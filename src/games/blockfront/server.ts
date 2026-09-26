@@ -33,6 +33,8 @@ import { BLASTERS, COOL_AFTER, COOL_FULL, defineWeapons, feedIcon, weaponFor, we
  */
 
 /** Most fighters a side, people included (a mode says how many it fills to: `Mode.side`). */
+/** A person's all-time numbers (`player.store`, `stats`). */
+type AllTime = { games: number; wins: number; kills: number; deaths: number; heroes: number };
 const MAX_SIDE = 16;
 const RESPAWN = 5;
 const INTERMISSION = 15;
@@ -497,13 +499,13 @@ function endMatch(game: GameContext, winner: Team) {
     const won = f.team === winner;
     p.hud.banner(won ? 'VICTORY' : 'DEFEAT', `The ${t.name} take ${match.map.name} · ${TEAMS[0].short} ${match.tickets[0]} · ${TEAMS[1].short} ${match.tickets[1]}`, { color: won ? COLORS.yellow : COLORS.red, duration: 10 });
     p.audio.play(won ? 'victory' : 'defeat');
-    const key = `stats:${p.name}`;
-    const s = game.store.get<{ games: number; wins: number; kills: number; deaths: number; heroes: number }>(key) ?? { games: 0, wins: 0, kills: 0, deaths: 0, heroes: 0 };
+    // All-time numbers, kept for their account (a guest's for the visit).
+    const s = p.store.get<AllTime>('stats') ?? { games: 0, wins: 0, kills: 0, deaths: 0, heroes: 0 };
     s.games++;
     if (won) s.wins++;
     s.kills += f.kills;
     s.deaths += f.deaths;
-    game.store.set(key, s);
+    p.store.set('stats', s);
     p.hud.toast(`All time: ${s.wins} wins in ${s.games} · ${s.kills} kills`);
   }
   // What's next: the rotation's next match in a public room; the same again in one's own.
@@ -707,6 +709,12 @@ export default defineServer(shared, {
     bots = makeBots(game, () => navs.get(match.map.id) ?? null, hotspots, conquest, heroes.botHooks);
 
     game.events.on('playerJoin', ({ player }) => {
+      // Signed in for the first time since claiming their name: the numbers kept by it are theirs.
+      if (player.adopted) {
+        const old = game.store.get<AllTime>(`stats:${player.adopted}`);
+        if (old) player.store.set('stats', old);
+        game.store.delete(`stats:${player.adopted}`);
+      }
       const f = fighters.get(player.id) ?? addFighter(game, player);
       if (player.bot) bots.add(player as Bot, 0.25 + game.rng.next() * 0.5);
       if (running && match.phase === 'playing') spawn(game, f);

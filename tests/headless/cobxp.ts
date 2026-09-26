@@ -52,8 +52,9 @@ class Room {
     this.host = new GameHost(cob, { engine: wasm, seed: 3, remote: true, radius: 4, budget: Infinity, cheats: true, store: this.db });
   }
 
+  /** Someone joining: signed in (their XP kept for their account), or, as "Player", a guest. */
   join(name: string): { id: string; player: Player } {
-    const c = this.host.connect(name);
+    const c = this.host.connect(name, name === 'Player' ? undefined : { account: { id: name.toLowerCase(), name, avatar: null } });
     this.got.set(c.id, []);
     this.all.set(c.id, []);
     this.keep(c.id, c.batch.events);
@@ -192,7 +193,7 @@ function firstRoom(path: string): number {
   s = room.last<XpState>(a.id, 'xp');
   check(gains(s).join() === '300 THE BRIEFCASE', `the briefcase: ${gains(s)}`);
   total = s!.total;
-  check(room.db.data().get('xp:Ann') !== undefined && (room.db.data().get('xp:Ann') as { xp: number }).xp === total, 'Ann kept by name');
+  check((room.db.data().get('$player:ann:xp') as { xp: number } | undefined)?.xp === total, 'Ann kept for her account');
 
   // A second person: the loadout is theirs, at their level.
   const b = room.join('Bob');
@@ -292,9 +293,8 @@ function firstRoom(path: string): number {
   room.exec(guest.id, 'xp 1000');
   const gs = room.last<XpState>(guest.id, 'xp');
   check(gs?.guest && gs.level === 2, `a guest levels up for the session: ${JSON.stringify(gs)}`);
-  check(room.db.data().get('xp:Player') === undefined, 'but a guest is never kept');
-  const keys = [...room.db.data().keys()].filter((k) => k.startsWith('xp:'));
-  check(keys.includes('xp:Ann') && keys.every((k) => k === 'xp:Ann' || k === 'xp:Bob'), `only people are kept: ${keys}`);
+  const keys = [...room.db.data().keys()].filter((k) => k.endsWith(':xp'));
+  check(keys.includes('$player:ann:xp') && keys.every((k) => k === '$player:ann:xp' || k === '$player:bob:xp'), `only signed-in people are kept, a guest never: ${keys}`);
   room.close();
   console.log(`  Ann: level ${levelOf(kept)}, ${kept} XP; kept across a restart and a new connection; Bob refused the sniper; guests not kept`);
   return kept;

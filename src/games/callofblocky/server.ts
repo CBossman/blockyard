@@ -99,6 +99,8 @@ let skipped = false;
 let next: NextVote;
 /** [progression] XP, levels and unlocks (progression.ts). */
 let xp: Progression;
+/** A person's all-time numbers (`player.store`, `stats`). */
+type AllTime = { games: number; wins: number; kills: number; deaths: number; best: number };
 
 const fmt = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 const ordinal = (n: number) => `${n}${n % 10 === 1 && n % 100 !== 11 ? 'st' : n % 10 === 2 && n % 100 !== 12 ? 'nd' : n % 10 === 3 && n % 100 !== 13 ? 'rd' : 'th'}`;
@@ -536,15 +538,14 @@ function endMatch(game: GameContext, winner: Player | null, team?: Team) {
     const mine = teams ? f.team === won : p === top;
     if (teams) p.hud.banner(won === null ? 'DRAW' : mine ? 'VICTORY' : 'DEFEAT', won === null ? `${TEAMS[0].name} ${match.score[0]} · ${TEAMS[1].name} ${match.score[1]}` : `${TEAMS[won].name} take ${match.map.name} · ${match.score[won]} to ${match.score[1 - won]}`, { color: mine ? COLORS.gold : COLORS.red, duration: 9 });
     else p.hud.banner(p === top ? 'YOU WIN' : 'GAME OVER', top ? `${top.name} takes ${match.map.name} · you came ${ordinal(place)}` : undefined, { color: p === top ? COLORS.gold : COLORS.red, duration: 9 });
-    // All-time numbers, kept by name.
-    const key = `stats:${p.name}`;
-    const s = game.store.get<{ games: number; wins: number; kills: number; deaths: number; best: number }>(key) ?? { games: 0, wins: 0, kills: 0, deaths: 0, best: 0 };
+    // All-time numbers, kept for their account (a guest's for the visit).
+    const s = p.store.get<AllTime>('stats') ?? { games: 0, wins: 0, kills: 0, deaths: 0, best: 0 };
     s.games++;
     if (mine) s.wins++;
     s.kills += f.kills;
     s.deaths += f.deaths;
     s.best = Math.max(s.best, f.best);
-    game.store.set(key, s);
+    p.store.set('stats', s);
     p.hud.toast(`All time: ${s.wins} wins · ${s.kills} kills · best streak ${s.best}`);
   }
   // What's next: the rotation's next match in a public room, the same again in one's own; or,
@@ -910,6 +911,12 @@ export default defineServer(shared, {
     vote = new SkipVote(game, { color: (p) => nameColor(p, COLORS.gold), skip: () => skipMatch(game) });
     next = new NextVote(game, { modeIcon: (id) => MODE_ICONS[id], mapIcon: (id) => MAP_ICONS[id] ?? { block: 'stone' }, name: planName });
     game.events.on('playerJoin', ({ player }) => {
+      // Signed in for the first time since claiming their name: the all-time numbers kept by it are theirs.
+      if (player.adopted) {
+        const old = game.store.get<AllTime>(`stats:${player.adopted}`);
+        if (old) player.store.set('stats', old);
+        game.store.delete(`stats:${player.adopted}`);
+      }
       const f = fighters.get(player.id) ?? addFighter(game, player);
       if (player.bot) bots.add(player as Bot, 0.3 + game.rng.next() * 0.5);
       if (running && match.phase === 'playing') spawn(game, f);

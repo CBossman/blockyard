@@ -5,9 +5,8 @@ import { COLORS, fighterModel } from './shared';
 import { LETHALS, WEAPONS } from './weapons';
 
 /**
- * XP, levels and unlocks: everything a person earns on Jackrabbit Lane, kept by name in the
- * server's database (`game.store`, `xp:<name>`), so it follows them across matches, rooms and
- * restarts. Only the server awards XP, only while a match is on, and only to people: bots are
+ * XP, levels and unlocks: everything a person earns on Jackrabbit Lane, kept for their account
+ * (`player.store`, `xp`), so it follows them across matches, rooms and restarts. Only the server awards XP, only while a match is on, and only to people: bots are
  * never limited and never earn anything (a bot killing a bot is worth nothing to anyone).
  *
  * Own rooms (`instances`) count too: they share the game's store with the public room, and a game
@@ -201,7 +200,7 @@ export interface Progression {
 // Keeping it
 // -------------------------------------------------------------------------------------------------
 
-/** Kept per name in the store. */
+/** Kept for each person (`player.store`, `xp`). */
 interface Saved {
   xp: number;
   /** The outfit they last picked. */
@@ -211,10 +210,8 @@ interface Saved {
 /** A person in this room, this match. */
 interface Tally {
   player: Player;
+  /** Not signed in: what they earn lasts the visit (`player.store` keeps it that long). */
   guest: boolean;
-  /** A guest's XP (never kept). */
-  guestXp: number;
-  guestOutfit?: number;
   /** The level at the start of the match (or when they came in). */
   from: number;
   joinedAt: number;
@@ -229,9 +226,6 @@ interface Tally {
   /** Kills on each person (by name) this match. */
   victims: Map<string, number>;
 }
-
-/** No name typed: the platform calls them "Player" (a second one "Player 2"). */
-const GUEST = /^Player( \d+)?$/;
 
 const ordinal = (n: number) => `${n}${n % 10 === 1 && n % 100 !== 11 ? 'ST' : n % 10 === 2 && n % 100 !== 12 ? 'ND' : n % 10 === 3 && n % 100 !== 13 ? 'RD' : 'TH'}`;
 
@@ -248,23 +242,22 @@ export function setupProgression(game: GameContext): Progression {
   let firstBlood = false;
   let stopClock: (() => void) | null = null;
 
-  const key = (p: Player) => `xp:${p.name}`;
   const saved = (p: Player): Saved => {
-    const s = game.store.get<Saved>(key(p));
+    const s = p.store.get<Saved>('xp');
     return { xp: Math.max(0, Number(s?.xp) || 0), outfit: typeof s?.outfit === 'number' ? s.outfit : undefined };
   };
+  const keep = (p: Player, s: Partial<Saved>) => p.store.set('xp', { ...saved(p), ...s });
 
   function tally(p: Player): Tally {
     let t = tallies.get(p.id);
     if (!t) {
-      const guest = GUEST.test(p.name);
-      t = { player: p, guest, guestXp: 0, from: 1, joinedAt: game.clock.now, fired: false, busy: false, streak: 0, multi: 0, lastKillAt: -99, earned: new Map(), victims: new Map() };
+      t = { player: p, guest: !p.account, from: 1, joinedAt: game.clock.now, fired: false, busy: false, streak: 0, multi: 0, lastKillAt: -99, earned: new Map(), victims: new Map() };
       tallies.set(p.id, t);
       t.from = levelOf(total(t));
     }
     return t;
   }
-  const total = (t: Tally) => (t.guest ? t.guestXp : saved(t.player).xp);
+  const total = (t: Tally) => saved(t.player).xp;
 
   const state = (t: Tally, gains?: Gain[]): XpState => {
     const xp = total(t);
@@ -283,8 +276,7 @@ export function setupProgression(game: GameContext): Progression {
     const t = tally(p);
     const sum = gains.reduce((a, [n]) => a + n, 0);
     const before = total(t);
-    if (t.guest) t.guestXp += sum;
-    else game.store.set(key(p), { ...saved(p), xp: before + sum });
+    keep(p, { xp: before + sum });
     // (This match's tally, for its summary: what was played for, not a cheat's.)
     if (!opts.cheat) {
       for (const [n, label] of gains) {
@@ -377,11 +369,17 @@ export function setupProgression(game: GameContext): Progression {
 
   game.events.on('playerJoin', ({ player }) => {
     if (player.bot) return;
+    // Signed in for the first time since claiming their name: what was kept by it before accounts is theirs.
+    if (player.adopted) {
+      const old = game.store.get<Saved>(`xp:${player.adopted}`);
+      if (old) keep(player, old);
+      game.store.delete(`xp:${player.adopted}`);
+    }
     tallies.delete(player.id);
     const t = tally(player);
     t.joinedAt = game.clock.now;
     send(player);
-    if (t.guest) player.hud.toast('Playing as a guest: type a name on the home page to keep your XP');
+    if (t.guest) player.hud.toast('Playing as a guest: sign in with Discord on the home page to keep your XP');
   });
   // Their screen's in play: the bar again, in case it wasn't there for the first.
   game.events.on('playerReady', ({ player }) => send(player));
@@ -411,9 +409,7 @@ export function setupProgression(game: GameContext): Progression {
     run: (name, g, me) => {
       const who = name.length ? g.players.find((p) => p.name === name.join(' ')) : me;
       if (!who || who.bot) throw new Error('Nobody by that name');
-      const t = tally(who);
-      if (t.guest) t.guestXp = 0;
-      else game.store.set(key(who), { ...saved(who), xp: 0 });
+      keep(who, { xp: 0 });
       send(who);
       return `${who.name}: level 1`;
     },
@@ -494,9 +490,7 @@ export function setupProgression(game: GameContext): Progression {
               if (!has(p, id)) return locked(p, id);
               p.setSkin(skinOrigin(i), ATLAS);
               p.setModel(fighterModel(i));
-              const t = tally(p);
-              if (t.guest) t.guestOutfit = i;
-              else game.store.set(key(p), { ...saved(p), outfit: i });
+              keep(p, { outfit: i });
               picked(i);
             },
           };
@@ -508,8 +502,7 @@ export function setupProgression(game: GameContext): Progression {
     },
 
     outfitFor(p, taken) {
-      const t = tally(p);
-      const last = t.guest ? t.guestOutfit : saved(p).outfit;
+      const last = saved(p).outfit;
       if (last !== undefined && last >= 0 && last < OUTFITS.length && has(p, outfitId(last))) return last;
       const mine = OUTFITS.map((_, i) => i).filter((i) => has(p, outfitId(i)));
       const free = mine.filter((i) => !taken.has(i));

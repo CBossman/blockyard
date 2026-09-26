@@ -50,10 +50,9 @@ interface AllTime {
 /** Players whose match has been counted (once each, when it ends for them). */
 const recorded = new Set<Player>();
 
-/** Count this match into a player's all-time numbers (once), and return them. */
-function record(game: GameContext, p: Player, t: Team, won: boolean): AllTime {
-  const key = `stats:${p.name}`;
-  const r: AllTime = { games: 0, wins: 0, kills: 0, finals: 0, beds: 0, ...game.store.get<AllTime>(key) };
+/** Count this match into a player's all-time numbers (once; kept for their account), and return them. */
+function record(p: Player, t: Team, won: boolean): AllTime {
+  const r: AllTime = { games: 0, wins: 0, kills: 0, finals: 0, beds: 0, ...p.store.get<AllTime>('stats') };
   if (!recorded.has(p)) {
     recorded.add(p);
     r.games++;
@@ -61,7 +60,7 @@ function record(game: GameContext, p: Player, t: Team, won: boolean): AllTime {
     r.kills += t.kills;
     r.finals += t.finals;
     r.beds += t.beds;
-    game.store.set(key, r);
+    p.store.set('stats', r);
   }
   return r;
 }
@@ -149,7 +148,7 @@ function eliminate(game: GameContext, t: Team) {
       title: 'ELIMINATED',
       subtitle: 'Your team is out. Watch the others fight it out.',
       tone: 'defeat',
-      stats: stats(t, record(game, p, t, false)),
+      stats: stats(t, record(p, t, false)),
       buttons: [
         { label: 'Watch', primary: true, onClick: () => {} },
         { label: 'Exit', onClick: () => game.exit() },
@@ -289,7 +288,7 @@ function finish(game: GameContext, winner: Team | null) {
   for (const p of game.players) {
     const t = match.seatOf(p);
     const won = !!t && t === winner;
-    const all = t ? record(game, p, t, won) : null;
+    const all = t ? record(p, t, won) : null;
     p.audio.play(won ? 'victory' : 'defeat');
     game.clock.after(won ? 1.8 : 1.4, () =>
       p.hud.screen({
@@ -464,6 +463,13 @@ export default defineServer(shared, {
 
     // Players coming and going mid-match take over from bots, and hand back to them.
     game.events.on('playerJoin', (e) => {
+      // Signed in for the first time since claiming their name: the numbers kept by it are theirs.
+      const was = e.player.adopted;
+      if (was) {
+        const old = game.store.get<AllTime>(`stats:${was}`);
+        if (old) e.player.store.set('stats', old);
+        game.store.delete(`stats:${was}`);
+      }
       if (playing) seat(game, e.player);
     });
     game.events.on('playerLeave', (e) => unseat(game, e.player));

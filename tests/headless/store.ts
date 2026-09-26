@@ -87,7 +87,7 @@ function bedwars(path: string) {
   let db = SqliteStore.open(path, 'bedwars');
   const run = () => {
     const host = new GameHost(game('bedwars'), { engine: wasm, seed: 1, remote: true, radius: 4, budget: Infinity, cheats: true, store: db });
-    const ann = host.connect('Ann');
+    const ann = host.connect('Ann', { account: { id: 'ann', name: 'Ann', avatar: null } });
     host.command(ann.id, { t: 'start' });
     for (let i = 0; i < 5; i++) host.step(1 / 30);
     host.command(ann.id, { t: 'exec', id: 1, line: 'bw win' });
@@ -98,7 +98,7 @@ function bedwars(path: string) {
   db.close();
   db = SqliteStore.open(path, 'bedwars');
   run();
-  const stats = db.data().get('stats:Ann') as { games: number; wins: number } | undefined;
+  const stats = db.data().get('$player:ann:stats') as { games: number; wins: number } | undefined;
   check(stats?.games === 2 && stats.wins === 2, `Ann's all-time stats across two servers: ${JSON.stringify(stats)}`);
   db.close();
   console.log(`  bedwars: all-time stats per player kept (${JSON.stringify(stats)})`);
