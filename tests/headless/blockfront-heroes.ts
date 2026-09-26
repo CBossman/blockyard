@@ -11,7 +11,9 @@ import { check, launch } from './_harness';
  * The heroes' core mechanics, on a platform of stone in the sky over the map (nothing in the
  * way): two saber cuts kill a trooper; the guard turns bolts from the front but not from the side;
  * Force Push throws troopers back; Force Choke kills one; Force Lightning burns several at once;
- * Saber Rush cuts through a line; and, in a match of bots, hero bots use their powers.
+ * Saber Rush cuts through a line; Chewblocca's and Boba Fetch's powers; each hero's jump (how
+ * high and long it floats held, a tap's hop, a second jump in the air, a soft landing); and, in a
+ * match of bots, hero bots use their powers.
  */
 
 const DT = 1 / 60;
@@ -369,6 +371,75 @@ export default function blockfrontHeroes() {
   check(up > 3, `the jetpack should lift Boba (${up.toFixed(2)})`);
   check(hovering > 2.5, `the jetpack should hold him up (${hovering.toFixed(2)})`);
   idle(4);
+
+  // ---- The heroes' jumps: Battlefront's, floaty with Space held (`JUMP`).
+  /**
+   * One jump from standing, a frame at a time: Space pressed, and held `hold` seconds (all the way
+   * by default); `second`: pressed again that far in; `run`: W and sprint held until they land,
+   * and nothing after. Afterwards, `after` seconds on the ground (Space still down if it was).
+   */
+  const jump = (opts: { hold?: number; second?: number; run?: boolean; after?: number } = {}) => {
+    const y0 = me.position.y;
+    const hold = opts.hold ?? 99;
+    const ys: number[] = [];
+    let t = 0;
+    let peak = 0;
+    let peakT = 0;
+    let air = 0;
+    let left = false;
+    let landSpeed = 0;
+    for (let i = 0; i < 300 && !air; i++) {
+      const down = [...(t < hold ? ['Space'] : []), ...(opts.run ? ['KeyW', 'ShiftLeft'] : [])];
+      const pressed = i === 0 || (opts.second !== undefined && Math.abs(t - opts.second) < DT / 2) ? ['Space'] : [];
+      if (pressed.length && !down.includes('Space')) down.push('Space');
+      h.step(DT, { yaw: me.yaw, pitch: me.pitch, down, pressed });
+      t += DT;
+      const y = me.position.y - y0;
+      ys.push(y);
+      if (y > peak) [peak, peakT] = [y, t];
+      if (!me.onGround) left = true;
+      else if (left) {
+        air = t;
+        landSpeed = Math.hypot(me.velocity.x, me.velocity.z);
+      }
+    }
+    const hang = ys.filter((y) => y > peak - 0.25).length * DT;
+    const held = hold > air;
+    h.run(opts.after ?? 0.1, { pilot: () => ({ yaw: me.yaw, pitch: me.pitch, down: held ? ['Space'] : [] }) });
+    return { peak, peakT, air, hang, landSpeed, after: Math.hypot(me.velocity.x, me.velocity.z), rest: me.position.y - y0, grounded: me.onGround };
+  };
+  const arcs: string[] = [];
+  const later: (() => void)[] = [];
+  for (const id of ['luke', 'ben', 'emperor', 'vader', 'chewie', 'boba'] as HeroId[]) {
+    hero(id);
+    place(me, 0, 6, 0);
+    ready([me]);
+    idle(0.4);
+    const full = jump({ after: 0.4 });
+    idle(0.3);
+    const tap = jump({ hold: 0.1 });
+    idle(0.3);
+    const second = jump({ second: full.peakT });
+    idle(0.3);
+    place(me, 0, 8, 0);
+    idle(0.3);
+    const run = jump({ run: true, hold: 0.3 });
+    idle(0.5);
+    arcs.push(`${id}: ${full.peak.toFixed(2)} high at ${full.peakT.toFixed(2)} s, ${full.hang.toFixed(2)} s near the top, ${full.air.toFixed(2)} s up; tapped ${tap.peak.toFixed(2)} (${tap.air.toFixed(2)} s); again at the top ${second.peak.toFixed(2)}; landing at a run ${run.landSpeed.toFixed(1)} -> ${run.after.toFixed(1)} b/s 0.1 s on`);
+    later.push(() => check(full.grounded && Math.abs(full.rest) < 0.05, `${id} held Space through the landing: they should stay down (${full.rest.toFixed(2)} up)`));
+    if (id !== 'chewie' && id !== 'boba') later.push(() => check(tap.peak < full.peak - 0.3, `${id}: a tap should hop lower than a held jump (${tap.peak.toFixed(2)}, ${full.peak.toFixed(2)})`));
+    if (id === 'chewie') later.push(() => check(second.peak < full.peak + 0.1, `Chewblocca has no second jump (${second.peak.toFixed(2)} after ${full.peak.toFixed(2)})`));
+    else later.push(() => check(second.peak > full.peak + 0.5, `${id}'s second jump should take them higher (${second.peak.toFixed(2)} after ${full.peak.toFixed(2)})`));
+    if (id === 'luke' || id === 'ben' || id === 'emperor') {
+      later.push(() => check(full.peak > 2.1 && full.peak < 2.7, `${id}'s Force jump should rise 2.1-2.7 blocks (${full.peak.toFixed(2)})`));
+      later.push(() => check(full.air > 1.2 && full.air < 1.7, `${id}'s Force jump should float 1.2-1.7 s (${full.air.toFixed(2)})`));
+      later.push(() => check(full.hang > 0.35, `${id} should hang at the top of a Force jump (${full.hang.toFixed(2)} s)`));
+    }
+    if (id === 'vader') later.push(() => check(full.peak > 2 && full.air < 1.2, `Darth Voxel jumps high but comes down heavy (${full.peak.toFixed(2)}, ${full.air.toFixed(2)} s)`));
+    later.push(() => check(run.after > run.landSpeed * 0.45, `${id} should land softly, keeping some way (${run.landSpeed.toFixed(1)} -> ${run.after.toFixed(1)})`));
+  }
+  console.log(`  jumps:\n    ${arcs.join('\n    ')}`);
+  for (const c of later) c();
 
   // ---- A hero's health doesn't come back as a trooper's does.
   me.damage(120, { source: 'world', knockback: 0 });

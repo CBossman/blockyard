@@ -237,7 +237,7 @@ function trail(B: Beams, beam: FxBeam, a: { base: Vec3; tip: Vec3 }, b: { base: 
 export function heroFx(scene: HeroScene): ClientKit {
   let beams: Beams | null = null;
   /** Each blade as it was last frame (for trails). */
-  const last = new Map<string, { base: Vec3; tip: Vec3 }>();
+  const last = new Map<string, { base: Vec3; tip: Vec3; at?: Vec3 }>();
   /** When each hero's lightning (or a chain) was last redrawn. */
   const zapped = new Map<string, number>();
   const chains: { p: string; path: string[]; until: number; next: number }[] = [];
@@ -314,7 +314,13 @@ export function heroFx(scene: HeroScene): ClientKit {
         const beam = BEAM[b.hero];
         const was = last.get(id);
         const rage = scene.on(id, 'rage');
-        if (was) trail(B, beam, was, b, rage, now);
+        // Its own sweep: where it was, carried along as far as its hero went since (a running or
+        // leaping hero's blade doesn't streak for that alone).
+        if (was) {
+          const from = was.at ?? b.at;
+          const went = { x: b.at.x - from.x, y: b.at.y - from.y, z: b.at.z - from.z };
+          trail(B, beam, { base: add(was.base, went), tip: add(was.tip, went) }, b, rage, now);
+        }
         // Its hum, near by: rising and swelling as the blade's swung (a swing's the hum swept past).
         const d = dist(cam, b.tip);
         let h = hums.get(id);
@@ -326,7 +332,7 @@ export function heroFx(scene: HeroScene): ClientKit {
           const tone = humOf(b.hero, h.speed);
           h.loop.set({ at: mid(b), pitch: tone.pitch, volume: tone.volume });
         }
-        last.set(id, { base: { ...b.base }, tip: { ...b.tip } });
+        last.set(id, { base: { ...b.base }, tip: { ...b.tip }, at: { ...b.at } });
         if (rage && tick % 3 === 0) fx.particles(lerp3(b.base, b.tip, Math.random()), lin('#ff3a1a'), { count: 1, speed: 0.6, size: 0.06, gravity: -3, glow: 2, life: 0.4, spread: 0.05, collide: false });
       }
       // (Blades gone all at once, a restart: their hums too.)
