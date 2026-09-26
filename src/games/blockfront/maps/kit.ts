@@ -68,6 +68,13 @@ export interface MapSpec {
   posts: PostSpec[];
   home: SpawnPoint;
   overview: { position: Vec3; target: Vec3 };
+  /**
+   * The opening fly-over's keyframes (the camera's place and the point it looks at), from the
+   * Rebels' end of the map to the Empire's: each screen flies them (turned round for the Rebels, so
+   * it ends over their own end), then comes down to its player (`cinema.ts`, `client/intro.ts`).
+   * Without them it passes over each post in turn.
+   */
+  intro?: { at: Vec3; look: Vec3 }[];
   hotspots: Vec3[];
 }
 

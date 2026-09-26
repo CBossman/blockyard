@@ -26,6 +26,10 @@ export interface Fighter {
   spawnAt: string | null;
   /** Battle points in hand: earned in the fight, spent on heroes. */
   bp: number;
+  /** Battle points earned this match, spent or not (the end screen). */
+  earned: number;
+  /** The heroes they've played this match, in the order they first took them (the end screen). */
+  heroesPlayed: HeroId[];
   score: number;
   kills: number;
   deaths: number;

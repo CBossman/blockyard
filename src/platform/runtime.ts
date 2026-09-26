@@ -42,7 +42,7 @@ import { CommandBar } from './ui/commandbar';
 import { Content } from './content';
 import { PLACEHOLDER_ICON, resolveIcon } from './looks';
 import { Presenter } from './client/present';
-import { PlayerCamera } from './client/camera';
+import { CameraTake, PlayerCamera } from './client/camera';
 import { EntityView } from './client/entities';
 import { PickupView } from './client/pickups';
 import { PropView } from './client/props';
@@ -115,6 +115,8 @@ export class Runtime {
   private renderer!: Renderer;
   private env = new Environment();
   private camera: THREE.PerspectiveCamera;
+  /** The camera as the game's client code takes it for a while (`client.camera.take`), over the player's own. */
+  private taken = new CameraTake();
   private pool!: WorkerPool;
   private chunks!: ChunkManager;
   private registry!: Registry;
@@ -658,6 +660,7 @@ export class Runtime {
     const view = this.view;
     const input = this.input;
     const worldCamera = this.camera;
+    const taken = this.taken;
     const settings = () => this.settings;
     const walker = this.walker;
     this.clientHud = new ClientHudService(this.hud, this.gameHud, def.hud?.theme);
@@ -690,6 +693,11 @@ export class Runtime {
           toWorld: (local) => {
             const p = worldCamera.localToWorld(new THREE.Vector3(local.x, local.y, local.z));
             return { x: p.x, y: p.y, z: p.z };
+          },
+          take: (pose) => taken.take(pose.position, pose.target, pose.fov),
+          release: (ease) => taken.release(ease),
+          get taken() {
+            return taken.active;
           },
         } as Client['camera'],
         fx: this.fx,
@@ -1474,7 +1482,7 @@ export class Runtime {
     // (In a replay, its player's hands and what they hold; our own HUD stays ours.)
     this.showPlayer(eyes ?? me, !rp);
 
-    if (this.walker && !ride && !rp) {
+    if (this.walker && !ride && !rp && !this.taken.active) {
       this.view.viewDirection(this.dir);
       this.chunks.update(me.x, me.z, this.dir.x, this.dir.z);
     } else {
@@ -1499,12 +1507,14 @@ export class Runtime {
     this.held.setLight(this.probe);
     // The first-person layer: drawn only in first person (nothing in hand while dead, someone out
     // of the game watching sees only the game, or in third person).
-    this.held.frame(this.camera.aspect, rp ? !!eyes && !eyes.dead && !eyes.vehicle : this.walker && this.mode !== 'title' && !me.dead && !me.vehicle && !this.view.thirdPerson);
+    this.held.frame(this.camera.aspect, !this.taken.active && (rp ? !!eyes && !eyes.dead && !eyes.vehicle : this.walker && this.mode !== 'title' && !me.dead && !me.vehicle && !this.view.thirdPerson));
     // The game's client code: its kits (the first-person view places the hand, the figures are
     // posed, ...), then its own frame. In a replay, `client.me` is the player it follows.
     if (!this.clientStarted) this.startClient(me);
     const mine = rp && eyes ? this.replays.me(eyes) : this.meOf(me, dt);
     this.client.frame(dt, mine);
+    // The camera as the client code has taken it (or easing back to ours), over the one placed above.
+    this.taken.apply(this.camera, dt);
     // The figures as client code posed them (the figures kit), animated.
     this.entityView.finish();
     // The world's effects move on by the frame's time (what the client code made just now, too).
