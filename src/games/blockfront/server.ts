@@ -551,7 +551,7 @@ function cool(game: GameContext, dt: number) {
 // -------------------------------------------------------------------------------------------------
 
 function scoreboard(game: GameContext, show = false) {
-  const left = Math.max(0, match.mode.time - (game.clock.now - startedAt));
+  const left = Math.max(0, Math.min(match.mode.time, match.mode.time - (game.clock.now - startedAt))); // cinema: full during the fly-over
   const rows = [...fighters.values()]
     .sort((a, b) => a.team - b.team || b.score - a.score)
     .map((f) => ({
@@ -571,7 +571,7 @@ function scoreboard(game: GameContext, show = false) {
 }
 
 function conquestBar(game: GameContext) {
-  const left = Math.max(0, match.mode.time - (game.clock.now - startedAt));
+  const left = Math.max(0, Math.min(match.mode.time, match.mode.time - (game.clock.now - startedAt))); // cinema: full during the fly-over
   const sideOf = (t: Team) => ({ short: TEAMS[t].short, color: TEAMS[t].color, tickets: match.tickets[t], pct: Math.round((match.tickets[t] / match.mode.tickets) * 100) / 100 });
   game.hud.widget('conquest', {
     a: sideOf(0),
@@ -881,8 +881,8 @@ export default defineServer(shared, {
       }
       return;
     }
-    if (intro) return; // cinema: everyone's held while the fly-over plays
-    for (const n of conquest.update(dt)) onPost(game, n);
+    // cinema: the posts (and the tickets they bleed) wait while the fly-over holds everyone.
+    if (!intro) for (const n of conquest.update(dt)) onPost(game, n);
     cool(game, dt);
     for (const f of fighters.values()) {
       const p = f.player;
