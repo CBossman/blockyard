@@ -48,6 +48,8 @@ export type News =
 export interface Blade {
   base: Vec3;
   tip: Vec3;
+  /** Where the figure holding it stands (its trail is the blade's own sweep, not the hero's running or leaping). */
+  at: Vec3;
   /** Drawn this frame (this screen's clock). */
   t: number;
   hero: HeroId;

@@ -404,7 +404,8 @@ class Poser {
       const len = end - g.z;
       const base = node.localToWorld(new Vec3(g.x, g.y, g.z + len * BLADE_FROM));
       const tip = node.localToWorld(new Vec3(g.x, g.y, end));
-      this.scene.blades.set(pid, { base: { x: base.x, y: base.y, z: base.z }, tip: { x: tip.x, y: tip.y, z: tip.z }, t: now, hero: this.hero! });
+      const at = this.fig.root.getWorldPosition(s4);
+      this.scene.blades.set(pid, { base: { x: base.x, y: base.y, z: base.z }, tip: { x: tip.x, y: tip.y, z: tip.z }, at: { x: at.x, y: at.y, z: at.z }, t: now, hero: this.hero! });
     } else this.scene.blades.delete(pid);
     // The right hand: on the hilt, or (the saber gone) its gesture.
     const high = Math.max(0, k.p[1] + 0.1);

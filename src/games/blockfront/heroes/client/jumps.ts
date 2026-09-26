@@ -54,7 +54,7 @@ export function heroJumps(scene: HeroScene): ClientKit {
         // Off the ground, going up: a jump (not a step off a ledge).
         if (b.air && !t.air && (b.vy !== undefined ? b.vy > 2 : rise > 1)) {
           const kind = ground(client, b.at);
-          rings.push({ at: { ...b.at }, born: now, r0: 0.2, r1: 0.7, kind, n: 14 });
+          rings.push({ at: { ...b.at }, born: now, r0: 0.2, r1: 0.7, kind, n: 26 });
           client.audio.play('bfh_jump', { at: b.at, volume: 0.7, pitch: heavy ? 0.8 : 1 });
         }
         if (b.air) {
@@ -65,7 +65,7 @@ export function heroJumps(scene: HeroScene): ClientKit {
           // Down: harder, bigger (a heavy hero's more).
           const hard = Math.min(1, Math.max(0, (-t.fall - 2) / 7));
           const kind = ground(client, b.at);
-          rings.push({ at: { ...b.at }, born: now, r0: 0.25, r1: 0.9 + 0.7 * hard + (heavy ? 0.3 : 0), kind, n: 18 + Math.round(hard * 14) });
+          rings.push({ at: { ...b.at }, born: now, r0: 0.25, r1: 0.9 + 0.7 * hard + (heavy ? 0.3 : 0), kind, n: 34 + Math.round(hard * 30) });
           client.audio.play('bfh_land', { at: b.at, volume: 0.45 + 0.55 * hard, pitch: heavy ? 0.78 : 1 });
           if (heavy && hard > 0.3 && b.id === scene.localId) client.fx.shake(0.08 * hard, 0.25);
         }
@@ -91,7 +91,8 @@ export function heroJumps(scene: HeroScene): ClientKit {
           continue;
         }
         const rad = r.r0 + (r.r1 - r.r0) * u;
-        const n = Math.max(2, Math.round(r.n * Math.min(1, dt * 60) * 0.5));
+        // (`n` motes in all, spread over its moment.)
+        const n = Math.max(1, Math.round((r.n * Math.min(dt, 0.05)) / 0.14));
         const look = LOOK[r.kind];
         for (let k = 0; k < n; k++) {
           const a = Math.random() * Math.PI * 2;
@@ -116,7 +117,7 @@ function ground(client: Client, at: Vec3): Ground {
 /** How each ground's motes look: colour, size, how long they hang, how heavy. */
 const LOOK: Record<Ground, { c: [number, number, number]; size: [number, number]; life: number; gravity: number }> = {
   dust: { c: [0.62, 0.54, 0.4], size: [0.1, 0.17], life: 0.55, gravity: 0.6 },
-  snow: { c: [0.93, 0.96, 1], size: [0.13, 0.22], life: 0.8, gravity: 0.35 },
+  snow: { c: [0.93, 0.96, 1], size: [0.09, 0.16], life: 0.6, gravity: 0.35 },
   frost: { c: [0.78, 0.83, 0.88], size: [0.1, 0.16], life: 0.55, gravity: 0.7 },
   grit: { c: [0.5, 0.5, 0.53], size: [0.07, 0.11], life: 0.35, gravity: 1.5 },
 };

@@ -232,7 +232,7 @@ function trail(B: Beams, beam: FxBeam, a: { base: Vec3; tip: Vec3 }, b: { base: 
 export function heroFx(scene: HeroScene): ClientKit {
   let beams: Beams | null = null;
   /** Each blade as it was last frame (for trails). */
-  const last = new Map<string, { base: Vec3; tip: Vec3 }>();
+  const last = new Map<string, { base: Vec3; tip: Vec3; at?: Vec3 }>();
   /** When each hero's lightning (or a chain) was last redrawn. */
   const zapped = new Map<string, number>();
   const chains: { p: string; path: string[]; until: number; next: number }[] = [];
@@ -293,8 +293,13 @@ export function heroFx(scene: HeroScene): ClientKit {
         const beam = BEAM[b.hero];
         const was = last.get(id);
         const rage = scene.on(id, 'rage');
-        if (was) trail(B, beam, was, b, rage, now);
-        last.set(id, { base: { ...b.base }, tip: { ...b.tip } });
+        // Its own sweep: where it was, carried along as far as its hero went since.
+        if (was) {
+          const from = was.at ?? b.at;
+          const moved = { x: b.at.x - from.x, y: b.at.y - from.y, z: b.at.z - from.z };
+          trail(B, beam, { base: add(was.base, moved), tip: add(was.tip, moved) }, b, rage, now);
+        }
+        last.set(id, { base: { ...b.base }, tip: { ...b.tip }, at: { ...b.at } });
         // A hum close by, now and then.
         const d = dist(cam, b.tip);
         if (d < 14 && now >= (hum.get(id) ?? 0)) {

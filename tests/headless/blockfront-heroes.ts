@@ -11,7 +11,9 @@ import { check, launch } from './_harness';
  * The heroes' core mechanics, on a platform of stone in the sky over the map (nothing in the
  * way): two saber cuts kill a trooper; the guard turns bolts from the front but not from the side;
  * Force Push throws troopers back; Force Choke kills one; Force Lightning burns several at once;
- * Saber Rush cuts through a line; and, in a match of bots, hero bots use their powers.
+ * Saber Rush cuts through a line; Chewblocca's and Boba Fetch's powers; each hero's jump (how
+ * high and long it floats held, a tap's hop, a second jump in the air, a soft landing); and, in a
+ * match of bots, hero bots use their powers.
  */
 
 const DT = 1 / 60;
