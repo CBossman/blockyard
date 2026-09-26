@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { engine, loadEngine } from './engine/wasm';
 import { WorkerPool } from './workers/pool';
 import { worldGenConfig } from './workers/config';
-import { SocketLink } from './client/link';
+import { Refused, SocketLink } from './client/link';
 import { FrameBuffer } from './client/interp';
 import type { ReplayPlayback } from './client/replay';
 import { ReplayView } from './client/replays';
@@ -290,19 +290,56 @@ export class Runtime {
     // Development games open by id but aren't listed in the launcher (a server names one too:
     // `?server=ws://host&game=highnoon`).
     const find = (id: string | null) => [...games, ...hidden].find((g) => g.meta.id === id);
-    const listed = find(picked) ?? games[0];
+    let listed = find(picked) ?? games[0];
     const room = url.searchParams.get('room');
-    const own = room && listed.meta.instances && ROOM_CODE.test(room) ? room : null;
-    const address = base ? `${base}/${listed.meta.id}${own ? `/${own}` : ''}` : given;
-    if (!address) throw new Error('No game server to play on: open with ?server=ws://host:port, or build with VITE_GAME_SERVER.');
+    let own = room && listed.meta.instances && ROOM_CODE.test(room) ? room : null;
+    // An invite link into a copy of the public game (started while it was full) names the copy.
+    let shard = own ? 0 : Number(url.searchParams.get('shard')) || 0;
+    const address = () => (base ? `${base}/${listed.meta.id}${own ? `/${own}` : shard > 1 ? `?shard=${shard}` : ''}` : given);
+    if (!address()) throw new Error('No game server to play on: open with ?server=ws://host:port, or build with VITE_GAME_SERVER.');
     // The home page at once, showing the game loading (it stays up when switching games).
     const title = carried?.title ?? new TitleScreen(ui, games.map((g) => g.meta));
     title.select(listed.meta.id);
     // Its client code loads while the connection opens (a server's own address names the game
     // only in its welcome).
-    const early = base ? listed.load() : null;
+    let early = base ? listed.load() : null;
     early?.catch(() => {});
-    const link = await SocketLink.connect(address);
+    // Turned away (the game's full, the server's busy or out of reach): the home page says so and
+    // tries again, less often as it goes on, unless another game's picked meanwhile.
+    let link: SocketLink | null = null;
+    for (let wait = 5; !link; ) {
+      try {
+        link = await SocketLink.connect(address()!);
+      } catch (err) {
+        if (!(err instanceof Refused) || !err.retry) throw err;
+        const next = await title.busy(err.message, wait);
+        const entry = next === null ? null : find(next);
+        if (!entry) {
+          wait = Math.min(30, wait * 2);
+          continue;
+        }
+        listed = entry;
+        own = null;
+        shard = 0;
+        wait = 5;
+        const to = new URL(location.href);
+        to.searchParams.set('game', entry.meta.id);
+        for (const p of ['room', 'shard']) to.searchParams.delete(p);
+        history.replaceState(null, '', to);
+        title.select(entry.meta.id);
+        early = base ? entry.load() : null;
+        early?.catch(() => {});
+      }
+    }
+    // The page's address names the game, and the copy of its public game it's in (none in the
+    // first): what an invite link copies.
+    if (base) {
+      const at = new URL(location.href);
+      at.searchParams.set('game', link.welcome.game);
+      if (link.welcome.shard) at.searchParams.set('shard', String(link.welcome.shard));
+      else at.searchParams.delete('shard');
+      history.replaceState(null, '', at);
+    }
     let game: ClientGame;
     try {
       const entry = find(link.welcome.game);
@@ -984,6 +1021,8 @@ export class Runtime {
   /** Start another game (or room) on the page the last one left (the home page stays up throughout). */
   private static switchTo(id: string, room: string | null, canvas: HTMLCanvasElement, ui: HTMLElement, games: GameEntry[], hidden: GameEntry[], carry: Carry) {
     const url = new URL(location.href);
+    // Back to the same public game: the same copy of it, if it still has a place.
+    if (url.searchParams.get('game') !== id || room) url.searchParams.delete('shard');
     url.searchParams.set('game', id);
     if (room) url.searchParams.set('room', room);
     else url.searchParams.delete('room');

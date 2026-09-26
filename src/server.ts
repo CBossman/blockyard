@@ -1,6 +1,6 @@
 // The game server: hosts the app's games for players who join from the browser.
 //
-//   npm run server -- [games…] [--port 8787] [--data data] [--seed 1234] [--rooms 8] [--new] [--cheats] [--dev]
+//   npm run server -- [games…] [--port 8787] [--data data] [--seed 1234] [--rooms 8] [--room-size 16] [--new] [--cheats] [--dev]
 //
 // Games default to all of them; each keeps its world, players and data in <data>/<game>.sqlite
 // (--db path for a single game). --new sets the kept worlds aside and starts fresh. `npm run dev`
@@ -47,7 +47,7 @@ export async function main(args: string[], worker?: ServeOptions['worker'], mode
     const i = args.indexOf(`--${name}`);
     return i >= 0 ? args[i + 1] : undefined;
   };
-  const valued = ['--port', '--seed', '--db', '--data', '--rooms', '--wasm'];
+  const valued = ['--port', '--seed', '--db', '--data', '--rooms', '--room-size', '--wasm'];
   const named = args.filter((a, i) => !a.startsWith('--') && !valued.includes(args[i - 1])).flatMap((a) => a.split(','));
   // Named games may include development games (`gallery`), in development mode only.
   const extra = dev ? await devGames() : [];
@@ -80,8 +80,9 @@ export async function main(args: string[], worker?: ServeOptions['worker'], mode
     worker,
     store: (game) => SqliteStore.open(dbOf(game), game),
     storeFile: dbOf,
-    // A room (a world, in a thread of its own) takes 30 to 50 MB: 8 fit a 512 MB machine.
-    limits: { rooms: Number(flag('rooms') ?? process.env.ROOMS ?? 8) },
+    // A room (a world, in a thread of its own) takes 30 to 50 MB: 8 fit a 512 MB machine. Its size
+    // (players and those watching; a full public game overflows into another copy) defaults to 16.
+    limits: { rooms: Number(flag('rooms') ?? process.env.ROOMS ?? 8), ...(flag('room-size') ?? process.env.ROOM_SIZE ? { playersPerGame: Number(flag('room-size') ?? process.env.ROOM_SIZE) } : {}) },
     accounts: Accounts.open(join(data, 'accounts.sqlite')),
     discord: process.env.DISCORD_CLIENT_ID && process.env.DISCORD_CLIENT_SECRET ? { id: process.env.DISCORD_CLIENT_ID, secret: process.env.DISCORD_CLIENT_SECRET } : null,
     sites: (process.env.SITE_ORIGINS ?? '').split(',').map((s) => s.trim()).filter(Boolean),

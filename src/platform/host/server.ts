@@ -3,7 +3,7 @@ import type { Worker } from 'node:worker_threads';
 import { WebSocketServer, type WebSocket } from 'ws';
 import type { GameDefinition } from '../api/types';
 import { decode, encode } from '../net/codec';
-import { ROOM_CODE, type ClientCommand, type WireBatch } from '../net/protocol';
+import { CLOSE_FULL, CLOSE_LIMIT, CLOSE_UNKNOWN, ROOM_CODE, type ClientCommand, type WireBatch } from '../net/protocol';
 import { sanitizeCommand } from '../net/validate';
 import { ADOPTED, PLAYER_DATA } from '../sim/sim';
 import type { Account, Accounts } from './accounts';
@@ -17,7 +17,9 @@ import type { Store } from './store';
 export interface ServeOptions {
   /**
    * The games on offer. A client joins a game's public room at `/<id>` (with a single game, also
-   * at `/`), and a room of their own, for a game with `instances`, at `/<id>/<code>`.
+   * at `/`), and a room of their own, for a game with `instances`, at `/<id>/<code>`. When the
+   * public room's full, a game with `instances` starts another copy of it (`/<id>?shard=2` asks
+   * for that one: an invite link).
    */
   games: GameDefinition[];
   /**
@@ -61,7 +63,7 @@ export interface ServeOptions {
   saveEvery?: number;
   /** Seconds a public room runs with nobody in it before it's saved and stopped (default 300). */
   idleStop?: number;
-  /** And a room of a player's own, which then goes (default 60). */
+  /** And a room of a player's own, or a copy of a public one, which then goes (default 60). */
   idleStopOwn?: number;
   limits?: Partial<Limits>;
   log?: (line: string) => void;
@@ -78,7 +80,11 @@ export interface ServeOptions {
 }
 
 export interface Limits {
-  /** Players in one room; more are turned away. */
+  /**
+   * Connections in one room: players and those watching (everyone on the home page watches). A
+   * full public room of a game with `instances` overflows into another copy; otherwise, and in a
+   * full room of a player's own, more are turned away.
+   */
   playersPerGame: number;
   /** Open connections from one address. */
   perAddress: number;
@@ -92,12 +98,12 @@ export interface Limits {
   roomsPerAddress: number;
 }
 
+/** Turned away when the server runs as many rooms as it may. */
+const BUSY = { code: CLOSE_FULL, reason: 'The server is busy right now' };
+
 const LIMITS: Limits = { playersPerGame: 16, perAddress: 6, messagesPerSecond: 300, maxMessage: 16 * 1024, rooms: 12, roomsPerAddress: 2 };
 
-/** Close codes a client shows as the reason it couldn't join. */
-export const CLOSE_FULL = 4001;
-export const CLOSE_LIMIT = 4002;
-export const CLOSE_UNKNOWN = 4004;
+export { CLOSE_FULL, CLOSE_LIMIT, CLOSE_UNKNOWN };
 
 export interface GameServer {
   readonly port: number;
@@ -121,7 +127,7 @@ interface RoomLink {
   readonly host: GameHost | null;
 }
 
-/** One room on the server: a game's public one, or one a player started of their own. */
+/** One room on the server: a game's public one (or a copy of it), or one a player started of their own. */
 class Room {
   readonly sockets = new Map<string, WebSocket>();
   link: RoomLink | null = null;
@@ -133,15 +139,27 @@ class Room {
 
   constructor(
     readonly def: GameDefinition,
-    /** `public`, or its code. */
+    /** `public`, `public-2` (a copy of it), or its code. */
     readonly instance: string,
     /** Who started it (a room of their own): their address. */
     readonly creator: string | null,
     readonly log: (line: string) => void,
+    /** Which copy of the public game: 1 (the one that keeps its world), 2, 3…; 0 for a room of a player's own. */
+    readonly shard = creator === null ? 1 : 0,
   ) {}
 
+  /** A room a player started of their own (its players may restart it, set it up). */
   get own(): boolean {
-    return this.instance !== 'public';
+    return this.creator !== null;
+  }
+
+  /**
+   * The game's public room proper: it keeps its world and where its players stood, and waits a
+   * while empty before stopping. A copy of it or a room of one's own shares only the game's data
+   * (all-time numbers), and goes soon after it empties.
+   */
+  get keeps(): boolean {
+    return this.shard === 1;
   }
 
   get key(): string {
@@ -186,11 +204,11 @@ export function serve(o: ServeOptions): Promise<GameServer> {
 
   /** Start a room's game: in a worker of its own, or here. */
   function start(room: Room): RoomLink {
-    const spec: RoomSpec = { game: room.def.id, instance: room.instance, tickRate: rate, cheats: o.cheats ?? false, dev: o.dev ?? false, seed: o.seed, saveEvery: o.saveEvery ?? 30 };
+    const spec: RoomSpec = { game: room.def.id, instance: room.own ? room.instance : 'public', ...(room.shard > 1 ? { shard: room.shard } : {}), tickRate: rate, cheats: o.cheats ?? false, dev: o.dev ?? false, seed: o.seed, saveEvery: o.saveEvery ?? 30 };
     if (o.worker) return inWorker(room, spec, room.stopping ?? Promise.resolve());
     let shared = stores.get(room.def.id);
     if (!shared && o.store) stores.set(room.def.id, (shared = o.store(room.def.id)));
-    const core = new RoomCore(room.def, spec, o.wasm, shared && room.own ? new PrivateStore(shared, false) : shared, {
+    const core = new RoomCore(room.def, spec, o.wasm, shared && !room.keeps ? new PrivateStore(shared, false) : shared, {
       send: (client, text) => room.send(client, text),
       counts: (playing, watching) => {
         room.playing = playing;
@@ -219,7 +237,7 @@ export function serve(o: ServeOptions): Promise<GameServer> {
     const exit = new Promise<void>((done) => {
       void after.then(() => {
         engine ??= new WebAssembly.Module(o.wasm);
-        worker = o.worker!({ spec, wasm: engine, storeFile: o.storeFile?.(room.def.id) ?? null, own: room.own });
+        worker = o.worker!({ spec, wasm: engine, storeFile: o.storeFile?.(room.def.id) ?? null, own: !room.keeps });
         worker.on('message', (m: FromRoom) => {
           if (m.t === 'send') room.send(m.client, m.text);
           else if (m.t === 'counts') {
@@ -263,13 +281,13 @@ export function serve(o: ServeOptions): Promise<GameServer> {
     for (const ws of room.sockets.values()) ws.close(1011, 'The game stopped unexpectedly');
   }
 
-  /** Save and stop a room (nobody's in it, or the server is closing); a room of a player's own then goes. */
+  /** Save and stop a room (nobody's in it, or the server is closing); a copy of the public one, or a room of a player's own, then goes. */
   async function stop(room: Room) {
     const link = room.link;
     if (!link) return room.stopping ?? undefined;
     room.link = null;
     room.playing = room.watching = 0;
-    if (room.own) rooms.delete(room.key);
+    if (!room.keeps) rooms.delete(room.key);
     const done = link.stop().then(() => {
       room.log(`stopped${o.store || o.storeFile ? ' and saved' : ''}`);
       if (room.stopping === done) room.stopping = null;
@@ -278,23 +296,48 @@ export function serve(o: ServeOptions): Promise<GameServer> {
     return done;
   }
 
-  /** The room a connection asks for (`/<game>`, or `/<game>/<code>`), made if need be; or why not. */
+  /** The room a connection asks for (`/<game>`, `/<game>?shard=2`, or `/<game>/<code>`), made if need be; or why not. */
   function roomFor(req: IncomingMessage, address: string): Room | { code: number; reason: string } {
-    const parts = new URL(req.url ?? '/', 'http://server').pathname.split('/').filter(Boolean);
+    const url = new URL(req.url ?? '/', 'http://server');
+    const parts = url.pathname.split('/').filter(Boolean);
     const def = parts.length ? defs.get(parts[0]) : o.games.length === 1 ? o.games[0] : undefined;
     const code = parts[1];
     // Rooms of players' own need threads of their own (the games' module-level state).
     if (!def || parts.length > 2 || (code !== undefined && (!def.instances || !o.worker || !ROOM_CODE.test(code)))) return { code: CLOSE_UNKNOWN, reason: 'No such game on this server' };
-    const key = `${def.id}/${code ?? 'public'}`;
+    if (code === undefined) return publicRoom(def, Number(url.searchParams.get('shard')) || 1);
+    const key = `${def.id}/${code}`;
     const room = rooms.get(key);
     if (room?.link) return room;
-    if (code !== undefined && [...rooms.values()].filter((r) => r.creator === address && r.link).length >= limits.roomsPerAddress) {
+    if ([...rooms.values()].filter((r) => r.creator === address && r.link).length >= limits.roomsPerAddress) {
       return { code: CLOSE_LIMIT, reason: 'You have too many games of your own going: leave one first' };
     }
-    if (running() >= limits.rooms) return { code: CLOSE_FULL, reason: 'The server is busy (too many games going): try again soon' };
+    if (running() >= limits.rooms) return BUSY;
     if (room) return room;
-    const made = new Room(def, code ?? 'public', code === undefined ? null : address, (line) => log(`[${key}] ${line}`));
+    const made = new Room(def, code, address, (line) => log(`[${key}] ${line}`));
     rooms.set(key, made);
+    return made;
+  }
+
+  /**
+   * Where a connection to a game's public game goes: the copy it asks for (an invite link names
+   * one) if that has a place, else the fullest one with a place (so games fill up rather than
+   * spread thin), the first on a tie. If none has one: the public room proper if it isn't running,
+   * else a new copy (a game with `instances`: a copy runs in a thread of its own); or why not.
+   */
+  function publicRoom(def: GameDefinition, asked: number): Room | { code: number; reason: string } {
+    const copies = [...rooms.values()].filter((r) => r.def === def && !r.own);
+    const open = copies.filter((r) => r.link && r.sockets.size < limits.playersPerGame);
+    const pick = open.find((r) => r.shard === asked) ?? open.sort((a, b) => b.sockets.size - a.sockets.size || a.shard - b.shard)[0];
+    if (pick) return pick;
+    const first = copies.find((r) => r.shard === 1);
+    if (first?.link && (!def.instances || !o.worker)) return { code: CLOSE_FULL, reason: 'This game is full' };
+    if (running() >= limits.rooms) return BUSY;
+    if (first && !first.link) return first;
+    let shard = first ? 2 : 1;
+    while (copies.some((r) => r.shard === shard)) shard++;
+    const instance = shard === 1 ? 'public' : `public-${shard}`;
+    const made = new Room(def, instance, null, (line) => log(`[${def.id}/${instance}] ${line}`), shard);
+    rooms.set(made.key, made);
     return made;
   }
 
@@ -337,14 +380,16 @@ export function serve(o: ServeOptions): Promise<GameServer> {
       res.writeHead(200, { 'Content-Type': 'text/plain' }).end('ok');
     } else if (path === '/games' || path === '/') {
       const games = o.games.map((def) => {
-        const pub = rooms.get(`${def.id}/public`);
+        // The public game, in all its copies running.
+        const pub = [...rooms.values()].filter((r) => r.def === def && !r.own && r.link);
         const own = [...rooms.values()].filter((r) => r.def === def && r.own && r.link);
         return {
           id: def.id,
           title: def.title,
-          players: pub?.playing ?? 0,
-          watching: pub?.watching ?? 0,
-          running: !!pub?.link,
+          players: pub.reduce((n, r) => n + r.playing, 0),
+          watching: pub.reduce((n, r) => n + r.watching, 0),
+          running: pub.length > 0,
+          copies: pub.length,
           instances: !!def.instances,
           // Rooms of players' own, and how many are playing in them.
           rooms: own.length,
@@ -444,11 +489,11 @@ export function serve(o: ServeOptions): Promise<GameServer> {
     });
   }
 
-  // Rooms nobody's in are saved and stopped after a while (players' own sooner, and they go).
+  // Rooms nobody's in are saved and stopped after a while (copies and players' own sooner, and they go).
   const idle = setInterval(() => {
     const now = clock();
     for (const room of [...rooms.values()]) {
-      if (room.link && !room.sockets.size && now - room.emptySince > (room.own ? (o.idleStopOwn ?? 60) : (o.idleStop ?? 300))) void stop(room);
+      if (room.link && !room.sockets.size && now - room.emptySince > (room.keeps ? (o.idleStop ?? 300) : (o.idleStopOwn ?? 60))) void stop(room);
     }
   }, 250);
 

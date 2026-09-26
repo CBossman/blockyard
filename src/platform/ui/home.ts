@@ -457,6 +457,34 @@ export class TitleScreen {
     this.setStatus(text);
   }
 
+  /**
+   * The game's full (or the server's busy, or out of reach): say so, counting down to trying
+   * again. Resolves with a game picked meanwhile (this one too: at once), else null when it's time.
+   */
+  busy(text: string, seconds: number): Promise<string | null> {
+    this.status.classList.remove('error');
+    this.loading(`Waiting for ${this.title}…`);
+    const said = text.replace(/[.\s]+$/, '');
+    return new Promise((done) => {
+      let left = seconds;
+      const tick = () => this.setStatus(`${said}. Trying again in ${left} s, or pick another game.`);
+      tick();
+      const timer = window.setInterval(() => {
+        if (--left > 0) return tick();
+        window.clearInterval(timer);
+        done(null);
+      }, 1000);
+      this.game = {
+        current: '',
+        onPlay: () => {},
+        onPick: (id) => {
+          window.clearInterval(timer);
+          done(id);
+        },
+      };
+    });
+  }
+
   /** Playing: the page fades away (it comes back with `show`). */
   hide() {
     window.clearInterval(this.poll);

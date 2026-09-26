@@ -1,7 +1,24 @@
 import { decode, encode } from '../net/codec';
 import { FrameReader } from '../net/delta';
-import type { ClientCommand, HostBatch, ServerWelcome, TimedBatch, WireBatch } from '../net/protocol';
+import { CLOSE_UNKNOWN, type ClientCommand, type HostBatch, type ServerWelcome, type TimedBatch, type WireBatch } from '../net/protocol';
 import type { SimFrame } from '../sim/sim';
+
+/**
+ * The server closed the connection before its welcome: turned away (full, busy, too many from this
+ * address: its close code and reason) or out of reach. Worth trying again, unless there's no such game.
+ */
+export class Refused extends Error {
+  constructor(
+    message: string,
+    readonly code: number,
+  ) {
+    super(message);
+  }
+
+  get retry(): boolean {
+    return this.code !== CLOSE_UNKNOWN;
+  }
+}
 
 /**
  * A client's connection to its game server (`wss://host/<game>`): the host runs there on its own
@@ -36,7 +53,7 @@ export class SocketLink {
       // Turned away (full, too many connections) or unreachable: the server's reason, if it gave one.
       ws.onclose = (e: CloseEvent) => {
         if (link) link.onClose?.();
-        else reject(new Error(e.reason || `Can't reach the game server at ${url}.`));
+        else reject(new Refused(e.reason || `Can't reach the game server at ${url}`, e.code));
       };
     });
   }
