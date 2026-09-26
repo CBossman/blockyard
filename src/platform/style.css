@@ -955,6 +955,268 @@ body {
   }
 }
 
+/* Their face beside the name: the way into the locker. */
+.home-face-button {
+  appearance: none;
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 60px;
+  padding: 0;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(8, 11, 17, 0.66);
+  cursor: pointer;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  transition: border-color 150ms ease, transform 120ms ease;
+}
+.home-face-button:hover {
+  border-color: var(--game);
+  transform: translateY(-1px);
+}
+.home-face {
+  width: 44px;
+  height: 44px;
+  image-rendering: pixelated;
+}
+
+/* The locker: their look, over the home page. */
+.home > .locker-screen {
+  position: absolute;
+  inset: 0;
+}
+.locker-screen {
+  z-index: 10;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(5, 7, 11, 0.62);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  transition-duration: 180ms;
+}
+.locker-panel {
+  display: flex;
+  flex-direction: column;
+  width: min(900px, 100%);
+  max-height: min(760px, calc(100vh - 48px));
+  padding: 20px 24px 22px;
+  border-radius: 16px;
+  background: rgba(12, 15, 23, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55);
+}
+.locker-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+.locker-title {
+  font: 700 26px/1 var(--pixel);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.locker-main {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  gap: 22px;
+  min-height: 0;
+}
+.locker-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 18px 10px 14px;
+  border-radius: 12px;
+  background: radial-gradient(circle at 50% 40%, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.01) 70%), rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+.locker-preview {
+  width: 216px;
+  image-rendering: pixelated;
+}
+.locker-tagline {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-height: 32px;
+}
+.locker-name {
+  font: 700 13px var(--pixel);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+}
+.locker-sub {
+  font: 600 10px var(--sans);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.8);
+}
+.locker-turn,
+.locker-done {
+  appearance: none;
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  font: 600 12.5px var(--sans);
+  cursor: pointer;
+}
+.locker-turn:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+.locker-side {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.locker-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  margin-bottom: 12px;
+}
+.locker-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-right: 4px;
+  scrollbar-width: thin;
+}
+.locker-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.locker-label {
+  font: 600 10.5px var(--sans);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.locker-swatches,
+.locker-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.locker-swatch {
+  appearance: none;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border-radius: 6px;
+  border: 2px solid rgba(255, 255, 255, 0.12);
+  cursor: pointer;
+}
+.locker-swatch.on {
+  border-color: #fff;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.25);
+}
+.locker-chip {
+  appearance: none;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: #d9dfe9;
+  font: 500 12.5px var(--sans);
+  cursor: pointer;
+}
+.locker-chip:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+.locker-chip.on {
+  color: #10130d;
+  background: var(--game, #7fd46b);
+  border-color: transparent;
+}
+.locker-random {
+  align-self: flex-start;
+}
+.locker-items {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 8px;
+}
+.locker-item {
+  appearance: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.locker-item:hover {
+  background: rgba(255, 255, 255, 0.07);
+}
+.locker-item.on {
+  border-color: var(--game, #7fd46b);
+  background: color-mix(in srgb, var(--game, #7fd46b) 12%, transparent);
+}
+.locker-item.locked {
+  cursor: default;
+  opacity: 0.5;
+}
+.locker-item-name {
+  font: 600 13.5px var(--sans);
+}
+.locker-item-how {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.locker-item-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+}
+.locker-item-title {
+  font: 700 10px var(--sans);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.85);
+}
+.locker-note {
+  margin: 12px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.locker-note:empty {
+  display: none;
+}
+.locker-done {
+  align-self: flex-end;
+  margin-top: 12px;
+  padding: 10px 22px;
+  color: #10130d;
+  background: var(--game, #7fd46b);
+  border-color: transparent;
+  font: 700 14px var(--pixel);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+@media (max-width: 720px) {
+  .locker-main {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* The shelf: every game's card, the one on show lifted and ringed in its colour. */
 .home-shelf {
   display: flex;
@@ -2376,6 +2638,16 @@ input[type='range']::-moz-range-thumb {
 }
 .marker.offscreen .marker-label {
   top: 12px;
+}
+/* A second line under a name: their title. */
+.marker-sub {
+  display: block;
+  margin-top: 1px;
+  font: 600 8.5px var(--sans);
+  letter-spacing: 0.06em;
+  text-align: center;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.82);
 }
 
 /* Radar (bottom right), or in a widget place, after the widgets there (`RadarData.at`) */

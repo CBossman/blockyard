@@ -99,6 +99,8 @@ export interface PlayerFrame {
   model: ModelSpec | null;
   /** Their name's colour above their figure. */
   color: string | null;
+  /** The cosmetics they wear (ids across the platform); each screen shows those its game shows. */
+  wear?: string[];
   /** A clip their figure plays (`player.animate`). */
   clip?: ClipFrame | null;
   /** The solid prop they ride (`player.riding`), and where their feet are on it (its own space). */
@@ -135,6 +137,8 @@ export interface PlayerSimParts {
   now(): number;
   /** `player.achieve`: award one of the game's achievements (true the first time). */
   achieve(p: PlayerSim, id: string): boolean;
+  /** `player.grant`: give one of the game's cosmetics. */
+  grant(p: PlayerSim, id: string): boolean;
 }
 
 /**
@@ -194,6 +198,12 @@ export class PlayerSim {
   store: StoreApi = guestStore();
   /** The game's achievements they have (their account's, as they joined, and any since). */
   achieved = new Set<string>();
+  /** Their avatar's code (`avatarCode`), or null: the game's own look for them. */
+  avatar: string | null = null;
+  /** The cosmetics they wear (ids across the platform). */
+  wear: string[] = [];
+  /** Cosmetics given to them here (`player.grant`), so each is given once. */
+  owns = new Set<string>();
   model: ModelSpec | null = null;
   color: string | null = null;
   /** A clip their figure plays (`animate`), and how many they've asked for. */
@@ -507,6 +517,7 @@ export class PlayerSim {
       skin: this.skin,
       model: this.model,
       color: this.color,
+      ...(this.wear.length ? { wear: this.wear } : {}),
       clip: this.clip,
       ride: s.ride ? { prop: s.ride, p: [s.rideX, s.rideY, s.rideZ] } : null,
       orbit: this.orbit,
@@ -600,6 +611,7 @@ export class PlayerSim {
         return me.adopted;
       },
       achieve: (id) => this.p.achieve(this, id),
+      grant: (id) => this.p.grant(this, id),
       achieved: (id) => me.achieved.has(id),
       hud: present.hud(this.id),
       audio: present.audio(this.id),

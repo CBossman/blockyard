@@ -1,6 +1,11 @@
 import { h } from './dom';
 import { AccountCorner } from './account';
 import { Profile, tally, type Earned } from './profile';
+import { Locker, setGameNames, type Look } from './locker';
+import { drawFace } from './avatarview';
+import { avatarCode, parseAvatar, randomAvatar } from '../avatar';
+import { cosmeticCatalog, type Cosmetic } from '../cosmetics';
+import type { CosmeticDef } from '../api/types';
 import { hintChips, keyHints, type GameControls } from './controls';
 
 /** Playing on a game server: the home page asks for a name, and says who's on. */
@@ -23,6 +28,7 @@ interface ListedGame {
   accent?: string;
   cover?: string;
   achievements?: Record<string, { title: string; description: string; hidden?: boolean }>;
+  cosmetics?: Record<string, CosmeticDef>;
 }
 
 /** Blockyard's mark: a grass block, drawn isometric. */
@@ -75,6 +81,13 @@ export class TitleScreen {
   /** The game on show's achievements (how many, how many earned): opens the profile. */
   private feats: HTMLElement;
   private profile: Profile;
+  private locker: Locker;
+  private catalog: Map<string, Cosmetic>;
+  /** What they wear (their account's once signed in; a guest's, kept in this browser). */
+  private look: Look;
+  private owned: string[] = [];
+  /** Their face, beside the name: opens the locker. */
+  private face = h('canvas.home-face') as HTMLCanvasElement;
   /** What the player has earned, as last asked (null: a guest, or not asked yet). */
   private earned: Earned | null = null;
   private fill: HTMLElement;
@@ -114,14 +127,24 @@ export class TitleScreen {
       if (me) this.nameInput.value = me.name;
       this.guest.classList.toggle('hidden', !!me || !this.game?.online);
       void this.refreshEarned();
+      void this.refreshLook();
     };
     this.profile = new Profile(games);
     this.profile.onSignIn = () => this.account.signIn();
     this.account.onProfile = () => this.openProfile();
     this.feats = h('button.home-feats.hidden', { onclick: () => this.openProfile(this.game?.current) });
+    this.catalog = cosmeticCatalog(games);
+    setGameNames(games);
+    this.look = localLook();
+    this.locker = new Locker(this.catalog);
+    this.locker.onSignIn = () => this.account.signIn();
+    this.locker.onSave = (look) => void this.saveLook(look);
+    this.account.onLocker = () => this.openLocker();
     const signIn = h('button.home-guest-signin', { onclick: () => this.account.signIn() }, 'Sign in with Discord');
     this.guest = h('div.home-guest.hidden', {}, 'Playing as a guest: what you earn lasts this visit. ', signIn, ' to keep it.');
-    this.actions = h('div.home-actions', {}, h('label.home-name', {}, h('span', {}, 'Playing as'), this.nameInput), this.button);
+    const faceButton = h('button.home-face-button', { onclick: () => this.openLocker(), title: 'Your look', 'aria-label': 'Your look' }, this.face);
+    this.actions = h('div.home-actions', {}, faceButton, h('label.home-name', {}, h('span', {}, 'Playing as'), this.nameInput), this.button);
+    this.drawFace();
     this.rooms = h('div.home-rooms');
     this.hints = h('div.home-hints');
     this.shelf = h('nav.home-shelf', { 'aria-label': 'Games' });
@@ -135,6 +158,7 @@ export class TitleScreen {
       h('main.home-hero', {}, this.kicker, this.heading, this.tagline, this.feats, this.status, this.actions, this.guest, this.rooms, this.hints),
       this.shelf,
       this.profile.root,
+      this.locker.root,
     );
     // The mouse wheel runs the shelf sideways, when there are more games than fit.
     this.shelf.addEventListener('wheel', (e) => {
@@ -176,6 +200,37 @@ export class TitleScreen {
     if (!all) return;
     this.feats.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7 3h10v2h3v3a4 4 0 0 1-4 4h-.4A5 5 0 0 1 13 14.9V17h3v2H8v-2h3v-2.1A5 5 0 0 1 8.4 12H8a4 4 0 0 1-4-4V5h3V3zm0 4H6v1a2 2 0 0 0 1 1.7V7zm10 0v2.7A2 2 0 0 0 18 8V7h-1zM6 20h12v2H6v-2z"/></svg>';
     this.feats.append(h('span', {}, this.account.me ? `${have} of ${all} achievements` : `${all} achievements to earn`));
+  }
+
+  /** What a signed-in player wears (their account's), and owns; a guest's stays as this browser has it. */
+  private async refreshLook() {
+    const kept = await this.account.look();
+    if (!kept) return;
+    this.owned = Object.keys(kept.owned);
+    this.look = { avatar: parseAvatar(kept.avatar) ?? this.look.avatar, wear: kept.wear };
+    this.drawFace();
+  }
+
+  private openLocker() {
+    this.locker.show(this.look, { signedIn: !!this.account.me, owned: this.owned, name: this.nameInput.value.trim() || this.account.me?.name || 'You' });
+  }
+
+  private async saveLook(look: Look) {
+    this.look = look;
+    saveLocalLook(look);
+    const kept = await this.account.saveLook(avatarCode(look.avatar), look.wear);
+    if (kept) this.look = { avatar: parseAvatar(kept.avatar) ?? look.avatar, wear: kept.wear };
+    this.drawFace();
+  }
+
+  private drawFace() {
+    const hat = this.look.wear.map((id) => this.catalog.get(id)).find((c) => c?.slot === 'hat');
+    drawFace(this.face, this.look.avatar, hat, 4);
+  }
+
+  /** Their avatar's code, to play in (a signed-in player's account's is used anyway). */
+  avatar(): string {
+    return avatarCode(this.look.avatar);
   }
 
   private openProfile(game?: string) {
@@ -417,4 +472,26 @@ export function copyInvite(said: (text: string) => void) {
     () => said(link.href),
   );
   if (!done) said(link.href);
+}
+
+/** A guest's look, as this browser keeps it (their first: a random avatar, kept). */
+function localLook(): Look {
+  try {
+    const kept = JSON.parse(localStorage.getItem('voxel.look') ?? 'null') as { avatar?: string } | null;
+    const avatar = parseAvatar(kept?.avatar);
+    if (avatar) return { avatar, wear: [] };
+  } catch {
+    // (A fresh one.)
+  }
+  const look = { avatar: randomAvatar(), wear: [] };
+  saveLocalLook(look);
+  return look;
+}
+
+function saveLocalLook(look: Look) {
+  try {
+    localStorage.setItem('voxel.look', JSON.stringify({ avatar: avatarCode(look.avatar) }));
+  } catch {
+    // not kept
+  }
 }

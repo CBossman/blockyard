@@ -1,3 +1,4 @@
+import { parseAvatar } from '../avatar';
 import { plainData } from '../ui/markup';
 import { MESSAGE_MAX, MESSAGE_NAME, type ClientCommand, type ClientMessage, type PlayerInput } from './protocol';
 
@@ -22,11 +23,13 @@ export function sanitizeCommand(raw: unknown): ClientCommand | null {
       return msg ? { t: 'message', msg } : null;
     }
     case 'start': {
-      if (raw.name === undefined) return { t: 'start' };
+      // An avatar's code, if it is one (anything else is left out).
+      const avatar = parseAvatar(raw.avatar as string) ? (raw.avatar as string) : undefined;
+      if (raw.name === undefined) return avatar ? { t: 'start', avatar } : { t: 'start' };
       if (typeof raw.name !== 'string') return null;
       // Printable and short: it's shown over their head and keys their saved place.
       const name = raw.name.replace(/[^\p{L}\p{N} _.-]/gu, '').trim().slice(0, 20);
-      return { t: 'start', name: name || 'Player' };
+      return { t: 'start', name: name || 'Player', ...(avatar ? { avatar } : {}) };
     }
     case 'restart':
       return { t: 'restart' };

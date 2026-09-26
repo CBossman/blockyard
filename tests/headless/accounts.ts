@@ -20,7 +20,7 @@ async function until(what: string, ok: () => boolean, ms = 10000) {
 }
 
 /** A socket from a page at `origin`, with `cookie`, pressing Play as `name` (at once, or on `play()` if `hold`). */
-function player(port: number, name: string, origin: string, cookie?: string, hold = false) {
+function player(port: number, name: string, origin: string, cookie?: string, hold = false, avatar?: string) {
   const ws = new WebSocket(`ws://localhost:${port}/heart-hunt`, { origin, headers: cookie ? { Cookie: cookie } : {} });
   const frames = new FrameReader<SimFrame>();
   let frame: SimFrame | null = null;
@@ -28,7 +28,7 @@ function player(port: number, name: string, origin: string, cookie?: string, hol
   const pops: { title: string; kept: boolean; count?: string }[] = [];
   let closed: { code: number; reason: string } | null = null;
   let welcomed = false;
-  const play = () => ws.send(encode({ t: 'start', name } satisfies ClientCommand));
+  const play = () => ws.send(encode({ t: 'start', name, ...(avatar ? { avatar } : {}) } satisfies ClientCommand));
   ws.on('message', (data) => {
     const m = decode<ServerWelcome | WireBatch>(String(data));
     if ('t' in m && m.t === 'welcome') {
@@ -44,6 +44,8 @@ function player(port: number, name: string, origin: string, cookie?: string, hol
   ws.on('close', (code, reason) => (closed = { code, reason: String(reason) }));
   return {
     pops,
+    /** A player as this screen last saw them. */
+    who: (n: string) => (frame as SimFrame | null)?.players.find((p) => p.name === n),
     send: (c: ClientCommand) => ws.send(encode(c)),
     play,
     welcomed: () => welcomed,
@@ -185,6 +187,73 @@ export default async function accounts() {
   }
   await inWorker();
   await achievements();
+  await looks();
+}
+
+/**
+ * Looks: an account's avatar and what it wears (`/me/look`: only what it owns, or the platform's
+ * free things, one to a slot), shown to everyone in a game that doesn't dress its players (a game
+ * that does keeps its own skin), a guest's avatar from Play, and a game's cosmetics given
+ * (`player.grant`, an achievement's `reward`), kept for the account and then wearable.
+ */
+async function looks() {
+  const accounts = Accounts.open(':memory:');
+  const base = games.find((g) => g.id === 'heart-hunt')!;
+  const hat = { boxes: [{ from: [-4, 0, -4], to: [4, 2, 4], color: '#ffcc00' }] } as const;
+  const def = {
+    ...base,
+    cosmetics: { t_crown: { name: 'Crown', slot: 'hat' as const, model: { boxes: hat.boxes.map((b) => ({ ...b, from: [...b.from] as [number, number, number], to: [...b.to] as [number, number, number] })) } } },
+    achievements: { ...base.achievements, t_win: { title: 'Win', description: 'Win', reward: 't_crown' } },
+  };
+  const dressed = { ...games.find((g) => g.id === 'obby')!, player: { ...games.find((g) => g.id === 'obby')!.player, skin: [0, 0] as [number, number] } };
+  const srv = await serve({ games: [def, dressed], port: 0, seed: 1, wasm: readFileSync('engine/pkg/voxel_engine_bg.wasm'), accounts, sites: [SITE], dev: true, cheats: true });
+  const base$ = `http://localhost:${srv.port}`;
+  const post = (path: string, cookie: string, body: unknown) => fetch(`${base$}${path}`, { method: 'POST', headers: { Cookie: cookie, Origin: SITE, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  try {
+    const cookie = (await fetch(`${base$}/auth/dev?name=Ann`)).headers.getSetCookie()[0].split(';')[0];
+    const annId = accounts.session(cookie.split('=')[1])!.id;
+    const fresh = (await (await fetch(`${base$}/me/look`, { headers: { Cookie: cookie, Origin: SITE } })).json()) as { avatar: string | null; wear: string[] };
+    check(fresh.avatar === null && fresh.wear.length === 0, `nothing chosen yet: ${JSON.stringify(fresh)}`);
+    const set = (await (await post('/me/look', cookie, { avatar: 'a3632182f1', wear: ['blockyard:cap', 'heart-hunt:t_crown', 'blockyard:beanie', 'blockyard:tag_sky'] })).json()) as { avatar: string; wear: string[] };
+    check(set.avatar === 'a3632182f1' && set.wear.join() === 'blockyard:beanie,blockyard:tag_sky', `only what's hers, a hat at a time: ${JSON.stringify(set)}`);
+    check((await post('/me/look', cookie, { avatar: 'not-an-avatar' })).status === 400, 'a made-up avatar is turned down');
+
+    // Everyone sees her look.
+    const ann = player(srv.port, 'x', SITE, cookie);
+    const gus = player(srv.port, 'Gus', SITE, undefined, false, 'a000000000');
+    const bad = player(srv.port, 'Bad', SITE, undefined, false, 'zzz');
+    await until('all three in', () => !!gus.who('Ann') && !!gus.who('Bad') && !!ann.who('Gus'));
+    const a = gus.who('Ann')!;
+    check(a.skin?.atlas === 'avatar:a3632182f1' && a.wear?.join() === 'blockyard:beanie,blockyard:tag_sky', `her avatar and what she wears, on another screen: ${JSON.stringify({ skin: a.skin, wear: a.wear })}`);
+    check(ann.who('Gus')?.skin?.atlas === 'avatar:a000000000' && !ann.who('Gus')?.wear, "a guest's avatar from Play (and nothing worn)");
+    check(ann.who('Bad')?.skin === null, `no avatar for a code that isn't one: ${JSON.stringify(ann.who('Bad')?.skin)}`);
+
+    // Given in play: an achievement's reward, then hers to wear.
+    const host = srv.host(def.id)!;
+    host.sim.players.find((p) => p.name === 'Ann')!.api.achieve('t_win');
+    await until('the crown is hers', () => !!accounts.owned(annId)['heart-hunt:t_crown']);
+    const worn = (await (await post('/me/look', cookie, { wear: ['heart-hunt:t_crown'] })).json()) as { wear: string[] };
+    check(worn.wear.join() === 'heart-hunt:t_crown', `now wearable: ${JSON.stringify(worn)}`);
+    check(!host.sim.players.find((p) => p.name === 'Gus')!.api.grant('t_crown'), "a guest's isn't kept");
+    for (const c of [ann, gus, bad]) c.close();
+
+    // A game that dresses its players keeps its own skin for them.
+    const inObby = new WebSocket(`ws://localhost:${srv.port}/obby`, { origin: SITE, headers: { Cookie: cookie } });
+    const frames = new FrameReader<SimFrame>();
+    let seen: SimFrame | null = null;
+    inObby.on('message', (d) => {
+      const m = decode<ServerWelcome | WireBatch>(String(d));
+      if ('t' in m && m.t === 'welcome') inObby.send(encode({ t: 'start', name: 'x' } satisfies ClientCommand));
+      else if ((m as WireBatch).f !== undefined) seen = frames.read((m as WireBatch).f);
+    });
+    await until('Ann in the obby', () => !!(seen as SimFrame | null)?.players.some((p) => p.name === 'Ann'));
+    const inO = (seen as SimFrame | null)!.players.find((p) => p.name === 'Ann')!;
+    check(inO.skin === null && inO.wear?.join() === 'heart-hunt:t_crown', `the game's skin, her crown: ${JSON.stringify({ skin: inO.skin, wear: inO.wear })}`);
+    inObby.close();
+    console.log('  looks: /me/look keeps what she may wear, everyone sees her avatar and what she wears, a guest\'s avatar from Play, a reward given and then worn, a dressing game keeps its skin');
+  } finally {
+    await srv.close();
+  }
 }
 
 /**

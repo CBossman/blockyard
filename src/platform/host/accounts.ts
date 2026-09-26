@@ -42,6 +42,17 @@ const SETUP = `
     created TEXT NOT NULL DEFAULT (datetime('now'))
   );
   CREATE INDEX IF NOT EXISTS sessions_account ON sessions (account);
+  CREATE TABLE IF NOT EXISTS looks (
+    account TEXT PRIMARY KEY REFERENCES accounts (id) ON DELETE CASCADE,
+    avatar TEXT,
+    wear TEXT NOT NULL DEFAULT '[]'
+  );
+  CREATE TABLE IF NOT EXISTS owned (
+    account TEXT NOT NULL REFERENCES accounts (id) ON DELETE CASCADE,
+    cosmetic TEXT NOT NULL,
+    at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (account, cosmetic)
+  );
   CREATE TABLE IF NOT EXISTS achievements (
     account TEXT NOT NULL REFERENCES accounts (id) ON DELETE CASCADE,
     game TEXT NOT NULL,
@@ -154,6 +165,39 @@ export class Accounts {
 
   endSession(token: string) {
     this.db.prepare('DELETE FROM sessions WHERE hash = ?').run(hash(token));
+  }
+
+  /** What an account wears: its avatar's code (null: none chosen yet) and the cosmetics it has on. */
+  look(account: string): { avatar: string | null; wear: string[] } {
+    const row = this.db.prepare('SELECT avatar, wear FROM looks WHERE account = ?').get(account) as { avatar: string | null; wear: string } | undefined;
+    if (!row) return { avatar: null, wear: [] };
+    let wear: string[] = [];
+    try {
+      wear = (JSON.parse(row.wear) as unknown[]).filter((w): w is string => typeof w === 'string');
+    } catch {
+      // (Nothing on.)
+    }
+    return { avatar: row.avatar, wear };
+  }
+
+  /** Change what an account wears (the caller checks it's theirs to wear). */
+  setLook(account: string, look: { avatar?: string | null; wear?: string[] }) {
+    const was = this.look(account);
+    const avatar = look.avatar === undefined ? was.avatar : look.avatar;
+    const wear = JSON.stringify(look.wear ?? was.wear);
+    this.db.prepare('INSERT INTO looks (account, avatar, wear) VALUES (?, ?, ?) ON CONFLICT (account) DO UPDATE SET avatar = excluded.avatar, wear = excluded.wear').run(account, avatar, wear);
+  }
+
+  /** A cosmetic, theirs: true the first time. */
+  own(account: string, cosmetic: string): boolean {
+    return this.db.prepare('INSERT INTO owned (account, cosmetic) VALUES (?, ?) ON CONFLICT DO NOTHING').run(account, cosmetic).changes > 0;
+  }
+
+  /** The cosmetics an account has: when each became theirs (UTC). */
+  owned(account: string): Record<string, string> {
+    const out: Record<string, string> = {};
+    for (const r of this.db.prepare('SELECT cosmetic, at FROM owned WHERE account = ?').all(account) as { cosmetic: string; at: string }[]) out[r.cosmetic] = r.at;
+    return out;
   }
 
   /** One of a game's achievements, earned (kept once: the first time counts). */

@@ -250,9 +250,9 @@ export type ClientCommand =
   | { t: 'message'; msg: ClientMessage }
   /**
    * Play begins (the title screen was clicked). On a server, a client that was watching joins the
-   * game here, as `name`.
+   * game here, as `name`, in their avatar (`avatarCode`: a guest's; a signed-in player's is their account's).
    */
-  | { t: 'start'; name?: string }
+  | { t: 'start'; name?: string; avatar?: string }
   | { t: 'restart' }
   /** Time of day (the pause menu, `[` `]`), and the day length (settings). */
   | { t: 'env'; time?: number; dayLength?: number }

@@ -8,6 +8,7 @@ import { sanitizeCommand } from '../net/validate';
 import { ADOPTED, PLAYER_DATA } from '../sim/sim';
 import type { Account, Accounts } from './accounts';
 import { Auth, type DiscordApp } from './auth';
+import { cosmeticCatalog } from '../cosmetics';
 import type { GameHost, Who } from './game';
 import { PrivateStore, RoomCore, type RoomSpec } from './room';
 import type { FromRoom, RoomWorkerData, ToRoom } from './room-worker';
@@ -176,7 +177,7 @@ export function serve(o: ServeOptions): Promise<GameServer> {
   /** Signed-in connections: their account's id. */
   const accountOf = new Map<string, { id: string; ws: WebSocket }>();
   const auth = o.accounts
-    ? new Auth({ accounts: o.accounts, discord: o.discord, sites: o.sites ?? [], dev: o.dev ?? false, onDelete: (a) => forget(a), log })
+    ? new Auth({ accounts: o.accounts, discord: o.discord, sites: o.sites ?? [], dev: o.dev ?? false, onDelete: (a) => forget(a), catalog: cosmeticCatalog([...o.games, ...(o.hidden ?? [])]), log })
     : null;
   // Compiled once: each room's worker gets the module (no compiling per room).
   let engine: WebAssembly.Module | null = null;
@@ -197,6 +198,7 @@ export function serve(o: ServeOptions): Promise<GameServer> {
       },
       log: room.log,
       achieve: (account, id) => o.accounts?.achieve(account, room.def.id, id),
+      grant: (account, id) => o.accounts?.own(account, id),
     });
     return {
       host: core.host,
@@ -225,6 +227,7 @@ export function serve(o: ServeOptions): Promise<GameServer> {
             room.watching = m.watching;
           } else if (m.t === 'log') room.log(m.line);
           else if (m.t === 'achieve') o.accounts?.achieve(m.account, room.def.id, m.id);
+          else if (m.t === 'grant' && m.id.startsWith(`${room.def.id}:`)) o.accounts?.own(m.account, m.id);
           else if (m.t === 'failed') failed(room, link, m.text);
         });
         worker.on('error', (err: Error) => failed(room, link, err.stack ?? err.message));
@@ -299,6 +302,9 @@ export function serve(o: ServeOptions): Promise<GameServer> {
    * An account is deleted: its connections close, and each game forgets what it kept for it (its
    * `player.store`, its place). Rooms in other threads pick that up when they next save.
    */
+  /** The cosmetics of one game an account has (`game:id`). */
+  const ownedIn = (account: string, game: string) => Object.keys(o.accounts?.owned(account) ?? {}).filter((id) => id.startsWith(`${game}:`));
+
   function forget(account: Account) {
     for (const [client, a] of accountOf) {
       if (a.id !== account.id) continue;
@@ -379,7 +385,7 @@ export function serve(o: ServeOptions): Promise<GameServer> {
     // their account if they're signed in.
     const id = `c${nextClient++}`;
     let account = auth?.who(req) ?? null;
-    const who: Who = account ? { account: { id: account.id, name: account.name, avatar: account.avatar }, achieved: o.accounts!.achievedIn(account.id, room.def.id) } : { account: null };
+    const who: Who = account ? { account: { id: account.id, name: account.name, avatar: account.avatar }, achieved: o.accounts!.achievedIn(account.id, room.def.id), look: o.accounts!.look(account.id), owned: ownedIn(account.id, room.def.id) } : { account: null };
     if (account) accountOf.set(id, { id: account.id, ws });
     room.sockets.set(id, ws);
     room.link ??= start(room);
@@ -416,15 +422,12 @@ export function serve(o: ServeOptions): Promise<GameServer> {
         if (ws.readyState === ws.OPEN) ws.send(encode(refused));
         return;
       }
-      // A guest can't be a name an account holds; a signed-in player plays as their account's name,
-      // as it is now (they may have changed it on the home page, watching).
+      // A guest can't be a name an account holds; a signed-in player plays as their account's name.
       if (cmd.t === 'start' && !account && o.accounts?.nameHeld(cmd.name ?? 'Player')) cmd = { ...cmd, name: `${cmd.name ?? 'Player'} (guest)` };
-      if (cmd.t === 'start' && account) {
-        const now = o.accounts?.get(account.id);
-        if (now && now.name !== account.name) {
-          account = now;
-          room.link?.identify(id, { account: { id: now.id, name: now.name, avatar: now.avatar } });
-        }
+      if (cmd.t === 'start' && account && o.accounts) {
+        // (Their name and look, too, as they are now: either may have changed on the home page.)
+        account = o.accounts.get(account.id) ?? account;
+        room.link?.identify(id, { account: { id: account.id, name: account.name, avatar: account.avatar }, look: o.accounts.look(account.id) });
       }
       room.link?.command(id, cmd);
       if (cmd.t === 'start') room.log(`${id} plays as ${account ? `${account.name} (${account.id})` : `${cmd.name ?? 'Player'} (a guest)`}`);

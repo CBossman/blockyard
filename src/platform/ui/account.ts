@@ -28,6 +28,8 @@ export class AccountCorner {
   onSay: ((text: string) => void) | null = null;
   /** "Achievements" in the menu: open the profile. */
   onProfile: (() => void) | null = null;
+  /** "Your look" in the menu: open the locker. */
+  onLocker: (() => void) | null = null;
   private http: string | null = null;
   private menuOpen = false;
 
@@ -71,6 +73,28 @@ export class AccountCorner {
     try {
       const r = await fetch(`${this.http}/me/achievements`, { credentials: 'include' });
       return r.ok ? ((await r.json()) as { achievements: Earned }).achievements : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** What they wear and own (signed in), or null. */
+  async look(): Promise<{ avatar: string | null; wear: string[]; owned: Record<string, string> } | null> {
+    if (!this.me || !this.http) return null;
+    try {
+      const r = await fetch(`${this.http}/me/look`, { credentials: 'include' });
+      return r.ok ? ((await r.json()) as { avatar: string | null; wear: string[]; owned: Record<string, string> }) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Keep what they wear for their account (signed in): what was kept (what they may wear of it). */
+  async saveLook(avatar: string, wear: string[]): Promise<{ avatar: string | null; wear: string[] } | null> {
+    if (!this.me || !this.http) return null;
+    try {
+      const r = await fetch(`${this.http}/me/look`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ avatar, wear }) });
+      return r.ok ? ((await r.json()) as { avatar: string | null; wear: string[] }) : null;
     } catch {
       return null;
     }
@@ -121,6 +145,7 @@ export class AccountCorner {
       'div.home-menu',
       { role: 'menu' },
       h('div.home-menu-head', {}, 'Signed in with Discord'),
+      h('button.home-menu-item', { onclick: () => (this.toggleMenu(false), this.onLocker?.()) }, 'Your look'),
       h('button.home-menu-item', { onclick: () => (this.toggleMenu(false), this.onProfile?.()) }, 'Your achievements'),
       h('button.home-menu-item', { onclick: () => void this.signOut() }, 'Sign out'),
       remove,

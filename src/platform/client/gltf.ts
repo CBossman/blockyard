@@ -8,7 +8,7 @@ import type { SharedUniforms } from '../render/pipeline';
 import { Shaders } from '../render/shaders';
 import type { AnimState, Figure } from '../render/entities';
 import { ClipLayer, type ClipPlay } from './clips';
-import { HELD_SCALE, HumanoidRig, rigFrames, type RigFrames } from './humanoid';
+import { HELD_SCALE, HumanoidRig, rigFrames, wearAnchor, type RigFrames } from './humanoid';
 
 /** A model without an emissive map glows nowhere. */
 const BLACK = (() => {
@@ -587,6 +587,8 @@ export class GltfFigure implements Figure {
   readonly rig: HumanoidRig | null = null;
   /** Clips played over its animation (`play`), when it isn't a humanoid. */
   private layer: ClipLayer | null = null;
+  /** Where cosmetics are worn (`attach`), once asked for. */
+  private anchors = new Map<string, THREE.Object3D>();
 
   constructor(gltf: GLTF, spec: GltfSpec, scale: number, lib: GltfLibrary) {
     const inner = new THREE.Group();
@@ -718,6 +720,18 @@ export class GltfFigure implements Figure {
     if (this.head && (s.headYaw || s.headPitch)) this.head.quaternion.multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(s.headPitch, s.headYaw, 0, 'YXZ')));
     if (this.layer?.active) this.layer.apply(dt);
     this.root.rotation.z = s.dying * (Math.PI / 2) * 0.95;
+  }
+
+  /** Where a cosmetic is worn (see `Figure.attach`): on the rig's head or chest; null off the rig. */
+  attach(point: 'hat' | 'back'): THREE.Object3D | null {
+    if (!this.rig) return null;
+    let a = this.anchors.get(point);
+    if (!a) {
+      const w = this.rig.wearFrame();
+      a = point === 'hat' ? wearAnchor(this.rig, 'head', w.top, w.headWidth, false, this.rig.body) : wearAnchor(this.rig, 'chest', w.back, w.bodyWidth, true, this.rig.body);
+      this.anchors.set(point, a);
+    }
+    return a;
   }
 
   /** Play one of its clips over its animation (`player.animate`, `entity.animate`), or null: fade out what's playing. */

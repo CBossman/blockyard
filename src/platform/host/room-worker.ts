@@ -26,6 +26,7 @@ export type FromRoom =
   | { t: 'counts'; playing: number; watching: number }
   | { t: 'log'; line: string }
   | { t: 'achieve'; account: string; id: string }
+  | { t: 'grant'; account: string; id: string }
   | { t: 'failed'; text: string };
 
 /**
@@ -52,6 +53,7 @@ export async function serveRoomWorker(find: (id: string, dev: boolean) => GameDe
       counts: (playing, watching) => post({ t: 'counts', playing, watching }),
       log: (line) => post({ t: 'log', line }),
       achieve: (account, id) => post({ t: 'achieve', account, id }),
+      grant: (account, id) => post({ t: 'grant', account, id }),
     });
   } catch (err) {
     post({ t: 'failed', text: err instanceof Error ? (err.stack ?? err.message) : String(err) });

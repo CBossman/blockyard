@@ -1,4 +1,6 @@
 import type * as THREE from 'three';
+import { shownSlots, type Cosmetic } from '../cosmetics';
+import type { CosmeticSlot } from '../api/types';
 import type { VoxelWorld } from '@engine/voxel_engine.js';
 import type { FigureSignals } from '../api/client';
 import { Models, Skins } from '../api/models';
@@ -31,6 +33,8 @@ export interface AvatarsParts {
   figure(def: ItemDefinition, state: object | null): FigureSignals | null;
   /** A clip our own movement abilities started, shown on our figure until the host's word arrives. */
   ownClip(): ClipFrame | null;
+  /** A cosmetic, by id (what players wear). */
+  cosmetic(id: string): Cosmetic | undefined;
 }
 
 /**
@@ -39,10 +43,14 @@ export interface AvatarsParts {
  */
 export class Avatars {
   private ids = new Map<string, number>();
+  /** The cosmetics this game shows. */
+  private slots: Set<CosmeticSlot>;
   private hurt = new Map<string, { health: number; flash: number }>();
   private tags = new Set<string>();
 
-  constructor(private p: AvatarsParts) {}
+  constructor(private p: AvatarsParts) {
+    this.slots = shownSlots(p.def);
+  }
 
   /** The entity id a player's figure has (none yet: undefined). */
   idOf(player: string): number | undefined {
@@ -108,6 +116,8 @@ export class Avatars {
       // state as the host shows it: a gun's aim and reload): the dead aim nothing.
       const heldDef = held ? this.p.content.items.get(held) : undefined;
       const mech = p.dead || !heldDef ? null : this.p.figure(heldDef, p.hand.state);
+      // What they wear that this game shows: hats and back items on the figure, a title and tag colour on the name.
+      const worn = (p.wear ?? []).map((w) => this.p.cosmetic(w)).filter((c): c is Cosmetic => !!c && this.slots.has(c.slot));
       out.push({
         id,
         player: p.id,
@@ -133,6 +143,7 @@ export class Avatars {
         reloading: mech?.reloading ?? false,
         sights: mech?.sights ?? 0,
         clip: (mine && this.p.ownClip()) || p.clip || undefined,
+        wear: worn.filter((c) => c.slot === 'hat' || c.slot === 'back').map((c) => c.id),
       });
       if (mine) continue;
       const tags = def.hud?.nameTags ?? 'always';
@@ -147,7 +158,9 @@ export class Avatars {
       seen.add(tag);
       this.tags.add(tag);
       const bar = def.hud?.healthBars && p.maxHealth > 0 ? p.health / p.maxHealth : undefined;
-      hud.marker(tag, top, { label: p.name, shape: 'dot', size: 3, color: p.color ?? '#ffffff', bar });
+      // (A game's colour for them, a team's, wins over their tag's.)
+      const title = worn.find((c) => c.slot === 'title')?.text;
+      hud.marker(tag, top, { label: p.name, sub: title, shape: 'dot', size: 3, color: p.color ?? worn.find((c) => c.slot === 'tag')?.color ?? '#ffffff', bar });
     }
     for (const tag of this.tags) {
       if (seen.has(tag)) continue;

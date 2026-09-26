@@ -62,6 +62,8 @@ interface ShownWidget {
 /** An achievement earned, as the host says it (see `Sim.achieve`). */
 interface AchievementPop {
   id: string;
+  /** The card's first line (default: "Achievement unlocked"). */
+  kicker?: string;
   title: string;
   description: string;
   /** Kept for their account (false: a guest's, for the visit). */
@@ -465,7 +467,11 @@ export class GameHud implements Omit<HudApi, 'marker' | 'radar' | 'scoreboard' |
     const cls = `marker ${opts.shape ?? 'box'}${opts.pulse ? ' pulse' : ''}${opts.bar !== undefined ? ' has-bar' : ''}`;
     if (m.el.className !== cls) m.el.className = cls;
     m.el.style.setProperty('--c', opts.color ?? '#ff5a4f');
-    if (m.label.textContent !== (opts.label ?? '')) m.label.textContent = opts.label ?? '';
+    const text = `${opts.label ?? ''}\u0000${opts.sub ?? ''}`;
+    if (m.label.dataset.text !== text) {
+      m.label.dataset.text = text;
+      m.label.replaceChildren(opts.label ?? '', ...(opts.sub ? [h('span.marker-sub', {}, opts.sub)] : []));
+    }
     if (opts.bar !== undefined) {
       let bar = m.el.querySelector('.marker-bar') as HTMLElement | null;
       if (!bar) m.el.append((bar = h('div.marker-bar', {}, h('div.marker-bar-fill'))));
@@ -623,6 +629,16 @@ export class GameHud implements Omit<HudApi, 'marker' | 'radar' | 'scoreboard' |
     if (this.popQueue.length === 1) this.nextAchievement();
   }
 
+  /**
+   * A cosmetic given to the player (`player.grant`): the same card as an achievement's, saying it's
+   * in their locker (or, a guest's, that signing in keeps such things).
+   */
+  cosmetic(c: { id: string; name: string; slot: string; kept: boolean }) {
+    const where = c.slot === 'hat' ? 'A hat' : c.slot === 'back' ? 'For your back' : c.slot === 'title' ? 'A title' : 'A name tag';
+    this.popQueue.push({ id: `cosmetic:${c.id}`, title: c.name, description: c.kept ? `${where}, in your locker on the home page` : `${where}: sign in to keep things like this`, kept: true, kicker: 'New to wear' });
+    if (this.popQueue.length === 1) this.nextAchievement();
+  }
+
   /** Which of the game's achievements the player has (as they joined), and whether they're kept (signed in). */
   achievements(ids: string[], kept: boolean) {
     this.earned = new Set(ids);
@@ -639,7 +655,7 @@ export class GameHud implements Omit<HudApi, 'marker' | 'radar' | 'scoreboard' |
       h(
         'div.achievement-text',
         {},
-        h('div.achievement-kicker', {}, `Achievement unlocked${a.count ? ` · ${a.count}` : ''}`),
+        h('div.achievement-kicker', {}, `${a.kicker ?? 'Achievement unlocked'}${a.count ? ` · ${a.count}` : ''}`),
         h('div.achievement-title', {}, a.title),
         h('div.achievement-desc', {}, a.description),
         a.kept ? null : h('div.achievement-note', {}, 'Playing as a guest: sign in on the home page to keep it'),

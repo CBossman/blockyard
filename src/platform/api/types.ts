@@ -65,6 +65,17 @@ export interface GameMeta {
    * alone: they don't add up across games. A guest sees them pop up, but they last the visit.
    */
   achievements?: Record<string, AchievementDef>;
+  /**
+   * Cosmetics the game gives (`player.grant(id)`, or an achievement's `reward`): hats, things worn
+   * on the back, titles and name tag colours that players keep for their account and wear in every
+   * game. Their ids are the game's own: `gold_fedora` here is `callofblocky:gold_fedora` everywhere.
+   */
+  cosmetics?: Record<string, CosmeticDef>;
+  /**
+   * Which cosmetics show in this game (default: all of them). A game can leave some out (`['title',
+   * 'tag']`: no hats in the way of its own headgear), or all (`[]`).
+   */
+  cosmeticSlots?: CosmeticSlot[];
 }
 
 /** One of a game's achievements (`GameMeta.achievements`). */
@@ -75,6 +86,39 @@ export interface AchievementDef {
   description: string;
   /** Kept off the profile until someone earns it (a surprise): "Hidden achievement" till then. */
   hidden?: boolean;
+  /** One of the game's cosmetics (`cosmetics`), given with it. */
+  reward?: string;
+}
+
+/** Where a cosmetic is worn: on the head, on the back, under the name (a title), or as the name tag's colour. */
+export type CosmeticSlot = 'hat' | 'back' | 'title' | 'tag';
+
+/**
+ * A cosmetic (`GameMeta.cosmetics`): something players keep for their account and wear in every game
+ * that shows its slot. Worn things are small models of coloured boxes; a title is text; a tag is a
+ * colour.
+ */
+export interface CosmeticDef {
+  name: string;
+  slot: CosmeticSlot;
+  /**
+   * A hat's or a back item's model, in texels (16 to a block), sized for the platform's box head (8
+   * texels across) and body (8 wide, 4 deep); on other bodies it's scaled to fit. A hat's origin is
+   * the middle of the top of the head (+y up, +z toward the face); a back item's is the middle of the
+   * back between the shoulders (+z out behind them). Keep hats within 12 texels across and 10 tall.
+   */
+  model?: CosmeticModel;
+  /** A title's words, under the name. */
+  text?: string;
+  /** A tag's colour (CSS). */
+  color?: string;
+  /** How it's earned, as the locker says it: "Reach level 10". */
+  how?: string;
+}
+
+/** A cosmetic's model: boxes, each from one corner to the other (texels), in one colour. */
+export interface CosmeticModel {
+  boxes: { from: [number, number, number]; to: [number, number, number]; color: string; glow?: boolean }[];
 }
 
 /**
@@ -1153,6 +1197,12 @@ export interface PlayerApi {
   achieve(id: string): boolean;
   /** Whether they have one of the game's achievements. */
   achieved(id: string): boolean;
+  /**
+   * Give them one of the game's cosmetics (`meta.cosmetics`), theirs to wear in every game: kept for
+   * their account, and it pops up. False for a guest (they're told signing in keeps such things),
+   * a bot, or an id the game doesn't list (reported). An achievement's `reward` gives one itself.
+   */
+  grant(id: string): boolean;
   /** This player's screen: HUD calls here reach only them (their wallet, their shop, their toasts). */
   readonly hud: HudApi;
   /** Sounds only this player hears (their coins, their kill). */
@@ -2222,6 +2272,8 @@ export interface MarkerOptions {
   /** Size in pixels, or `{ world: n }` to scale with distance like an object n blocks wide. */
   size?: number | { world: number; min?: number; max?: number };
   label?: string;
+  /** A second, smaller line under the label (a player's title, on their name tag). */
+  sub?: string;
   /** Arrow on the screen edge when off-screen. */
   edge?: boolean;
   /** Pulse (locks, warnings). */

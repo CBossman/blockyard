@@ -5,7 +5,10 @@ import { Shaders } from './shaders';
 import type { SharedUniforms } from './pipeline';
 import { GltfLibrary, surfaceUniforms, type ItemMesh, type Surface } from '../client/gltf';
 import type { ClipPlay } from '../client/clips';
-import { HumanoidRig } from '../client/humanoid';
+import { HumanoidRig, wearAnchor } from '../client/humanoid';
+import { ATLAS as ART_ATLAS } from '../art';
+import { atlasAvatar } from '../avatar';
+import { avatarPixels } from './avatar';
 import type { FigureState } from '../api/client/figures';
 
 /** The built-in starter sprites (16x16, `builtin` atlas, row at y = 64). Games bring the rest. */
@@ -131,7 +134,14 @@ export class EntityGraphics {
   }
 
   atlas(name: string): Atlas {
-    const a = this.atlases.get(name);
+    let a = this.atlases.get(name);
+    // A player's avatar (`avatar:<code>`): its skin painted from the code, the first time it's needed.
+    const avatar = a ? null : atlasAvatar(name);
+    if (avatar) {
+      const { albedo, emissive } = avatarPixels(avatar);
+      this.addAtlas(name, ART_ATLAS, ART_ATLAS, albedo, emissive);
+      a = this.atlases.get(name);
+    }
     if (!a) throw new Error(`unknown atlas "${name}"`);
     return a;
   }
@@ -329,7 +339,14 @@ export class EntityGraphics {
       pivot.add(mesh);
       nodes.get(joint)!.add(pivot);
     }
-    return new JointedFigure(root, body, material);
+    // Its head's top and width, its back's middle (between the shoulders) and the body's width, for what it wears.
+    const wear = {
+      top: [head.pivot[0], head.pivot[1] + head.offset[1] + head.size[1], head.pivot[2]] as [number, number, number],
+      headWidth: head.size[0],
+      back: [0, bottom(torso) + torso.size[1] * 0.72, torso.pivot[2] + torso.offset[2]] as [number, number, number],
+      bodyWidth: torso.size[0],
+    };
+    return new JointedFigure(root, body, material, wear);
   }
 
   /** Extruded 3D geometry for a 16x16 sprite (front/back quads plus pixel edges), 1 block wide. */
@@ -517,8 +534,16 @@ export interface Figure {
   animate(s: AnimState, held?: THREE.Object3D | null): void;
   /** Play one of its model's clips over its animation (`animate`), or null: fade it out. */
   play?(clip: ClipPlay | null): void;
+  /**
+   * Where a cosmetic is worn (`hat`: on top of the head; `back`: between the shoulders, +z out
+   * behind), made the first time it's asked for: a node on the figure scaled so a unit is a texel of
+   * the platform's box head (8 across), or null for a figure that wears nothing (off the rig).
+   */
+  attach?(point: 'hat' | 'back'): THREE.Object3D | null;
   dispose(): void;
 }
+
+
 
 /**
  * A box humanoid on the humanoid rig (`EntityGraphics.buildJointed`): posed by client code (the
@@ -527,11 +552,14 @@ export interface Figure {
 export class JointedFigure implements Figure {
   readonly pivots = new Map<string, THREE.Object3D>();
   readonly rig: HumanoidRig;
+  private anchors = new Map<string, THREE.Object3D>();
 
   constructor(
     readonly root: THREE.Group,
-    body: THREE.Group,
+    private body: THREE.Group,
     readonly material: THREE.RawShaderMaterial,
+    /** Its head and back, in texels (the body's space): the top of the head, its width; the middle of the back, the body's width. */
+    private wear: { top: [number, number, number]; headWidth: number; back: [number, number, number]; bodyWidth: number },
   ) {
     this.rig = new HumanoidRig(body);
     body.traverse((o) => {
@@ -543,6 +571,17 @@ export class JointedFigure implements Figure {
 
   animate(s: AnimState, held: THREE.Object3D | null = null) {
     this.rig.apply(s.time, held);
+  }
+
+  attach(point: 'hat' | 'back'): THREE.Object3D {
+    let a = this.anchors.get(point);
+    if (!a) {
+      const w = this.wear;
+      const at = (v: [number, number, number]) => new THREE.Vector3(v[0] / 16, v[1] / 16, v[2] / 16);
+      a = point === 'hat' ? wearAnchor(this.rig, 'head', at(w.top), w.headWidth / 16, false, this.body) : wearAnchor(this.rig, 'chest', at(w.back), w.bodyWidth / 16, true, this.body);
+      this.anchors.set(point, a);
+    }
+    return a;
   }
 
   dispose() {

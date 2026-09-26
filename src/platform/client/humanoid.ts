@@ -251,6 +251,53 @@ export class HumanoidRig {
     return this.frames.nodes[name];
   }
 
+  /**
+   * A body's head and back as it rests (the model's space), for what it wears: the top of the head
+   * and its width; the middle of the back between the shoulders and the body's width. Measured from
+   * the model's rigid parts on those joints; a skinned model's are guessed from its build.
+   */
+  wearFrame(): { top: THREE.Vector3; headWidth: number; back: THREE.Vector3; bodyWidth: number } {
+    const f = this.frames;
+    const joints = new Set<THREE.Object3D>(Object.values(f.nodes));
+    // The rigid meshes on a joint (not those on the joints below it), as they rest, in the model's space.
+    const bounds = (bone: Bone) => {
+      const box = new THREE.Box3();
+      const node = f.nodes[bone];
+      const unit = new THREE.Vector3();
+      new THREE.Matrix4().copy(this.body.matrixWorld).invert().multiply(node.matrixWorld).decompose(new THREE.Vector3(), new THREE.Quaternion(), unit);
+      const walk = (o: THREE.Object3D, m: THREE.Matrix4) => {
+        for (const c of o.children) {
+          if (joints.has(c) || this.own.has(c)) continue;
+          const cm = new THREE.Matrix4().multiplyMatrices(m, c.matrix);
+          const mesh = c as THREE.Mesh;
+          if (mesh.isMesh && !(mesh as THREE.SkinnedMesh).isSkinnedMesh) {
+            mesh.geometry.computeBoundingBox();
+            const b = mesh.geometry.boundingBox!.clone().applyMatrix4(cm);
+            // From the node's space to the model's, as the joint rests.
+            const rest = new THREE.Matrix4().compose(f.at[bone], f.turn[bone], unit);
+            box.union(b.applyMatrix4(rest));
+          }
+          walk(c, cm);
+        }
+      };
+      walk(node, new THREE.Matrix4());
+      return box.isEmpty() ? null : box;
+    };
+    const k = Math.max(0.3, f.at.hips.y / 0.95);
+    const head = bounds('head');
+    const chest = bounds('chest') ?? bounds('spine');
+    const h = f.at.head;
+    const top = head ? new THREE.Vector3((head.min.x + head.max.x) / 2, head.max.y, (head.min.z + head.max.z) / 2) : new THREE.Vector3(h.x, h.y + 0.26 * k, h.z + 0.02 * k);
+    const c = f.at.chest;
+    const back = chest ? new THREE.Vector3((chest.min.x + chest.max.x) / 2, c.y + 0.1 * k, chest.min.z) : new THREE.Vector3(c.x, c.y + 0.1 * k, c.z - 0.12 * k);
+    return { top, headWidth: head ? head.max.x - head.min.x : 0.3 * k, back, bodyWidth: chest ? chest.max.x - chest.min.x : 0.36 * k };
+  }
+
+  /** Where the model's node for a joint rests, and how it's turned, in the model's space. */
+  restOf(name: Bone): { at: THREE.Vector3; turn: THREE.Quaternion } {
+    return { at: this.frames.at[name], turn: this.frames.turn[name] };
+  }
+
   /** Play one of the model's clips over the rig's pose (null: fade out what's playing). */
   play(clip: ClipPlay | null) {
     this.clips?.play(clip);
@@ -304,3 +351,26 @@ export class HumanoidRig {
 
 const clamp = (v: number, lo: number, hi: number) => (v < lo ? lo : v > hi ? hi : v);
 
+/**
+ * The attach point on a body (`Figure.attach`): on the model's node for a joint of the rig, at
+ * `point` (the model's space, as it rests), unturned from the model's frame, scaled so a texel of
+ * the box head (8 across) is `width / 8` of the model's units; a back item's turned to face out
+ * behind. Worked out from the joint at rest, so it follows the joint however it's posed.
+ */
+export function wearAnchor(rig: HumanoidRig, bone: 'head' | 'chest', point: THREE.Vector3, width: number, behind: boolean, modelRoot: THREE.Object3D): THREE.Object3D {
+  const node = rig.joint(bone);
+  const { at, turn } = rig.restOf(bone);
+  // The node's own units (an armature can be scaled: Blender's bones in centimetres).
+  modelRoot.updateMatrixWorld(true);
+  const s = new THREE.Vector3();
+  new THREE.Matrix4().copy(modelRoot.matrixWorld).invert().multiply(node.matrixWorld).decompose(new THREE.Vector3(), new THREE.Quaternion(), s);
+  const unit = s.x || 1;
+  const inv = turn.clone().invert();
+  const anchor = new THREE.Object3D();
+  anchor.position.copy(point).sub(at).applyQuaternion(inv).divideScalar(unit);
+  anchor.quaternion.copy(inv);
+  if (behind) anchor.quaternion.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI));
+  anchor.scale.setScalar(width / 0.5 / unit);
+  node.add(anchor);
+  return anchor;
+}

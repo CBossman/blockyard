@@ -31,6 +31,8 @@ export interface RoomOut {
   log(line: string): void;
   /** A signed-in player earned one of the game's achievements: the server keeps it for their account. */
   achieve?(account: string, id: string): void;
+  /** A signed-in player was given one of the game's cosmetics (`game:id`). */
+  grant?(account: string, id: string): void;
 }
 
 /**
@@ -103,6 +105,7 @@ export class RoomCore {
       store,
       onError: (err) => out.log(`error: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}`),
       onAchieve: (account, id) => out.achieve?.(account, id),
+      onGrant: (account, id) => out.grant?.(account, id),
     });
     if (store) this.host.persist();
     out.log(kept ? `started, carrying on the kept world (seed ${this.host.seed})` : `started a new world (seed ${this.host.seed})`);

@@ -9,6 +9,7 @@ import { CreativeBuild } from './creative';
 import { EntitySim, type EntityFrame, type ProjectileFrame } from './entities';
 import { ItemSim, type PickupFrame } from './items';
 import { BotControlsImpl, guestStore, PlayerSim, type PlayerFrame } from './player';
+import { avatarAtlas, parseAvatar } from '../avatar';
 
 /** Where `player.store` is kept in the game's data: `$player:<account id>:<key>`. */
 export const PLAYER_DATA = '$player:';
@@ -119,6 +120,8 @@ export interface SimOptions {
   replay?: ReplayBackend;
   /** A signed-in player earned one of the game's achievements (`player.achieve`): keep it for their account. */
   achieve?: (account: string, id: string) => void;
+  /** A signed-in player was given one of the game's cosmetics (`player.grant`; `game:id`): theirs from now on. */
+  grant?: (account: string, id: string) => void;
   /**
    * Game code threw (a timer, `update`, an entity's AI): report it and carry on with the tick,
    * so one bug doesn't stop the whole game. Without it, errors are thrown.
@@ -468,7 +471,7 @@ export class Sim {
    * player's place (`game.player`) is taken first if it's vacant; anyone else is new, at the
    * spawn. The game hears `playerJoin`.
    */
-  join(name = 'Player', account: PlayerAccount | null = null, achieved: readonly string[] = []): PlayerSim {
+  join(name = 'Player', account: PlayerAccount | null = null, achieved: readonly string[] = [], look: { avatar: string | null; wear: string[]; owned?: string[] } = { avatar: null, wear: [] }): PlayerSim {
     let p = this.local;
     if (p.vacant) {
       p.vacant = false;
@@ -485,6 +488,7 @@ export class Sim {
     p.name = name;
     this.identify(p, account);
     p.achieved = new Set(account ? achieved : []);
+    this.dress(p, look);
     // Their screen knows which of the game's achievements they have (the pause menu lists them).
     if (this.def.achievements) this.presentation.send(p.id, 'hud', 'achievements', [[...p.achieved], !!account]);
     this.host.world.set_frozen(p.slot, true);
@@ -617,6 +621,7 @@ export class Sim {
       emit: (k, e) => this.emit(k, e),
       now: () => this.time,
       achieve: (who, a) => this.achieve(who, a),
+      grant: (who, c) => this.grant(who, c),
     });
     if (this.def.player?.build)
       p.creative = new CreativeBuild(
@@ -628,6 +633,22 @@ export class Sim {
         (x, y, z, id, against) => this.placeBlockAt(x, y, z, id, p.api, { against }),
       );
     return p;
+  }
+
+  /**
+   * A joining player's own look: their avatar (in a game that doesn't dress its players itself: no
+   * `player.skin` or `player.model` of its own; a game dressing them later replaces it) and the
+   * cosmetics they wear.
+   */
+  private dress(p: PlayerSim, look: { avatar: string | null; wear: string[]; owned?: string[] }) {
+    p.avatar = look.avatar && parseAvatar(look.avatar) ? look.avatar : null;
+    p.wear = p.account ? look.wear.slice(0, 8) : [];
+    p.owns = new Set(p.account ? look.owned : []);
+    p.skin = null;
+    if (p.avatar && !this.def.player?.skin && !this.def.player?.model) {
+      p.skin = { uv: [0, 0], atlas: avatarAtlas(p.avatar) };
+      this.presentation.send(p.id, 'view', 'setSkin', [[0, 0], avatarAtlas(p.avatar)]);
+    }
   }
 
   /**
@@ -649,7 +670,31 @@ export class Sim {
     const have = Object.keys(this.def.achievements ?? {}).filter((a) => p.achieved.has(a)).length;
     this.presentation.send(p.id, 'hud', 'achievement', [{ id, title: def.title, description: def.description, kept: !!p.account, count: `${have} of ${all}` }]);
     if (p.account) this.o.achieve?.(p.account.id, id);
+    if (def.reward) this.grant(p, def.reward);
     return true;
+  }
+
+  /**
+   * `player.grant`: one of the game's cosmetics, theirs (a signed-in player's, kept for their
+   * account; the server knows if they had it): it pops up. A guest is told signing in keeps them.
+   */
+  private grant(p: PlayerSim, id: string): boolean {
+    const def = this.def.cosmetics?.[id];
+    if (!def) {
+      const err = new Error(`player.grant: "${id}" isn't one of ${this.def.id}'s cosmetics (meta.cosmetics)`);
+      if (!this.o.error) throw err;
+      this.o.error(err);
+      return false;
+    }
+    if (p.bot || p.vacant) return false;
+    const full = `${this.def.id}:${id}`;
+    if (p.account) {
+      if (p.owns.has(full)) return false;
+      p.owns.add(full);
+      this.o.grant?.(p.account.id, full);
+    }
+    this.presentation.send(p.id, 'hud', 'cosmetic', [{ id: full, name: def.name, slot: def.slot, kept: !!p.account }]);
+    return !!p.account;
   }
 
   /** A command typed by a player. */

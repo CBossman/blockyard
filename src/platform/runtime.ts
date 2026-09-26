@@ -52,6 +52,7 @@ import { MESSAGE_MAX, newRoomCode, ROOM_CODE, type DevReply, type HostBatch, typ
 import { sanitizeGameMessage } from './net/validate';
 import { clipFrame, type ClipFrame } from './sim/entities';
 import { Inventory as BlockPicker } from './ui/screens';
+import { cosmeticCatalog } from './cosmetics';
 import { TitleScreen } from './ui/home';
 import { PauseMenu } from './ui/pause';
 import { blockIcon } from './ui/icons';
@@ -491,6 +492,9 @@ export class Runtime {
       gltf: this.graphics.gltf,
     });
     this.entityView = new EntityView(this.graphics, this.renderer.entityScene, world, this.content);
+    // Every cosmetic on the platform (the platform's own and each game's), for what players wear.
+    const cosmetics = cosmeticCatalog([...this.games, ...this.hidden].map((g) => g.meta));
+    this.entityView.cosmetic = (id) => cosmetics.get(id);
     this.pickupView = new PickupView({
       graphics: this.graphics,
       scene: this.renderer.entityScene,
@@ -512,6 +516,7 @@ export class Runtime {
       hud: this.gameHud,
       figure: (item, state) => this.client.kindFigure(item, state),
       ownClip: () => this.ownClip,
+      cosmetic: (id) => cosmetics.get(id),
     });
     this.replays = new ReplayView({
       camera: this.camera,
@@ -1071,7 +1076,7 @@ export class Runtime {
     this.held.visible = this.hudVisible;
     this.mode = 'playing';
     // Joining the game: as the name on the title screen.
-    this.link.send({ t: 'start', name: this.title.name() });
+    this.link.send({ t: 'start', name: this.title.name(), avatar: this.title.avatar() });
   }
 
   private onLockChange(locked: boolean) {

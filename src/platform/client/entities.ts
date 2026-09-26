@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { cosmeticLook, type CosmeticLook } from '../render/cosmetics';
+import type { Cosmetic } from '../cosmetics';
 import type { VoxelWorld } from '@engine/voxel_engine.js';
 import type { Content } from '../content';
 import type { ClientFigures, HeldPoint } from '../api/client/figures';
@@ -22,6 +24,8 @@ export type FigureFrame = EntityFrame & {
   air?: boolean;
   sprint?: boolean;
   reloading?: boolean;
+  /** The cosmetics it wears that this game shows (a player's: ids across the platform). */
+  wear?: string[];
 };
 
 let streakGeo: THREE.BufferGeometry[] | null = null;
@@ -67,6 +71,9 @@ interface Shown {
   frame: FigureFrame;
   /** The figure as client code sees it. */
   figure: ShownFigure;
+  /** What it wears (`FigureFrame.wear`, as a key) and the meshes showing it. */
+  wearing: string;
+  worn: THREE.Mesh[];
 }
 
 interface Shot {
@@ -100,6 +107,10 @@ export class EntityView {
   private t = 0;
   /** The figures, for client code. */
   readonly figures: ClientFigures;
+  /** The platform's cosmetics, by id (what players wear). */
+  cosmetic: (id: string) => Cosmetic | undefined = () => undefined;
+  /** Each cosmetic's look, built once. */
+  private looks = new Map<string, CosmeticLook>();
 
   constructor(
     private graphics: EntityGraphics,
@@ -157,6 +168,8 @@ export class EntityView {
           clip: 0,
           frame: f,
           figure: new ShownFigure(f.id, f.player ?? null, f.type, def.model, partsOf(model), anim, (name) => this.point(f.id, name)),
+          wearing: '',
+          worn: [],
         };
         this.shown.set(f.id, v);
       }
@@ -297,6 +310,35 @@ export class EntityView {
       (hu.uProbe.value as THREE.Vector2).copy(u.uProbe.value as THREE.Vector2);
       (hu.uOpacity as { value: number }).value = (u.uOpacity as { value: number }).value;
     }
+    const wearing = f.wear?.join(',') ?? '';
+    if (wearing !== v.wearing) this.dress(v, f.wear ?? []);
+    for (const m of v.worn) {
+      const wu = (m.material as THREE.RawShaderMaterial).uniforms;
+      (wu.uProbe.value as THREE.Vector2).copy(u.uProbe.value as THREE.Vector2);
+      (wu.uOpacity as { value: number }).value = (u.uOpacity as { value: number }).value;
+      (wu.uTint.value as THREE.Vector4).copy(u.uTint.value as THREE.Vector4);
+    }
+  }
+
+  /** What a figure wears (hats and back items; titles and tags are its name tag's): each on its body's attach point. */
+  private dress(v: Shown, wear: string[]) {
+    v.wearing = wear.join(',');
+    for (const m of v.worn) {
+      m.removeFromParent();
+      (m.material as THREE.Material).dispose();
+    }
+    v.worn = [];
+    for (const id of wear) {
+      const c = this.cosmetic(id);
+      if (!c?.model || (c.slot !== 'hat' && c.slot !== 'back')) continue;
+      const anchor = v.model.attach?.(c.slot);
+      if (!anchor) continue;
+      let look = this.looks.get(id);
+      if (!look) this.looks.set(id, (look = cosmeticLook(c.model)));
+      const mesh = new THREE.Mesh(look.geometry, this.graphics.materialFor(look.albedo, look.emissive));
+      anchor.add(mesh);
+      v.worn.push(mesh);
+    }
   }
 
   /**
@@ -307,6 +349,7 @@ export class EntityView {
   /** A figure's gone (or its model is replaced): what it holds, and its model, go. */
   private drop(v: Shown) {
     this.hold(v, null);
+    this.dress(v, []);
     v.model.root.removeFromParent();
     v.model.dispose();
   }
@@ -400,9 +443,16 @@ export class EntityView {
   /** Everything goes (restart). */
   clear() {
     for (const v of this.shown.values()) {
+      this.dress(v, []);
       v.model.root.removeFromParent();
       v.model.dispose();
     }
+    for (const l of this.looks.values()) {
+      l.geometry.dispose();
+      l.albedo.dispose();
+      l.emissive.dispose();
+    }
+    this.looks.clear();
     this.shown.clear();
     this.drawn = [];
     this.list = [];

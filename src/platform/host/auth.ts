@@ -1,6 +1,8 @@
 import { randomBytes } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { SESSION_SECONDS, type Account, type Accounts, type DiscordUser } from './accounts';
+import { parseAvatar } from '../avatar';
+import { wearable, type Cosmetic } from '../cosmetics';
 
 /** Sign in with Discord: its application's id and secret (Fly secrets `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`). */
 export interface DiscordApp {
@@ -22,6 +24,8 @@ export interface AuthOptions {
   dev: boolean;
   /** Everything kept for an account is going (`DELETE /me`): the server clears the games' data for it. */
   onDelete?: (account: Account) => void;
+  /** Every cosmetic on the platform (what may be worn: `/me/look`). */
+  catalog?: ReadonlyMap<string, Cosmetic>;
   log?: (line: string) => void;
 }
 
@@ -72,7 +76,7 @@ export class Auth {
 
   /** Answer an `/auth/…` or `/me` request: true if it was one. */
   handle(req: IncomingMessage, res: ServerResponse, path: string): boolean {
-    if (path === '/me' || path === '/me/name' || path === '/me/achievements' || path === '/auth/logout') {
+    if (path === '/me' || path === '/me/name' || path === '/me/achievements' || path === '/me/look' || path === '/auth/logout') {
       this.cors(req, res);
       if (req.method === 'OPTIONS') {
         res.writeHead(204, { 'Access-Control-Allow-Methods': 'GET, POST, DELETE', 'Access-Control-Allow-Headers': 'Content-Type', 'Access-Control-Max-Age': '600' }).end();
@@ -102,6 +106,9 @@ export class Auth {
         return true;
       case '/me/name':
         void this.rename(req, res);
+        return true;
+      case '/me/look':
+        void this.lookRoute(req, res);
         return true;
       case '/me/achievements': {
         const account = this.account(req);
@@ -248,6 +255,39 @@ export class Auth {
     const r = this.o.accounts.rename(account.id, asked);
     if ('error' in r) return this.fail(res, 409, r.error);
     res.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify(this.public({ ...account, name: r.name })));
+  }
+
+  /**
+   * `GET /me/look`: what they wear (their avatar's code, the cosmetics on) and what they own.
+   * `POST` `{ avatar?, wear? }` changes it: an avatar's code (or null), and cosmetics they own or
+   * anyone may wear, one to a slot (anything else is left off).
+   */
+  private async lookRoute(req: IncomingMessage, res: ServerResponse) {
+    const account = this.account(req);
+    if (!account) return this.fail(res, 401, 'Not signed in');
+    const accounts = this.o.accounts;
+    const answer = () => {
+      const look = accounts.look(account.id);
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }).end(JSON.stringify({ ...look, owned: accounts.owned(account.id) }));
+    };
+    if (req.method !== 'POST') return answer();
+    let body = '';
+    for await (const chunk of req) {
+      body += chunk;
+      if (body.length > 4000) return this.fail(res, 413, 'Too long');
+    }
+    let asked: { avatar?: unknown; wear?: unknown };
+    try {
+      asked = JSON.parse(body) as typeof asked;
+    } catch {
+      return this.fail(res, 400, 'Send { "avatar": "...", "wear": [...] }');
+    }
+    const change: { avatar?: string | null; wear?: string[] } = {};
+    if (asked.avatar === null || (typeof asked.avatar === 'string' && parseAvatar(asked.avatar))) change.avatar = asked.avatar as string | null;
+    else if (asked.avatar !== undefined) return this.fail(res, 400, "That isn't an avatar");
+    if (Array.isArray(asked.wear)) change.wear = wearable(asked.wear.filter((w): w is string => typeof w === 'string').slice(0, 16), new Set(Object.keys(accounts.owned(account.id))), this.o.catalog ?? new Map());
+    accounts.setLook(account.id, change);
+    answer();
   }
 
   /** What the site gets to know of an account. */

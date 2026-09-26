@@ -138,6 +138,8 @@ export interface GameHostOptions {
   onError?: (err: unknown) => void;
   /** A signed-in player earned one of the game's achievements: keep it for their account. */
   onAchieve?: (account: string, id: string) => void;
+  /** A signed-in player was given one of the game's cosmetics (`game:id`): theirs. */
+  onGrant?: (account: string, id: string) => void;
 }
 
 /** Who a connection is, as the server found them (their cookie): signed in, or a guest. */
@@ -145,6 +147,10 @@ export interface Who {
   account: PlayerAccount | null;
   /** The game's achievements their account has. */
   achieved?: string[];
+  /** What their account wears: its avatar (null: none chosen) and the cosmetics it has on. */
+  look?: { avatar: string | null; wear: string[] };
+  /** The game's cosmetics their account has (`game:id`). */
+  owned?: string[];
 }
 
 /** A connected client: watching (no player yet), or playing. */
@@ -154,6 +160,9 @@ interface Client {
   account: PlayerAccount | null;
   /** The game's achievements their account has (as they connected). */
   achieved: string[];
+  /** What their account wears, and the game's cosmetics it has. */
+  look: { avatar: string | null; wear: string[] } | null;
+  owned: string[];
   /** Their controls since the last step: held keys as they are now, presses and clicks added up. */
   input: PlayerInput;
   radius: number;
@@ -293,6 +302,7 @@ export class GameHost {
       store,
       replay: this.replays,
       achieve: o.onAchieve,
+      grant: o.onGrant,
       error: (err) => this.report(err),
     });
     if (o.dayLength && !def.world?.freezeTime) this.sim.env.dayLength = o.dayLength;
@@ -317,7 +327,7 @@ export class GameHost {
     this.events.push({ t: 'ready' });
     // One client from the start, or none yet: the first to connect takes the first player's place.
     if (o.remote) this.sim.leave(me.id);
-    else this.clients.set(me.id, { player: me, account: null, achieved: [], input: { ...IDLE_INPUT }, radius: this.radius, moves: null, bank: 0 });
+    else this.clients.set(me.id, { player: me, account: null, achieved: [], look: null, owned: [], input: { ...IDLE_INPUT }, radius: this.radius, moves: null, bank: 0 });
   }
 
   // -----------------------------------------------------------------------------------------------
@@ -352,7 +362,7 @@ export class GameHost {
    */
   connect(name?: string, who?: Who): { id: string; player: string | null; batch: HostBatch } {
     useGameBlocks(this.blocks);
-    const client: Client = { player: null, account: who?.account ?? null, achieved: who?.achieved ?? [], input: { ...IDLE_INPUT }, radius: this.radius, moves: null, bank: 0 };
+    const client: Client = { player: null, account: who?.account ?? null, achieved: who?.achieved ?? [], look: who?.look ?? null, owned: who?.owned ?? [], input: { ...IDLE_INPUT }, radius: this.radius, moves: null, bank: 0 };
     let id = `c${this.nextClient++}`;
     if (name !== undefined) {
       // Straight in: known by their player's id.
@@ -375,7 +385,7 @@ export class GameHost {
    * A watching client joins the game as a player, named `asked` (a number added if someone here
    * has it), back where they left off if the world is kept.
    */
-  private join(id: string, client: Client, typed: string) {
+  private join(id: string, client: Client, typed: string, avatar?: string) {
     const taken = new Set(this.sim.players.filter((p) => !p.vacant).map((p) => p.name));
     // Signed in, they're their account's name, whatever was typed.
     const asked = client.account?.name ?? typed;
@@ -392,7 +402,9 @@ export class GameHost {
     // putting a widget up on their screen, a toast): a screen drops calls for a player it
     // doesn't know it is yet.
     const at = this.events.length;
-    const player = this.sim.join(name, client.account, client.achieved);
+    // Their avatar: their account's, else the one they came with (a guest's).
+    const look = { avatar: client.look?.avatar ?? avatar ?? null, wear: client.look?.wear ?? [], owned: client.owned };
+    const player = this.sim.join(name, client.account, client.achieved, look);
     const was = this.keeps ? this.keptPlace(player) : null;
     if (was) {
       this.world.update([was], 4, Infinity);
@@ -477,7 +489,9 @@ export class GameHost {
   /** Who a watching client is, again (their account's name changed before they joined). */
   identify(id: string, who: Who) {
     const c = this.clients.get(id);
-    if (c && !c.player) c.account = who.account;
+    if (!c || c.player) return;
+    c.account = who.account;
+    if (who.look) c.look = who.look;
   }
 
   /** How many clients are connected. */
@@ -571,7 +585,7 @@ export class GameHost {
     // (Watching or playing.)
     if (c.t === 'dev') return this.devCommand(id, client, c);
     // Watching: they can join (`start`) and say how far they see, nothing else yet.
-    if (c.t === 'start' && !client.player) this.join(id, client, c.name ?? 'Player');
+    if (c.t === 'start' && !client.player) this.join(id, client, c.name ?? 'Player', c.avatar);
     if (c.t === 'radius') {
       client.radius = c.columns;
       this.radius = Math.max(...[...this.clients.values()].map((x) => x.radius));
