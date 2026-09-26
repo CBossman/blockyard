@@ -467,6 +467,12 @@ export class GameHost {
     this.store.flush();
   }
 
+  /** Who a watching client is, again (their account's name changed before they joined). */
+  identify(id: string, who: Who) {
+    const c = this.clients.get(id);
+    if (c && !c.player) c.account = who.account;
+  }
+
   /** How many clients are connected. */
   get connected(): number {
     return this.clients.size;

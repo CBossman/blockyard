@@ -68,7 +68,7 @@ src/games/
     models/             the guns and fighters as GLB files (tools/ writes them; the guns reached only by client code)
     art.ts              the pulp wardrobe (skins painted in code)
     hud.css hud.ts      its HUD: the comic-book theme (hud.theme.css), its corner widget, the team modes' bar, the vote's card
-    progression.ts      XP, levels 1 to 30 and what they unlock, kept by name (game.store); the loadout's locks
+    progression.ts      XP, levels 1 to 30 and what they unlock, kept for each account (player.store); the loadout's locks
     client/progression.ts  the XP bar, the ticker of gains, level-ups and the match's XP: a client kit of its own
   blockfront/           Blockfront II: Rebels against the Empire, third person, over the command posts of a desert spaceport
     server.ts           rules: sides, classes, spawning at posts, battle points and heroes, the deploy menu, the HUD calls
@@ -466,7 +466,9 @@ With no games named, a server hosts every game in the launcher. Development game
 
 The server runs the game at 30 steps a second whether or not anyone's watching a given frame. The first to join is `game.player`; everyone else arrives at the spawn and the game hears `playerJoin`. When the first player leaves, the next to join takes their place, so `game.player` always works. Everyone sees everyone else as a figure with their name above it, wearing the game's player skin (or their own, `player.setSkin`). Your own movement is predicted: it happens the moment you press a key, and the server's word only corrects it when something you couldn't know about happened (a knockback, a teleport). A restart (a "Play again" button, or Restart match in the pause menu) restarts the game for everyone. Players can restart the game or change its time of day from the pause menu only in a game of their own: in the public game, which is everyone's, the server turns both down (unless it runs with `--cheats`, as development servers do). `game.exit()` sends back to the launcher only the player whose button or command called it.
 
-**What a server keeps.** Each server has a SQLite database (`data/<game>.sqlite`, or `--db path`). It holds the world's seed, so restarting the server carries on the same world; for games that keep their world (`world.persist`, like Sandbox) its builds and time of day, and each player's place by name (where they stood, which way they faced, whether they were flying, their block hotbar); and your game's `game.store`. It's saved every 30 seconds, when a game stops for want of players, and when the server stops (Ctrl-C). `--new` starts a fresh world and sets the old database aside. Names aren't checked yet: whoever joins as Ann gets Ann's place, and a second Ann at the same time becomes "Ann 2".
+**What a server keeps.** Each server has a SQLite database (`data/<game>.sqlite`, or `--db path`). It holds the world's seed, so restarting the server carries on the same world; for games that keep their world (`world.persist`, like Sandbox) its builds and time of day, and each signed-in player's place (where they stood, which way they faced, whether they were flying, their block hotbar; a guest starts at the spawn each time); and your game's `game.store` and each player's `player.store`. It's saved every 30 seconds, when a game stops for want of players, and when the server stops (Ctrl-C). `--new` starts a fresh world and sets the old database aside. Two players with one name at the same time (one account in two tabs) become "Ann" and "Ann 2".
+
+**Accounts.** Players sign in with Discord, on the game server: the home page's "Sign in with Discord" goes to its `/auth/discord` and back, and the server keeps accounts and their sessions in `data/accounts.sqlite`. The session is an HttpOnly cookie on the server's own address, which is under the site's domain (`play.blockyard.potrock.xyz` for `blockyard.potrock.xyz`), so the site's requests and connections carry it and no page script can read it. The server takes a sign-in only from the site's pages (`SITE_ORIGINS`; in development, any `http://localhost` page). Discord's application is the environment's `DISCORD_CLIENT_ID` and `DISCORD_CLIENT_SECRET`; without them only a development server signs in, as a made-up account (`/auth/dev?name=Ann`, which the home page's button uses in development). `GET /me` says who's signed in, `POST /me/name` renames them (once a day), `POST /auth/logout` signs out, and `DELETE /me` deletes the account and everything games kept for it.
 
 **Games of one's own.** A match game can let players start a game of their own instead of joining the public one: set `instances: true` on the game (Bed Wars, the Arena and Starfighter do). Its home page on a server then offers "Start a private game" under Play. It opens a separate copy of the game (its own world, its own match, the bots filling the empty places) at an address of its own (`?game=bedwars&room=k3x9f2`); "Copy invite link" (or Invite friends in the pause menu) hands that address to friends, and "Back to the public game" goes back. Such a game keeps no world or places, but it shares the game's `game.store` with the public one, so all-time numbers count wherever they were earned. It stops a minute after the last player leaves. Each game on a server runs in a worker thread of its own, so the variables your game keeps in its module are its own in each copy; leave `instances` off for games that are one shared world (Sandbox). A server runs up to 8 games at once (`--rooms`, about 30 to 50 MB each), and one address may have 2 of its own going. A game knows which it is from `game.room`: `'public'`, or the room's code. Call of Blocky's public room goes round its modes and maps match by match, while in a room of one's own the players pick them (a menu on M); in either, the people playing can vote to skip the match that's on (V, or `/skip`: more than half of them, bots not counted, and the next is on).
 
@@ -1175,17 +1177,37 @@ client.audio.define('laser', (s) => {
 
 ## Keeping data
 
-`game.store` keeps values across restarts: all-time stats, leaderboards, unlocks. It's in the server's database. Values are anything JSON can hold, and they're copies (changing an object you got doesn't change what's kept until you `set` it again). Keep per-player values under the player's name:
+Values are kept across restarts in the server's database, in two places. Values are anything JSON can hold, and they're copies (changing an object you got doesn't change what's kept until you `set` it again).
+
+**A player's own: `player.store`.** Their XP, unlocks, all-time numbers, best times. It's kept for their account (players sign in with Discord), so it's theirs wherever and whenever they play your game: the public game, one of their own, another server start. A guest (not signed in) has one too, but it lasts only until they leave, and the home page tells them signing in keeps what they earn.
 
 ```ts
-const key = `stats:${player.name}`;
-const s = game.store.get<{ wins: number }>(key) ?? { wins: 0 };
+const s = player.store.get<{ wins: number }>('stats') ?? { wins: 0 };
 s.wins++;
-game.store.set(key, s);
-game.store.keys('stats:'); // everyone's, for a leaderboard
+player.store.set('stats', s);
 ```
 
-Bed Wars counts each player's games, wins, kills, final kills and beds this way and shows the all-time numbers on its result screen. Call of Blocky keeps each player's XP (`xp:<name>`), and so their level and unlocks, across matches, rooms and restarts (`src/games/callofblocky/progression.ts`); a name is anyone's who types it, so guests (the default "Player") aren't kept at all.
+**The game's own: `game.store`.** Records, leaderboards, the state of its world. For a leaderboard of signed-in players, keep their entries by account (`player.account.id`), with the name they had then:
+
+```ts
+if (player.account) game.store.set(`board:${player.account.id}`, { name: player.name, time });
+game.store.keys('board:'); // everyone's
+```
+
+**Accounts.** `player.account` is `{ id, name, avatar }` for a signed-in player, or null (a guest, or a bot). A signed-in player's name is their account's, unique on the platform; a guest can't take one (they become "Pat (guest)"). Never key what you keep by `player.name` alone: a guest can type anything, and an account can be renamed. A game never sees anything of the sign-in itself.
+
+**Data kept by name before accounts.** The first time a signed-in player comes to your game after claiming their name, `player.adopted` is that name, so what you kept under it is theirs to move (nobody else can claim the name now). It's the name for that visit, and null ever after:
+
+```ts
+game.events.on('playerJoin', ({ player }) => {
+  if (!player.adopted) return;
+  const old = game.store.get(`stats:${player.adopted}`);
+  if (old) player.store.set('stats', old);
+  game.store.delete(`stats:${player.adopted}`);
+});
+```
+
+Call of Blocky keeps each player's XP, and so their level and unlocks, in `player.store` (`src/games/callofblocky/progression.ts`); Bed Wars and Blockfront their all-time numbers, which they show on their result screens; Sky Obby each player's best time, and a leaderboard of signed-in players' in `game.store`.
 
 ## Commands
 

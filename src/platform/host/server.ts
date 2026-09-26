@@ -111,6 +111,8 @@ export interface GameServer {
 interface RoomLink {
   connect(client: string, who: Who): void;
   command(client: string, cmd: ClientCommand): void;
+  /** Who a watching client is, again. */
+  identify(client: string, who: Who): void;
   disconnect(client: string): void;
   /** Save (if it keeps anything) and stop. */
   stop(): Promise<void>;
@@ -199,6 +201,7 @@ export function serve(o: ServeOptions): Promise<GameServer> {
       host: core.host,
       connect: (c, who) => core.connect(c, who),
       command: (c, cmd) => core.command(c, cmd),
+      identify: (c, who) => core.identify(c, who),
       disconnect: (c) => core.disconnect(c),
       stop: async () => core.stop(),
     };
@@ -235,6 +238,7 @@ export function serve(o: ServeOptions): Promise<GameServer> {
       host: null,
       connect: (c, who) => post({ t: 'connect', client: c, who }),
       command: (c, cmd) => post({ t: 'command', client: c, cmd }),
+      identify: (c, who) => post({ t: 'identify', client: c, who }),
       disconnect: (c) => post({ t: 'disconnect', client: c }),
       stop: () => {
         if (!exited) post({ t: 'stop' });
@@ -372,7 +376,7 @@ export function serve(o: ServeOptions): Promise<GameServer> {
     // They watch until their client says `start` (with a name): then they're in the game, as
     // their account if they're signed in.
     const id = `c${nextClient++}`;
-    const account = auth?.who(req) ?? null;
+    let account = auth?.who(req) ?? null;
     const who: Who = { account: account && { id: account.id, name: account.name, avatar: account.avatar } };
     if (account) accountOf.set(id, { id: account.id, ws });
     room.sockets.set(id, ws);
@@ -410,8 +414,16 @@ export function serve(o: ServeOptions): Promise<GameServer> {
         if (ws.readyState === ws.OPEN) ws.send(encode(refused));
         return;
       }
-      // A guest can't be a name an account holds.
+      // A guest can't be a name an account holds; a signed-in player plays as their account's name,
+      // as it is now (they may have changed it on the home page, watching).
       if (cmd.t === 'start' && !account && o.accounts?.nameHeld(cmd.name ?? 'Player')) cmd = { ...cmd, name: `${cmd.name ?? 'Player'} (guest)` };
+      if (cmd.t === 'start' && account) {
+        const now = o.accounts?.get(account.id);
+        if (now && now.name !== account.name) {
+          account = now;
+          room.link?.identify(id, { account: { id: now.id, name: now.name, avatar: now.avatar } });
+        }
+      }
       room.link?.command(id, cmd);
       if (cmd.t === 'start') room.log(`${id} plays as ${account ? `${account.name} (${account.id})` : `${cmd.name ?? 'Player'} (a guest)`}`);
     });

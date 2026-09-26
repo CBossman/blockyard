@@ -18,7 +18,7 @@ export interface RoomWorkerData {
 }
 
 /** The server to a room's worker. */
-export type ToRoom = { t: 'connect'; client: string; who?: Who } | { t: 'command'; client: string; cmd: ClientCommand } | { t: 'disconnect'; client: string } | { t: 'stop' };
+export type ToRoom = { t: 'connect'; client: string; who?: Who } | { t: 'identify'; client: string; who: Who } | { t: 'command'; client: string; cmd: ClientCommand } | { t: 'disconnect'; client: string } | { t: 'stop' };
 
 /** A room's worker to the server. */
 export type FromRoom =
@@ -61,6 +61,7 @@ export async function serveRoomWorker(find: (id: string, dev: boolean) => GameDe
     try {
       if (m.t === 'connect') core.connect(m.client, m.who);
       else if (m.t === 'command') core.command(m.client, m.cmd);
+      else if (m.t === 'identify') core.identify(m.client, m.who);
       else if (m.t === 'disconnect') core.disconnect(m.client);
       else if (m.t === 'stop') {
         // Saved and closed: the thread ends (the server waits for that).

@@ -1,6 +1,11 @@
 # Design: accounts, achievements and cosmetics
 
-Status: **proposal** (2026-09-26). Nothing here is built yet. How the platform works now is in PLATFORM.md.
+Status: **approved** (2026-09-26); phase 1 (accounts) built. How the platform works now is in PLATFORM.md.
+
+Decided (2026-09-26): the server's address is `play.blockyard.potrock.xyz`; guests' progress lasts
+the visit only; cosmetics are on in every game unless it opts out of slots; and **achievements
+belong to their game**: each game's are its own, shown by game on the profile, with no platform-wide
+points or account level made from them (so no level rewards either).
 
 ## Why
 
@@ -11,8 +16,8 @@ their progress lives inside one game, and what they earn in one game means nothi
 The cross-game value comes in three layers, each resting on the one before:
 
 1. **Who you are, everywhere.** One account (Sign in with Discord), one name, one profile.
-2. **What you've done, everywhere.** Achievements that every game declares and the platform
-   keeps, adding up to one account level.
+2. **What you've done, on your profile.** Achievements that each game declares for itself and
+   the platform keeps and shows, game by game.
 3. **What you wear, everywhere.** Cosmetics that games grant and every game shows: a hat earned
    in Call of Blocky is worn in Bed Wars. Each new game adds things to earn that show up in all
    the others. That is the flywheel.
@@ -94,7 +99,7 @@ for guests.
 3. It finds or makes the account for that Discord id, starts a session, and sets
    `__Host-session=<random 32 bytes>` (HttpOnly, Secure, SameSite=Lax, 90 days; the database keeps
    only its hash), then redirects back to the page.
-4. `GET /me` (CORS: the site's origin only, with credentials) answers `{ id, name, avatar, level }`
+4. `GET /me` (CORS: the site's origin only, with credentials) answers `{ id, name, avatar }`
    or 401. `POST /auth/logout` ends the session. `DELETE /me` deletes the account and everything
    kept for it.
 
@@ -131,28 +136,26 @@ times) and Blockfront are the games with per-player data today.
 (id, discord id, name, avatar, created, seen), `sessions` (hash, account, expires), and the
 achievements and cosmetics below. Rooms, in their threads, ask and tell the main thread by message.
 
-### Achievements and the account level
+### Achievements
 
+Each game's are its own (decided 2026-09-26): no points adding up across games, no account level.
 Declared in the game's meta, so the profile can list every game's without loading any:
 
 ```ts
 export default defineMeta({
   id: 'callofblocky',
   achievements: {
-    first_blood: { title: 'First Blood', description: 'Take down another player', points: 5 },
-    untouchable: { title: 'Untouchable', description: 'Win a match without going down', points: 25 },
-    quiet_room: { title: 'Quiet Room', description: '...', points: 10, hidden: true },
+    first_blood: { title: 'First Blood', description: 'Take down another player' },
+    untouchable: { title: 'Untouchable', description: 'Win a match without going down' },
+    quiet_room: { title: 'Quiet Room', description: '...', hidden: true },
   },
 });
 ```
 
 The server grants them: `player.achieve('first_blood')`. That's all a game writes. The platform
-keeps it (once), shows the toast on that player's screen, and adds the points to their account.
-A guest sees the toast with "Sign in to keep this"; it isn't kept.
-
-The **account level** comes from points across every game: each game adds more to earn, and a
-level earned anywhere shows everywhere (the profile, the name tag). Levels also unlock the
-platform's own cosmetics.
+keeps it (once) and shows the toast on that player's screen. A guest sees the toast with "Sign in
+to keep this"; it isn't kept. The profile shows each game's: done, to do (hidden ones only once
+done), and when.
 
 ### Cosmetics
 
@@ -160,13 +163,13 @@ platform's own cosmetics.
 the name tag) and `tag` (the name tag's colour). Later, on their own merits: `trail`, `emote`,
 effects on a game's own things (a ship's paint in Starfighter).
 
-**A cosmetic is data.** Declared in a game's meta (its own) or the platform's (everyone's defaults
-and the level rewards):
+**A cosmetic is data.** Declared in a game's meta (its own) or the platform's (everyone's
+defaults):
 
 ```ts
 cosmetics: {
   gold_fedora: { name: 'Gold Fedora', slot: 'hat', model: fedoraGlb, icon: fedoraPng, how: 'Win 10 matches' },
-  pulp_title: { name: 'Pulp Hero', slot: 'title', text: 'Pulp Hero', how: 'Reach level 20 in Call of Blocky' },
+  pulp_title: { name: 'Pulp Hero', slot: 'title', text: 'Pulp Hero', how: 'Reach level 20' },
 },
 ```
 
@@ -199,8 +202,9 @@ the client resolves from the catalog every screen already has (the metas).
 ### The home page and profile
 
 A corner of the home page shows who you are: "Sign in with Discord" for a guest, or your Discord
-avatar, name and level. It opens your **profile**: level, achievements by game (done and to do),
-and the locker. The name box becomes your account's name once you're signed in.
+avatar and name, with a menu (sign out, delete the account). The name box is your account's name
+once you're signed in, and changing it there renames you. Phase 2 adds the **profile** (your
+achievements by game, done and to do) and phase 3 the locker.
 
 ## Security and privacy
 
@@ -246,15 +250,15 @@ and the locker. The name box becomes your account's name once you're signed in.
      adopting what was under the name;
    - tests: guests and accounts, names held, sessions, adoption, a room in a worker seeing `who`;
    - PLATFORM.md.
-2. **Achievements and levels**: `meta.achievements`, `player.achieve`, the toast, points and
-   levels, the profile. Every listed game gets its first five to ten achievements, which proves the
-   API on every kind of game.
+2. **Achievements**: `meta.achievements`, `player.achieve`, the toast, the profile (by game).
+   Every listed game gets its first five to ten achievements, which proves the API on every kind
+   of game.
 3. **Cosmetics**:
    - the catalog in metas, `grant`/`reward`, owning and wearing;
    - `look` on the wire;
    - `Figure.attach` on both bodies, the cosmetics kit, the name tag's second line;
    - the locker;
-   - the first set: a few platform defaults, level rewards, and two or three per game.
+   - the first set: a few platform defaults, and two or three per game.
 4. **Friends and parties** (outline only for now): friends by name, who's playing what, "join",
    and parties that move from game to game together (switching games in place and rooms of one's
    own already exist).
@@ -262,13 +266,9 @@ and the locker. The name box becomes your account's name once you're signed in.
 Alongside, for launch: an `author` in meta (credit on the card and the game's page), a guide to
 submitting a game, and per-game numbers for their authors.
 
-## Decisions to make
+## Decisions (2026-09-26)
 
-1. **The server's address**: `play.blockyard.potrock.xyz`? (Recommended; any name under
-   potrock.xyz works.)
-2. **Guests' progress**: kept only for the visit (recommended: it closes the name-stealing hole and
-   is the reason to sign in), or by name as now for names no account holds?
-3. **Cosmetics in competitive games**: on by default, games opting out of slots
-   (recommended), or off by default and games opting in?
-4. **Achievement points**: a free hand for each game, or a fixed budget per game (say 1,000) so
-   no game can inflate everyone's level? (Recommended: a budget, checked in review.)
+1. **The server's address**: `play.blockyard.potrock.xyz`.
+2. **Guests' progress**: kept only for the visit.
+3. **Cosmetics in competitive games**: on by default; games opt out of slots.
+4. **Achievements**: scoped to their game; no platform-wide points or level.

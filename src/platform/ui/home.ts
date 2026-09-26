@@ -1,4 +1,5 @@
 import { h } from './dom';
+import { AccountCorner } from './account';
 import { hintChips, keyHints, type GameControls } from './controls';
 
 /** Playing on a game server: the home page asks for a name, and says who's on. */
@@ -65,6 +66,10 @@ export class TitleScreen {
   private hints: HTMLElement;
   private shelf: HTMLElement;
   private online: HTMLElement;
+  /** Who you are: sign in, or your account. */
+  private account: AccountCorner;
+  /** For a guest: what's kept, and a way to sign in. */
+  private guest: HTMLElement;
   private fill: HTMLElement;
   private label: HTMLElement;
   private button: HTMLButtonElement;
@@ -89,12 +94,21 @@ export class TitleScreen {
     this.status = h('div.home-status');
     this.fill = h('span.home-play-fill');
     this.label = h('span.home-play-label', {}, 'Starting the engine…');
-    this.button = h('button.home-play', { disabled: true, onclick: () => this.ready && this.game?.onPlay() }, this.fill, this.label) as HTMLButtonElement;
+    this.button = h('button.home-play', { disabled: true, onclick: () => void this.play() }, this.fill, this.label) as HTMLButtonElement;
     this.nameInput = this.makeName();
     this.nameInput.addEventListener('keydown', (e) => {
       e.stopPropagation();
-      if (e.key === 'Enter' && this.ready) this.game?.onPlay();
+      if (e.key === 'Enter') void this.play();
     });
+    this.nameInput.addEventListener('input', () => this.status.classList.remove('error'));
+    this.account = new AccountCorner(() => this.nameInput.value.trim());
+    this.account.onSay = (text) => this.setStatus(text);
+    this.account.onChange = (me) => {
+      if (me) this.nameInput.value = me.name;
+      this.guest.classList.toggle('hidden', !!me || !this.game?.online);
+    };
+    const signIn = h('button.home-guest-signin', { onclick: () => this.account.signIn() }, 'Sign in with Discord');
+    this.guest = h('div.home-guest.hidden', {}, 'Playing as a guest: what you earn lasts this visit. ', signIn, ' to keep it.');
     this.actions = h('div.home-actions', {}, h('label.home-name', {}, h('span', {}, 'Playing as'), this.nameInput), this.button);
     this.rooms = h('div.home-rooms');
     this.hints = h('div.home-hints');
@@ -105,8 +119,8 @@ export class TitleScreen {
       {},
       this.cover,
       h('div.home-scrim'),
-      h('header.home-top', {}, h('div.home-brand', {}, mark, h('span.home-logo', {}, 'Blockyard'), h('span.home-pitch', {}, 'Block games anyone can build, played together')), this.online),
-      h('main.home-hero', {}, this.kicker, this.heading, this.tagline, this.status, this.actions, this.rooms, this.hints),
+      h('header.home-top', {}, h('div.home-brand', {}, mark, h('span.home-logo', {}, 'Blockyard'), h('span.home-pitch', {}, 'Block games anyone can build, played together')), h('div.home-top-right', {}, this.online, this.account.root)),
+      h('main.home-hero', {}, this.kicker, this.heading, this.tagline, this.status, this.actions, this.guest, this.rooms, this.hints),
       this.shelf,
     );
     // The mouse wheel runs the shelf sideways, when there are more games than fit.
@@ -124,6 +138,8 @@ export class TitleScreen {
     this.game = g;
     this.feature(g.current, g.title);
     this.actions.querySelector('.home-name')?.classList.toggle('hidden', !g.online);
+    if (g.online) this.account.use(g.online.server.replace(/^ws/, 'http').replace(/\/+$/, ''));
+    this.guest.classList.toggle('hidden', !g.online || !this.account.loaded || !!this.account.me);
     this.renderRooms(g.online ?? null);
     this.renderHints(g);
     this.here = null;
@@ -238,6 +254,27 @@ export class TitleScreen {
     );
   }
 
+  /**
+   * Play (the button, or Enter in the name box): signed in with a new name typed, that's saved
+   * first (and if it can't be, why not is said instead).
+   */
+  private async play() {
+    if (!this.ready || !this.game) return;
+    const me = this.account.me;
+    const typed = this.nameInput.value.trim();
+    if (me && typed && typed !== me.name) {
+      try {
+        this.nameInput.value = await this.account.rename(typed);
+      } catch (err) {
+        this.status.classList.add('error');
+        this.setStatus(err instanceof Error ? err.message : String(err));
+        this.nameInput.focus();
+        return;
+      }
+    }
+    this.game.onPlay();
+  }
+
   /** Who's in the room on show (a room of a player's own). */
   present(names: string[]) {
     const here = names.join(', ');
@@ -272,8 +309,8 @@ export class TitleScreen {
             card.live.classList.toggle('on', g.players > 0);
           }
           this.online.replaceChildren(...(total ? [h('span.live-dot'), `${total} playing now`] : []));
-          // (In a room of one's own, `present` says who's in it.)
-          if (online.room) return;
+          // (In a room of one's own, `present` says who's in it; a problem stays said.)
+          if (online.room || this.status.classList.contains('error')) return;
           const here = games.find((g) => g.id === online.game)?.players ?? 0;
           this.setStatus(here ? `${here} ${here === 1 ? 'player' : 'players'} in this game now` : 'Nobody in this game yet: you could be first', here > 0);
         })

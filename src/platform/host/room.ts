@@ -135,6 +135,12 @@ export class RoomCore {
     if (id) this.host.command(id, cmd);
   }
 
+  /** Who a watching client is, again (see `GameHost.identify`). */
+  identify(client: string, who: Who) {
+    const id = this.ids.get(client);
+    if (id) this.host.identify(id, who);
+  }
+
   disconnect(client: string) {
     const id = this.ids.get(client);
     this.ids.delete(client);

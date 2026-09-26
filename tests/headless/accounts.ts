@@ -19,19 +19,26 @@ async function until(what: string, ok: () => boolean, ms = 10000) {
   for (const t0 = Date.now(); !ok(); await wait(20)) if (Date.now() - t0 > ms) throw new Error(`timed out: ${what}`);
 }
 
-/** A socket from a page at `origin`, with `cookie`, pressing Play as `name`. */
-function player(port: number, name: string, origin: string, cookie?: string) {
+/** A socket from a page at `origin`, with `cookie`, pressing Play as `name` (at once, or on `play()` if `hold`). */
+function player(port: number, name: string, origin: string, cookie?: string, hold = false) {
   const ws = new WebSocket(`ws://localhost:${port}/heart-hunt`, { origin, headers: cookie ? { Cookie: cookie } : {} });
   const frames = new FrameReader<SimFrame>();
   let frame: SimFrame | null = null;
   let closed: { code: number; reason: string } | null = null;
+  let welcomed = false;
+  const play = () => ws.send(encode({ t: 'start', name } satisfies ClientCommand));
   ws.on('message', (data) => {
     const m = decode<ServerWelcome | WireBatch>(String(data));
-    if ('t' in m && m.t === 'welcome') ws.send(encode({ t: 'start', name } satisfies ClientCommand));
+    if ('t' in m && m.t === 'welcome') {
+      welcomed = true;
+      if (!hold) play();
+    }
     else if ((m as WireBatch).f !== undefined) frame = frames.read((m as WireBatch).f);
   });
   ws.on('close', (code, reason) => (closed = { code, reason: String(reason) }));
   return {
+    play,
+    welcomed: () => welcomed,
     names: () => (frame as SimFrame | null)?.players.map((p) => p.name) ?? [],
     get closed() {
       return closed;
@@ -127,11 +134,17 @@ export default async function accounts() {
     check(store.data().get(`$player:${nellyId}:hearts`) === 7, 'her own data is kept by account');
 
     // Renaming: once a day, and not to a name an account holds.
+    // Watching as Nelly, she renames herself on the home page, then presses Play.
+    const watching = player(srv.port, 'x', SITE, nelly, true);
+    await until('watching', () => watching.welcomed());
     const dev = await get('/auth/dev?name=Zed');
     const zed = session(dev);
     check(dev.status === 200 && !!zed, 'a development sign-in');
     const renamed = await get('/me/name', { cookie: nelly, origin: SITE, method: 'POST', body: { name: 'Nell!' } });
     check(renamed.status === 200 && ((await renamed.json()) as { name: string }).name === 'Nell', 'renamed (cleaned like a typed name)');
+    watching.play();
+    await until('Nell in, by her new name', () => n.names().includes('Nell'));
+    watching.close();
     const taken = await get('/me/name', { cookie: nelly, origin: SITE, method: 'POST', body: { name: 'zed' } });
     check(taken.status === 409, `a name an account holds is taken: ${taken.status}`);
     const again = await get('/me/name', { cookie: nelly, origin: SITE, method: 'POST', body: { name: 'Nellie' } });

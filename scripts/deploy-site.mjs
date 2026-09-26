@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Deploys the website to Vercel: builds it here (Vercel's builders have no Rust for the engine),
-// pointed at the game server (GAME_SERVER, default the Fly app), and uploads the result as a
+// pointed at the game server (GAME_SERVER, default the Fly app at play.blockyard.potrock.xyz: under
+// the site's own domain, so its sign-in cookie goes with the site's requests), and uploads the result as a
 // prebuilt static site to the Vercel project this repo is linked to (`vercel link`).
 //
 //   npm run deploy:site                 production
@@ -8,7 +9,7 @@
 import { execSync } from 'node:child_process';
 import { cpSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 
-const server = process.env.GAME_SERVER ?? 'wss://voxel-games.fly.dev';
+const server = process.env.GAME_SERVER ?? 'wss://play.blockyard.potrock.xyz';
 const run = (cmd, env = {}) => execSync(cmd, { stdio: 'inherit', env: { ...process.env, ...env } });
 
 run('npm run build', { VITE_GAME_SERVER: server });
