@@ -701,7 +701,13 @@ export class Runtime {
           },
         } as Client['camera'],
         fx: this.fx,
-        audio: { play: (name, opts) => this.sfx.play(name, opts), define: (name, voice) => this.sfx.define(name, voice) },
+        audio: {
+          play: (name, opts) => this.sfx.play(name, opts),
+          define: (name, voice, opts) => this.sfx.define(name, voice, opts),
+          loop: (name, opts) => this.sfx.loop(name, opts),
+          defineLoop: (name, voice) => this.sfx.defineLoop(name, voice),
+          acoustics: (a) => this.sfx.acoustics(a),
+        },
         items: { look: (id, look) => this.content.lookItem(id, look), get: (id) => this.content.items.get(id) },
         input: {
           isDown: (code) => input.isDown(code),

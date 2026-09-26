@@ -844,6 +844,9 @@ export default defineServer(shared, {
     startedAt = game.clock.now;
     lastSecond = -1;
     boardDirty = true;
+    // (A restart puts the match's clock back to 0: times kept from the last match mean nothing now.)
+    boardAt = 0;
+    for (const b of game.bots.all) bots.forget(b);
     markers.clear();
     lastShot.clear();
     coolant.clear();

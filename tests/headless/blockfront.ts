@@ -51,6 +51,13 @@ export default function blockfront() {
   check(match.tickets[0] < match.mode.tickets && match.tickets[1] < match.mode.tickets, 'tickets should drain');
   check(cooled > 0, 'blasters should cool');
 
+  // After a restart (the match's clock back at 0) the scoreboard still goes out.
+  const boards = () => h.find('hud', 'scoreboard').length;
+  g.restart();
+  const before = boards();
+  h.run(3, { pilot: () => null });
+  check(boards() > before, 'the scoreboard should go out again after a restart');
+
   // Heroes vs Villains: three heroes a side, nothing but heroes.
   const hv = launch('blockfront', { seed: 4, radius: 6, cheats: true });
   hv.ctx.commands.run('/mode hvv');

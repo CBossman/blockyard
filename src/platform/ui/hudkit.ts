@@ -990,7 +990,13 @@ export function applyTheme(ui: HTMLElement, theme: HudTheme | undefined): () => 
   if (!theme) return () => {};
   const links: HTMLLinkElement[] = [];
   if (theme.fonts?.length) {
-    const families = theme.fonts.map((f) => `family=${encodeURIComponent(f).replace(/%20/g, '+')}:wght@400;700`).join('&');
+    // 'Barlow:300;500' names its weights (400 and 700 if it doesn't).
+    const families = theme.fonts
+      .map((f) => {
+        const [name, weights] = f.split(':');
+        return `family=${encodeURIComponent(name.trim()).replace(/%20/g, '+')}:wght@${/^\d{3}(;\d{3})*$/.test(weights ?? '') ? weights : '400;700'}`;
+      })
+      .join('&');
     const link = document.createElement('link');
     link.rel = 'stylesheet';
     link.href = `https://fonts.googleapis.com/css2?${families}&display=swap`;
