@@ -35,6 +35,8 @@ export interface Store {
   saveWorld(w: SavedWorld): void;
   player(name: string): SavedPlayer | null;
   savePlayer(name: string, p: SavedPlayer): void;
+  /** Forget where a player left off (their account is gone). */
+  forgetPlayer(name: string): void;
   /** Everything the game has put in `game.store`. */
   data(): Map<string, unknown>;
   /** A change to `game.store` (`undefined`: deleted). */
@@ -74,6 +76,10 @@ export class MemoryStore implements Store {
 
   savePlayer(name: string, p: SavedPlayer) {
     this.players.set(name, { ...p });
+  }
+
+  forgetPlayer(name: string) {
+    this.players.delete(name);
   }
 
   data() {
