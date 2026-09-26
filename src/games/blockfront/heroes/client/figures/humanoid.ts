@@ -138,10 +138,9 @@ class Poser {
   private stance: SaberKey | null = null;
   /** The hero whose blaster it holds (Chewblocca's bowcaster, Boba Fetch's EE-3). */
   private gunHero: HeroId | null = null;
-  /** How fast it's rising (blocks a second, from where it's drawn), and a hero's knees tucked in a jump (0..1). */
-  private lastY = NaN;
-  private vy = 0;
-  private tuck = 0;
+  /** A hero floating in a jump, legs hanging (0..1), and bent a little more through a flip (0..1). */
+  private float = 0;
+  private bend = 0;
   /** The body's place at rest, while a hero's second jump turns it over (a flip, a spin). */
   private flipRest: { p: Vec3; q: Quat } | null = null;
 
@@ -167,10 +166,6 @@ class Poser {
     const dt = this.last < 0 ? 0 : clamp(s.time - this.last, 0, 0.1);
     this.last = s.time;
     if (this.fig.held !== this.heldFrom) this.hold(this.fig.held);
-    // How fast it rises, as drawn (smoothed; a teleport's leap ignored).
-    const y = this.fig.root.getWorldPosition(v1).y;
-    if (dt > 0 && Number.isFinite(this.lastY)) this.vy += (clamp((y - this.lastY) / dt, -20, 20) - this.vy) * clamp01(dt * 14);
-    this.lastY = y;
     this.flip(s);
     this.pose(s, dt);
   }
@@ -335,11 +330,12 @@ class Poser {
     else this.swingArms(s, ph, moving, run, air);
     if (gact && held === 'gun') this.gunGesture(gact, aimQ, bodyQ, scale);
 
-    // A hero in a jump: knees tucked on the way up and through a flip, reaching down to land.
-    const flipping = this.flipRest !== null;
-    const tuckTo = (this.hero || this.gunHero) && s.air ? (flipping || this.vy > 1 ? 1 : this.vy > -1.5 ? 0.65 : 0.15) : 0;
-    this.tuck += (tuckTo - this.tuck) * clamp01(dt * (tuckTo > this.tuck ? 12 : 7));
-    this.legs(s, ph, moving, run, crouch, slide, air, bodyQ, this.tuck);
+    // A hero in a jump floats: legs hanging loose under them (not tucked up), bent a little more
+    // through a flip.
+    const floatTo = (this.hero || this.gunHero) && s.air ? 1 : 0;
+    this.float += (floatTo - this.float) * clamp01(dt * 10);
+    this.bend += ((this.flipRest !== null ? 1 : 0) - this.bend) * clamp01(dt * 10);
+    this.legs(s, ph, moving, run, crouch, slide, air, bodyQ, this.float, this.bend);
     if (victim) this.victimPose(victim, s, bodyQ, scale);
 
     // The head looks where it looks, whatever the body's doing.
@@ -672,8 +668,8 @@ class Poser {
     j.lowerArmL.quaternion.multiply(q1);
   }
 
-  /** The feet: planted and stepping along the way it goes, tucked in the air, out ahead in a slide; the legs bend to them. */
-  private legs(s: Readonly<FigureState>, ph: number, moving: number, run: number, crouch: number, slide: number, air: number, bodyQ: Quat, tuck = 0) {
+  /** The feet: planted and stepping along the way it goes, drawn up in the air (a hero's hanging), out ahead in a slide; the legs bend to them. */
+  private legs(s: Readonly<FigureState>, ph: number, moving: number, run: number, crouch: number, slide: number, air: number, bodyQ: Quat, float = 0, bend = 0) {
     const G = this.poses.gait;
     // Which way it's going, in its own space (+z ahead).
     let dx = s.moveX ?? 0;
@@ -705,19 +701,24 @@ class Poser {
       let z = dz * along;
       let y = ankle + up;
       // A crouch: one foot a little ahead of the other. A slide: the left leg out ahead, the right
-      // tucked under. In the air: tucked up.
+      // tucked under. In the air: drawn up a little, one ahead; a hero's hang loose and drift, toes
+      // down, as if they were floating.
       z += crouch * (1 - slide) * (side === 'L' ? 0.12 : -0.08);
       if (slide > 0) {
         z = z * (1 - slide) + slide * (side === 'L' ? 0.72 : 0.05);
         y = y * (1 - slide) + slide * (side === 'L' ? ankle : ankle + 0.12);
       }
       if (air > 0) {
-        y += 0.2 * air + 0.3 * tuck;
-        z += (side === 'L' ? 0.12 : -0.1) * air + (side === 'L' ? 0.2 : 0.12) * tuck;
+        const lead = side === 'L';
+        const drift = Math.sin(s.time * 1.6 + (lead ? 0 : 2.1)) * 0.03;
+        const hangY = (lead ? 0.08 : 0.02) + 0.14 * bend;
+        const hangZ = (lead ? 0.1 : -0.06) + drift + (lead ? 0.1 : 0.06) * bend;
+        y += air * (0.2 * (1 - float) + hangY * float);
+        z += air * ((lead ? 0.12 : -0.1) * (1 - float) + hangZ * float);
       }
       const target = this.body.localToWorld(v1.set(x, y, z));
-      // Level feet, toes up a little as they swing through.
-      const footQ = q1.copy(bodyQ).multiply(rot(q2, -up * 1.2, 0, 0));
+      // Level feet, toes up a little as they swing through (pointed down, a hero hanging in the air).
+      const footQ = q1.copy(bodyQ).multiply(rot(q2, -up * 1.2 + 0.5 * air * float, 0, 0));
       this.limb(side, target, footQ, v2.set(sign * 0.12, 0, 1).applyQuaternion(bodyQ), true);
     }
   }
