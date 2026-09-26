@@ -1318,5 +1318,14 @@ export const SPACEPORT: MapSpec = {
   // across the bay to the wreck beyond the canyon.
   home: spawnAt(-2, FLOOR + 22, -36, 0, 20),
   overview: { position: { x: 20, y: FLOOR + 55, z: -80 }, target: { x: -5, y: FLOOR, z: 10 } },
+  // The opening fly-over (cinema.ts): high over the Rebel hangar, low over the market's stalls, down
+  // over the docking bay, past the cantina, up over the Imperial garrison.
+  intro: [
+    { at: { x: -118, y: FLOOR + 46, z: 62 }, look: { x: -64, y: FLOOR, z: 0 } },
+    { at: { x: -70, y: FLOOR + 24, z: 48 }, look: { x: -42, y: FLOOR, z: 18 } },
+    { at: { x: -14, y: FLOOR + 20, z: 40 }, look: { x: 2, y: PIT, z: 6 } },
+    { at: { x: 28, y: FLOOR + 22, z: 16 }, look: { x: 44, y: FLOOR, z: -24 } },
+    { at: { x: 104, y: FLOOR + 34, z: 36 }, look: { x: 78, y: FLOOR + 2, z: 0 } },
+  ],
   hotspots: [...POSTS.map((p) => ({ ...p.at })), { x: -44, y: FLOOR, z: 0 }, { x: 44, y: FLOOR, z: 0 }, { x: 0, y: FLOOR, z: -36 }, { x: 0, y: FLOOR, z: 36 }],
 };

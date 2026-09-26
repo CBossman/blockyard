@@ -4,18 +4,20 @@ import { TEAMS } from './teams';
 
 /**
  * Blockfront's HUD: its theme (`hud.css`, over the platform's pieces) and its widgets (filled in
- * by `server.ts` every tick; only what changed goes out):
+ * by `server.ts` every tick; only what changed goes out). The look: white type at a few
+ * strengths over the world, condensed capitals with wide tracking, hairlines and slim bars, each
+ * side's colour kept to a thin line or a glow, the crawl's yellow only for what matters.
  *
- * - `conquest` (everyone's, top middle): each side's reinforcements (the number, and a bar
- *   draining toward the middle; flashing once they're low), and the command posts between them:
- *   each a diamond edged in its holder's colour, filling from the bottom in the colour of the side
- *   it leans to as it's taken, pulsing in the taker's colour while it moves, flashing white
- *   while it's contested. The clock under them.
+ * - `conquest` (everyone's, top middle): each side's reinforcements (the number, and a thin line
+ *   draining toward the middle; red once they're low), and the command posts between them: each
+ *   a ring that fills in the colour of the side it leans to as it's taken, round a disc in its
+ *   holder's colour; glowing in the taker's colour while it moves, pulsing white while it's
+ *   contested. The clock under them.
  * - `status` (each player's, top right): what they fight as, their battle points, and how near a
- *   hero is (a bar toward the cheapest), or HERO READY (H).
+ *   hero is (a line toward the cheapest), or HERO READY (H).
  */
 
-/** Reinforcements at or under this share of a full side's are running low: they flash (server.ts warns the side at the same, `LOW_TICKETS`). */
+/** Reinforcements at or under this share of a full side's are running low: they turn red (server.ts warns the side at the same, `LOW_TICKETS`). */
 const LOW = 0.2;
 
 /** The scoreboard's columns after the name (the theme lays the two sides out by them: `boardCss`). */
@@ -23,117 +25,105 @@ export const BOARD_COLUMNS = ['Score', 'Kills', 'Deaths', 'Posts'] as const;
 
 const [REB, IMP] = TEAMS;
 
+/** One side's end of the conquest bar: its name, its tickets, the line draining toward the middle. */
+const side = (k: 'a' | 'b') => `
+      <div class="side ${k}" style="--c: {{${k}.color}}; --fill: {{${k}.pct}}">
+        <div class="name">{{${k}.short}}<span class="low" data-if="${k}.pct <= ${LOW}">LOW</span></div>
+        <div class="n" data-if="${k}.pct > ${LOW}">{{${k}.tickets}}</div><div class="n short" data-if="${k}.pct <= ${LOW}">{{${k}.tickets}}</div>
+        <div class="drain"><i></i></div>
+      </div>`;
+
 export const CONQUEST: WidgetDefinition = {
   at: 'top',
   html: `
-    <div class="bar">
-      <div class="side a" style="--c: {{a.color}}; --fill: {{a.pct}}">
-        <div class="head"><span class="name">{{a.short}}</span><span class="low" data-if="a.pct <= ${LOW}">LOW</span></div>
-        <div class="count"><span class="track"><span class="left"></span></span><span class="n" data-if="a.pct > ${LOW}">{{a.tickets}}</span><span class="n flash" data-if="a.pct <= ${LOW}">{{a.tickets}}</span></div>
-      </div>
-      <div class="posts">
-        <div data-each="posts" class="post own-{{own}} lean-{{lean}} by-{{by}} {{state}}" style="--fill: {{fill}}">
-          <span class="gem"><span class="core"><span class="fill"></span></span></span>
-          <span class="letter">{{id}}</span>
-          <span class="cue"></span>
+    <div class="bar">${side('a')}
+      <div class="mid">
+        <div class="posts">
+          <div data-each="posts" class="post own-{{own}} lean-{{lean}} by-{{by}} {{state}}" style="--fill: {{fill}}">
+            <span class="core"></span><span class="ring"></span><span class="letter">{{id}}</span>
+          </div>
         </div>
-      </div>
-      <div class="side b" style="--c: {{b.color}}; --fill: {{b.pct}}">
-        <div class="head"><span class="low" data-if="b.pct <= ${LOW}">LOW</span><span class="name">{{b.short}}</span></div>
-        <div class="count"><span class="n" data-if="b.pct > ${LOW}">{{b.tickets}}</span><span class="n flash" data-if="b.pct <= ${LOW}">{{b.tickets}}</span><span class="track"><span class="left"></span></span></div>
-      </div>
-    </div>
-    <div class="clock">{{clock}}</div>`,
+        <div class="clock">{{clock}}</div>
+      </div>${side('b')}
+    </div>`,
   css: `
-    :scope { margin-top: -4px; display: flex; flex-direction: column; align-items: center; --y: var(--hud-accent, #ffe81f); }
-    .bar {
-      position: relative; display: flex; align-items: center; gap: 14px; padding: 7px 16px 8px;
-      background: linear-gradient(180deg, rgba(6, 9, 13, 0.82), rgba(6, 9, 13, 0.62));
-      clip-path: polygon(0 0, 100% 0, calc(100% - 14px) 100%, 14px 100%);
-    }
-    .bar::before { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 1px; background: linear-gradient(90deg, transparent, var(--y) 20%, var(--y) 80%, transparent); opacity: 0.75; }
-    .side { display: flex; flex-direction: column; gap: 3px; width: 168px; }
-    .side.a { align-items: flex-start; }
-    .side.b { align-items: flex-end; }
-    .head { display: flex; align-items: center; gap: 6px; }
-    .name { font: 700 10px var(--pixel); letter-spacing: 0.24em; color: var(--c); text-shadow: 0 0 8px color-mix(in srgb, var(--c) 45%, transparent); }
-    .low { font: 700 8px var(--pixel); letter-spacing: 0.2em; padding: 1px 4px 0; color: #0b0f14; background: #ff3b30; animation: blink 0.6s steps(2) infinite; }
-    .count { display: flex; align-items: center; gap: 8px; width: 100%; }
-    .n { font: 700 21px/1 var(--pixel); color: #fff; min-width: 46px; font-variant-numeric: tabular-nums; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8); }
-    .a .n { text-align: right; order: 2; }
-    .b .n { text-align: left; }
-    .n.flash { color: #ff5a4f; animation: blink 0.6s steps(2) infinite; }
-    .track { flex: 1; height: 5px; background: rgba(255, 255, 255, 0.1); position: relative; overflow: hidden; }
-    .a .track { order: 1; }
-    .left { position: absolute; top: 0; bottom: 0; width: calc(var(--fill) * 100%); background: var(--c); box-shadow: 0 0 8px var(--c); transition: width 300ms ease; }
-    .a .left { right: 0; }
-    .b .left { left: 0; }
-    .posts { display: flex; gap: 7px; padding: 0 4px; }
-    .post { position: relative; width: 32px; height: 36px; display: grid; place-items: center; --own: rgba(233, 237, 242, 0.55); --lean: rgba(233, 237, 242, 0.5); --by: var(--y); }
+    :scope { margin-top: -8px; --fg: #f3f5f7; --fg2: rgba(243, 245, 247, 0.62); --y: var(--hud-accent, #ffe81f); --bad: #ff5a4f; }
+    .bar { position: relative; z-index: 0; display: flex; align-items: flex-start; gap: 18px; padding: 10px 34px 14px; filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.6)) drop-shadow(0 1px 4px rgba(0, 0, 0, 0.35)); }
+    /* (No panel behind it: a tight dark halo round each mark, the filter above, keeps it readable over snow and sky.) */
+    .side { display: flex; flex-direction: column; gap: 1px; width: 132px; padding-top: 1px; }
+    .side.a { align-items: flex-end; text-align: right; }
+    .side.b { align-items: flex-start; }
+    .name { font: 600 10px/1 var(--pixel); letter-spacing: 0.3em; color: color-mix(in srgb, var(--c) 72%, white); display: flex; gap: 6px; align-items: center; }
+    .side.a .name { flex-direction: row-reverse; margin-right: -0.3em; }
+    .low { font: 700 8px/1 var(--pixel); letter-spacing: 0.22em; color: var(--bad); animation: breathe 1.4s ease-in-out infinite; }
+    .n { font: 500 26px/1.05 var(--pixel); letter-spacing: 0.02em; color: var(--fg); font-variant-numeric: tabular-nums; text-shadow: 0 1px 6px rgba(0, 0, 0, 0.45); }
+    .n.short { color: var(--bad); }
+    .drain { position: relative; width: 100%; height: 2px; margin-top: 3px; background: rgba(255, 255, 255, 0.14); }
+    .drain > i { position: absolute; top: 0; bottom: 0; width: calc(var(--fill) * 100%); background: color-mix(in srgb, var(--c) 80%, white); box-shadow: 0 0 6px var(--c); transition: width 600ms ease; }
+    .a .drain > i { right: 0; }
+    .b .drain > i { left: 0; }
+    .mid { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+    .posts { display: flex; gap: 8px; }
+    .post { position: relative; width: 28px; height: 28px; display: grid; place-items: center;
+      --own: rgba(243, 245, 247, 0.5); --lean: rgba(243, 245, 247, 0.7); --by: var(--y); }
     .post.own-rebels { --own: ${REB.color}; }
     .post.own-empire { --own: ${IMP.color}; }
     .post.lean-rebels { --lean: ${REB.color}; }
     .post.lean-empire { --lean: ${IMP.color}; }
     .post.by-rebels { --by: ${REB.color}; }
     .post.by-empire { --by: ${IMP.color}; }
-    .gem { position: absolute; left: 1px; top: 3px; width: 30px; height: 30px; background: var(--own); clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); }
-    .core { position: absolute; inset: 2px; background: rgba(8, 11, 16, 0.92); clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); overflow: hidden; }
-    .fill { position: absolute; left: 0; right: 0; bottom: 0; height: calc(var(--fill) * 100%); background: color-mix(in srgb, var(--lean) 78%, transparent); transition: height 250ms linear; }
-    .post.own-rebels.lean-rebels .fill, .post.own-empire.lean-empire .fill { background: color-mix(in srgb, var(--own) 62%, #0b0f14); }
-    .letter { position: relative; margin-top: -1px; font: 700 12px var(--pixel); color: #fff; text-shadow: 0 1px 2px #000, 0 0 4px #000; }
-    .cue { position: absolute; left: 7px; right: 7px; bottom: -2px; height: 2px; background: var(--by); box-shadow: 0 0 6px var(--by); opacity: 0; }
-    .post.moving .cue { opacity: 1; animation: blink 0.5s ease-in-out infinite; }
-    .post.moving .gem { animation: breathe 0.9s ease-in-out infinite; }
-    .post.contested .gem { background: #fff; animation: blink 0.3s steps(2) infinite; }
-    .post.contested .cue { opacity: 1; background: #fff; box-shadow: 0 0 6px #fff; }
-    .clock {
-      margin-top: 0; padding: 2px 14px 3px; font: 700 11px var(--pixel); letter-spacing: 0.16em; color: rgba(233, 237, 242, 0.9);
-      background: rgba(6, 9, 13, 0.62); clip-path: polygon(0 0, 100% 0, calc(100% - 8px) 100%, 8px 100%);
-      font-variant-numeric: tabular-nums;
-    }
-    @media (max-width: 1240px) { .side { width: 116px; } .n { font-size: 18px; min-width: 38px; } .bar { gap: 10px; padding: 7px 14px 8px; } }
-    @media (max-width: 980px) { .side { width: 78px; } .name { letter-spacing: 0.12em; } .low { display: none; } .posts { gap: 4px; } }
-    @keyframes blink { 50% { opacity: 0.35; } }
-    @keyframes breathe { 50% { filter: brightness(1.8); } }`,
+    .core { position: absolute; inset: 4px; border-radius: 50%; background: color-mix(in srgb, var(--own) 30%, rgba(6, 9, 13, 0.7)); transition: background-color 450ms ease; }
+    .post.own-none .core { background: rgba(6, 9, 13, 0.55); }
+    .ring { position: absolute; inset: 0; border-radius: 50%;
+      background: conic-gradient(var(--lean) calc(var(--fill) * 360deg), rgba(255, 255, 255, 0.16) 0);
+      -webkit-mask: radial-gradient(closest-side, transparent calc(100% - 2.5px), #000 calc(100% - 2px));
+      mask: radial-gradient(closest-side, transparent calc(100% - 2.5px), #000 calc(100% - 2px));
+      transition: filter 300ms ease; }
+    .letter { position: relative; font: 600 12px/1 var(--pixel); letter-spacing: 0.04em; color: var(--fg); }
+    .post.own-none .letter { color: var(--fg2); }
+    .post.moving .ring { filter: drop-shadow(0 0 3px var(--by)) drop-shadow(0 0 6px var(--by)); animation: breathe 1.2s ease-in-out infinite; }
+    .post.contested .ring { background: rgba(255, 255, 255, 0.95); animation: breathe 0.8s ease-in-out infinite; }
+    .clock { font: 500 12px/1 var(--pixel); letter-spacing: 0.16em; color: var(--fg2); font-variant-numeric: tabular-nums; }
+    @media (max-width: 1240px) { .side { width: 100px; } .n { font-size: 22px; } .bar { gap: 12px; padding: 10px 24px 14px; } }
+    @media (max-width: 980px) { .side { width: 70px; } .name { letter-spacing: 0.16em; } .low { display: none; } .posts { gap: 5px; } }
+    @keyframes breathe { 50% { opacity: 0.45; } }`,
 };
 
 export const STATUS: WidgetDefinition = {
   at: 'top-right',
   html: `
     <div class="card" style="--c: {{color}}; --p: calc({{bp}} / {{heroCost}})">
-      <div class="who"><span class="side"><span class="mark"></span>{{side}}</span><span class="role">{{role}}</span></div>
-      <div class="bp"><span class="label">BATTLE POINTS</span><span class="value">{{bp}}</span></div>
-      <div class="hero ready" data-if="heroReady"><span class="key">H</span><span>HERO READY</span></div>
+      <div class="side">{{side}}</div>
+      <div class="role">{{role}}</div>
+      <div class="bp"><span class="label">Battle points</span><span class="value">{{bp}}</span></div>
+      <div class="hero ready" data-if="heroReady"><span class="key">H</span>Hero ready</div>
       <div class="hero" data-if="!heroReady">
-        <span class="as" data-if="hero">IN THE FIGHT AS A HERO</span>
-        <span class="toward" data-if="!hero"><span class="bar"><span class="got"></span></span><span class="at">HERO {{heroCost}}</span></span>
+        <span class="as" data-if="hero">Hero in play</span>
+        <span class="toward" data-if="!hero"><span class="bar"><i></i></span><span class="at">Hero {{heroCost}}</span></span>
       </div>
     </div>`,
   css: `
-    :scope { margin: 0; align-self: flex-end; width: 236px; }
+    :scope { margin: 16px -4px 0 0; align-self: flex-end; width: 232px; --fg: #f3f5f7; --fg2: rgba(243, 245, 247, 0.62); --fg3: rgba(243, 245, 247, 0.42); --y: var(--hud-accent, #ffe81f); }
     .card {
-      position: relative; display: flex; flex-direction: column; align-items: stretch; gap: 5px; padding: 8px 14px 10px 18px; color: #e9edf2;
-      background: linear-gradient(270deg, rgba(6, 9, 13, 0.8), rgba(6, 9, 13, 0.55));
-      clip-path: polygon(12px 0, 100% 0, 100% 100%, 0 100%, 0 12px);
-      border-right: 2px solid var(--c);
+      position: relative; z-index: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; padding: 10px 16px 12px 24px; text-align: right; color: var(--fg);
+      border-right: 2px solid color-mix(in srgb, var(--c) 70%, transparent); filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.6)) drop-shadow(0 1px 4px rgba(0, 0, 0, 0.35));
     }
-    .card::before { content: ''; position: absolute; left: 12px; right: 0; top: 0; height: 1px; background: linear-gradient(90deg, transparent, var(--hud-accent, #ffe81f)); opacity: 0.7; }
-    .who { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; min-width: 0; }
-    .mark { display: inline-block; width: 7px; height: 7px; margin-right: 7px; background: var(--c); transform: rotate(45deg); box-shadow: 0 0 6px var(--c); }
-    .side { font: 700 10px var(--pixel); letter-spacing: 0.22em; color: var(--c); }
-    .role { max-width: 100%; font: 700 14px var(--pixel); letter-spacing: 0.06em; color: #fff; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .bp { display: flex; justify-content: space-between; align-items: baseline; border-top: 1px solid rgba(255, 255, 255, 0.1); padding-top: 5px; }
-    .label { font: 700 9px var(--pixel); letter-spacing: 0.2em; color: rgba(233, 237, 242, 0.55); }
-    .value { font: 700 19px/1 var(--pixel); color: var(--hud-accent, #ffe81f); font-variant-numeric: tabular-nums; text-shadow: 0 0 10px rgba(255, 232, 31, 0.3); }
-    .hero { display: flex; align-items: center; justify-content: flex-end; gap: 8px; font: 700 10px var(--pixel); letter-spacing: 0.16em; }
-    .hero.ready { justify-content: center; padding: 4px 8px; color: #0b0f14; background: var(--hud-accent, #ffe81f); animation: glow 1.1s ease-in-out infinite; }
-    .key { display: inline-grid; place-items: center; width: 16px; height: 16px; border: 1.5px solid #0b0f14; font: 700 10px var(--pixel); }
+    /* (No panel behind it: a tight dark halo round each mark, the filter above, keeps it readable over snow and sky.) */
+    .side { font: 600 10px/1.2 var(--pixel); letter-spacing: 0.3em; margin-right: -0.3em; color: color-mix(in srgb, var(--c) 72%, white); }
+    .role { max-width: 100%; font: 500 20px/1.1 var(--pixel); letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 1px 6px rgba(0, 0, 0, 0.45); }
+    .bp { display: flex; align-items: baseline; gap: 8px; margin-top: 6px; }
+    .label { font: 600 9px var(--pixel); letter-spacing: 0.26em; text-transform: uppercase; color: rgba(243, 245, 247, 0.8); }
+    .value { font: 500 18px/1 var(--pixel); color: var(--fg); font-variant-numeric: tabular-nums; }
+    .hero { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 6px; width: 100%; font: 600 10px/1 var(--pixel); letter-spacing: 0.24em; text-transform: uppercase; }
+    .hero.ready { color: var(--y); text-shadow: 0 0 10px color-mix(in srgb, var(--y) 55%, transparent); animation: arrive 400ms ease-out, glow 2.2s ease-in-out 400ms infinite; }
+    .key { display: inline-grid; place-items: center; min-width: 16px; height: 16px; border: 1px solid var(--y); border-radius: 3px; font: 600 10px var(--pixel); letter-spacing: 0; }
     .toward { display: flex; align-items: center; gap: 8px; width: 100%; }
-    .bar { flex: 1; height: 4px; background: rgba(255, 255, 255, 0.1); position: relative; overflow: hidden; }
-    .got { position: absolute; left: 0; top: 0; bottom: 0; width: calc(min(1, var(--p)) * 100%); background: var(--hud-accent, #ffe81f); opacity: 0.8; transition: width 300ms ease; }
-    .at { color: rgba(233, 237, 242, 0.6); white-space: nowrap; }
-    .as { color: var(--c); }
-    @keyframes glow { 50% { box-shadow: 0 0 16px var(--hud-accent, #ffe81f); } }`,
+    .bar { position: relative; flex: 1; height: 2px; background: rgba(255, 255, 255, 0.14); }
+    .bar > i { position: absolute; left: 0; top: 0; bottom: 0; width: calc(min(1, var(--p)) * 100%); background: var(--fg); transition: width 400ms ease; }
+    .at { color: rgba(243, 245, 247, 0.8); white-space: nowrap; }
+    .as { color: color-mix(in srgb, var(--c) 72%, white); }
+    @keyframes arrive { from { opacity: 0; transform: translateX(8px); } }
+    @keyframes glow { 50% { text-shadow: 0 0 16px var(--y); } }`,
 };
 
 /**

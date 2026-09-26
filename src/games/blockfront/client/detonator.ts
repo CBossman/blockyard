@@ -4,8 +4,9 @@ import { DETONATOR } from '../weapons';
 
 /** The thermal detonator's item. */
 const ITEM = 'detonator';
-/** Within this far a blast in sight whitens the screen for a moment. */
+/** Within this far a blast in sight whitens the screen for a moment; within this far it kicks the camera. */
 const GLARE = 30;
+const KICK = 14;
 
 /**
  * A thermal detonator going off, over the platform's blast (its fireball, smoke and crater): a
@@ -37,6 +38,8 @@ export function detonatorBlast(): ClientKit {
         const cam = client.camera.position;
         const d = Math.hypot(at.x - cam.x, at.y - cam.y, at.z - cam.z);
         if (d < GLARE && inSight(client.world.raycast.bind(client.world), cam, at, d)) fx.flash('rgba(190, 220, 255, 1)', 0.45 * (1 - d / GLARE), 0.4);
+        // Close by, a harder kick than the platform's shake for a blast of its size (that one reaches further).
+        if (d < KICK) fx.shake(0.9 * (1 - d / KICK) + 0.15, 0.5);
       }
     },
   };

@@ -81,10 +81,11 @@ export interface Cut {
  * - `rocket`: launched from `from` along `dir`, seeking `target`, numbered `t`; off (`on: false`,
  *   `t` its number) where it went off, `at`.
  * - `flame`: on (held) and off. `jetpack`: lit for `t` seconds of fuel, and out.
+ * - `djump`: a second jump in the air (a flip, a spin, a kick of the jetpack: `JUMP`).
  */
 export interface Power {
   p: string;
-  k: PowerId | 'land' | 'knock';
+  k: PowerId | 'land' | 'knock' | 'djump';
   on?: boolean;
   t?: number;
   target?: string;

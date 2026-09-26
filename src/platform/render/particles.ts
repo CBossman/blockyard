@@ -117,11 +117,12 @@ export class Particles {
     y: number,
     z: number,
     color: [number, number, number],
-    opts: { count?: number; speed?: number; size?: number; gravity?: number; glow?: number; life?: number; spread?: number; up?: number; drag?: number; collide?: boolean } = {},
+    opts: { count?: number; speed?: number; size?: number; gravity?: number; glow?: number; life?: number; spread?: number; up?: number; velocity?: { x: number; y: number; z: number }; drag?: number; collide?: boolean } = {},
   ) {
     this.rebase(x, y, z);
     const count = opts.count ?? 16;
     const speed = opts.speed ?? 3;
+    const v = opts.velocity;
     for (let i = 0; i < count; i++) {
       const p = this.next;
       this.next = (this.next + 1) % MAX;
@@ -134,7 +135,7 @@ export class Particles {
       this.col.set([color[0] * j, color[1] * j, color[2] * j, 1], p * 4);
       const sp0 = opts.spread ?? 0.3;
       this.pos.set([x - this.origin.x + (Math.random() - 0.5) * sp0, y - this.origin.y + (Math.random() - 0.5) * sp0, z - this.origin.z + (Math.random() - 0.5) * sp0], p * 3);
-      this.vel.set([r * Math.cos(a) * sp, u * sp + (opts.up ?? 1.5), r * Math.sin(a) * sp], p * 3);
+      this.vel.set([r * Math.cos(a) * sp + (v?.x ?? 0), u * sp + (opts.up ?? 1.5) + (v?.y ?? 0), r * Math.sin(a) * sp + (v?.z ?? 0)], p * 3);
       this.size[p] = (opts.size ?? 0.08) * (0.7 + Math.random() * 0.6);
       this.life[p] = (opts.life ?? 0.8) * (0.7 + Math.random() * 0.6);
       this.glow[p] = opts.glow ?? 0;

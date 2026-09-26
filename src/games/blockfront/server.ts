@@ -11,9 +11,11 @@ import { MAPS, mapById, type SpawnPoint } from './map';
 import { fighterOf, hostile, match, teamFighters, type Fighter, type Post } from './match';
 import { MODES, ROTATION, type MatchPlan, type ModeId } from './modes';
 import { COLORS, shared, trooperModel } from './shared';
+import { setupHits } from './hits'; // hits
 import { setupSkies, updateSkies } from './skies'; // skies
 import { other, TEAMS, type Team } from './teams';
 import { BLASTERS, COOL_AFTER, COOL_FULL, defineWeapons, feedIcon, weaponFor, weaponName } from './weapons';
+import { INTRO_HOLD, introOn, joinIntro, setupCinema, showEnd, startIntro, tickEnd } from './cinema'; // cinema
 
 /**
  * Blockfront II: the Rebels against the Empire over the command posts of a desert spaceport.
@@ -27,6 +29,8 @@ import { BLASTERS, COOL_AFTER, COOL_FULL, defineWeapons, feedIcon, weaponFor, we
  * - **Heroes** (heroes/): battle points (kills, captures) buy a turn as one of the side's heroes,
  *   one of each at a time, two a side at most: sabers, blocking, the Force.
  * - **Third person**: seen from over the shoulder (V: through the eyes instead).
+ * - **Framing** (cinema.ts, its calls marked `cinema`): an opening fly-over over the map, everyone
+ *   held meanwhile, and an end screen in place of the plain scoreboard.
  *
  * Bots fill each side to its size (people take their places), fight for the posts, and become
  * heroes too once they've earned it.
@@ -107,6 +111,8 @@ function addFighter(game: GameContext, p: Player): Fighter {
     lastHero: null,
     spawnAt: null,
     bp: 0,
+    earned: 0, // cinema
+    heroesPlayed: [], // cinema
     score: 0,
     kills: 0,
     deaths: 0,
@@ -276,6 +282,7 @@ function becomeHero(game: GameContext, f: Fighter, id: HeroId) {
   if (f.hero !== id && !heroMode()) f.bp -= h.cost;
   f.hero = id;
   f.lastHero = id;
+  if (!f.heroesPlayed.includes(id)) f.heroesPlayed.push(id); // cinema
   heroes.become(f.player, id);
   boardDirty = true;
   // (In Heroes vs Villains everyone's a hero all the time: no fanfare.)
@@ -421,6 +428,7 @@ const killIcon = (weapon: string): IconRef | null => feedIcon(weapon) ?? (weapon
 
 function earn(f: Fighter, points: number) {
   f.bp += points;
+  f.earned += points; // cinema
   f.score += points;
   boardDirty = true;
 }
@@ -489,7 +497,7 @@ function endMatch(game: GameContext, winner: Team) {
   if (match.phase === 'over') return;
   match.phase = 'over';
   overAt = game.clock.now;
-  const t = TEAMS[winner];
+  const alltime = new Map<string, string>(); // cinema
   for (const f of fighters.values()) {
     const p = f.player;
     p.freeze(true, { weapons: true });
@@ -497,7 +505,6 @@ function endMatch(game: GameContext, winner: Team) {
     p.hud.progress(null);
     if (p.bot) continue;
     const won = f.team === winner;
-    p.hud.banner(won ? 'VICTORY' : 'DEFEAT', `The ${t.name} take ${match.map.name} · ${TEAMS[0].short} ${match.tickets[0]} · ${TEAMS[1].short} ${match.tickets[1]}`, { color: won ? COLORS.yellow : COLORS.red, duration: 10 });
     p.audio.play(won ? 'victory' : 'defeat');
     // All-time numbers, kept for their account (a guest's for the visit).
     const s = p.store.get<AllTime>('stats') ?? { games: 0, wins: 0, kills: 0, deaths: 0, heroes: 0 };
@@ -506,11 +513,13 @@ function endMatch(game: GameContext, winner: Team) {
     s.kills += f.kills;
     s.deaths += f.deaths;
     p.store.set('stats', s);
-    p.hud.toast(`All time: ${s.wins} wins in ${s.games} · ${s.kills} kills`);
+    alltime.set(p.id, `All time · ${s.wins} ${s.wins === 1 ? 'win' : 'wins'} in ${s.games} · ${s.kills} kills`);
   }
   // What's next: the rotation's next match in a public room; the same again in one's own.
   if (game.room === 'public') plan = ROTATION[++turn % ROTATION.length];
-  scoreboard(game, true);
+  scoreboard(game);
+  // cinema: the end screen (the result, the top three, their own match, what's next).
+  showEnd(winner, { mode: MODES[plan.mode].name, map: mapById(plan.map)?.name ?? plan.map }, INTERMISSION, alltime);
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -545,7 +554,7 @@ function cool(game: GameContext, dt: number) {
 // -------------------------------------------------------------------------------------------------
 
 function scoreboard(game: GameContext, show = false) {
-  const left = Math.max(0, match.mode.time - (game.clock.now - startedAt));
+  const left = Math.max(0, Math.min(match.mode.time, match.mode.time - (game.clock.now - startedAt))); // cinema: full during the fly-over
   const rows = [...fighters.values()]
     .sort((a, b) => a.team - b.team || b.score - a.score)
     .map((f) => ({
@@ -565,7 +574,7 @@ function scoreboard(game: GameContext, show = false) {
 }
 
 function conquestBar(game: GameContext) {
-  const left = Math.max(0, match.mode.time - (game.clock.now - startedAt));
+  const left = Math.max(0, Math.min(match.mode.time, match.mode.time - (game.clock.now - startedAt))); // cinema: full during the fly-over
   const sideOf = (t: Team) => ({ short: TEAMS[t].short, color: TEAMS[t].color, tickets: match.tickets[t], pct: Math.round((match.tickets[t] / match.mode.tickets) * 100) / 100 });
   game.hud.widget('conquest', {
     a: sideOf(0),
@@ -700,10 +709,12 @@ export default defineServer(shared, {
     conquest = new Conquest(game);
     defineWeapons(game);
     setupSkies(game); // skies
+    setupHits(game); // hits
     // (A hurt hero falls back to the nearest post their side holds.)
     heroes = setupHeroes(game, { teamOf: (p) => fighterOf(p)?.team ?? null, hostile, retreat: (p) => nearestHeld(p) });
     heroes.define();
     game.hud.define('conquest', CONQUEST);
+    setupCinema(game); // cinema: the end screen
     game.hud.define('status', STATUS);
     navs = new Map(MAPS.map((m) => [m.id, navGrid(game, { bounds: m.bounds })]));
     bots = makeBots(game, () => navs.get(match.map.id) ?? null, hotspots, conquest, heroes.botHooks);
@@ -727,7 +738,10 @@ export default defineServer(shared, {
       const f = fighters.get(player.id);
       // A room of one's own: the first one in picks what to play; anyone else, what they fight as.
       if (game.room !== 'public' && !offered) matchMenu(game, player);
-      else if (f && running) spawnMenu(game, f);
+      else if (f && running) {
+        spawnMenu(game, f);
+        if (match.phase === 'playing') joinIntro(game, f); // cinema: their own fly-over
+      }
     });
     game.events.on('playerLeave', ({ player }) => {
       const f = fighters.get(player.id);
@@ -840,19 +854,25 @@ export default defineServer(shared, {
     startedAt = game.clock.now;
     lastSecond = -1;
     boardDirty = true;
+    // (A restart puts the match's clock back to 0: times kept from the last match mean nothing now.)
+    boardAt = 0;
+    for (const b of game.bots.all) bots.forget(b);
     markers.clear();
     lastShot.clear();
     coolant.clear();
     warned[0] = warned[1] = false;
     for (const f of fighters.values()) {
       if (f.hero) heroes.end(f.player);
-      Object.assign(f, { hero: null, wantHero: null, lastHero: null, spawnAt: null, bp: 0, score: 0, kills: 0, deaths: 0, captures: 0, diedAt: -1, firedAt: -99, radar: '' });
+      Object.assign(f, { hero: null, wantHero: null, lastHero: null, spawnAt: null, bp: 0, earned: 0, heroesPlayed: [], score: 0, kills: 0, deaths: 0, captures: 0, diedAt: -1, firedAt: -99, radar: '' });
     }
     for (const p of game.players) if (!fighters.has(p.id)) addFighter(game, p);
     balanceBots(game);
     for (const f of fighters.values()) spawn(game, f);
     conquestBar(game);
-    game.hud.banner(match.map.name.toUpperCase(), `${match.mode.name} · ${match.mode.posts ? match.map.blurb : match.mode.goal}`, { color: COLORS.yellow, duration: 3.5 });
+    // cinema: the opening fly-over (its title card in place of a banner), everyone held till it's
+    // done, and the clock from then.
+    startIntro(game);
+    startedAt += INTRO_HOLD;
     game.audio.play('match_start');
   },
 
@@ -860,16 +880,19 @@ export default defineServer(shared, {
     const now = game.clock.now;
     heroes.update(dt);
     updateSkies(game, dt); // skies
-    bots.update(dt, match.phase !== 'playing');
+    const intro = introOn(game); // cinema
+    bots.update(dt, match.phase !== 'playing' || intro);
     if (match.phase === 'over') {
       if (now - overAt > INTERMISSION) game.restart();
       else if (Math.floor(now) !== lastSecond) {
         lastSecond = Math.floor(now);
-        scoreboard(game, true);
+        scoreboard(game);
+        tickEnd(INTERMISSION - (now - overAt)); // cinema
       }
       return;
     }
-    for (const n of conquest.update(dt)) onPost(game, n);
+    // cinema: the posts (and the tickets they bleed) wait while the fly-over holds everyone.
+    if (!intro) for (const n of conquest.update(dt)) onPost(game, n);
     cool(game, dt);
     for (const f of fighters.values()) {
       const p = f.player;

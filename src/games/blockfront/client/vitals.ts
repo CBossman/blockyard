@@ -1,12 +1,14 @@
 import type { ClientKit } from '@platform/client';
 
-/** Below this much of their health a trooper's screen reddens at the edges and their heart pounds. */
+/** Below this much of their health a trooper's screen reddens at the edges, and below `BEAT` their heart pounds. */
 const LOW = 0.35;
+const BEAT = 0.25;
 
 /**
  * Hurt, on the player's own screen: the edges darkening red as their health runs low (deeper the
- * lower it goes, pulsing), and their heartbeat, quicker the nearer they are to the end. It all
- * eases off as their health comes back (it regenerates after a few seconds out of the fight).
+ * lower it goes, pulsing), and near the end their heartbeat, soft, a little quicker the nearer
+ * they are. It all eases off as their health comes back (it regenerates after a few seconds out
+ * of the fight).
  */
 export function vitals(): ClientKit {
   let unstyle: (() => void) | null = null;
@@ -32,9 +34,11 @@ export function vitals(): ClientKit {
         edge.style.setProperty('--low', String(k));
         edge.classList.toggle('on', k > 0);
       }
-      if (low > 0 && client.time >= beat) {
-        beat = client.time + 1.05 - low * 0.45;
-        client.audio.play('ui_heartbeat', { volume: 0.5 + low * 0.5 });
+      // The heartbeat: only when it's really low, soft, slowing again as health comes back.
+      const pound = !me.dead && !client.replay.playing && hp < BEAT ? 1 - hp / BEAT : 0;
+      if (pound > 0 && client.time >= beat) {
+        beat = client.time + 1.15 - pound * 0.35;
+        client.audio.play('ui_heartbeat', { volume: 0.22 + pound * 0.28 });
       }
     },
     dispose() {
