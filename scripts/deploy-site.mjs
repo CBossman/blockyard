@@ -9,10 +9,10 @@
 import { execSync } from 'node:child_process';
 import { cpSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 
-const server = process.env.GAME_SERVER ?? 'wss://play.blockyard.potrock.xyz';
+const server = process.env.GAME_SERVER ?? 'wss://play.blockyard.gg';
 /** The site's home, and the older addresses that send visitors there (sign-in works only under it). */
-const home = 'blockyard.potrock.xyz';
-const moved = []; // until blockyard.gg is live: then home is blockyard.gg and these are www.blockyard.gg and blockyard.potrock.xyz
+const home = 'blockyard.gg';
+const moved = ['www.blockyard.gg', 'blockyard.potrock.xyz'];
 const run = (cmd, env = {}) => execSync(cmd, { stdio: 'inherit', env: { ...process.env, ...env } });
 
 run('npm run build', { VITE_GAME_SERVER: server });
