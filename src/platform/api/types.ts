@@ -422,7 +422,10 @@ export interface StoreApi {
 
 export interface GameContext {
   readonly world: WorldApi;
-  /** Data kept across restarts (see `StoreApi`). Key per player by name: `stats:${player.name}`. */
+  /**
+   * Data kept across restarts (see `StoreApi`), the game's own: records, leaderboards, the state
+   * of its world. A player's own data goes in `player.store`, which is kept for their account.
+   */
   readonly store: StoreApi;
   /**
    * Everyone playing. A single-player game has exactly one; in a multiplayer game players join
@@ -1066,6 +1069,16 @@ export interface BlueprintData {
 /** A player (the same object as in `game.players`). */
 export type Player = PlayerApi;
 
+/** A player's Blockyard account, as games see it (`player.account`). */
+export interface PlayerAccount {
+  /** Stable forever: key what's kept for them by it. */
+  id: string;
+  /** Their name on the platform (unique); it can change. */
+  name: string;
+  /** Their Discord avatar's URL. */
+  avatar: string | null;
+}
+
 /** Who did something: an entity, a player, or the world (explosions, the void, traps). Check `kind` to tell them apart. */
 export type Actor = Entity | Player | 'world';
 
@@ -1098,7 +1111,23 @@ export interface PlayerApi {
   readonly kind: 'player';
   /** Stable for the session (`local` in single-player). */
   readonly id: string;
+  /** Over their head; a signed-in player's is their account's (unique on the platform). */
   readonly name: string;
+  /** Their Blockyard account (signed in with Discord), or null: a guest, or a bot. */
+  readonly account: PlayerAccount | null;
+  /**
+   * This player's own data in this game (their XP, unlocks, best times), kept for their account:
+   * the same wherever and whenever they play it, in the public game or one of their own. A
+   * guest's lasts until they leave (signing in is what keeps it).
+   */
+  readonly store: StoreApi;
+  /**
+   * A signed-in player's first time in this game since they claimed their name: that name. What
+   * the game kept under it before accounts (`xp:${name}` in `game.store`) is theirs now, for the
+   * game to move into `player.store` (the name is theirs, so nobody else can claim it). Null
+   * otherwise, and after this visit.
+   */
+  readonly adopted: string | null;
   /** This player's screen: HUD calls here reach only them (their wallet, their shop, their toasts). */
   readonly hud: HudApi;
   /** Sounds only this player hears (their coins, their kill). */

@@ -587,7 +587,7 @@ function draw(client: Client): (dt: number) => void {
         el('div.xp-track', mfill, was),
         up > 0 ? el('span.xp-m-up', up > 1 ? `+${up} LEVELS` : 'LEVEL UP') : el('span.xp-m-up', m.need > 0 ? `${num(m.need - m.into)} to go` : 'TOP LEVEL'),
       ),
-      m.guest ? el('div.xp-m-note', 'Playing as a guest: type a name on the home page to keep your XP.') : null,
+      m.guest ? el('div.xp-m-note', 'Playing as a guest: sign in with Discord on the home page to keep your XP.') : null,
     );
     layer.append(card);
     void mfill.offsetWidth;

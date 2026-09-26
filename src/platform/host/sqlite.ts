@@ -140,6 +140,10 @@ export class SqliteStore implements Store {
     this.db.prepare(`INSERT INTO players (name, state, seen) VALUES (?, ?, datetime('now')) ON CONFLICT (name) DO UPDATE SET state = excluded.state, seen = excluded.seen`).run(name, JSON.stringify(p));
   }
 
+  forgetPlayer(name: string) {
+    this.db.prepare('DELETE FROM players WHERE name = ?').run(name);
+  }
+
   data() {
     return this.values;
   }

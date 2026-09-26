@@ -6,12 +6,18 @@
 // (--db path for a single game). --new sets the kept worlds aside and starts fresh. `npm run dev`
 // runs this in development mode, next to Vite.
 //
+// Accounts (Sign in with Discord) are kept in <data>/accounts.sqlite. Discord's application comes
+// from the environment (DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET: without them only a development
+// server's /auth/dev signs in), and the site's addresses, the pages that may use a sign-in, from
+// SITE_ORIGINS (comma-separated; a development server also allows any http://localhost page).
+//
 // It reaches the games only through their server registry (src/games/server.ts): their shared
 // definitions and rules. No game's client code, and nothing of the browser's, comes in here.
 import { existsSync, readFileSync, renameSync } from 'node:fs';
 import { join } from 'node:path';
 import { devGames, games } from './games/server';
 import type { GameDefinition } from './platform/api/types';
+import { Accounts } from './platform/host/accounts';
 import { serve, type ServeOptions } from './platform/host/server';
 import { SqliteStore } from './platform/host/sqlite';
 
@@ -76,6 +82,9 @@ export async function main(args: string[], worker?: ServeOptions['worker'], mode
     storeFile: dbOf,
     // A room (a world, in a thread of its own) takes 30 to 50 MB: 8 fit a 512 MB machine.
     limits: { rooms: Number(flag('rooms') ?? process.env.ROOMS ?? 8) },
+    accounts: Accounts.open(join(data, 'accounts.sqlite')),
+    discord: process.env.DISCORD_CLIENT_ID && process.env.DISCORD_CLIENT_SECRET ? { id: process.env.DISCORD_CLIENT_ID, secret: process.env.DISCORD_CLIENT_SECRET } : null,
+    sites: (process.env.SITE_ORIGINS ?? '').split(',').map((s) => s.trim()).filter(Boolean),
     log: (line) => console.log(line),
   });
   const how = dev ? ' (development mode: cheats, development games, __game.dev)' : cheats ? ' (cheats on)' : '';

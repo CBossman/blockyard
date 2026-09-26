@@ -3,7 +3,7 @@ import { encode } from '../net/codec';
 import { quantize } from '../net/delta';
 import type { ClientCommand, ServerWelcome, WireBatch } from '../net/protocol';
 import type { SimFrame } from '../sim/sim';
-import { GameHost } from './game';
+import { GameHost, type Who } from './game';
 import type { SavedPlayer, SavedWorld, Store } from './store';
 
 /** Longest step a room takes (seconds): a stall longer than this is lost time. */
@@ -49,6 +49,7 @@ export class PrivateStore implements Store {
     return null;
   }
   savePlayer() {}
+  forgetPlayer() {}
   data() {
     return this.shared.data();
   }
@@ -115,9 +116,9 @@ export class RoomCore {
     }, 1000 * dt);
   }
 
-  /** A client watching (they join with `start`): their welcome and a batch catching them up. */
-  connect(client: string) {
-    const { id, batch } = this.host.connect();
+  /** A client watching (they join with `start`): their welcome and a batch catching them up. `who`: signed in, or not. */
+  connect(client: string, who?: Who) {
+    const { id, batch } = this.host.connect(undefined, who);
     this.ids.set(client, id);
     const sp = this.host.sim.spawn;
     const welcome: ServerWelcome = { t: 'welcome', game: this.def.id, room: this.spec.instance, seed: this.host.seed, player: null, spawn: { x: sp.x, y: sp.y, z: sp.z, yaw: sp.yaw }, tickRate: this.spec.tickRate };
@@ -132,6 +133,12 @@ export class RoomCore {
   command(client: string, cmd: ClientCommand) {
     const id = this.ids.get(client);
     if (id) this.host.command(id, cmd);
+  }
+
+  /** Who a watching client is, again (see `GameHost.identify`). */
+  identify(client: string, who: Who) {
+    const id = this.ids.get(client);
+    if (id) this.host.identify(id, who);
   }
 
   disconnect(client: string) {

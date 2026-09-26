@@ -20,8 +20,9 @@ export default function obbyMultiplayer() {
   const calls = (id: string, method: string) => (events.get(id) ?? []).flatMap((e) => (e.t === 'call' && e.call.method === method ? [e.call.args.map(String)] : []));
   const last = (id: string, method: string, key?: string) => calls(id, method).filter((a) => key === undefined || a[0] === key).at(-1);
   const player = (name: string) => game.players.find((p) => p.name === name)!;
+  // (Signed in: their best times are kept.)
   const join = (name: string) => {
-    const c = host.connect(name);
+    const c = host.connect(name, { account: { id: name.toLowerCase(), name, avatar: null } });
     host.command(c.id, { t: 'start' });
     return c.id;
   };
@@ -56,7 +57,8 @@ export default function obbyMultiplayer() {
   step(30 * 4);
   check(calls(ann, 'screen').length === 1 && calls(bob, 'screen').length === 0, 'only Ann sees a finish screen');
   check(calls(bob, 'feed').some((a) => a[0].startsWith('Ann finished in ')), 'Bob hears Ann finished');
-  check(typeof game.store.get('best:Ann') === 'number' && game.store.get('best:Bob') === undefined, 'Ann’s best time is kept');
+  check(typeof player('Ann').store.get('best') === 'number' && player('Bob').store.get('best') === undefined, 'Ann’s best time is kept');
+  check(game.store.get<{ name: string }>('board:ann')?.name === 'Ann' && game.store.get('board:bob') === undefined, 'and on the leaderboard');
 
   // The blinking platforms take turns: a red cell is gone at some point in a cycle.
   const red = course.blinkA[0];

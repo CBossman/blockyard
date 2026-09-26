@@ -45,22 +45,24 @@ function fmt(s: number) {
   return `${m}:${sec.toFixed(1).padStart(4, '0')}`;
 }
 
-function runOf(game: GameContext, p: Player): Run {
+function runOf(p: Player): Run {
   let r = runs.get(p.id);
-  if (!r) runs.set(p.id, (r = freshRun(game, p)));
+  if (!r) runs.set(p.id, (r = freshRun(p)));
   return r;
 }
 
-function freshRun(game: GameContext, p: Player): Run {
-  return { stage: 0, started: null, finished: null, falls: 0, practice: false, padCooldown: 0, best: game.store.get<number>(`best:${p.name}`) };
+function freshRun(p: Player): Run {
+  return { stage: 0, started: null, finished: null, falls: 0, practice: false, padCooldown: 0, best: p.store.get<number>('best') };
 }
 
-/** Everyone's best times, fastest first. */
+/**
+ * Everyone's best times, fastest first: signed-in players' (`board:<account>`, with the name they
+ * had then), and the ones kept by name before accounts (`best:<name>`) until someone claims the name.
+ */
 function leaderboard(game: GameContext) {
-  return game.store
-    .keys('best:')
-    .map((k) => ({ name: k.slice(5), time: game.store.get<number>(k) ?? Infinity }))
-    .sort((a, b) => a.time - b.time);
+  const board = game.store.keys('board:').map((k) => game.store.get<{ name: string; time: number }>(k) ?? { name: '?', time: Infinity });
+  const old = game.store.keys('best:').map((k) => ({ name: k.slice(5), time: game.store.get<number>(k) ?? Infinity }));
+  return [...board, ...old].sort((a, b) => a.time - b.time);
 }
 
 /** Is anyone standing in this block's space? (Don't put a block back inside a player.) */
@@ -101,7 +103,7 @@ function onStart(p: Player) {
 // ---------------------------------------------------------------------------------------------
 
 /** Back to the checkpoint (or the finish island, once finished). Falling off the start begins the run afresh. */
-function respawn(game: GameContext, p: Player, run: Run, why: 'fell' | 'lava' | 'reset') {
+function respawn(p: Player, run: Run, why: 'fell' | 'lava' | 'reset') {
   if (run.finished !== null) {
     p.teleport(course.finish, course.finishYaw, 0);
     return;
@@ -110,7 +112,7 @@ function respawn(game: GameContext, p: Player, run: Run, why: 'fell' | 'lava' | 
   p.teleport(s.spawn, s.yaw, 0);
   p.audio.play('respawn');
   if (run.stage === 0 && !run.practice) {
-    Object.assign(run, freshRun(game, p));
+    Object.assign(run, freshRun(p));
     return;
   }
   run.falls++;
@@ -118,8 +120,8 @@ function respawn(game: GameContext, p: Player, run: Run, why: 'fell' | 'lava' | 
 }
 
 /** Start again from the start island. */
-function restartRun(game: GameContext, p: Player) {
-  runs.set(p.id, freshRun(game, p));
+function restartRun(p: Player) {
+  runs.set(p.id, freshRun(p));
   const s = course.stages[0];
   p.teleport(s.spawn, s.yaw, 0);
   p.hud.banner('SKY OBBY', 'The clock starts when you leave the island', { duration: 2.4, color: GOLD });
@@ -150,7 +152,9 @@ function finish(game: GameContext, p: Player, run: Run, now: number) {
   const pb = counts && (run.best === undefined || time < run.best);
   if (pb) {
     run.best = time;
-    game.store.set(`best:${p.name}`, time);
+    // Theirs for the visit; on the leaderboard for good if they're signed in.
+    p.store.set('best', time);
+    if (p.account) game.store.set(`board:${p.account.id}`, { name: p.name, time });
   }
   p.audio.play('victory');
   game.fx.fireworks(course.finish, 6);
@@ -170,7 +174,7 @@ function finish(game: GameContext, p: Player, run: Run, now: number) {
         ...board.slice(0, 5).map((e, i): [string, string] => [`#${i + 1}  ${e.name}${e.name === p.name ? ' (you)' : ''}`, fmt(e.time)]),
       ],
       buttons: [
-        { label: 'Run again', primary: true, onClick: () => restartRun(game, p) },
+        { label: 'Run again', primary: true, onClick: () => restartRun(p) },
         { label: 'Look around', onClick: () => {} },
         { label: 'Switch game', onClick: () => game.exit() },
       ],
@@ -179,12 +183,12 @@ function finish(game: GameContext, p: Player, run: Run, now: number) {
 }
 
 function updatePlayer(game: GameContext, p: Player, dt: number, now: number) {
-  const run = runOf(game, p);
+  const run = runOf(p);
   run.padCooldown -= dt;
   if (p.input.pressed('KeyR')) {
     p.input.consume('KeyR');
-    if (run.finished !== null) restartRun(game, p);
-    else respawn(game, p, run, 'reset');
+    if (run.finished !== null) restartRun(p);
+    else respawn(p, run, 'reset');
   }
   if (run.started === null && !onStart(p)) run.started = now;
 
@@ -197,8 +201,8 @@ function updatePlayer(game: GameContext, p: Player, dt: number, now: number) {
     }
   }
   const fallY = run.finished !== null ? course.finish.y - 10 : course.stages[run.stage].fallY;
-  if (inLava(game, p)) respawn(game, p, run, 'lava');
-  else if (p.position.y < fallY) respawn(game, p, run, 'fell');
+  if (inLava(game, p)) respawn(p, run, 'lava');
+  else if (p.position.y < fallY) respawn(p, run, 'fell');
 
   const t = run.finished ?? (run.started === null ? 0 : now - run.started);
   const stage = course.stages[run.stage];
@@ -331,7 +335,16 @@ export default defineServer(shared, {
   setup(game) {
     // (Its voices are each screen's, `client/sounds.ts`: played here by name.)
     game.events.on('playerJoin', ({ player }) => {
-      runs.set(player.id, freshRun(game, player));
+      // Signed in for the first time since claiming their name: the best time kept by it is theirs.
+      if (player.adopted && player.account) {
+        const old = game.store.get<number>(`best:${player.adopted}`);
+        if (old !== undefined) {
+          player.store.set('best', old);
+          game.store.set(`board:${player.account.id}`, { name: player.name, time: old });
+        }
+        game.store.delete(`best:${player.adopted}`);
+      }
+      runs.set(player.id, freshRun(player));
       player.hud.banner('SKY OBBY', 'The clock starts when you leave the island', { duration: 3, color: GOLD });
       game.hud.feed(`${player.name} joined the course`, { color: GOLD });
     });
@@ -339,8 +352,8 @@ export default defineServer(shared, {
 
     game.commands.register('reset', {
       help: 'Start your run again from the beginning',
-      run: (_args, g, player) => {
-        restartRun(g, player);
+      run: (_args, _game, player) => {
+        restartRun(player);
         return 'Back to the start';
       },
     });
@@ -352,7 +365,7 @@ export default defineServer(shared, {
       run: ([n], g, player) => {
         const i = Number(n) - 1;
         if (!(i >= 0 && i < STAGES)) throw new Error(`Pick a stage from 1 to ${STAGES}`);
-        const run = runOf(g, player);
+        const run = runOf(player);
         Object.assign(run, { stage: i, practice: true, finished: null, started: run.started ?? g.clock.now });
         player.teleport(course.stages[i].spawn, course.stages[i].yaw, 0);
         return `Stage ${i + 1}: ${course.stages[i].name}`;
@@ -371,7 +384,7 @@ export default defineServer(shared, {
     runs.clear();
     resetCourse(game);
     for (const p of game.players) {
-      runs.set(p.id, freshRun(game, p));
+      runs.set(p.id, freshRun(p));
       p.hud.banner('SKY OBBY', 'The clock starts when you leave the island', { duration: 3, color: GOLD });
     }
   },

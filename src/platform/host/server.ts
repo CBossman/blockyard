@@ -5,7 +5,10 @@ import type { GameDefinition } from '../api/types';
 import { decode, encode } from '../net/codec';
 import { ROOM_CODE, type ClientCommand, type WireBatch } from '../net/protocol';
 import { sanitizeCommand } from '../net/validate';
-import type { GameHost } from './game';
+import { ADOPTED, PLAYER_DATA } from '../sim/sim';
+import type { Account, Accounts } from './accounts';
+import { Auth, type DiscordApp } from './auth';
+import type { GameHost, Who } from './game';
 import { PrivateStore, RoomCore, type RoomSpec } from './room';
 import type { FromRoom, RoomWorkerData, ToRoom } from './room-worker';
 import type { Store } from './store';
@@ -61,6 +64,16 @@ export interface ServeOptions {
   idleStopOwn?: number;
   limits?: Partial<Limits>;
   log?: (line: string) => void;
+  /**
+   * Accounts (Sign in with Discord, `/auth/discord`): a signed-in player plays as their account's
+   * name, and what games keep for them (`player.store`) is kept by it; a guest can't take a name an
+   * account holds. Without, everyone's a guest.
+   */
+  accounts?: Accounts;
+  /** Discord's application, to sign in with (a development server also has `/auth/dev`). */
+  discord?: DiscordApp | null;
+  /** The site's addresses: the only pages that may use a player's sign-in (see `AuthOptions.sites`). */
+  sites?: string[];
 }
 
 export interface Limits {
@@ -96,8 +109,10 @@ export interface GameServer {
 
 /** A running room, wherever it runs (here, or in a worker): what the server tells it. */
 interface RoomLink {
-  connect(client: string): void;
+  connect(client: string, who: Who): void;
   command(client: string, cmd: ClientCommand): void;
+  /** Who a watching client is, again. */
+  identify(client: string, who: Who): void;
   disconnect(client: string): void;
   /** Save (if it keeps anything) and stop. */
   stop(): Promise<void>;
@@ -158,6 +173,11 @@ export function serve(o: ServeOptions): Promise<GameServer> {
   const perAddress = new Map<string, number>();
   const clock = () => performance.now() / 1000;
   let nextClient = 1;
+  /** Signed-in connections: their account's id. */
+  const accountOf = new Map<string, { id: string; ws: WebSocket }>();
+  const auth = o.accounts
+    ? new Auth({ accounts: o.accounts, discord: o.discord, sites: o.sites ?? [], dev: o.dev ?? false, onDelete: (a) => forget(a), log })
+    : null;
   // Compiled once: each room's worker gets the module (no compiling per room).
   let engine: WebAssembly.Module | null = null;
 
@@ -179,8 +199,9 @@ export function serve(o: ServeOptions): Promise<GameServer> {
     });
     return {
       host: core.host,
-      connect: (c) => core.connect(c),
+      connect: (c, who) => core.connect(c, who),
       command: (c, cmd) => core.command(c, cmd),
+      identify: (c, who) => core.identify(c, who),
       disconnect: (c) => core.disconnect(c),
       stop: async () => core.stop(),
     };
@@ -215,8 +236,9 @@ export function serve(o: ServeOptions): Promise<GameServer> {
     });
     const link: RoomLink = {
       host: null,
-      connect: (c) => post({ t: 'connect', client: c }),
+      connect: (c, who) => post({ t: 'connect', client: c, who }),
       command: (c, cmd) => post({ t: 'command', client: c, cmd }),
+      identify: (c, who) => post({ t: 'identify', client: c, who }),
       disconnect: (c) => post({ t: 'disconnect', client: c }),
       stop: () => {
         if (!exited) post({ t: 'stop' });
@@ -271,12 +293,38 @@ export function serve(o: ServeOptions): Promise<GameServer> {
     return made;
   }
 
+  /**
+   * An account is deleted: its connections close, and each game forgets what it kept for it (its
+   * `player.store`, its place). Rooms in other threads pick that up when they next save.
+   */
+  function forget(account: Account) {
+    for (const [client, a] of accountOf) {
+      if (a.id !== account.id) continue;
+      accountOf.delete(client);
+      a.ws.close(4003, 'Your account was deleted');
+    }
+    if (!o.store) return;
+    for (const def of defs.values()) {
+      let store = stores.get(def.id);
+      if (!store) stores.set(def.id, (store = o.store(def.id)));
+      const data = store.data();
+      for (const key of [...data.keys()]) {
+        if (!key.startsWith(`${PLAYER_DATA}${account.id}:`) && key !== `${ADOPTED}${account.id}`) continue;
+        data.delete(key);
+        store.put(key, undefined);
+      }
+      store.forgetPlayer(`#${account.id}`);
+      store.flush();
+    }
+  }
+
   // Behind a proxy (Fly), the player's address is in a header.
   const addressOf = (req: IncomingMessage) => String(req.headers['fly-client-ip'] ?? req.socket.remoteAddress ?? '?');
 
   const http = createServer((req, res) => {
     const path = new URL(req.url ?? '/', 'http://server').pathname;
     res.setHeader('Access-Control-Allow-Origin', '*');
+    if (auth?.handle(req, res, path)) return;
     if (path === '/health') {
       res.writeHead(200, { 'Content-Type': 'text/plain' }).end('ok');
     } else if (path === '/games' || path === '/') {
@@ -325,11 +373,15 @@ export function serve(o: ServeOptions): Promise<GameServer> {
     if (room.sockets.size >= limits.playersPerGame) return ws.close(CLOSE_FULL, 'This game is full');
     perAddress.set(address, (perAddress.get(address) ?? 0) + 1);
 
-    // They watch until their client says `start` (with a name): then they're in the game.
+    // They watch until their client says `start` (with a name): then they're in the game, as
+    // their account if they're signed in.
     const id = `c${nextClient++}`;
+    let account = auth?.who(req) ?? null;
+    const who: Who = { account: account && { id: account.id, name: account.name, avatar: account.avatar } };
+    if (account) accountOf.set(id, { id: account.id, ws });
     room.sockets.set(id, ws);
     room.link ??= start(room);
-    room.link.connect(id);
+    room.link.connect(id, who);
     room.log(`${id} connected from ${address} (${room.sockets.size} here)`);
 
     // A bucket of messages, refilled each second; a client far over it is disconnected.
@@ -362,11 +414,22 @@ export function serve(o: ServeOptions): Promise<GameServer> {
         if (ws.readyState === ws.OPEN) ws.send(encode(refused));
         return;
       }
+      // A guest can't be a name an account holds; a signed-in player plays as their account's name,
+      // as it is now (they may have changed it on the home page, watching).
+      if (cmd.t === 'start' && !account && o.accounts?.nameHeld(cmd.name ?? 'Player')) cmd = { ...cmd, name: `${cmd.name ?? 'Player'} (guest)` };
+      if (cmd.t === 'start' && account) {
+        const now = o.accounts?.get(account.id);
+        if (now && now.name !== account.name) {
+          account = now;
+          room.link?.identify(id, { account: { id: now.id, name: now.name, avatar: now.avatar } });
+        }
+      }
       room.link?.command(id, cmd);
-      if (cmd.t === 'start' && cmd.name) room.log(`${id} plays as ${cmd.name}`);
+      if (cmd.t === 'start') room.log(`${id} plays as ${account ? `${account.name} (${account.id})` : `${cmd.name ?? 'Player'} (a guest)`}`);
     });
     ws.on('close', () => {
       clearInterval(refill);
+      accountOf.delete(id);
       perAddress.set(address, (perAddress.get(address) ?? 1) - 1);
       if (!perAddress.get(address)) perAddress.delete(address);
       room.sockets.delete(id);
@@ -403,6 +466,7 @@ export function serve(o: ServeOptions): Promise<GameServer> {
               await Promise.all([...rooms.values()].map((r) => stop(r)));
               for (const s of stores.values()) s.close();
               stores.clear();
+              o.accounts?.close();
               done();
             });
           }),

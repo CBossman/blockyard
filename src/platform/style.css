@@ -586,6 +586,140 @@ body {
   font-size: 11px;
 }
 
+/* Who you are, top right: "Sign in with Discord", or your avatar and name with a menu. */
+.home-top-right {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  min-width: 0;
+}
+.home-account {
+  position: relative;
+}
+.home-signin {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 14px 8px 12px;
+  border: 0;
+  border-radius: 10px;
+  background: #5865f2;
+  color: #fff;
+  font: 600 13.5px var(--sans);
+  cursor: pointer;
+  box-shadow: 0 6px 20px rgba(88, 101, 242, 0.35);
+  transition: filter 150ms ease, transform 120ms ease;
+}
+.home-signin:hover {
+  filter: brightness(1.08);
+  transform: translateY(-1px);
+}
+.home-signin svg {
+  width: 20px;
+  height: 20px;
+}
+.home-me {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  max-width: 240px;
+  padding: 4px 12px 4px 4px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  background: rgba(8, 11, 17, 0.62);
+  color: var(--text);
+  font: 600 13.5px var(--sans);
+  cursor: pointer;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+.home-me:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+.home-avatar {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+.home-avatar.blank {
+  display: grid;
+  place-items: center;
+  background: #5865f2;
+  font: 700 13px var(--sans);
+}
+.home-me-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.home-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 5;
+  display: none;
+  flex-direction: column;
+  min-width: 230px;
+  padding: 6px;
+  border-radius: 12px;
+  background: rgba(12, 15, 23, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+}
+.home-account.open .home-menu {
+  display: flex;
+}
+.home-menu-head {
+  padding: 8px 10px 6px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.home-menu-item {
+  appearance: none;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--text);
+  font: 500 13.5px var(--sans);
+  text-align: left;
+  cursor: pointer;
+}
+.home-menu-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+.home-menu-item.danger {
+  color: #ff9f94;
+}
+/* A guest: what's kept, and signing in. */
+.home-guest {
+  margin-top: 10px;
+  font-size: 12.5px;
+  color: #c3cad6;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.7);
+}
+.home-guest.hidden {
+  display: none;
+}
+.home-guest-signin {
+  appearance: none;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #aab4ff;
+  font: 600 12.5px var(--sans);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.home-guest-signin:hover {
+  color: #c8ceff;
+}
+
 /* The shelf: every game's card, the one on show lifted and ringed in its colour. */
 .home-shelf {
   display: flex;

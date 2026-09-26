@@ -169,19 +169,21 @@ export default function gameblocks() {
   const glassTile = (JSON.parse(h2.blocks.json) as { name: string; layer: number; cull_self: boolean; opacity?: number }[])[0];
   check(glassTile.name === 'glass_tile' && glassTile.layer === 1 && glassTile.cull_self && glassTile.opacity === 0, `like: 'glass' is see-through like glass: ${JSON.stringify(glassTile)}`);
 
-  // A kept world (a server's store): the keys go with the edits, and hotbars keep blocks by name.
+  // A kept world (a server's store): the keys go with the edits, and hotbars keep blocks by name
+  // (a signed-in player's: a guest's place isn't kept).
   const store = new MemoryStore();
   const host = new GameHost(def, { engine: wasm, seed: 3, budget: Infinity, store, remote: true });
-  const c = host.connect('Ann');
+  const ann = { account: { id: 'ann', name: 'Ann', avatar: null } };
+  const c = host.connect('Ann', ann);
   host.command(c.id, { t: 'message', msg: { t: 'creativePick', player: '', block: id('crate') } });
   host.sim.ctx.world.setBlock(4, FLOOR, 4, 'marble');
   host.persist();
   check(store.world()!.blocks!.join() === h.host.blocks.keys.join(), 'the kept world has the keys');
-  check(store.player('Ann')!.hotbar!.includes('crate'), `the hotbar keeps the crate by name: ${store.player('Ann')!.hotbar}`);
+  check(store.player('#ann')!.hotbar!.includes('crate'), `the hotbar keeps the crate by name: ${store.player('#ann')!.hotbar}`);
   host.disconnect(c.id);
   host.dispose();
   const host2 = new GameHost(later, { engine: wasm, seed: 3, budget: Infinity, store, remote: true });
-  const c2 = host2.connect('Ann');
+  const c2 = host2.connect('Ann', ann);
   const annAgain = host2.sim.players.find((p) => p.name === 'Ann')!;
   check(annAgain.creative!.hotbar.includes(host2.sim.ctx.world.blockId('crate')), `the crate is back in the hotbar with its new id: ${annAgain.creative!.hotbar}`);
   check(host2.sim.ctx.world.blockName(host2.sim.ctx.world.getBlock(4, FLOOR, 4)) === 'marble', 'the kept world loads by name');

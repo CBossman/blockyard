@@ -1,5 +1,5 @@
 import * as engine from '@engine/voxel_engine.js';
-import type { Actor, Anchor, AudioApi, BlockRef, Bot, BotApi, DamageCause, DestructibleOptions, Entity, GameContext, GameDefinition, GameEvents, Player, ReplayApi, ReplayHandle, ReplayOptions, Rng, StoreApi, Vec3, VehicleWorld, WorldApi } from '../api/types';
+import type { Actor, Anchor, AudioApi, BlockRef, Bot, BotApi, DamageCause, DestructibleOptions, Entity, GameContext, GameDefinition, GameEvents, Player, PlayerAccount, ReplayApi, ReplayHandle, ReplayOptions, Rng, StoreApi, Vec3, VehicleWorld, WorldApi } from '../api/types';
 import { Commands } from '../commands';
 import type { Content } from '../content';
 import { IDLE_INPUT, type ClientMessage, type PlayerInput } from '../net/protocol';
@@ -8,7 +8,12 @@ import { dependents, FACING_DIR, placement, type PlaceHow } from '../world/place
 import { CreativeBuild } from './creative';
 import { EntitySim, type EntityFrame, type ProjectileFrame } from './entities';
 import { ItemSim, type PickupFrame } from './items';
-import { BotControlsImpl, PlayerSim, type PlayerFrame } from './player';
+import { BotControlsImpl, guestStore, PlayerSim, type PlayerFrame } from './player';
+
+/** Where `player.store` is kept in the game's data: `$player:<account id>:<key>`. */
+export const PLAYER_DATA = '$player:';
+/** Accounts told `player.adopted` in this game already: `$adopted:<account id>` (the name). */
+export const ADOPTED = '$adopted:';
 import { castBullet, History, type Hittable } from './hitscan';
 import { resolveHitscan, type HitscanRules } from './hitboxes';
 import { flightWorld } from './flight';
@@ -170,8 +175,23 @@ export class Sim {
   /** Which blocks a blast takes in a world with destructible blocks (null: whole blocks, as always). */
   private blastable: { ids: Uint8Array; above: number } | null;
   private nextBot = 1;
+  /**
+   * The game's kept data, raw: `game.store` and every account's `player.store` (under keys of the
+   * platform's own, `PLAYER_DATA`, which `game.store` doesn't list).
+   */
+  private readonly data: { get(key: string): unknown; set(key: string, v: unknown): void; keys(): Iterable<string> };
 
   constructor(private o: SimOptions) {
+    const values = o.store?.data() ?? new Map<string, unknown>();
+    this.data = {
+      get: (key) => values.get(key),
+      set: (key, v) => {
+        if (v === undefined) values.delete(key);
+        else values.set(key, v);
+        o.store?.put(key, v);
+      },
+      keys: () => values.keys(),
+    };
     this.def = o.def;
     this.registry = o.registry;
     // Every block that changes, told to the game (`blockChange`) while anyone's listening.
@@ -446,7 +466,7 @@ export class Sim {
    * player's place (`game.player`) is taken first if it's vacant; anyone else is new, at the
    * spawn. The game hears `playerJoin`.
    */
-  join(name = 'Player'): PlayerSim {
+  join(name = 'Player', account: PlayerAccount | null = null): PlayerSim {
     let p = this.local;
     if (p.vacant) {
       p.vacant = false;
@@ -461,9 +481,22 @@ export class Sim {
       p.place(sp.x, sp.y, sp.z, sp.yaw);
     }
     p.name = name;
+    this.identify(p, account);
     this.host.world.set_frozen(p.slot, true);
     this.emit('playerJoin', { player: p.api });
+    // (Their first visit since claiming their name: told once, while they're here.)
+    if (account && p.adopted) this.data.set(`${ADOPTED}${account.id}`, p.adopted);
     return p;
+  }
+
+  /**
+   * Who a joining player is: their account and their `player.store` (kept for the account, in the
+   * game's data), or a guest's, kept until they leave.
+   */
+  private identify(p: PlayerSim, account: PlayerAccount | null) {
+    p.account = account && { ...account };
+    p.adopted = account && this.data.get(`${ADOPTED}${account.id}`) === undefined ? account.name : null;
+    p.store = account ? this.scopedStore(`${PLAYER_DATA}${account.id}:`) : guestStore();
   }
 
   /**
@@ -524,21 +557,18 @@ export class Sim {
 
   /** `game.store`: values copied through JSON, so nothing the game holds on to changes them. */
   private makeStore(): StoreApi {
-    const backing = this.o.store;
-    const data = backing?.data() ?? new Map<string, unknown>();
+    const store = this.scopedStore('');
+    return { ...store, keys: (prefix = '') => store.keys(prefix).filter((k) => !k.startsWith(PLAYER_DATA) && !k.startsWith(ADOPTED)) };
+  }
+
+  /** A store over the kept data's keys starting with `scope` (the scope left off). */
+  private scopedStore(scope: string): StoreApi {
     const copy = <T>(v: T): T => (v === undefined ? v : (JSON.parse(JSON.stringify(v)) as T));
     return {
-      get: <T>(key: string) => copy(data.get(key)) as T | undefined,
-      set: (key, value) => {
-        const v = copy(value);
-        data.set(key, v);
-        backing?.put(key, v);
-      },
-      delete: (key) => {
-        data.delete(key);
-        backing?.put(key, undefined);
-      },
-      keys: (prefix = '') => [...data.keys()].filter((k) => k.startsWith(prefix)).sort(),
+      get: <T>(key: string) => copy(this.data.get(scope + key)) as T | undefined,
+      set: (key, value) => this.data.set(scope + key, copy(value)),
+      delete: (key) => this.data.set(scope + key, undefined),
+      keys: (prefix = '') => [...this.data.keys()].filter((k) => k.startsWith(scope + prefix)).map((k) => k.slice(scope.length)).sort(),
     };
   }
 

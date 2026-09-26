@@ -1,5 +1,5 @@
 import { TerrainGen, VoxelWorld } from '@engine/voxel_engine.js';
-import type { BlockRef, GameDefinition } from '../api/types';
+import type { BlockRef, GameDefinition, PlayerAccount } from '../api/types';
 import { Content } from '../content';
 import { loadEngineSync } from '../engine/wasm';
 import { FrameWriter } from '../net/delta';
@@ -138,9 +138,16 @@ export interface GameHostOptions {
   onError?: (err: unknown) => void;
 }
 
+/** Who a connection is, as the server found them (their cookie): signed in, or a guest. */
+export interface Who {
+  account: PlayerAccount | null;
+}
+
 /** A connected client: watching (no player yet), or playing. */
 interface Client {
   player: PlayerSim | null;
+  /** Their account, if they're signed in: they play as its name, and what's kept for them is kept by it. */
+  account: PlayerAccount | null;
   /** Their controls since the last step: held keys as they are now, presses and clicks added up. */
   input: PlayerInput;
   radius: number;
@@ -303,7 +310,7 @@ export class GameHost {
     this.events.push({ t: 'ready' });
     // One client from the start, or none yet: the first to connect takes the first player's place.
     if (o.remote) this.sim.leave(me.id);
-    else this.clients.set(me.id, { player: me, input: { ...IDLE_INPUT }, radius: this.radius, moves: null, bank: 0 });
+    else this.clients.set(me.id, { player: me, account: null, input: { ...IDLE_INPUT }, radius: this.radius, moves: null, bank: 0 });
   }
 
   // -----------------------------------------------------------------------------------------------
@@ -336,9 +343,9 @@ export class GameHost {
    * until their `start` (with a name). With `name`, they join straight away. The id is theirs
    * for `command`, `step`'s batches and `disconnect`.
    */
-  connect(name?: string): { id: string; player: string | null; batch: HostBatch } {
+  connect(name?: string, who?: Who): { id: string; player: string | null; batch: HostBatch } {
     useGameBlocks(this.blocks);
-    const client: Client = { player: null, input: { ...IDLE_INPUT }, radius: this.radius, moves: null, bank: 0 };
+    const client: Client = { player: null, account: who?.account ?? null, input: { ...IDLE_INPUT }, radius: this.radius, moves: null, bank: 0 };
     let id = `c${this.nextClient++}`;
     if (name !== undefined) {
       // Straight in: known by their player's id.
@@ -361,8 +368,10 @@ export class GameHost {
    * A watching client joins the game as a player, named `asked` (a number added if someone here
    * has it), back where they left off if the world is kept.
    */
-  private join(id: string, client: Client, asked: string) {
+  private join(id: string, client: Client, typed: string) {
     const taken = new Set(this.sim.players.filter((p) => !p.vacant).map((p) => p.name));
+    // Signed in, they're their account's name, whatever was typed.
+    const asked = client.account?.name ?? typed;
     let name = asked || 'Player';
     for (let n = 2; taken.has(name); n++) name = `${asked} ${n}`;
     // Taking the first player's place: a new screen, whatever was shown to the last one there
@@ -376,8 +385,8 @@ export class GameHost {
     // putting a widget up on their screen, a toast): a screen drops calls for a player it
     // doesn't know it is yet.
     const at = this.events.length;
-    const player = this.sim.join(name);
-    const was = this.keeps ? this.store.player(name) : null;
+    const player = this.sim.join(name, client.account);
+    const was = this.keeps ? this.keptPlace(player) : null;
     if (was) {
       this.world.update([was], 4, Infinity);
       this.world.world.set_flying(player.slot, was.flying && player.allowFlight);
@@ -416,14 +425,23 @@ export class GameHost {
     return !!this.def.world?.persist;
   }
 
+  /**
+   * Where a player left off, in a game that keeps its world: kept for their account (or, their
+   * first time since claiming their name, where that name left off). A guest's isn't kept.
+   */
+  private keptPlace(p: PlayerSim): SavedPlayer | null {
+    if (!p.account) return null;
+    return this.store.player(placeKey(p.account.id)) ?? (p.adopted ? this.store.player(p.adopted) : null);
+  }
+
   private keepPlayer(p: PlayerSim) {
-    if (!this.keeps || p.vacant) return;
+    if (!this.keeps || p.vacant || !p.account) return;
     const s = p.state;
     // The game's own blocks in the hotbar are kept by name: their ids follow the definitions.
     const first = firstGameBlock();
     const hotbar = p.creative?.hotbar.map((id) => (id >= first ? (this.registry.blocks[id]?.key ?? id) : id));
     const saved: SavedPlayer = { x: s.x, y: s.y, z: s.z, yaw: p.yaw, pitch: p.pitch, flying: s.flying, hotbar };
-    this.store.savePlayer(p.name, saved);
+    this.store.savePlayer(placeKey(p.account.id), saved);
   }
 
   /** A kept hotbar slot's block: an id, or a game block's key (stone if it's no longer defined). */
@@ -447,6 +465,12 @@ export class GameHost {
     this.store.saveWorld({ game: this.def.id, seed: this.seed, edits: this.keeps ? w.export_edits() : null, blocks: this.blocks.keys, time: this.sim.env.time });
     for (const c of this.clients.values()) if (c.player) this.keepPlayer(c.player);
     this.store.flush();
+  }
+
+  /** Who a watching client is, again (their account's name changed before they joined). */
+  identify(id: string, who: Who) {
+    const c = this.clients.get(id);
+    if (c && !c.player) c.account = who.account;
   }
 
   /** How many clients are connected. */
@@ -735,3 +759,6 @@ function decodeEdits(data: Uint8Array): [number, number, number, number][] {
   }
   return cells;
 }
+
+/** Where an account's place is kept among the players (by name before accounts: `#` keeps them apart). */
+const placeKey = (account: string) => `#${account}`;

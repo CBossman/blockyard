@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { VoxelWorld } from '@engine/voxel_engine.js';
-import type { Bot, BotControls, CameraApi, GameContext, GameEvents, ItemStack, ModelSpec, OrbitOptions, Player, PlayerOptions, Prop, Vec3, VehicleDefinition, VehicleWorld } from '../api/types';
+import type { Bot, BotControls, CameraApi, GameContext, GameEvents, ItemStack, ModelSpec, OrbitOptions, Player, PlayerAccount, PlayerOptions, Prop, StoreApi, Vec3, VehicleDefinition, VehicleWorld } from '../api/types';
 import { IDLE_INPUT, type PlayerInput } from '../net/protocol';
 import type { ItemHost, ItemKind, Penetration } from '../api/items';
 import { ItemRunner } from './itemrun';
@@ -184,6 +184,12 @@ export class PlayerSim {
   /** Swings and uses so far. */
   swings = 0;
   skin: { uv: [number, number]; atlas?: string } | null = null;
+  /** Their account (signed in), or null: a guest or a bot. Set as they join. */
+  account: PlayerAccount | null = null;
+  /** `player.adopted`: the name whose kept data is theirs to take, on their first visit since claiming it. */
+  adopted: string | null = null;
+  /** `player.store` (the simulation sets it as they join: their account's, or a guest's for this visit). */
+  store: StoreApi = guestStore();
   model: ModelSpec | null = null;
   color: string | null = null;
   /** A clip their figure plays (`animate`), and how many they've asked for. */
@@ -580,6 +586,15 @@ export class PlayerSim {
       get name() {
         return me.name;
       },
+      get account() {
+        return me.account && { ...me.account };
+      },
+      get store() {
+        return me.store;
+      },
+      get adopted() {
+        return me.adopted;
+      },
       hud: present.hud(this.id),
       audio: present.audio(this.id),
       fx: present.fx(this.id),
@@ -774,3 +789,17 @@ export class BotControlsImpl implements BotControls {
 }
 
 export type { Bot };
+
+/** A guest's `player.store`: theirs until they leave, kept nowhere. */
+export function guestStore(): StoreApi {
+  const data = new Map<string, string>();
+  return {
+    get: <T>(key: string) => (data.has(key) ? (JSON.parse(data.get(key)!) as T) : undefined),
+    set: (key, value) => {
+      if (value === undefined) data.delete(key);
+      else data.set(key, JSON.stringify(value));
+    },
+    delete: (key) => void data.delete(key),
+    keys: (prefix = '') => [...data.keys()].filter((k) => k.startsWith(prefix)).sort(),
+  };
+}
