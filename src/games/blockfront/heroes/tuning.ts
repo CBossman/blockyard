@@ -1,3 +1,5 @@
+import type { HeroId } from './defs';
+
 /**
  * The heroes' numbers, in one place: the saber, the guard, the Force powers, how heroes move.
  * Plain data: the server's rules read it (`saber.ts`, `powers.ts`, `rules.ts`) and so does the
@@ -79,12 +81,57 @@ export const MOVE = {
   /** The guard up: times their speed (walking; sprinting it's slower still). */
   block: 0.55,
   blockSprint: 0.42,
-  /** A second jump in the air (Force jump): upward speed. */
-  doubleJump: 10.5,
   /** Each swing steps them forward this fast (blocks a second), at most this often. */
   lunge: 6.5,
   lungeEvery: 0.28,
 };
+
+/**
+ * A hero's jump (the movement ability, `abilities.ts`), as Battlefront's heroes jump: a big, floaty
+ * arc while Space is held, a short hop when it's tapped. Troopers fall at 30 blocks a second a
+ * second (`shared.ts`); a hero's gravity is that times:
+ * - `up` on the way up with Space held, `cut` once it's let go (the rise cut short);
+ * - `hang` near the top (upward or downward speed under `band`), with Space held: they linger;
+ * - `fall` coming down with Space held, no faster than `maxFall` (a slow, controlled descent),
+ *   `drop` once it's let go.
+ * `v0`: the launch (blocks a second); `air`: steering in the air, times a trooper's; `double`: a
+ * second press in the air, the upward speed it gives (0: none), `push` along the way they steer;
+ * `flip`: what their figure does with it. After landing they keep their way a moment (`soft`
+ * seconds, a soft landing, not a dead stop).
+ *
+ * Luke Skyblocker, Ben Kenoblock and Emperor Palpablock float (Luke most); Darth Voxel launches
+ * hard and comes down heavy; Chewblocca jumps strong with no Force in it; Boba Fetch's second
+ * press is a kick of his jetpack. (A full held jump, measured in `tests/headless/blockfront-heroes.ts`.)
+ */
+export interface Jump {
+  v0: number;
+  up: number;
+  cut: number;
+  hang: number;
+  band: number;
+  fall: number;
+  maxFall: number;
+  drop: number;
+  air: number;
+  double: number;
+  push: number;
+  flip: 'flip' | 'spin' | 'jet' | null;
+  soft: number;
+}
+
+const FORCE_JUMP: Jump = { v0: 8.1, up: 0.5, cut: 1.3, hang: 0.24, band: 1.5, fall: 0.45, maxFall: 4.5, drop: 1.2, air: 2.2, double: 6.8, push: 1.5, flip: 'flip', soft: 0.22 };
+
+export const JUMP: Record<HeroId, Jump> = {
+  luke: { ...FORCE_JUMP, v0: 8.3, up: 0.48, fall: 0.42, maxFall: 4.2, air: 2.5, double: 7.2, push: 2 },
+  ben: FORCE_JUMP,
+  emperor: { ...FORCE_JUMP, fall: 0.4, maxFall: 4, air: 2, flip: 'spin' },
+  vader: { ...FORCE_JUMP, v0: 9, up: 0.62, hang: 0.55, fall: 0.8, maxFall: 8, drop: 1.25, air: 1.5, double: 6, push: 0.8, flip: null, soft: 0.14 },
+  chewie: { ...FORCE_JUMP, v0: 9.5, up: 0.95, cut: 1.25, hang: 1, fall: 1, maxFall: 60, drop: 1.1, air: 1.3, double: 0, push: 0, flip: null, soft: 0.12 },
+  boba: { ...FORCE_JUMP, v0: 8.8, up: 0.9, cut: 1.3, hang: 0.9, fall: 0.9, maxFall: 60, drop: 1.1, air: 1.6, double: 7.5, push: 1.5, flip: 'jet', soft: 0.15 },
+};
+
+/** A press of Space this long before landing still jumps as they land. */
+export const JUMP_BUFFER = 0.15;
 
 export const POWERS = {
   /** Heroes take this much of a power's damage (the saber's is `SABER.heroes`). */

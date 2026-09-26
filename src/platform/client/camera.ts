@@ -274,3 +274,65 @@ export class PlayerCamera {
     return this.camera.getWorldDirection(out);
   }
 }
+
+/**
+ * The world camera taken by the game's client code for a while (`client.camera.take`: a fly-over,
+ * a cutscene): drawn from the pose it last gave, placed over the player's own camera each frame
+ * (which goes on underneath, following them as ever). Given back (`release`), the view eases from
+ * the last pose into the player's own camera over the seconds asked, wherever that has got to.
+ */
+export class CameraTake {
+  private pose: { position: THREE.Vector3; quaternion: THREE.Quaternion; fov: number | null } | null = null;
+  /** Taken now (not easing back). */
+  private held = false;
+  private easeTime = 0;
+  private eased = 0;
+  private m = new THREE.Matrix4();
+
+  /** Taken, or easing back to the player's own camera. */
+  get active(): boolean {
+    return this.pose !== null;
+  }
+
+  take(position: { x: number; y: number; z: number }, target: { x: number; y: number; z: number }, fov?: number) {
+    const p = new THREE.Vector3(position.x, position.y, position.z);
+    const t = new THREE.Vector3(target.x, target.y, target.z);
+    // (Looking straight down or up: any turn about the vertical will do.)
+    if (p.distanceToSquared(t) < 1e-8) t.z -= 1;
+    const q = new THREE.Quaternion().setFromRotationMatrix(this.m.lookAt(p, t, new THREE.Vector3(0, 1, 0)));
+    this.pose = { position: p, quaternion: q, fov: fov ?? null };
+    this.held = true;
+  }
+
+  release(ease = 1) {
+    if (!this.held) return;
+    this.held = false;
+    this.easeTime = Math.max(0, ease);
+    this.eased = 0;
+    if (this.easeTime === 0) this.pose = null;
+  }
+
+  /** Over the player's own camera, placed this frame: the pose taken, or the ease back from it. */
+  apply(camera: THREE.PerspectiveCamera, dt: number) {
+    const pose = this.pose;
+    if (!pose) return;
+    const fov0 = camera.fov;
+    if (this.held) {
+      camera.position.copy(pose.position);
+      camera.quaternion.copy(pose.quaternion);
+      if (pose.fov !== null) camera.fov = pose.fov;
+    } else {
+      this.eased += dt;
+      const k = smoothstep(this.eased / this.easeTime);
+      if (k >= 1) {
+        this.pose = null;
+        return;
+      }
+      camera.position.lerpVectors(pose.position, camera.position, k);
+      camera.quaternion.copy(pose.quaternion).slerp(camera.quaternion.clone(), k);
+      if (pose.fov !== null) camera.fov = pose.fov + (fov0 - pose.fov) * k;
+    }
+    if (camera.fov !== fov0) camera.updateProjectionMatrix();
+    camera.updateMatrixWorld();
+  }
+}
