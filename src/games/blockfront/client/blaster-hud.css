@@ -141,20 +141,13 @@
   --hc: #f3f5f7;
   background: none;
   z-index: 0;
+  filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.6)) drop-shadow(0 1px 4px rgba(0, 0, 0, 0.35));
   color: #f3f5f7;
   text-align: right;
   font-family: var(--sans);
   text-shadow: 0 1px 6px rgba(0, 0, 0, 0.55);
 }
-/* A soft shade behind, feathered out on every side, so it reads over snow and sky. */
-.bf-heat::before {
-  content: '';
-  position: absolute;
-  inset: -26px -30px -26px -10px;
-  z-index: -1;
-  background: radial-gradient(closest-side, rgba(5, 8, 12, 0.5), rgba(5, 8, 12, 0.28) 55%, transparent);
-  pointer-events: none;
-}
+/* (No panel behind it: a tight dark halo round each mark, its filter, keeps it readable over snow and sky.) */
 .bf-heat-name {
   font: 600 13px/1.1 var(--pixel);
   letter-spacing: 0.24em;
@@ -171,7 +164,7 @@
 .bf-heat-label {
   font: 600 9px var(--pixel);
   letter-spacing: 0.3em;
-  color: rgba(243, 245, 247, 0.45);
+  color: rgba(243, 245, 247, 0.75);
 }
 .bf-heat-track {
   position: relative;
