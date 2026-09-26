@@ -13,6 +13,10 @@ kill_timeout = "10s"
 # under the site's own domain, so its session cookie goes with the site's requests.
 [env]
   SITE_ORIGINS = "https://blockyard.gg,https://blockyard.potrock.xyz"
+  # Matches running at once (16 people each; a full public game overflows into another copy).
+  # Measured 2026-09-26 on performance-1x: a match with bots takes about 3% of the CPU with one
+  # viewer, more with a full 16; 14 leaves headroom.
+  ROOMS = "14"
 
 [[mounts]]
   source = "data"
@@ -27,8 +31,8 @@ kill_timeout = "10s"
 
   [http_service.concurrency]
     type = "connections"
-    soft_limit = 150
-    hard_limit = 200
+    soft_limit = 250
+    hard_limit = 300
 
   [[http_service.checks]]
     grace_period = "10s"
