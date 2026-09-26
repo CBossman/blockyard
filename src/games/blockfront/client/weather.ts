@@ -1,5 +1,5 @@
 import type { Vec3 } from '@platform';
-import type { Client, ClientKit } from '@platform/client';
+import type { Client, ClientKit, ClientLoop } from '@platform/client';
 import { Vec3 as V3 } from '@platform/client/math';
 import { MAPS, type MapSpec } from '../map';
 
@@ -10,6 +10,9 @@ import { MAPS, type MapSpec } from '../map';
  *   that come every so often; and dust kicked up by running feet.
  * - **Frostline**: snow falling, driven sideways when it gusts, blown off the tops of the ridges
  *   and rocks; and everyone's breath, a little white puff every couple of seconds.
+ *
+ * And on Frostline its own wind (`bf_frost_wind`): a thinner, colder rush than the desert's, a
+ * whistle through the rocks over it, rising and falling with the same gusts that drive the snow.
  *
  * Which map it is: the camera's place against each map's bounds. Nothing while a replay plays, and
  * it thins out under a roof (the sky straight up is blocked) and while looking down the sights. It
@@ -72,6 +75,19 @@ function mapAt(p: Vec3): MapSpec | null {
     if (p.x > min.x - 160 && p.x < max.x + 160 && p.z > min.z - 160 && p.z < max.z + 160) return m;
   }
   return null;
+}
+
+/**
+ * Frostline's wind, a loop: a thin low rush, blown snow hissing over it, a whistle and a higher
+ * one through the rocks. The gusts are its loudness and pitch (`frame`), as the desert wind's are.
+ */
+export function defineFrostWind(client: Client) {
+  client.audio.defineLoop('bf_frost_wind', (l) => {
+    l.noise({ freq: 240, filter: 'lowpass', q: 0.7, volume: 0.42 });
+    l.noise({ freq: 1150, filter: 'bandpass', q: 0.9, volume: 0.4 });
+    l.noise({ freq: 640, filter: 'bandpass', q: 9, volume: 0.1 });
+    l.noise({ freq: 1500, filter: 'bandpass', q: 11, volume: 0.045 });
+  });
 }
 
 export function weather(): ClientKit {
@@ -137,13 +153,23 @@ export function weather(): ClientKit {
     }
   }
 
+  let windLoop: ClientLoop | null = null;
+  const hush = () => {
+    windLoop?.stop();
+    windLoop = null;
+  };
+
   return {
     name: 'blockfront.weather',
+    setup(client) {
+      defineFrostWind(client);
+    },
     frame(client, dt) {
-      if (client.replay.playing || dt <= 0) return;
       const cam = client.camera.position;
       const map = mapAt(cam);
       const air = map ? AIRS[map.id] : undefined;
+      if (!client.running || !map || !air || air.climate !== 'snow') hush();
+      if (client.replay.playing || dt <= 0) return;
       if (!map || !air) return;
       const t = client.time;
 
@@ -157,6 +183,11 @@ export function weather(): ClientKit {
       const heading = air.heading + sway;
       const speed = air.wind + (air.gust - air.wind) * gust;
       const wind = { x: Math.cos(heading) * speed, y: 0, z: Math.sin(heading) * speed };
+      if (air.climate === 'snow' && client.running) {
+        // Heard as the desert wind is (ambience.ts): quiet in a lull, up and higher in a gust; muffled under a roof.
+        windLoop ??= client.audio.loop('bf_frost_wind', { volume: 0 });
+        windLoop.set({ volume: (0.06 + gust * 0.15) * (0.45 + 0.55 * sky), pitch: 0.8 + gust * 0.45 + sway * 0.2 });
+      }
 
       // Under a roof or out; how open it is round about (how far it sees along the ground).
       look(client, cam);
@@ -179,6 +210,7 @@ export function weather(): ClientKit {
       else sand(client, dt, cam, fwd, wind, air, thin);
       breathAndDust(client, air, wind, cam);
     },
+    dispose: hush,
   };
 
   /** Snow: falling round the camera, carried on the wind; blown off the tops of things in plumes. */
