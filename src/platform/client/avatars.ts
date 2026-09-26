@@ -57,7 +57,9 @@ export class Avatars {
     const d = this.p.def.player;
     const content = this.p.content;
     // A model (theirs, or the game's for everyone): one figure type per model.
-    const model = p.model ?? d?.model;
+    // (A box humanoid on the rig: players' bodies are jointed, and wear what they wear.)
+    const given = p.model ?? d?.model;
+    const model = given && given.rig === 'humanoid' && !given.gltf ? { ...given, skeleton: true } : given;
     if (model) {
       const type = `$player:model:${JSON.stringify(model)}`;
       if (!content.entities.has(type)) content.defineEntity(type, { name: 'Player', model, hitbox: { width: 0.6, height: 1.8 }, health: 20, speed: 4.3 });
@@ -66,7 +68,7 @@ export class Avatars {
     const skin = p.skin ?? (d?.skin ? { uv: d.skin, atlas: d.skinAtlas } : { uv: Skins.player, atlas: undefined });
     const type = `$player:${skin.atlas ?? 'builtin'}:${skin.uv.join(',')}`;
     if (!content.entities.has(type)) {
-      content.defineEntity(type, { name: 'Player', model: Models.humanoid({ skin: skin.uv, atlas: skin.atlas }), hitbox: { width: 0.6, height: 1.8 }, health: 20, speed: 4.3 });
+      content.defineEntity(type, { name: 'Player', model: Models.humanoid({ skin: skin.uv, atlas: skin.atlas, skeleton: true }), hitbox: { width: 0.6, height: 1.8 }, health: 20, speed: 4.3 });
     }
     return type;
   }

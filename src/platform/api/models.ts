@@ -19,9 +19,10 @@ export const Models = {
    * Two legs, body, two arms and a head. `normal` = the standard 64x64 skin (8x8 head, 4-wide
    * limbs), `thin` = 2-wide limbs, `large` = 10x10 head and 14-wide body (big mobs, bosses).
    * `extras` adds parts of your own (hats, crowns, gear): UVs are relative to the skin origin,
-   * and `parent: 'head'` makes a part follow the head.
+   * and `parent: 'head'` makes a part follow the head. `skeleton` puts it on the humanoid rig
+   * (see `ModelSpec.skeleton`), as players' bodies are.
    */
-  humanoid(opts: { skin: [number, number]; atlas?: string; scale?: number; build?: Build; extras?: ModelPart[] }): ModelSpec {
+  humanoid(opts: { skin: [number, number]; atlas?: string; scale?: number; build?: Build; extras?: ModelPart[]; skeleton?: boolean }): ModelSpec {
     const o = opts.skin;
     const build = opts.build ?? 'normal';
     let parts: ModelPart[];
@@ -48,7 +49,7 @@ export const Models = {
       ];
     }
     for (const e of opts.extras ?? []) parts.push({ ...e, uv: add(o, e.uv) });
-    return { rig: 'humanoid', parts, atlas: opts.atlas ?? 'builtin', scale: opts.scale ?? 1 };
+    return { rig: 'humanoid', parts, atlas: opts.atlas ?? 'builtin', scale: opts.scale ?? 1, ...(opts.skeleton ? { skeleton: true } : {}) };
   },
 
   /**

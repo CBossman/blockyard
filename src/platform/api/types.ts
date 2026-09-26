@@ -1710,6 +1710,12 @@ export interface ModelSpec {
   scale: number;
   /** A glTF model (`Models.gltf`) instead of boxes. */
   gltf?: GltfSpec;
+  /**
+   * A box humanoid on the humanoid rig (docs/HUMANOID.md) instead of animating itself: its body,
+   * arms and legs are jointed at the waist, elbows and knees, client code poses it (the figures
+   * kit), and what's worn (cosmetics) hangs from its joints. Players' bodies always are.
+   */
+  skeleton?: boolean;
 }
 
 /**

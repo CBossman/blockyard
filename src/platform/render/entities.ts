@@ -5,7 +5,7 @@ import { Shaders } from './shaders';
 import type { SharedUniforms } from './pipeline';
 import { GltfLibrary, surfaceUniforms, type ItemMesh, type Surface } from '../client/gltf';
 import type { ClipPlay } from '../client/clips';
-import type { HumanoidRig } from '../client/humanoid';
+import { HumanoidRig } from '../client/humanoid';
 import type { FigureState } from '../api/client/figures';
 
 /** The built-in starter sprites (16x16, `builtin` atlas, row at y = 64). Games bring the rest. */
@@ -84,7 +84,8 @@ export class EntityGraphics {
 
   /** A figure for an entity's model: boxes now, or glTF once its file is here (null till then). */
   figure(spec: ModelSpec): Figure | null {
-    return spec.rig === 'gltf' ? this.gltf.figure(spec) : this.buildModel(spec);
+    if (spec.rig === 'gltf') return this.gltf.figure(spec);
+    return spec.rig === 'humanoid' && spec.skeleton ? (this.buildJointed(spec) ?? this.buildModel(spec)) : this.buildModel(spec);
   }
 
   /** Free every atlas texture and cached geometry (a game is over). */
@@ -242,6 +243,95 @@ export class EntityGraphics {
     return new ModelInstance(root, pivots, rest, material, spec);
   }
 
+  /**
+   * A box humanoid on the humanoid rig (docs/HUMANOID.md): its joints where its parts' pivots are,
+   * the body split at the waist and the arms and legs at the elbows and knees (each half the rows
+   * of its skin), so client code poses it like any figure on the rig. Null if it lacks a part.
+   */
+  buildJointed(spec: ModelSpec): Figure | null {
+    const part = new Map(spec.parts.map((p) => [p.name, p]));
+    const [legR, legL, torso, head, armR, armL] = (['legR', 'legL', 'body', 'head', 'armR', 'armL'] as const).map((n) => part.get(n));
+    if (!legR || !legL || !torso || !head || !armR || !armL) return null;
+    const atlas = this.atlas(spec.atlas);
+    const material = this.material(spec.atlas);
+    const shadow = this.shadowMaterial(spec.atlas);
+    const bottom = (p: ModelPart) => p.pivot[1] + p.offset[1];
+    // Where each joint is (texels, the figure's space), and what it hangs from.
+    type V = [number, number, number];
+    const at = (p: ModelPart, y: number): V => [p.pivot[0], y, p.pivot[2]];
+    const J: Record<string, { at: V; parent: string | null }> = {
+      hips: { at: [0, legR.pivot[1], 0], parent: null },
+      spine: { at: [0, bottom(torso) + torso.size[1] * 0.15, 0], parent: 'hips' },
+      chest: { at: [0, bottom(torso) + torso.size[1] / 2, 0], parent: 'spine' },
+      neck: { at: [0, head.pivot[1] - 0.5, 0], parent: 'chest' },
+      head: { at: [...head.pivot], parent: 'neck' },
+    };
+    for (const [s, arm, leg] of [['R', armR, legR], ['L', armL, legL]] as const) {
+      J[`upperArm${s}`] = { at: [...arm.pivot], parent: 'chest' };
+      J[`lowerArm${s}`] = { at: at(arm, bottom(arm) + arm.size[1] / 2), parent: `upperArm${s}` };
+      J[`hand${s}`] = { at: at(arm, bottom(arm) + arm.size[1] / 4), parent: `lowerArm${s}` };
+      // The fist's hold: a texel and a half up from the end of the arm, in its middle.
+      J[`grip${s}`] = { at: at(arm, bottom(arm) + 1.5), parent: `hand${s}` };
+      J[`upperLeg${s}`] = { at: [...leg.pivot], parent: 'hips' };
+      J[`lowerLeg${s}`] = { at: at(leg, bottom(leg) + leg.size[1] / 2), parent: `upperLeg${s}` };
+      J[`foot${s}`] = { at: at(leg, bottom(leg) + 1), parent: `lowerLeg${s}` };
+    }
+    const root = new THREE.Group();
+    const inner = new THREE.Group();
+    inner.scale.setScalar(spec.scale);
+    root.add(inner);
+    const body = new THREE.Group();
+    inner.add(body);
+    const nodes = new Map<string, THREE.Object3D>();
+    for (const [name, j] of Object.entries(J)) {
+      const o = new THREE.Object3D();
+      o.name = name;
+      const from = j.parent ? J[j.parent].at : [0, 0, 0];
+      o.position.set((j.at[0] - from[0]) / 16, (j.at[1] - from[1]) / 16, (j.at[2] - from[2]) / 16);
+      (j.parent ? nodes.get(j.parent)! : body).add(o);
+      nodes.set(name, o);
+    }
+    // A part's rows (from its top) as a box hanging from a joint.
+    const place = (p: ModelPart, joint: string, from = 0, rows = p.size[1]) => {
+      const mesh = new THREE.Mesh(boxGeometry(p, atlas.width, atlas.height, [from, rows]), material);
+      mesh.customDepthMaterial = shadow;
+      const top = bottom(p) + p.size[1] - from;
+      const j = J[joint].at;
+      mesh.position.set((p.pivot[0] + p.offset[0] + p.size[0] / 2 - j[0]) / 16, (top - rows / 2 - j[1]) / 16, (p.pivot[2] + p.offset[2] + p.size[2] / 2 - j[2]) / 16);
+      nodes.get(joint)!.add(mesh);
+    };
+    const halves = (p: ModelPart, upper: string, lower: string) => {
+      const h = p.size[1] / 2;
+      place(p, upper, 0, h);
+      place(p, lower, h, p.size[1] - h);
+    };
+    halves(torso, 'chest', 'spine');
+    place(head, 'head');
+    for (const [s, arm, leg] of [['R', armR, legR], ['L', armL, legL]] as const) {
+      halves(arm, `upperArm${s}`, `lowerArm${s}`);
+      halves(leg, `upperLeg${s}`, `lowerLeg${s}`);
+    }
+    // Parts of the model's own (a crown on the head): on the joint their part became.
+    const onto: Record<string, string> = { head: 'head', body: 'chest', armR: 'lowerArmR', armL: 'lowerArmL', legR: 'lowerLegR', legL: 'lowerLegL' };
+    for (const p of spec.parts) {
+      if (['legR', 'legL', 'body', 'head', 'armR', 'armL'].includes(p.name)) continue;
+      const owner = p.parent ? part.get(p.parent) : undefined;
+      const joint = (p.parent && onto[p.parent]) || 'hips';
+      const base = owner ? owner.pivot : [0, 0, 0];
+      const j = J[joint].at;
+      const pivot = new THREE.Object3D();
+      pivot.position.set((base[0] + p.pivot[0] - j[0]) / 16, (base[1] + p.pivot[1] - j[1]) / 16, (base[2] + p.pivot[2] - j[2]) / 16);
+      const r = p.rotation ?? [0, 0, 0];
+      pivot.rotation.set(r[0], r[1], r[2]);
+      const mesh = new THREE.Mesh(boxGeometry(p, atlas.width, atlas.height), material);
+      mesh.customDepthMaterial = shadow;
+      mesh.position.set((p.offset[0] + p.size[0] / 2) / 16, (p.offset[1] + p.size[1] / 2) / 16, (p.offset[2] + p.size[2] / 2) / 16);
+      pivot.add(mesh);
+      nodes.get(joint)!.add(pivot);
+    }
+    return new JointedFigure(root, body, material);
+  }
+
   /** Extruded 3D geometry for a 16x16 sprite (front/back quads plus pixel edges), 1 block wide. */
   spriteGeometry(ref: SpriteRef): { geometry: THREE.BufferGeometry; atlas: string } {
     const s = resolveSprite(ref);
@@ -316,14 +406,20 @@ export class EntityGraphics {
 }
 
 /** Minecraft box-UV unwrapping onto a BoxGeometry (model faces +Z). */
-export function boxGeometry(p: ModelPart, aw: number, ah: number): THREE.BufferGeometry {
-  const [w, h, d] = p.size;
+/**
+ * A part's box, its faces mapped to its skin (the Minecraft layout). `rows`: only those of its
+ * height (from the top, and how many), a box that much shorter with its sides' rows of the skin
+ * (a limb jointed in two).
+ */
+export function boxGeometry(p: ModelPart, aw: number, ah: number, rows?: [number, number]): THREE.BufferGeometry {
+  const [w, full, d] = p.size;
+  const [from, h] = rows ?? [0, full];
   const g = new THREE.BoxGeometry(w / 16, h / 16, d / 16);
   const [u, v] = p.uv;
-  const right: [number, number, number, number] = [u, v + d, d, h];
-  const front: [number, number, number, number] = [u + d, v + d, w, h];
-  const left: [number, number, number, number] = [u + d + w, v + d, d, h];
-  const back: [number, number, number, number] = [u + 2 * d + w, v + d, w, h];
+  const right: [number, number, number, number] = [u, v + d + from, d, h];
+  const front: [number, number, number, number] = [u + d, v + d + from, w, h];
+  const left: [number, number, number, number] = [u + d + w, v + d + from, d, h];
+  const back: [number, number, number, number] = [u + 2 * d + w, v + d + from, w, h];
   const top: [number, number, number, number] = [u + d, v, w, d];
   const bottom: [number, number, number, number] = [u + d + w, v, w, d];
   // BoxGeometry face order: +X, -X, +Y, -Y, +Z, -Z. The model's left side is +X.
@@ -422,6 +518,39 @@ export interface Figure {
   /** Play one of its model's clips over its animation (`animate`), or null: fade it out. */
   play?(clip: ClipPlay | null): void;
   dispose(): void;
+}
+
+/**
+ * A box humanoid on the humanoid rig (`EntityGraphics.buildJointed`): posed by client code (the
+ * figures kit), like a glTF figure on the rig.
+ */
+export class JointedFigure implements Figure {
+  readonly pivots = new Map<string, THREE.Object3D>();
+  readonly rig: HumanoidRig;
+
+  constructor(
+    readonly root: THREE.Group,
+    body: THREE.Group,
+    readonly material: THREE.RawShaderMaterial,
+  ) {
+    this.rig = new HumanoidRig(body);
+    body.traverse((o) => {
+      if (o.name && !this.pivots.has(o.name)) this.pivots.set(o.name, o);
+    });
+    // What's held hangs from the right hand.
+    this.pivots.set('armR', this.rig.joint('handR'));
+  }
+
+  animate(s: AnimState, held: THREE.Object3D | null = null) {
+    this.rig.apply(s.time, held);
+  }
+
+  dispose() {
+    this.root.traverse((o) => {
+      if (o instanceof THREE.Mesh) o.geometry.dispose();
+    });
+    this.material.dispose();
+  }
 }
 
 export class ModelInstance implements Figure {
