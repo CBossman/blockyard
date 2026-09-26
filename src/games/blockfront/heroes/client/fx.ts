@@ -249,8 +249,16 @@ export function heroFx(scene: HeroScene): ClientKit {
     hums.get(id)?.loop.stop();
     hums.delete(id);
   };
-  /** When each jetpack last roared (its sound comes in short bursts). */
-  const jetSound = new Map<string, number>();
+  /** Flamethrowers and jetpacks burning (`f:<id>`, `j:<id>`): their loops, and (a jet's) how high it was a frame ago. */
+  const burning = new Map<string, { loop: ClientLoop; y: number }>();
+  /** Keep `key`'s loop (`voice`) going at `at` this frame; the frame stops the ones it didn't keep. */
+  const kept = new Set<string>();
+  const burn = (client: Client, key: string, voice: string, at: Vec3) => {
+    kept.add(key);
+    let b = burning.get(key);
+    if (!b) burning.set(key, (b = { loop: client.audio.loop(voice, { at, volume: 0 }), y: at.y }));
+    return b;
+  };
   /** Rockets as drawn here: where, which way (eased toward the server's word). */
   const rocketsDrawn = new Map<number, { at: V3; dir: V3 }>();
   /** Rings spreading over the ground from a hero (a stance, a rage, an aura taking hold). */
@@ -380,6 +388,7 @@ export function heroFx(scene: HeroScene): ClientKit {
       }
 
       // ---- Chewblocca and Boba Fetch: what goes on while their powers do.
+      kept.clear();
       for (const [id, until] of scene.lasting) {
         const who = chests.get(id);
         const face = facing(id);
@@ -402,10 +411,9 @@ export function heroFx(scene: HeroScene): ClientKit {
           }
           if (tick % 3 === 0) fx.particles(add(from, dir, POWERS.flame.range * 0.8), [0.12, 0.1, 0.09], { count: 1, speed: 0.6, size: 0.22, gravity: -1.5, life: 0.9, spread: 0.4, collide: false });
           fx.flare(from, 0.35);
-          if (now >= (jetSound.get(`f:${id}`) ?? 0)) {
-            jetSound.set(`f:${id}`, now + 0.28);
-            client.audio.play('bfh_flame', { at: from, volume: 0.9 });
-          }
+          // Its roar, flickering, and the fuel spitting in it.
+          burn(client, `f:${id}`, 'bfh_flame', from).loop.set({ at: from, volume: rnd(0.8, 1), pitch: rnd(0.93, 1.07) });
+          if (Math.random() < dt * 7) client.audio.play('bfh_flame_crackle', { at: from, pitch: rnd(0.8, 1.3), volume: 0.8 });
         }
         // The jetpack: twin jets of fire from his back, driving down.
         if ((until.get('jetpack') ?? 0) > now) {
@@ -419,12 +427,19 @@ export function heroFx(scene: HeroScene): ClientKit {
             if (tick % (mine ? 6 : 3) === 0) fx.particles({ x: nozzle.x, y: nozzle.y - 0.6, z: nozzle.z }, [0.55, 0.52, 0.5], { count: 1, speed: 0.8, size: mine ? 0.12 : 0.2, gravity: 2, life: mine ? 0.5 : 0.8, spread: 0.1, collide: false });
             fx.flare(nozzle, 0.3);
           }
-          if (now >= (jetSound.get(id) ?? 0)) {
-            jetSound.set(id, now + 0.3);
-            client.audio.play('bfh_jet_loop', { at: who, volume: 0.8 });
-          }
+          // Its roar: higher as he climbs, lower as he drops, flickering.
+          const jet = burn(client, `j:${id}`, 'bfh_jet_burn', who);
+          const climb = dt > 0 ? Math.max(-1, Math.min(1, (who.y - jet.y) / dt / 7)) : 0;
+          jet.y = who.y;
+          jet.loop.set({ at: who, volume: rnd(0.85, 1), pitch: 1 + 0.2 * climb + rnd(-0.03, 0.03) });
         }
       }
+      // (Flames and jets out: their roars too.)
+      for (const [key, b] of burning)
+        if (!kept.has(key)) {
+          b.loop.stop();
+          burning.delete(key);
+        }
       // A charge: dust thrown up at his heels.
       for (const [id, a] of scene.acts) {
         if (a.k !== 'charge' || now - a.at > a.t) continue;
@@ -546,7 +561,7 @@ export function heroFx(scene: HeroScene): ClientKit {
         let whirl = whirls.get(id);
         if (!whirl) whirls.set(id, (whirl = client.audio.loop(humOf(heroId, 0).voice, { at: fl.at, volume: 0 })));
         const turn = Math.sin(t.spin);
-        whirl.set({ at: fl.at, pitch: 1.12 + 0.2 * turn, volume: 0.22 + 0.08 * turn });
+        whirl.set({ at: fl.at, pitch: 1.12 + 0.2 * turn, volume: 0.12 + 0.05 * turn });
       }
       for (const [id, t] of thrown)
         if (!scene.flights.has(id)) {
@@ -605,6 +620,8 @@ export function heroFx(scene: HeroScene): ClientKit {
       for (const id of [...hums.keys()]) hush(id);
       for (const w of whirls.values()) w.stop();
       whirls.clear();
+      for (const b of burning.values()) b.loop.stop();
+      burning.clear();
     },
   };
 

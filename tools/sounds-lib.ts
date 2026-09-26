@@ -134,7 +134,7 @@ export const SCENES: Record<string, { seconds: number; play: Scene; note?: strin
       const l = s.loop('bfh_hum_dark', { at: s.here, volume: 0 });
       for (let t = 0; t <= 2; t += 1 / 60) {
         const turn = Math.sin(t * Math.PI * 2 * 3.2);
-        s.at(t, () => l.set({ pitch: 1.12 + 0.2 * turn, volume: 0.22 + 0.08 * turn }));
+        s.at(t, () => l.set({ pitch: 1.12 + 0.2 * turn, volume: 0.12 + 0.05 * turn }));
       }
       s.at(2, () => {
         l.stop();
@@ -147,6 +147,56 @@ export const SCENES: Record<string, { seconds: number; play: Scene; note?: strin
     play: (s) => {
       s.play('bfh_lightning_chain', { at: s.here });
       for (let t = 0; t < 1.5; t += 1 / 60) if (Math.random() < 0.35) s.at(t, () => s.play('bfh_crackle', { at: s.here, pitch: rnd(0.85, 1.2), volume: 0.8 }));
+    },
+  },
+  'bowcaster volley': {
+    seconds: 3,
+    note: 'three quarrels, each bursting where it lands 12 blocks off',
+    play: (s) => {
+      for (let i = 0; i < 3; i++) {
+        s.at(i * 0.63, () => s.play('bfh_bowcaster', { at: s.here, pitch: rnd(0.97, 1.03) }));
+        s.at(i * 0.63 + 0.14, () => s.play('bfh_quarrel', { at: off(s.here, rnd(-3, 3), -12), pitch: rnd(0.9, 1.1) }));
+      }
+    },
+  },
+  'EE-3 burst': { seconds: 2, play: (s) => burst(s, 'blaster_ee3', 8, 60 / 470) },
+  'Wookiee charge': {
+    seconds: 2,
+    play: (s) => {
+      s.play('bfh_charge', { at: s.here });
+      s.at(0.62, () => s.play('bfh_knock', { at: off(s.here, 0, -2) }));
+    },
+  },
+  'jetpack flight': {
+    seconds: 4,
+    note: 'lift-off, a climb, a hover and a drop',
+    play: (s) => {
+      s.play('bfh_jet', { at: s.here });
+      if (!s.loops) {
+        for (let t = 0.1; t < 3.5; t += 0.3) s.at(t, () => s.play('bfh_jet_loop', { at: s.here, volume: 0.8 }));
+        return;
+      }
+      const l = s.loop('bfh_jet_burn', { at: s.here, volume: 0 });
+      for (let t = 0.1; t <= 3.5; t += 1 / 30) {
+        const climb = t < 1.2 ? 0.8 : t < 2.5 ? 0 : -0.7;
+        s.at(t, () => l.set({ volume: rnd(0.85, 1), pitch: 1 + 0.2 * climb + rnd(-0.03, 0.03) }));
+      }
+      s.at(3.5, () => l.stop());
+    },
+  },
+  'flamethrower (2 s)': {
+    seconds: 3,
+    play: (s) => {
+      if (!s.loops) {
+        for (let t = 0; t < 2; t += 0.28) s.at(t, () => s.play('bfh_flame', { at: s.here, volume: 0.9 }));
+        return;
+      }
+      const l = s.loop('bfh_flame', { at: s.here, volume: 0 });
+      for (let t = 0; t <= 2; t += 1 / 30) {
+        s.at(t, () => l.set({ volume: rnd(0.8, 1), pitch: rnd(0.93, 1.07) }));
+        if (Math.random() < 7 / 30) s.at(t, () => s.play('bfh_flame_crackle', { at: s.here, pitch: rnd(0.8, 1.3), volume: 0.8 }));
+      }
+      s.at(2, () => l.stop());
     },
   },
   'wind (gusting)': {
@@ -180,9 +230,9 @@ export const SCENES: Record<string, { seconds: number; play: Scene; note?: strin
         s.at(2, () => s.play('amb_firefight', { at: off(undefined, -40, -70), volume: 3.2 }));
         return;
       }
-      burst(s, 'blaster_rifle_empire', 5, 0.22, 0, off(undefined, 50, -60), 0.5);
-      burst(s, 'blaster_rifle_rebels', 4, 0.25, 1.5, off(undefined, 58, -52), 0.5);
-      burst(s, 'blaster_heavy_empire', 8, 0.11, 2.8, off(undefined, 45, -64), 0.5);
+      burst(s, 'blaster_rifle_empire', 5, 0.22, 0, off(undefined, 50, -60), 0.35);
+      burst(s, 'blaster_rifle_rebels', 4, 0.25, 1.5, off(undefined, 58, -52), 0.35);
+      burst(s, 'blaster_heavy_empire', 8, 0.11, 2.8, off(undefined, 45, -64), 0.35);
       s.at(3.4, () => s.play('amb_boom', { at: off(undefined, -60, -70), volume: 3.5 }));
     },
   },
@@ -205,9 +255,11 @@ export const GROUPS: Record<string, string[]> = {
   Sabers: ['bfh_saber_ignite', 'bfh_saber_swing', 'bfh_saber_hit', 'bfh_saber_clash', 'bfh_saber_deflect', 'bfh_guard_break', 'bfh_saber_throw', 'bfh_saber_catch'],
   Force: ['bfh_force_push', 'bfh_force_pull', 'bfh_force_stance', 'bfh_force_choke', 'bfh_force_rage', 'bfh_crackle', 'bfh_lightning_chain', 'bfh_dark_aura', 'bfh_saber_rush', 'bfh_force_leap', 'bfh_force_land', 'bfh_force_jump'],
   'HUD and stingers': ['post_gained', 'post_lost', 'ui_hero_ready', 'low_tickets', 'ui_heartbeat', 'respawn', 'hero_arrives', 'match_start', 'victory', 'defeat'],
+  Chewblocca: ['bfh_bowcaster', 'bfh_quarrel', 'bowcaster_recock', 'bfh_roar', 'bfh_charge', 'bfh_knock', 'bfh_hero_ready'],
+  'Boba Fetch': ['blaster_ee3', 'vent_ee3', 'bfh_rocket', 'bfh_jet'],
   Sky: ['amb_scream', 'amb_roar', 'amb_sky_laser', 'amb_sky_laser_imp', 'amb_boom'],
 };
-const FALLBACK: Record<string, string> = { vent_rifle: 'vent', vent_heavy: 'vent', vent_sniper: 'vent', vent_pistol: 'vent' };
+const FALLBACK: Record<string, string> = { vent_rifle: 'vent', vent_heavy: 'vent', vent_sniper: 'vent', vent_pistol: 'vent', vent_ee3: 'vent', bowcaster_recock: 'vent', blaster_ee3: 'blaster_pistol' };
 
 /** Where a sound's put for the board's distance and side. */
 export function placed(dist: number, side: number): Vec3 | undefined {
