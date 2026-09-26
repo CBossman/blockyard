@@ -1160,9 +1160,16 @@ client.audio.define('laser', (s) => {
 });
 ```
 
-- `s.tone` is an oscillator sweep with an envelope and optional lowpass, bandpass (which can sweep: `bandpass: { freq, to, q }`) or vibrato. Starfighter's TIE howl is three detuned, wavering sawtooths through a sweeping bandpass.
-- `s.noise` is filtered noise with a sweeping filter.
+- `s.tone` is an oscillator sweep with an envelope and optional lowpass (which can sweep: `lowpass: { freq, to, time }`), highpass, bandpass (`bandpass: { freq, to, q }`) or vibrato. Starfighter's TIE howl is three detuned, wavering sawtooths through a sweeping bandpass.
+  - `glide: [[seconds, hz], …]` gives the pitch a path instead of `to`: a blaster bolt's chirp falls fast then slower, a swung blade rises and falls.
+  - `fm: { ratio, depth, to }` bends it with a sine at `ratio` times its frequency: whole ratios make it richer (brass, buzz); others ring like metal (1.41, 2.76).
+  - `drive` (0..1) adds grit.
+  - `hold` keeps it at full volume after the attack, before it dies away: held notes, a steady drone. Every layer lasts `attack + hold + duration`.
+- `s.noise` is filtered noise with a sweeping filter (and its own `attack` and `hold`: a gust that swells, a steady hiss).
 - `s.pitch` is the play's pitch: multiply frequencies by it.
+- **Continuous sounds** (a blade's hum, the wind, an engine): `client.audio.defineLoop(name, (l) => { l.tone({ wave, freq, … }); l.noise({ freq, … }) })` defines one from steady layers; `client.audio.loop(name, { at })` starts it (or the platform's `engine` / `wind`) and returns a handle whose `set({ volume, pitch, at })` changes it as it goes (pitch moves every frequency together) and `stop()` ends it. Blockfront's sabers each keep one, its pitch and loudness rising as the blade swings. Stop your loops when a kit's done (`dispose`).
+- **Acoustics:** `client.audio.acoustics({ air: 1, reverb: { near, far, seconds, damp } })` in `setup` makes far sounds lose their highs, and sends every sound into a shared reverb, a little close by and more far off (far fights are mostly their echo). A voice can take less of it: `define(name, voice, { reverb: 0 })` keeps a HUD's beep dry. Without it, sounds only fade with distance.
+- `/tools/sounds.html` (development) puts Blockfront's voices and some scenes of them (a burst, a saber duel, a far firefight) on a board, near or far, and older copies of its sound files dropped in `tools/.before/` beside them to compare.
 - A voice is code on the player's screen, played as written every time (a little randomness in one differs play to play). The server never defines voices: it plays them by name.
 - The built-in sounds (`BuiltinSound`) are the ones the platform's own systems play. The engine itself keeps only its world's and its screens' (`hit`, `hurt`, `pickup`, `heal`, `click`, `spawn`, `countdown`, `lock`, `alarm`, `wave`, `victory`, `defeat`); the rest (weapons: `swing`, `crit`, `bow_draw`, `bow_shoot`, `arrow_hit`, `gunshot`, `gun_reload`, `gun_empty`, `gun_cycle`, `hitmarker`, `kill`; creatures: `mob_hurt`, `mob_death`; `explosion`, `explosion_big`, a grenade's `bounce`, a bottle's `glass`, `fire`, `whoosh`) are ordinary voices the sounds kit defines on each screen (`sounds.standard()`, see "Client code").
 
@@ -1232,7 +1239,7 @@ game.commands.run('/give pike'); // run one from code
 | `hud.feed([...parts])` | A feed line can be parts: text, `{ text, color }`, `{ icon }` (a gun side on, as each screen has it: `{ icon: { item: 'rifle', view: 'side' } }`; or any icon, `{ gltf: url, view: 'side' }`) |
 | `hud.define(name, { html, css, at, modal, actions })`, `hud.widget(name, data)` | HUD widgets of the game's own, from HTML and CSS, filled in from data (see below) |
 | `fx.burst`, `shake`, `flash`, `shockwave`, `damageNumber`, `fireworks`, `explosion` | Effects |
-| `audio.play(name, { at, item })`, `audio.loop(name)` | Synthesised, positional sound effects (built-in, or defined in the game's client code) and continuous engine / wind loops. `item: { id, sound, pitch? }` plays that item's own sound instead (its `sounds.use`, `.hit`…, as each screen has it), where it has one |
+| `audio.play(name, { at, item })`, `audio.loop(name)` | Synthesised, positional sound effects (built-in, or defined in the game's client code) and continuous engine / wind loops (client code has its own loops too: `client.audio.loop`). `item: { id, sound, pitch? }` plays that item's own sound instead (its `sounds.use`, `.hit`…, as each screen has it), where it has one |
 | `env.time`, `env.frozen` | Time of day |
 | `events.on('entityDeath' \| 'entityDamage' \| 'playerDamage' \| 'playerDeath' \| 'pickup' \| 'blockBreak' \| 'blockPlace' \| 'blockChange' \| 'playerJoin' \| 'playerReady' \| 'playerLeave' \| 'ability' \| 'clientMessage', fn)` | Events (player events name the `player`) |
 | `clients.send(to, name, data)` | A message to the game's client code on one player's screen, a list of players', or everyone's (`'all'`), heard there with `client.on(name, fn)`; `clientMessage` hears theirs (see "Client code") |

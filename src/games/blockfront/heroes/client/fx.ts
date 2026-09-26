@@ -1,6 +1,6 @@
 import type { Vec3 } from '@platform';
 import type { GunItem } from '@platform/items';
-import type { Client, ClientKit, Node } from '@platform/client';
+import type { Client, ClientKit, ClientLoop, Node } from '@platform/client';
 import { Color, Quat, Vec3 as V3 } from '@platform/client/math';
 import { HEROES, saberOf, type HeroId } from '../defs';
 import { fxItem, type FxBeam } from '../fxitems';
@@ -8,6 +8,7 @@ import { drawBolt } from '../../client/bolts';
 import { STYLE } from '../../style';
 import { POWERS } from '../tuning';
 import { BEAM, type Blade, type HeroScene } from './state';
+import { humOf } from './sounds';
 
 /** A beam drawn for a while: thinning away as it goes. */
 interface Lit {
@@ -19,6 +20,10 @@ interface Lit {
 }
 
 const Z = new V3(0, 0, 1);
+/** A blade's hum is heard within this far (blocks): its loop starts nearer, and stops further. */
+const HUM_NEAR = 26;
+const HUM_FAR = 32;
+
 /** How big a saber is in the hand (the figures' `heldScale`): a thrown one is drawn as big. */
 const HELD_SCALE = STYLE.poses?.heldScale ?? 0.52;
 const tq = new Quat();
@@ -236,9 +241,24 @@ export function heroFx(scene: HeroScene): ClientKit {
   /** When each hero's lightning (or a chain) was last redrawn. */
   const zapped = new Map<string, number>();
   const chains: { p: string; path: string[]; until: number; next: number }[] = [];
-  const hum = new Map<string, number>();
-  /** When each jetpack last roared (its sound comes in short bursts). */
-  const jetSound = new Map<string, number>();
+  /** Each blade's hum near by: its loop, and how fast its tip's been moving (smoothed). */
+  const hums = new Map<string, { loop: ClientLoop; speed: number }>();
+  /** Thrown sabers' whirling hum, by hero. */
+  const whirls = new Map<string, ClientLoop>();
+  const hush = (id: string) => {
+    hums.get(id)?.loop.stop();
+    hums.delete(id);
+  };
+  /** Flamethrowers and jetpacks burning (`f:<id>`, `j:<id>`): their loops, and (a jet's) how high it was a frame ago. */
+  const burning = new Map<string, { loop: ClientLoop; y: number }>();
+  /** Keep `key`'s loop (`voice`) going at `at` this frame; the frame stops the ones it didn't keep. */
+  const kept = new Set<string>();
+  const burn = (client: Client, key: string, voice: string, at: Vec3) => {
+    kept.add(key);
+    let b = burning.get(key);
+    if (!b) burning.set(key, (b = { loop: client.audio.loop(voice, { at, volume: 0 }), y: at.y }));
+    return b;
+  };
   /** Rockets as drawn here: where, which way (eased toward the server's word). */
   const rocketsDrawn = new Map<number, { at: V3; dir: V3 }>();
   /** Rings spreading over the ground from a hero (a stance, a rage, an aura taking hold). */
@@ -283,6 +303,7 @@ export function heroFx(scene: HeroScene): ClientKit {
       // ---- The blades: glowing, streaking, humming.
       for (const [id, b] of scene.blades) {
         if (b.t !== now) {
+          if (now - b.t > 0.2) hush(id);
           if (now - b.t > 0.5) {
             scene.blades.delete(id);
             last.delete(id);
@@ -294,15 +315,22 @@ export function heroFx(scene: HeroScene): ClientKit {
         const was = last.get(id);
         const rage = scene.on(id, 'rage');
         if (was) trail(B, beam, was, b, rage, now);
-        last.set(id, { base: { ...b.base }, tip: { ...b.tip } });
-        // A hum close by, now and then.
+        // Its hum, near by: rising and swelling as the blade's swung (a swing's the hum swept past).
         const d = dist(cam, b.tip);
-        if (d < 14 && now >= (hum.get(id) ?? 0)) {
-          hum.set(id, now + 0.85 + Math.random() * 0.2);
-          client.audio.play('bfh_hum', { at: mid(b), volume: 0.55, pitch: b.hero === 'vader' || b.hero === 'emperor' ? 0.85 : 1 });
+        let h = hums.get(id);
+        if (!h && d < HUM_NEAR) hums.set(id, (h = { loop: client.audio.loop(humOf(b.hero, 0).voice, { at: mid(b), volume: 0 }), speed: 0 }));
+        if (h && d > HUM_FAR) hush(id);
+        else if (h) {
+          const moved = was && dt > 0 ? dist(was.tip, b.tip) / dt : 0;
+          h.speed += (Math.min(40, moved) - h.speed) * Math.min(1, dt * 14);
+          const tone = humOf(b.hero, h.speed);
+          h.loop.set({ at: mid(b), pitch: tone.pitch, volume: tone.volume });
         }
+        last.set(id, { base: { ...b.base }, tip: { ...b.tip } });
         if (rage && tick % 3 === 0) fx.particles(lerp3(b.base, b.tip, Math.random()), lin('#ff3a1a'), { count: 1, speed: 0.6, size: 0.06, gravity: -3, glow: 2, life: 0.4, spread: 0.05, collide: false });
       }
+      // (Blades gone all at once, a restart: their hums too.)
+      for (const id of hums.keys()) if (!scene.blades.has(id)) hush(id);
 
       // ---- This frame's news.
       for (const n of scene.news) {
@@ -360,6 +388,7 @@ export function heroFx(scene: HeroScene): ClientKit {
       }
 
       // ---- Chewblocca and Boba Fetch: what goes on while their powers do.
+      kept.clear();
       for (const [id, until] of scene.lasting) {
         const who = chests.get(id);
         const face = facing(id);
@@ -382,10 +411,9 @@ export function heroFx(scene: HeroScene): ClientKit {
           }
           if (tick % 3 === 0) fx.particles(add(from, dir, POWERS.flame.range * 0.8), [0.12, 0.1, 0.09], { count: 1, speed: 0.6, size: 0.22, gravity: -1.5, life: 0.9, spread: 0.4, collide: false });
           fx.flare(from, 0.35);
-          if (now >= (jetSound.get(`f:${id}`) ?? 0)) {
-            jetSound.set(`f:${id}`, now + 0.28);
-            client.audio.play('bfh_flame', { at: from, volume: 0.9 });
-          }
+          // Its roar, flickering, and the fuel spitting in it.
+          burn(client, `f:${id}`, 'bfh_flame', from).loop.set({ at: from, volume: rnd(0.8, 1), pitch: rnd(0.93, 1.07) });
+          if (Math.random() < dt * 7) client.audio.play('bfh_flame_crackle', { at: from, pitch: rnd(0.8, 1.3), volume: 0.8 });
         }
         // The jetpack: twin jets of fire from his back, driving down.
         if ((until.get('jetpack') ?? 0) > now) {
@@ -399,12 +427,19 @@ export function heroFx(scene: HeroScene): ClientKit {
             if (tick % (mine ? 6 : 3) === 0) fx.particles({ x: nozzle.x, y: nozzle.y - 0.6, z: nozzle.z }, [0.55, 0.52, 0.5], { count: 1, speed: 0.8, size: mine ? 0.12 : 0.2, gravity: 2, life: mine ? 0.5 : 0.8, spread: 0.1, collide: false });
             fx.flare(nozzle, 0.3);
           }
-          if (now >= (jetSound.get(id) ?? 0)) {
-            jetSound.set(id, now + 0.3);
-            client.audio.play('bfh_jet_loop', { at: who, volume: 0.8 });
-          }
+          // Its roar: higher as he climbs, lower as he drops, flickering.
+          const jet = burn(client, `j:${id}`, 'bfh_jet_burn', who);
+          const climb = dt > 0 ? Math.max(-1, Math.min(1, (who.y - jet.y) / dt / 7)) : 0;
+          jet.y = who.y;
+          jet.loop.set({ at: who, volume: rnd(0.85, 1), pitch: 1 + 0.2 * climb + rnd(-0.03, 0.03) });
         }
       }
+      // (Flames and jets out: their roars too.)
+      for (const [key, b] of burning)
+        if (!kept.has(key)) {
+          b.loop.stop();
+          burning.delete(key);
+        }
       // A charge: dust thrown up at his heels.
       for (const [id, a] of scene.acts) {
         if (a.k !== 'charge' || now - a.at > a.t) continue;
@@ -496,6 +531,8 @@ export function heroFx(scene: HeroScene): ClientKit {
             client.scene.remove(t.node);
             thrown.delete(id);
           }
+          whirls.get(id)?.stop();
+          whirls.delete(id);
           continue;
         }
         if (!t) {
@@ -520,12 +557,21 @@ export function heroFx(scene: HeroScene): ClientKit {
         if (t.lastTip) B.line(BEAM[heroId], t.lastTip, tip, 0.05, 0.14, now);
         B.line(BEAM[heroId], add(fl.at, along, reach * 0.25), tip, 0.035, 0.09, now);
         t.lastTip = tip;
-        if (tick % 4 === 0) client.audio.play('bfh_saber_spin', { at: fl.at, volume: 0.6 });
+        // Its hum whirling: the blade sweeping toward us and away each turn.
+        let whirl = whirls.get(id);
+        if (!whirl) whirls.set(id, (whirl = client.audio.loop(humOf(heroId, 0).voice, { at: fl.at, volume: 0 })));
+        const turn = Math.sin(t.spin);
+        whirl.set({ at: fl.at, pitch: 1.12 + 0.2 * turn, volume: 0.12 + 0.05 * turn });
       }
       for (const [id, t] of thrown)
         if (!scene.flights.has(id)) {
           client.scene.remove(t.node);
           thrown.delete(id);
+        }
+      for (const [id, w] of whirls)
+        if (!scene.flights.has(id)) {
+          w.stop();
+          whirls.delete(id);
         }
       // Force waves: a ring of disturbed air, growing as it rolls out (or shrinking as it's drawn in).
       for (let i = waves.length - 1; i >= 0; i--) {
@@ -571,6 +617,11 @@ export function heroFx(scene: HeroScene): ClientKit {
     },
     dispose() {
       beams?.clear();
+      for (const id of [...hums.keys()]) hush(id);
+      for (const w of whirls.values()) w.stop();
+      whirls.clear();
+      for (const b of burning.values()) b.loop.stop();
+      burning.clear();
     },
   };
 
