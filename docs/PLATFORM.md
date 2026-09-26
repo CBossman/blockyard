@@ -36,11 +36,11 @@ src/games/
     client/sounds.ts    the beacon's bell, the hull's thud (client.audio.define)
   starfighter/          a Star Fox-style dogfighter: no walking, the game flies the camera
     server.ts           waves, HUD, win/lose
-    shared.ts flight.ts the X-wing as a vehicle (its step runs on the pilot's screen too)
+    shared.ts flight.ts the Vox-wing as a vehicle (its step runs on the pilot's screen too)
     ships.ts            the fighters, as Blueprints (meshed into movable props)
     destroyer.ts        the capital ship, as a world structure
     craft.ts pilot.ts enemies.ts weapons.ts capital.ts   collisions, AI, lasers, the boss
-    client/sounds.ts    lasers, torpedoes, the capital ship's horn, the TIE howl (client.audio.define)
+    client/sounds.ts    lasers, torpedoes, the capital ship's horn, the Bowtie howl (client.audio.define)
     layout.ts           where the battle is
     previews/           dev-only previews of the ships and the capital ship
   bedwars/              Bed Wars against three bots: sky islands, mining, building, a shop
@@ -468,7 +468,7 @@ The server runs the game at 30 steps a second whether or not anyone's watching a
 
 **What a server keeps.** Each server has a SQLite database (`data/<game>.sqlite`, or `--db path`). It holds the world's seed, so restarting the server carries on the same world; for games that keep their world (`world.persist`, like Sandbox) its builds and time of day, and each signed-in player's place (where they stood, which way they faced, whether they were flying, their block hotbar; a guest starts at the spawn each time); and your game's `game.store` and each player's `player.store`. It's saved every 30 seconds, when a game stops for want of players, and when the server stops (Ctrl-C). `--new` starts a fresh world and sets the old database aside. Two players with one name at the same time (one account in two tabs) become "Ann" and "Ann 2".
 
-**Accounts.** Players sign in with Discord, on the game server: the home page's "Sign in with Discord" goes to its `/auth/discord` and back, and the server keeps accounts and their sessions in `data/accounts.sqlite`. The session is an HttpOnly cookie on the server's own address, which is under the site's domain (`play.blockyard.potrock.xyz` for `blockyard.potrock.xyz`), so the site's requests and connections carry it and no page script can read it. The server takes a sign-in only from the site's pages (`SITE_ORIGINS`; in development, any `http://localhost` page). Discord's application is the environment's `DISCORD_CLIENT_ID` and `DISCORD_CLIENT_SECRET`; without them only a development server signs in, as a made-up account (`/auth/dev?name=Ann`, which the home page's button uses in development). `GET /me` says who's signed in, `POST /me/name` renames them (once a day), `POST /auth/logout` signs out, and `DELETE /me` deletes the account and everything games kept for it.
+**Accounts.** Players sign in with Discord, on the game server: the home page's "Sign in with Discord" goes to its `/auth/discord` and back, and the server keeps accounts and their sessions in `data/accounts.sqlite`. The session is an HttpOnly cookie on the server's own address, which is under the site's domain (`play.blockyard.gg` for `blockyard.gg`), so the site's requests and connections carry it and no page script can read it. The server takes a sign-in only from the site's pages (`SITE_ORIGINS`; in development, any `http://localhost` page). Discord's application is the environment's `DISCORD_CLIENT_ID` and `DISCORD_CLIENT_SECRET`; without them only a development server signs in, as a made-up account (`/auth/dev?name=Ann`, which the home page's button uses in development). `GET /me` says who's signed in, `POST /me/name` renames them (once a day), `POST /auth/logout` signs out, and `DELETE /me` deletes the account and everything games kept for it.
 
 **Games of one's own.** A match game can let players start a game of their own instead of joining the public one: set `instances: true` on the game (Bed Wars, the Arena and Starfighter do). Its home page on a server then offers "Start a private game" under Play. It opens a separate copy of the game (its own world, its own match, the bots filling the empty places) at an address of its own (`?game=bedwars&room=k3x9f2`); "Copy invite link" (or Invite friends in the pause menu) hands that address to friends, and "Back to the public game" goes back. Such a game keeps no world or places, but it shares the game's `game.store` with the public one, so all-time numbers count wherever they were earned. It stops a minute after the last player leaves. Each game on a server runs in a worker thread of its own, so the variables your game keeps in its module are its own in each copy; leave `instances` off for games that are one shared world (Sandbox). A server runs up to 8 games at once (`--rooms`, about 30 to 50 MB each), and one address may have 2 of its own going. A game knows which it is from `game.room`: `'public'`, or the room's code. Call of Blocky's public room goes round its modes and maps match by match, while in a room of one's own the players pick them (a menu on M); in either, the people playing can vote to skip the match that's on (V, or `/skip`: more than half of them, bots not counted, and the next is on).
 
@@ -965,7 +965,7 @@ export const shared = defineShared({
 - **Input:** `game.input.isDown('KeyW')`, `pressed(code)`, `button(0)`, `buttonPressed(2)`, and `mouseX` / `mouseY` / `wheel` deltas while the mouse is captured. A controller's buttons press keys and mouse buttons, and its right stick moves the mouse (see Controllers), so a vehicle steered by the mouse steers with the stick too. Everything reads as idle while paused (or a menu's open, or they're typing in chat), so games never need to check, and while the player's dead; `pressed(code, { dead: true })` hears a dead player's keys too, for a vote or a menu they can still use. `consume(button | key)` claims an input for the rest of the frame, so the built-in systems (which run after your `update`) ignore it.
 - **Math:** `import { math } from '@platform'` gives `Vector3`, `Quaternion`, `Euler`, `Matrix4` and `MathUtils`.
 - **Props** are movable objects:
-  - `props.model(blueprint, { scale, pivot })` meshes a Blueprint once. The mesh uses the world's block textures, with ambient occlusion, sun shadows and glowing blocks. At `scale: 0.25`, each block is a quarter metre, which is how the Starfighter builds detailed X-wings.
+  - `props.model(blueprint, { scale, pivot })` meshes a Blueprint once. The mesh uses the world's block textures, with ambient occlusion, sun shadows and glowing blocks. At `scale: 0.25`, each block is a quarter metre, which is how the Starfighter builds detailed Vox-wings.
   - `props.spawn(model, { solid })` places a copy; move it through its `position` and `quaternion`. `flash(color)` tints it briefly for hits. `solid: true` makes it something to stand on and ride (see *Ships, lifts and moving platforms* below).
   - `props.bolt({ color, length, width, flicker, far })` is a glowing streak along its -z, for lasers, tracers and engine flames. `flicker` makes it waver on its own; past `far` blocks from each player's camera it grows with the distance, so it stays visible.
   - `prop.attach(parent)`: it rides on another prop (engine flames on a ship, a turret on a tank), its `position` and `quaternion` now on the parent. It goes wherever the parent goes without being moved each tick, and goes when the parent is removed.
@@ -982,7 +982,7 @@ export const shared = defineShared({
 - Sounds include `laser`, `laser_enemy`, `explosion`, `explosion_big`, `torpedo`, `lock`, `alarm`, `whoosh` and `flyby`.
 - `audio.loop('engine')` returns a handle whose `set({ volume, pitch })` follows the throttle (in steps: a steady engine sends nothing).
 
-`src/games/starfighter/` is the reference: the X-wing is a vehicle (`flight.ts`), the TIEs fly themselves with the same physics, and every pilot has their own HUD.
+`src/games/starfighter/` is the reference: the Vox-wing is a vehicle (`flight.ts`), the Bowties fly themselves with the same physics, and every pilot has their own HUD.
 
 ## Ships, lifts and moving platforms
 
@@ -1162,7 +1162,7 @@ client.audio.define('laser', (s) => {
 });
 ```
 
-- `s.tone` is an oscillator sweep with an envelope and optional lowpass (which can sweep: `lowpass: { freq, to, time }`), highpass, bandpass (`bandpass: { freq, to, q }`) or vibrato. Starfighter's TIE howl is three detuned, wavering sawtooths through a sweeping bandpass.
+- `s.tone` is an oscillator sweep with an envelope and optional lowpass (which can sweep: `lowpass: { freq, to, time }`), highpass, bandpass (`bandpass: { freq, to, q }`) or vibrato. Starfighter's Bowtie howl is three detuned, wavering sawtooths through a sweeping bandpass.
   - `glide: [[seconds, hz], …]` gives the pitch a path instead of `to`: a blaster bolt's chirp falls fast then slower, a swung blade rises and falls.
   - `fm: { ratio, depth, to }` bends it with a sine at `ratio` times its frequency: whole ratios make it richer (brass, buzz); others ring like metal (1.41, 2.76).
   - `drive` (0..1) adds grit.

@@ -15,7 +15,7 @@ export interface AuthOptions {
   /** Absent: signing in with Discord is off (a development server still has `/auth/dev`). */
   discord?: DiscordApp | null;
   /**
-   * The site's addresses (`https://blockyard.potrock.xyz`): where players may be sent back to
+   * The site's addresses (`https://blockyard.gg`): where players may be sent back to
    * after signing in, and the only pages that may ask who's signed in or connect as them. A
    * development server also allows any `http://localhost` page.
    */

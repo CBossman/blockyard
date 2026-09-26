@@ -4,9 +4,9 @@ import { box, disc, dist, hash, slab, stairs, type Canvas } from './build';
 /**
  * The ships of Mos Blockley, homages rather than anyone's in particular, block-built and nose
  * west (-x) in their own coordinates (put them on a `Place` to turn them), standing on the floor
- * at y (the feet level): the battered saucer freighter in the docking bay, the Rebels' X-winged
+ * at y (the feet level): the battered saucer freighter in the docking bay, the Rebels' Vox-wing
  * fighters, the Empire's folded-wing shuttle and its twin-panelled fighter, and the wedge of a
- * star destroyer lying half buried out in the dunes.
+ * Star Demolisher lying half buried out in the dunes.
  */
 
 /**
@@ -75,7 +75,7 @@ export function freighter(c: Canvas, y: number, R = 9.5) {
 }
 
 /**
- * An X-winged fighter on its landing gear: a long nose, the cockpit and a little droid behind it,
+ * A Vox-wing on its landing gear: a long nose, the cockpit and a little droid behind it,
  * four wings splayed from engines at their roots, a cannon at each wingtip, red squadron stripes.
  * Its tail is at x = 0.
  */
@@ -187,7 +187,7 @@ export function tieFighter(c: Canvas, y: number) {
 }
 
 /**
- * The wreck of a star destroyer: a dagger-shaped wedge `len` long, its nose at the origin and its
+ * The wreck of a Star Demolisher: a dagger-shaped wedge `len` long, its nose at the origin and its
  * stern along +x, rolled most of the way onto its side so its flat belly stands up like a wall
  * facing -z, a great grey triangle of plating sunk in the sand (put dunes round it); its dead
  * engines face +x, and plates are torn away here and there. For the backdrop: nobody gets near it.

@@ -45,7 +45,7 @@ export default function starfighterMultiplayer() {
   check(game().pilots.size === 2 && A().vehicle && B().vehicle, 'a ship each');
   const frame = () => last.get(ann.id)!.frame!;
   const fa = () => frame().players.find((p) => p.id === ann.player)!;
-  check(fa().vehicle?.name === 'xwing' && fa().camera.follow && fa().vehicle!.prop !== null, `Ann's frame carries her vehicle: ${JSON.stringify(fa().vehicle?.name)}`);
+  check(fa().vehicle?.name === 'voxwing' && fa().camera.follow && fa().vehicle!.prop !== null, `Ann's frame carries her vehicle: ${JSON.stringify(fa().vehicle?.name)}`);
 
   // Each steers only their own: Ann pushes the stick right (inputs numbered, as a server's client sends them),
   // and her own screen's prediction lands where the host flies her.
@@ -69,7 +69,7 @@ export default function starfighterMultiplayer() {
   check(Math.abs(A().vehicle.state.yaw - yawA) > 0.5 && Math.abs(B().vehicle.state.yaw - yawB) < 0.05, `Ann turned (${(A().vehicle.state.yaw - yawA).toFixed(2)}), Bob didn't (${(B().vehicle.state.yaw - yawB).toFixed(2)})`);
   check(worst < 0.01, `prediction lands where the host flies her: worst correction ${worst.toFixed(4)} blocks`);
 
-  // Wave 1 for two: 5 TIEs, half as many again.
+  // Wave 1 for two: 5 Bowties, half as many again.
   step(30 * 5);
   check(game().enemies.length === 8, `wave 1 for two pilots: ${game().enemies.length} fighters`);
 
@@ -125,5 +125,5 @@ export default function starfighterMultiplayer() {
   const screen = (id: string) => (events.get(id) ?? []).flatMap((e) => (e.t === 'call' && e.call.method === 'screen' ? [e.call.args[1] as { title: string; subtitle: string }] : [])).at(-1);
   check(screen(ann.id)?.title === 'Shot Down' && screen(bob.id)?.subtitle.startsWith('Your squadron fell'), `lost when both are down: ${JSON.stringify(screen(bob.id))}`);
   host.dispose();
-  console.log(`  a ship each · Ann steered, Bob didn't · prediction within ${worst.toFixed(4)} blocks · 8 TIEs for two · Ann's kill · her achievements (Scratch One, Do a Barrel Roll!, Shields Down) · Bob down and back · lost when both fell`);
+  console.log(`  a ship each · Ann steered, Bob didn't · prediction within ${worst.toFixed(4)} blocks · 8 Bowties for two · Ann's kill · her achievements (Scratch One, Do a Barrel Roll!, Shields Down) · Bob down and back · lost when both fell`);
 }

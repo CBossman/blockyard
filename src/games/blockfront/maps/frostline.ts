@@ -10,7 +10,7 @@ import * as ships from './ships';
  * drawn from the other).
  *
  * - **A, the base's hangar** (west, the Rebels' for good): a great cavern cut into the glacier's
- *   cliff, a transport, an X-winged fighter and a snowspeeder parked in it; its blast-door mouth
+ *   cliff, a transport, a Vox-wing and a snowspeeder parked in it; its blast-door mouth
  *   opens east, and a tunnel each side comes out further along the cliff.
  * - **B, the shield generator** (the Rebels' at the start): a big dish on its pylon, walls of
  *   packed snow round the post, and in front of it the trench line: a zigzag of plank-lined

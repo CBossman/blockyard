@@ -9,10 +9,10 @@ kill_timeout = "10s"
   dockerfile = "Dockerfile"
 
 # The site's addresses: the pages that may use a player's sign-in (Sign in with Discord, whose
-# application's id and secret are Fly secrets). The server answers at play.blockyard.potrock.xyz,
+# application's id and secret are Fly secrets). The server answers at play.blockyard.gg,
 # under the site's own domain, so its session cookie goes with the site's requests.
 [env]
-  SITE_ORIGINS = "https://blockyard.potrock.xyz"
+  SITE_ORIGINS = "https://blockyard.gg,https://blockyard.potrock.xyz"
 
 [[mounts]]
   source = "data"

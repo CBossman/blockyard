@@ -7,7 +7,7 @@ const _v = new math.Vector3();
 const _w = new math.Vector3();
 
 /**
- * A player in the battle: their X-wing (a vehicle, so it flies at once on their own screen), and
+ * A player in the battle: their Vox-wing (a vehicle, so it flies at once on their own screen), and
  * what the host does with it: wing cannons (left mouse), a proton torpedo at whatever they've
  * locked (right mouse), lasers glancing off a barrel roll, shields that recharge, a hull that
  * doesn't, and scraping into things.
@@ -47,7 +47,7 @@ export class Pilot implements Target {
     yaw: number,
   ) {
     this.craft = new Craft(game, type, 100, '#ff7a3a');
-    this.vehicle = player.drive('xwing', freshShip(at, yaw), { prop: this.craft.prop });
+    this.vehicle = player.drive('voxwing', freshShip(at, yaw), { prop: this.craft.prop });
     this.syncBody();
     this.engine = player.audio.loop('engine', { volume: 0.5, pitch: 1 });
   }
@@ -144,7 +144,7 @@ export class Pilot implements Target {
         const v = assist.vel ?? { x: 0, y: 0, z: 0 };
         conv = new math.Vector3(assist.pos.x + v.x * t, assist.pos.y + v.y * t, assist.pos.z + v.z * t);
       }
-      // Four guns fire in diagonal pairs (like an X-wing's staggered bolts); fewer fire together.
+      // Four guns fire in diagonal pairs (like a Vox-wing's staggered bolts); fewer fire together.
       const pairs = guns.length >= 4 ? [[0, 3], [1, 2]] : [guns.map((_, i) => i)];
       for (const gi of pairs[this.gunIndex % pairs.length]) {
         const from = c.toWorld(guns[gi], new math.Vector3());
@@ -241,7 +241,7 @@ export class Pilot implements Target {
   /** Back in the fight: a new ship, shields and hull full. */
   respawn(at: Vec3, yaw: number) {
     this.craft = new Craft(this.game, this.type, 100, '#ff7a3a');
-    this.vehicle = this.player.drive('xwing', freshShip(at, yaw), { prop: this.craft.prop });
+    this.vehicle = this.player.drive('voxwing', freshShip(at, yaw), { prop: this.craft.prop });
     this.syncBody();
     this.down = false;
     this.shields = this.hull = 100;

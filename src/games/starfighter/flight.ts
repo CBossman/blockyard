@@ -1,17 +1,17 @@
 import { math, type VehicleDefinition } from '@platform';
 import { angleDiff, forwardOf, headingTo, moveBody, orientationOf, shipGeometry, steerBody, type Body } from './craft';
 import { ARENA } from './layout';
-import { xwing } from './ships';
+import { voxwing } from './ships';
 
 export const CRUISE = 44;
 export const BOOST = 82;
 export const BRAKE = 22;
 
-/** The X-wing's shape (its hull points, for collisions), from its design: the same on every screen. */
-export const XWING = shipGeometry(xwing());
+/** The Vox-wing's shape (its hull points, for collisions), from its design: the same on every screen. */
+export const VOXWING = shipGeometry(voxwing());
 
 /**
- * A player's X-wing as data: what its step reads and writes. It crosses to the pilot's screen as
+ * A player's Vox-wing as data: what its step reads and writes. It crosses to the pilot's screen as
  * is, so it's plain numbers.
  */
 export interface ShipState {
@@ -82,11 +82,11 @@ const _w = new math.Vector3();
 const _q = new math.Quaternion();
 
 /**
- * The X-wing: mouse steers (a virtual stick that re-centres), A/D bank, W / Shift boost, S brake,
+ * The Vox-wing: mouse steers (a virtual stick that re-centres), A/D bank, W / Shift boost, S brake,
  * Q / E barrel roll. It flies the same on the host and on the pilot's screen; the guns, damage
  * and sounds are the game's (`Pilot`), reading the state.
  */
-export const xwingVehicle: VehicleDefinition<ShipState> = {
+export const voxwingVehicle: VehicleDefinition<ShipState> = {
   step(s, c, dt, world) {
     // Virtual stick.
     s.sx = math.MathUtils.clamp(s.sx + c.mouseX * 0.0045, -1, 1);
@@ -125,7 +125,7 @@ export const xwingVehicle: VehicleDefinition<ShipState> = {
     const pitchRate = -s.sy * 1.6;
     steerBody(b, dt, yawRate, pitchRate, yawRate * 0.55 + bankKeys * 0.35);
     if (strafe) b.knock.addScaledVector(_v.set(Math.cos(b.yaw), 0, -Math.sin(b.yaw)), strafe * dt * 4);
-    const hit = moveBody(b, XWING.probes, dt, world);
+    const hit = moveBody(b, VOXWING.probes, dt, world);
     if (hit && hit.force >= s.hit) {
       s.hit = Math.max(hit.force, 0.001);
       s.hx = hit.at.x;

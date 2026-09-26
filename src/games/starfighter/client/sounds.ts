@@ -2,7 +2,7 @@ import type { Client } from '@platform/client';
 
 /**
  * Starfighter's own sounds, synthesised on each screen (`client.audio.define`): the lasers (ours
- * and the Empire's), the proton torpedo, the capital ship's horn, the TIE howl. The server plays
+ * and the Empire's), the proton torpedo, the capital ship's horn, the Bowtie howl. The server plays
  * them by name (`audio.play('laser')`).
  */
 export function defineSounds(client: Client) {
@@ -28,7 +28,7 @@ export function defineSounds(client: Client) {
     for (const f of [58, 87, 116]) s.tone({ wave: 'sawtooth', from: f * s.pitch, to: f * 0.94 * s.pitch, duration: 1.8, attack: 0.25, volume: 0.28, lowpass: 900 });
     s.noise({ duration: 1.4, filter: 'lowpass', from: 600, to: 120, volume: 0.2 });
   });
-  // The TIE howl: detuned saws with a fast wobble through a bandpass sweeping down as it passes.
+  // The Bowtie howl: detuned saws with a fast wobble through a bandpass sweeping down as it passes.
   a.define('flyby', (s) => {
     const p = s.pitch;
     for (const f of [170, 176, 340])
