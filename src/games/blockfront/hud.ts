@@ -48,10 +48,8 @@ export const CONQUEST: WidgetDefinition = {
     </div>`,
   css: `
     :scope { margin-top: -8px; --fg: #f3f5f7; --fg2: rgba(243, 245, 247, 0.62); --y: var(--hud-accent, #ffe81f); --bad: #ff5a4f; }
-    .bar { position: relative; z-index: 0; display: flex; align-items: flex-start; gap: 18px; padding: 10px 34px 14px; }
-    /* A soft shade behind, feathered out on every side, so it reads over snow and sky. */
-    .bar::before { content: ''; position: absolute; inset: -30px -40px -16px; z-index: -1; pointer-events: none;
-      background: radial-gradient(closest-side, rgba(5, 8, 12, 0.55), rgba(5, 8, 12, 0.3) 55%, transparent); }
+    .bar { position: relative; z-index: 0; display: flex; align-items: flex-start; gap: 18px; padding: 10px 34px 14px; filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.6)) drop-shadow(0 1px 4px rgba(0, 0, 0, 0.35)); }
+    /* (No panel behind it: a tight dark halo round each mark, the filter above, keeps it readable over snow and sky.) */
     .side { display: flex; flex-direction: column; gap: 1px; width: 132px; padding-top: 1px; }
     .side.a { align-items: flex-end; text-align: right; }
     .side.b { align-items: flex-start; }
@@ -105,18 +103,16 @@ export const STATUS: WidgetDefinition = {
       </div>
     </div>`,
   css: `
-    :scope { margin: -4px -4px 0 0; align-self: flex-end; width: 232px; --fg: #f3f5f7; --fg2: rgba(243, 245, 247, 0.62); --fg3: rgba(243, 245, 247, 0.42); --y: var(--hud-accent, #ffe81f); }
+    :scope { margin: 16px -4px 0 0; align-self: flex-end; width: 232px; --fg: #f3f5f7; --fg2: rgba(243, 245, 247, 0.62); --fg3: rgba(243, 245, 247, 0.42); --y: var(--hud-accent, #ffe81f); }
     .card {
       position: relative; z-index: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; padding: 10px 16px 12px 24px; text-align: right; color: var(--fg);
-      border-right: 2px solid color-mix(in srgb, var(--c) 70%, transparent);
+      border-right: 2px solid color-mix(in srgb, var(--c) 70%, transparent); filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.6)) drop-shadow(0 1px 4px rgba(0, 0, 0, 0.35));
     }
-    /* A soft shade behind, feathered out on every side, so it reads over snow and sky. */
-    .card::before { content: ''; position: absolute; inset: -20px -10px -20px -30px; z-index: -1; pointer-events: none;
-      background: radial-gradient(closest-side, rgba(5, 8, 12, 0.55), rgba(5, 8, 12, 0.3) 55%, transparent); }
+    /* (No panel behind it: a tight dark halo round each mark, the filter above, keeps it readable over snow and sky.) */
     .side { font: 600 10px/1.2 var(--pixel); letter-spacing: 0.3em; margin-right: -0.3em; color: color-mix(in srgb, var(--c) 72%, white); }
     .role { max-width: 100%; font: 500 20px/1.1 var(--pixel); letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 1px 6px rgba(0, 0, 0, 0.45); }
     .bp { display: flex; align-items: baseline; gap: 8px; margin-top: 6px; }
-    .label { font: 600 9px var(--pixel); letter-spacing: 0.26em; text-transform: uppercase; color: var(--fg2); }
+    .label { font: 600 9px var(--pixel); letter-spacing: 0.26em; text-transform: uppercase; color: rgba(243, 245, 247, 0.8); }
     .value { font: 500 18px/1 var(--pixel); color: var(--fg); font-variant-numeric: tabular-nums; }
     .hero { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 6px; width: 100%; font: 600 10px/1 var(--pixel); letter-spacing: 0.24em; text-transform: uppercase; }
     .hero.ready { color: var(--y); text-shadow: 0 0 10px color-mix(in srgb, var(--y) 55%, transparent); animation: arrive 400ms ease-out, glow 2.2s ease-in-out 400ms infinite; }
@@ -124,7 +120,7 @@ export const STATUS: WidgetDefinition = {
     .toward { display: flex; align-items: center; gap: 8px; width: 100%; }
     .bar { position: relative; flex: 1; height: 2px; background: rgba(255, 255, 255, 0.14); }
     .bar > i { position: absolute; left: 0; top: 0; bottom: 0; width: calc(min(1, var(--p)) * 100%); background: var(--fg); transition: width 400ms ease; }
-    .at { color: var(--fg2); white-space: nowrap; }
+    .at { color: rgba(243, 245, 247, 0.8); white-space: nowrap; }
     .as { color: color-mix(in srgb, var(--c) 72%, white); }
     @keyframes arrive { from { opacity: 0; transform: translateX(8px); } }
     @keyframes glow { 50% { text-shadow: 0 0 16px var(--y); } }`,

@@ -30,9 +30,8 @@ const CSS = `
 body.bfh-on .hotbar, body.bfh-on .healthbar { visibility: hidden; }
 .bfh-hero { position: absolute; left: 50%; bottom: 20px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: stretch; gap: 7px; width: min(520px, 92vw); pointer-events: none; font-family: var(--sans, system-ui); color: #f3f5f7; --blade: #5dff6a; text-shadow: 0 1px 6px rgba(0, 0, 0, 0.55); animation: bfh-in 360ms cubic-bezier(0.2, 0.7, 0.2, 1); }
 .bfh-hero.off { display: none; }
-.bfh-hero { z-index: 0; }
-/* A soft shade behind, feathered out on every side, so it reads over snow and sky. */
-.bfh-hero::before { content: ''; position: absolute; inset: -26px -60px -20px; z-index: -1; pointer-events: none; background: radial-gradient(closest-side, rgba(5, 8, 12, 0.5), rgba(5, 8, 12, 0.28) 55%, transparent); }
+.bfh-hero { z-index: 0; filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.6)) drop-shadow(0 1px 4px rgba(0, 0, 0, 0.35)); }
+/* (No panel behind it: a tight dark halo round each mark, its filter, keeps it readable over snow and sky.) */
 .bfh-top { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
 .bfh-name { font: 500 22px/1 var(--pixel, sans-serif); letter-spacing: 0.14em; text-transform: uppercase; color: #f3f5f7; }
 .bfh-title { font: 600 10px var(--pixel); letter-spacing: 0.32em; text-transform: uppercase; color: color-mix(in srgb, var(--blade) 70%, white); margin-left: 12px; }
@@ -47,7 +46,7 @@ body.bfh-on .hotbar, body.bfh-on .healthbar { visibility: hidden; }
 .bfh-hp > b { position: absolute; left: 0; top: 0; bottom: 0; width: calc(var(--lost, 1) * 100%); background: rgba(255, 90, 79, 0.7); transition: width 0.6s ease-out 0.25s; }
 .bfh-guard-row { display: flex; align-items: center; gap: 10px; }
 .bfh-hero.gun .bfh-guard-row { display: none; }
-.bfh-guard-l { font: 600 9px var(--pixel); letter-spacing: 0.3em; color: rgba(243, 245, 247, 0.6); min-width: 46px; }
+.bfh-guard-l { font: 600 9px var(--pixel); letter-spacing: 0.3em; color: rgba(243, 245, 247, 0.78); min-width: 46px; }
 .bfh-guard { flex: 1; height: 2px; }
 .bfh-guard > i { background: #bfe6ff; box-shadow: 0 0 6px rgba(159, 216, 255, 0.8); }
 .bfh-guard-row.up .bfh-guard-l { color: #9fd8ff; }
