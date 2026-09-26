@@ -1,6 +1,7 @@
 import type { Bot, GameContext, Player, Vec3 } from '../../src/platform/api/types';
 import type { PlayerInput } from '../../src/platform/net/protocol';
 import { HERO_ABILITY, type HeroMove } from '../../src/games/blockfront/heroes/abilities';
+import { INTRO_HOLD } from '../../src/games/blockfront/cinema';
 import { HEROES, type HeroId } from '../../src/games/blockfront/heroes/defs';
 import { match } from '../../src/games/blockfront/match';
 import type { Sabers } from '../../src/games/blockfront/heroes/saber';
@@ -25,6 +26,8 @@ export default function blockfrontHeroes() {
   const h = launch('blockfront', { seed: 5, radius: 6 });
   const g = h.ctx;
   const me = g.player;
+  // Past the match's opening fly-over, which holds everyone still (cinema.ts).
+  h.run(INTRO_HOLD + 0.1);
   g.commands.run('/bots 0');
   check(g.players.length === 1, `expected only the player once the bots went, got ${g.players.length}`);
   /** The platform, laid whole (again: bolts that miss chip it, and a section mustn't stand anyone on a hole). */

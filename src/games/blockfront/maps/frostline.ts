@@ -964,5 +964,14 @@ export const FROSTLINE: MapSpec = {
   // Over the field behind the ion cannon, first looking west to the glacier and the base.
   home: spawnAt(OX + 30, FLOOR + 22, 30, OX - 60, -5),
   overview: { position: { x: OX + 20, y: FLOOR + 55, z: 90 }, target: { x: OX, y: FLOOR, z: 0 } },
+  // The opening fly-over (cinema.ts): high over the glacier hangar, along the trench to the shield
+  // generator, over the ion cannon and the ridge's fallen walker, up to the landing zone's standing one.
+  intro: [
+    { at: { x: OX - 120, y: FLOOR + 44, z: 60 }, look: { x: OX - 82, y: FLOOR + 2, z: 0 } },
+    { at: { x: OX - 64, y: FLOOR + 28, z: 40 }, look: { x: OX - 48, y: FLOOR, z: 4 } },
+    { at: { x: OX - 10, y: FLOOR + 30, z: 44 }, look: { x: OX + 2, y: FLOOR, z: 10 } },
+    { at: { x: OX + 30, y: FLOOR + 28, z: 34 }, look: { x: OX + 45, y: FLOOR + 4, z: -2 } },
+    { at: { x: OX + 104, y: FLOOR + 36, z: 40 }, look: { x: OX + 86, y: FLOOR + 8, z: 0 } },
+  ],
   hotspots: [...POSTS.map((p) => ({ ...p.at })), { x: OX - 29, y: FLOOR + TRENCH, z: 0 }, { x: OX - 10, y: FLOOR, z: -44 }, { x: OX - 10, y: FLOOR - 2, z: 41 }, { x: OX + 45, y: FLOOR, z: -32 }, { x: OX + 45, y: FLOOR, z: 24 }],
 };

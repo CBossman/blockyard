@@ -247,6 +247,18 @@ export interface ClientCamera {
   readonly position: PlainVec3;
   /** A point in the camera's own space (x right, y up, looking down -z) in the world, as it's placed this frame (before any shake). */
   toWorld(local: PlainVec3): PlainVec3;
+  /**
+   * Take the world camera (a fly-over, a cutscene): from this frame on it's drawn from `position`,
+   * looking at `target` (and with `fov`, degrees, if given) instead of from the player's own
+   * camera, which goes on underneath (they still look round, and walk if they're free to). Call it
+   * every frame to move it. What's in first person is hidden while it's taken, and the world
+   * loads round the camera. Only this screen's view: the game's server knows nothing of it.
+   */
+  take(pose: { position: PlainVec3; target: PlainVec3; fov?: number }): void;
+  /** Give the view back: it eases from the last pose taken into the player's own camera over `ease` seconds (default 1; 0: at once). */
+  release(ease?: number): void;
+  /** Client code has the camera (`take`), or it's still easing back. */
+  readonly taken: boolean;
 }
 
 /** Effects in the world, on this screen only. */
