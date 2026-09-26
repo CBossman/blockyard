@@ -2,6 +2,8 @@
 
 Status: **approved** (2026-09-26); phases 1 (accounts), 2 (achievements) and 3 (avatars and cosmetics) built. How the platform works now is in PLATFORM.md.
 
+(Since the evening of 2026-09-26 the site is at blockyard.gg and the server at play.blockyard.gg: the same design under the new domain. The addresses below are the ones it was designed with.)
+
 Decided (2026-09-26): the look travels too: a player's avatar (a body made of choices, painted as a
 skin) is theirs in every game that doesn't dress its players, and players' box bodies moved onto the
 humanoid rig so everything worn follows the same joints on every kind of body. The server's address is `play.blockyard.potrock.xyz`; guests' progress lasts
