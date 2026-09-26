@@ -19,7 +19,7 @@
     "server": "node --disable-warning=ExperimentalWarning scripts/server.mjs",
     "build:server": "vite build --ssr src/serve.ts --outDir dist-server",
     "start": "node --disable-warning=ExperimentalWarning dist-server/serve.js",
-    "deploy:server": "npm run wasm && fly deploy --remote-only",
+    "deploy:server": "node scripts/deploy-server.mjs",
     "deploy:site": "node scripts/deploy-site.mjs"
   },
   "dependencies": {
