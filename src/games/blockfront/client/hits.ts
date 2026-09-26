@@ -1,10 +1,11 @@
 import type { ClientKit } from '@platform/client';
 
-/** A hit's word from the server (`hits.ts`): how much it took, a head hit, a kill. */
+/** A hit's word from the server (`hits.ts`): how much it took, a head hit, a kill, part of a stream (lightning, flame, a choke: summed, a few a second). */
 interface Hit {
   n: number;
   h: boolean;
   k: boolean;
+  s: boolean;
 }
 
 /** Damage at which a marker is at its biggest. */
@@ -77,13 +78,15 @@ export function hits(): ClientKit {
       client.on('bf.hit', (data) => {
         const d = data as Partial<Hit> | null;
         if (!d || typeof d.n !== 'number') return;
-        const hit: Hit = { n: d.n, h: !!d.h, k: !!d.k };
+        const hit: Hit = { n: d.n, h: !!d.h, k: !!d.k, s: !!d.s };
         show(hit);
         // One sound for a burst of hits in the same moment (a saber's sweep, a blast), a kill's always.
         const t = client.time;
         if (t - lastSound <= 0.04 && !hit.k) return;
         lastSound = t;
-        client.audio.play(hit.k ? 'bf_kill' : hit.h ? 'bf_hit_head' : 'bf_hit', { volume: 0.9 });
+        // A stream's pulse: softer and lower, under whatever else is landing.
+        if (hit.s && !hit.k) client.audio.play('bf_hit', { volume: 0.4, pitch: 0.8 });
+        else client.audio.play(hit.k ? 'bf_kill' : hit.h ? 'bf_hit_head' : 'bf_hit', { volume: 0.9 });
       });
     },
     frame(client) {

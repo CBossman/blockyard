@@ -252,11 +252,15 @@ export default function blockfrontHeroes() {
   place(t3, 0, -8);
   ready([me, shooter, t2, t3]);
   idle(0.3);
+  const confirms0 = messages('bf.hit');
   h.run(1.4, { pilot: () => ({ yaw: 0, pitch: -0.12, down: ['KeyQ'] }) });
   idle(0.2);
+  const confirms = messages('bf.hit') - confirms0;
   const burnt = [shooter, t2, t3].map((t) => (t.alive ? t.health : 0));
-  console.log(`  lightning: 1.4 s held, troopers at ${burnt.map((v) => v.toFixed(0)).join(', ')}`);
+  console.log(`  lightning: 1.4 s held, troopers at ${burnt.map((v) => v.toFixed(0)).join(', ')}; ${confirms} hit confirms`);
   check(burnt.every((v) => v < 60), `lightning should burn all three (${burnt.join(', ')})`);
+  // (Its harm comes a little every tick: the confirms come summed, a few a second, not one a tick.)
+  check(confirms >= 2 && confirms <= 8, `lightning's hit confirms should come a few a second (${confirms} in 1.4 s)`);
   check((me.abilities[HERO_ABILITY] as HeroMove).c0 > 0, 'lightning should cool down once let go');
 
   // ---- Chewblocca: the bowcaster's quarrels burst (a trooper beside the one hit is hurt too).
