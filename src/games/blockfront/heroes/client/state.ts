@@ -92,6 +92,8 @@ export class HeroScene {
   burns: { at: Vec3; until: number }[] = [];
   /** Lightning's targets now, by caster. */
   zaps = new Map<string, string[]>();
+  /** When each hero last jumped a second time in the air (their figure flips; the Force shimmers). */
+  flips = new Map<string, number>();
   blades = new Map<string, Blade>();
   hands = new Map<string, { l: Vec3; r: Vec3; t: number }>();
   news: News[] = [];
@@ -208,6 +210,10 @@ export class HeroScene {
     const now = this.now;
     const off = m.on === false;
     switch (m.k) {
+      case 'djump':
+        // Ours ran ahead (`heroState`, from our own movement).
+        if (m.p !== this.localId) this.flips.set(m.p, now);
+        break;
       case 'push':
         this.acts.set(m.p, { k: 'push', at: now, t: 0.6 });
         for (const h of m.hits ?? []) this.victims.set(h, { kind: 'thrown', by: m.p, at: now, until: now + 0.8 });
@@ -338,7 +344,7 @@ export class HeroScene {
 
   /** A restart: everything goes. */
   clear() {
-    for (const m of [this.swings, this.guards, this.staggers, this.flicks, this.acts, this.victims, this.flights, this.lasting, this.zaps, this.blades, this.hands, this.rockets]) m.clear();
+    for (const m of [this.swings, this.guards, this.staggers, this.flicks, this.acts, this.victims, this.flights, this.lasting, this.zaps, this.blades, this.hands, this.rockets, this.flips]) m.clear();
     this.burns = [];
     this.news = [];
   }
@@ -366,6 +372,13 @@ export function heroState(scene: HeroScene, own: OwnSaber | null = null): Client
       }
       for (const [name, data] of scene.takeInjected()) scene.hear(name, data);
       scene.listen(null);
+      // Our own second jump, as our movement has it (run ahead of the server: `abilities.ts`'s `dj`).
+      const dj = scene.localId ? client.me.abilities.hero?.dj : undefined;
+      if (scene.localId && typeof dj === 'number' && dj < 0.6) {
+        const at = scene.now - dj;
+        const last = scene.flips.get(scene.localId);
+        if (last === undefined || at - last > 0.25) scene.flips.set(scene.localId, at);
+      }
       scene.own?.frame(client, scene);
     },
   };

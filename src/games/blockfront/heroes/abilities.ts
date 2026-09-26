@@ -1,13 +1,13 @@
 import type { MovementAbility } from '@platform';
 import { HEROES, heroByNumber, usesSaber } from './defs';
-import { MOVE, POWERS } from './tuning';
+import { JUMP, JUMP_BUFFER, MOVE, POWERS } from './tuning';
 
 /**
  * How heroes move: a movement ability every player has (`shared.ts` lists it), resting until the
  * server makes them a hero (`h`). Like every ability it runs on the host and, ahead of it, on the
  * player's own screen, so what it does answers the moment they press the key:
  *
- * - a second jump in the air (a Force jump);
+ * - their jump: a Battlefront hero's, big and floaty with Space held, a second one in the air (`JUMP`);
  * - the guard up (RMB) slows them;
  * - each swing of the saber steps them forward (a lunge);
  * - Luke's Saber Rush (E: a dash through everyone in the way; the server cuts them) and Force Leap
@@ -39,6 +39,13 @@ export interface HeroMove {
   m: number;
   /** Jumps in the air since they left the ground. */
   j: number;
+  /** Seconds in the air since their jump (0: not in one); since their second jump (9: not lately); since they landed from one (9: long ago); a press of Space kept for landing (seconds left). */
+  jt: number;
+  dj: number;
+  ld: number;
+  jb: number;
+  /** Space was down last step (1). */
+  sp: number;
   /** Saber Rush: seconds left, and its way (level, unit). */
   r: number;
   rx: number;
@@ -52,7 +59,7 @@ export interface HeroMove {
   ft: number;
 }
 
-export const HERO_MOVE: HeroMove = { h: 0, c0: 0, c1: 0, c2: 0, a0: 0, a1: 0, a2: 0, g: 0, k: 0, m: 100, j: 0, r: 0, rx: 0, rz: -1, l: 0, u: 0, f: 0, ft: 0 };
+export const HERO_MOVE: HeroMove = { h: 0, c0: 0, c1: 0, c2: 0, a0: 0, a1: 0, a2: 0, g: 0, k: 0, m: 100, j: 0, jt: 0, dj: 9, ld: 9, jb: 0, sp: 0, r: 0, rx: 0, rz: -1, l: 0, u: 0, f: 0, ft: 0 };
 
 /** The ability's name in `movement.abilities` (and `player.abilities`). */
 export const HERO_ABILITY = 'hero';
@@ -63,7 +70,7 @@ export const activeOf = (s: HeroMove, slot: number) => (slot === 0 ? s.a0 : slot
 
 const hero: MovementAbility<HeroMove> = {
   state: HERO_MOVE,
-  step(s, c, body, dt) {
+  step(s, c, body, dt, world) {
     s.c0 = Math.max(0, s.c0 - dt);
     s.c1 = Math.max(0, s.c1 - dt);
     s.c2 = Math.max(0, s.c2 - dt);
@@ -73,7 +80,7 @@ const hero: MovementAbility<HeroMove> = {
     s.u = Math.max(0, s.u - dt);
     const id = heroByNumber(s.h);
     if (!id) {
-      s.r = s.l = s.j = s.f = 0;
+      s.r = s.l = s.j = s.f = s.jt = s.jb = 0;
       return;
     }
     const guard = s.g > 0 && c.button(2);
@@ -148,17 +155,77 @@ const hero: MovementAbility<HeroMove> = {
       }
     }
 
-    // On the ground: the jumps come back, and a leap lands (the server's shockwave).
-    if (body.onGround || body.inWater) {
+    // The jump (Space), as Battlefront's heroes jump (`JUMP`): a press launches them; held, they
+    // rise slowly, hang at the top and come down slowly (let go, they drop); they steer hard in the
+    // air; a second press there jumps again (the Force's; Boba Fetch's jetpack kicks); they land
+    // softly, keeping their way a moment. Not while a rush, a leap or the jetpack has them.
+    const J = JUMP[id];
+    const busy = s.r > 0 || s.l > 0 || s.f > 0;
+    s.dj = Math.min(9, s.dj + dt);
+    s.ld = Math.min(9, s.ld + dt);
+    s.jb = Math.max(0, s.jb - dt);
+    // A press: this frame's, or Space newly down (bots hold keys rather than press them).
+    const space = c.isDown('Space');
+    const press = c.pressed('Space') || (space && !s.sp);
+    s.sp = space ? 1 : 0;
+    const at = body.position;
+    const ladder = world.blockName(world.getBlock(Math.floor(at.x), Math.floor(at.y), Math.floor(at.z))).startsWith('ladder');
+    if (body.inWater || body.flying || ladder) {
+      // Swimming, flying, on a ladder: the platform's (Space swims up, climbs).
       s.j = 0;
-      if (s.l > 0.12) body.trigger('land');
-      if (s.l > 0.12 || body.inWater) s.l = 0;
-    } else if (s.j < 1 && s.r === 0 && s.l === 0 && s.f === 0 && body.control !== 0 && c.pressed('Space')) {
-      // A second jump, in the air.
-      s.j++;
-      c.consume('Space');
-      body.setVelocity({ y: MOVE.doubleJump });
-      body.trigger('jump');
+      s.jt = 0;
+      s.l = 0;
+    } else if (body.onGround) {
+      // Down: the jumps come back, and a leap lands (the server's shockwave).
+      s.j = 0;
+      if (s.jt > 0.1) s.ld = 0;
+      s.jt = 0;
+      if (s.l > 0.12) {
+        body.trigger('land');
+        s.l = 0;
+      }
+      // The platform jumps whenever Space is down; a hero on a press (or one just before they
+      // landed), so holding it through a landing doesn't hop them straight up again. (It's
+      // swallowed in the air too: they may touch down partway through a step.)
+      body.jump = false;
+      if (!busy && (press || (s.jb > 0 && space))) {
+        body.setVelocity({ y: J.v0 });
+        body.gravity *= J.up;
+        s.jt = 1e-3;
+        s.jb = 0;
+        body.trigger('jump');
+      } else if (s.ld < J.soft) {
+        // A soft landing: their way held a moment, easing back to their feet; the camera dips.
+        const k = s.ld / J.soft;
+        body.control *= 0.2 + 0.8 * k * k;
+        body.camera.dip = (J.maxFall > 6 ? 0.13 : 0.08) * (1 - k);
+      }
+    } else {
+      body.jump = false;
+      if (s.jt > 0) s.jt += dt;
+      if (!busy && body.control !== 0 && press) {
+        if (s.j < 1 && J.double > 0) {
+          // A second jump, in the air: up again, and a push the way they steer.
+          s.j++;
+          c.consume('Space');
+          body.setVelocity({ y: Math.max(body.velocity.y, J.double) });
+          body.addVelocity({ x: body.wish.x * J.push, z: body.wish.z * J.push });
+          s.dj = 0;
+          if (s.jt === 0) s.jt = 1e-3;
+          body.trigger('djump');
+        } else s.jb = JUMP_BUFFER;
+      }
+      if (s.jt > 0 && !busy) {
+        const vy = body.velocity.y;
+        const held = space;
+        let g = vy > J.band ? (held ? J.up : J.cut) : vy > -J.band ? (held ? J.hang : J.drop) : held ? J.fall : J.drop;
+        if (held && vy < -J.maxFall) {
+          body.setVelocity({ y: vy + (-J.maxFall - vy) * Math.min(1, dt * 8) });
+          g = 0;
+        }
+        body.gravity *= g;
+        body.control *= J.air;
+      }
     }
 
     // A rush under way: level and unsteerable, out of it at a run. (A charge keeps to the ground.)

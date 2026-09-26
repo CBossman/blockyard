@@ -2,6 +2,7 @@ import type { HumanoidPoses } from '@platform';
 import type { Client, ClientKit, Figure, FigureHeld, FigureNode, FigureRig, FigureState } from '@platform/client';
 import { Euler, Mat4, Quat, Vec3 } from '@platform/client/math';
 import type { HeroId } from '../../defs';
+import { JUMP } from '../../tuning';
 import { HeroScene, type Victim } from '../state';
 import { heldInfo, inFist, type HeldInfo } from './held';
 import { DEFAULT_POSES, resolvePoses, type Poses } from './poses';
@@ -137,6 +138,12 @@ class Poser {
   private stance: SaberKey | null = null;
   /** The hero whose blaster it holds (Chewblocca's bowcaster, Boba Fetch's EE-3). */
   private gunHero: HeroId | null = null;
+  /** How fast it's rising (blocks a second, from where it's drawn), and a hero's knees tucked in a jump (0..1). */
+  private lastY = NaN;
+  private vy = 0;
+  private tuck = 0;
+  /** The body's place at rest, while a hero's second jump turns it over (a flip, a spin). */
+  private flipRest: { p: Vec3; q: Quat } | null = null;
 
   constructor(
     private fig: Figure,
@@ -160,7 +167,42 @@ class Poser {
     const dt = this.last < 0 ? 0 : clamp(s.time - this.last, 0, 0.1);
     this.last = s.time;
     if (this.fig.held !== this.heldFrom) this.hold(this.fig.held);
+    // How fast it rises, as drawn (smoothed; a teleport's leap ignored).
+    const y = this.fig.root.getWorldPosition(v1).y;
+    if (dt > 0 && Number.isFinite(this.lastY)) this.vy += (clamp((y - this.lastY) / dt, -20, 20) - this.vy) * clamp01(dt * 14);
+    this.lastY = y;
+    this.flip(s);
     this.pose(s, dt);
+  }
+
+  /**
+   * A hero's second jump in the air: the whole body turned over about the hips (Luke's and Ben's
+   * a forward flip, the Emperor's a spin, `JUMP`'s `flip`), everything posed in the turned body.
+   */
+  private flip(s: Readonly<FigureState>) {
+    const body = this.body;
+    const id = this.hero ?? this.gunHero;
+    const kind = id ? JUMP[id].flip : null;
+    const at = this.fig.player ? this.scene.flips.get(this.fig.player) : undefined;
+    const len = kind === 'spin' ? 0.55 : 0.5;
+    const t = at === undefined ? 99 : this.scene.now - at;
+    const on = (kind === 'flip' || kind === 'spin') && t >= 0 && t < len && s.air && s.dying <= 0;
+    if (!on) {
+      if (this.flipRest) {
+        body.position.copy(this.flipRest.p);
+        body.quaternion.copy(this.flipRest.q);
+        this.flipRest = null;
+      }
+      return;
+    }
+    if (!this.flipRest) this.flipRest = { p: body.position.clone(), q: body.quaternion.clone() };
+    const u = smooth(t / len);
+    const turn = kind === 'flip' ? q1.setFromAxisAngle(X, u * Math.PI * 2) : q1.setFromAxisAngle(Y, u * Math.PI * 2);
+    // About the hips: the rest place moved so the hips stay where they were.
+    const pivot = v2.set(0, this.rig.straight.hips.y, 0);
+    const off = v3.copy(pivot).sub(v4.copy(pivot).applyQuaternion(turn)).multiplyScalar(body.scale.x).applyQuaternion(this.flipRest.q);
+    body.position.copy(this.flipRest.p).add(off);
+    body.quaternion.copy(this.flipRest.q).multiply(turn);
   }
 
   /** Something in hand (null: empty-handed): a model on the chest, placed by the pose; a sprite in the fist. */
@@ -293,7 +335,11 @@ class Poser {
     else this.swingArms(s, ph, moving, run, air);
     if (gact && held === 'gun') this.gunGesture(gact, aimQ, bodyQ, scale);
 
-    this.legs(s, ph, moving, run, crouch, slide, air, bodyQ);
+    // A hero in a jump: knees tucked on the way up and through a flip, reaching down to land.
+    const flipping = this.flipRest !== null;
+    const tuckTo = (this.hero || this.gunHero) && s.air ? (flipping || this.vy > 1 ? 1 : this.vy > -1.5 ? 0.65 : 0.15) : 0;
+    this.tuck += (tuckTo - this.tuck) * clamp01(dt * (tuckTo > this.tuck ? 12 : 7));
+    this.legs(s, ph, moving, run, crouch, slide, air, bodyQ, this.tuck);
     if (victim) this.victimPose(victim, s, bodyQ, scale);
 
     // The head looks where it looks, whatever the body's doing.
@@ -626,7 +672,7 @@ class Poser {
   }
 
   /** The feet: planted and stepping along the way it goes, tucked in the air, out ahead in a slide; the legs bend to them. */
-  private legs(s: Readonly<FigureState>, ph: number, moving: number, run: number, crouch: number, slide: number, air: number, bodyQ: Quat) {
+  private legs(s: Readonly<FigureState>, ph: number, moving: number, run: number, crouch: number, slide: number, air: number, bodyQ: Quat, tuck = 0) {
     const G = this.poses.gait;
     // Which way it's going, in its own space (+z ahead).
     let dx = s.moveX ?? 0;
@@ -665,8 +711,8 @@ class Poser {
         y = y * (1 - slide) + slide * (side === 'L' ? ankle : ankle + 0.12);
       }
       if (air > 0) {
-        y += 0.2 * air;
-        z += (side === 'L' ? 0.12 : -0.1) * air;
+        y += 0.2 * air + 0.3 * tuck;
+        z += (side === 'L' ? 0.12 : -0.1) * air + (side === 'L' ? 0.2 : 0.12) * tuck;
       }
       const target = this.body.localToWorld(v1.set(x, y, z));
       // Level feet, toes up a little as they swing through.

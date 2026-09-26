@@ -739,7 +739,7 @@ export function setupPowers(game: GameContext, rules: PowerRules): Powers {
   });
 
   // The movement abilities' powers: Luke's rush (cutting through), his leap and its landing, and
-  // every hero's second jump.
+  // every hero's second jump. (Their jumps' dust and voices are each screen's: `client/jumps.ts`.)
   game.events.on('ability', ({ player: p, ability, name }) => {
     if (ability !== HERO_ABILITY || !rules.heroOf(p)) return;
     const g = of(p);
@@ -770,7 +770,10 @@ export function setupPowers(game: GameContext, rules: PowerRules): Powers {
       }
       send({ p: p.id, k: 'land', at: p3(at), hits: hits.map((h) => h.id) });
       game.audio.play('bfh_force_land', { at });
-    } else if (name === 'jump') game.audio.play('bfh_force_jump', { at: p.position });
+    } else if (name === 'djump') {
+      // A second jump in the air: every screen but theirs flips their figure (theirs ran ahead).
+      send({ p: p.id, k: 'djump' });
+    }
   });
 
   const endAll = (p: Player) => {
