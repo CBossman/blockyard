@@ -13,6 +13,10 @@ import type { Vec3 } from '../src/platform/api/types';
 import { VOICES } from '../src/platform/client-kits/sounds';
 import { defineSounds } from '../src/games/blockfront/client/sounds';
 import { defineHeroSounds, humOf } from '../src/games/blockfront/heroes/client/sounds';
+import { hits } from '../src/games/blockfront/client/hits';
+import { defineFrostWind } from '../src/games/blockfront/client/weather';
+import { heroJumps } from '../src/games/blockfront/heroes/client/jumps';
+import type { HeroScene } from '../src/games/blockfront/heroes/client/state';
 
 type Define = (client: Client) => void;
 export interface Version {
@@ -23,21 +27,29 @@ export interface Version {
 }
 
 const before = import.meta.glob(['./.before/sounds.ts', './.before/hero-sounds.ts'], { eager: true }) as Record<string, { defineSounds?: Define; defineHeroSounds?: Define }>;
-export const VERSIONS: Version[] = [{ name: 'now', defines: [defineSounds, defineHeroSounds], loops: true }];
+/** The kits that define voices of their own in `setup` (the hit markers, the jumps), and the frost wind. */
+const kitVoices: Define = (c) => {
+  hits().setup?.(c);
+  heroJumps({} as HeroScene).setup?.(c);
+  defineFrostWind(c);
+};
+export const VERSIONS: Version[] = [{ name: 'now', defines: [defineSounds, defineHeroSounds, kitVoices], loops: true }];
 const old = Object.values(before).flatMap((m) => [m.defineSounds, m.defineHeroSounds].filter((d): d is Define => !!d));
 if (old.length) VERSIONS.push({ name: 'before', defines: old, loops: false });
 
-/** A client with only its audio, onto `sfx`. */
+/** Anything a kit's `setup` reaches for besides the audio (the HUD, events): it takes the call and does nothing. */
+const nothing: unknown = new Proxy(() => nothing, { get: (_, k) => (k === Symbol.toPrimitive ? () => '' : nothing), apply: () => nothing });
+
+/** A client with only its audio, onto `sfx` (the rest does nothing). */
 function clientOf(sfx: Sfx): Client {
-  return {
-    audio: {
-      play: (n: string, o?: { at?: Vec3; volume?: number; pitch?: number }) => sfx.play(n, o),
-      define: (n: string, v: Parameters<Sfx['define']>[1], o?: { reverb?: number }) => sfx.define(n, v, o),
-      loop: (n: string, o?: { at?: Vec3; volume?: number; pitch?: number }) => sfx.loop(n, o),
-      defineLoop: (n: string, v: Parameters<Sfx['defineLoop']>[1]) => sfx.defineLoop(n, v),
-      acoustics: (a: Parameters<Sfx['acoustics']>[0]) => sfx.acoustics(a),
-    },
-  } as unknown as Client;
+  const audio = {
+    play: (n: string, o?: { at?: Vec3; volume?: number; pitch?: number }) => sfx.play(n, o),
+    define: (n: string, v: Parameters<Sfx['define']>[1], o?: { reverb?: number }) => sfx.define(n, v, o),
+    loop: (n: string, o?: { at?: Vec3; volume?: number; pitch?: number }) => sfx.loop(n, o),
+    defineLoop: (n: string, v: Parameters<Sfx['defineLoop']>[1]) => sfx.defineLoop(n, v),
+    acoustics: (a: Parameters<Sfx['acoustics']>[0]) => sfx.acoustics(a),
+  };
+  return new Proxy({}, { get: (_, k) => (k === 'audio' ? audio : nothing) }) as unknown as Client;
 }
 
 export function load(sfx: Sfx, v: Version) {
@@ -77,6 +89,17 @@ function hum(s: Stage, hero: 'luke' | 'vader', len: number, speed: (t: number) =
     s.at(t, () => l.set({ pitch: tone.pitch, volume: tone.volume }));
   }
   s.at(len, () => l.stop());
+}
+
+/** A wind loop through one gust curve (the same every time, to compare winds), `set` from its strength. */
+function windScene(s: Stage, voice: string, at: (g: number) => { volume: number; pitch: number }) {
+  if (!s.loops) return;
+  const w = s.loop(voice, { volume: 0 });
+  for (let t = 0; t <= 8; t += 1 / 30) {
+    const g = Math.max(0, Math.min(1, 0.5 + 0.6 * Math.sin(t * 0.9) * Math.sin(t * 0.31 + 1)));
+    s.at(t, () => w.set(at(g)));
+  }
+  s.at(8, () => w.stop());
 }
 
 /** How fast a swing moves the tip: a bump `len` long, peaking at `peak`. */
@@ -197,6 +220,25 @@ export const SCENES: Record<string, { seconds: number; play: Scene; note?: strin
         if (Math.random() < 7 / 30) s.at(t, () => s.play('bfh_flame_crackle', { at: s.here, pitch: rnd(0.8, 1.3), volume: 0.8 }));
       }
       s.at(2, () => l.stop());
+    },
+  },
+  'desert wind (steady gusts)': { seconds: 8, play: (s) => windScene(s, 'amb_wind', (g) => ({ volume: 0.065 + g * 0.15, pitch: 0.75 + g * 0.55 })) },
+  'frost wind (steady gusts)': { seconds: 8, play: (s) => windScene(s, 'bf_frost_wind', (g) => ({ volume: 0.06 + g * 0.15, pitch: 0.8 + g * 0.45 })) },
+  'hits and a kill': {
+    seconds: 2,
+    play: (s) => {
+      for (let i = 0; i < 4; i++) s.at(i * 0.15, () => s.play(i === 2 ? 'bf_hit_head' : 'bf_hit', { volume: 0.9 }));
+      s.at(0.75, () => s.play('bf_kill', { volume: 0.9 }));
+    },
+  },
+  'jumps and landings': {
+    seconds: 3,
+    play: (s) => {
+      s.play('bfh_jump', { at: s.here, volume: 0.7 });
+      s.at(0.45, () => s.play('bfh_jump2', { at: s.here, volume: 0.8 }));
+      s.at(1.2, () => s.play('bfh_land', { at: s.here, volume: 1 }));
+      s.at(1.8, () => s.play('bfh_jump', { at: s.here, volume: 0.7, pitch: 0.8 }));
+      s.at(2.4, () => s.play('bfh_land', { at: s.here, volume: 0.6, pitch: 0.78 }));
     },
   },
   'wind (gusting)': {
