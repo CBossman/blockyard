@@ -16,6 +16,10 @@ const BLINK = { period: 3.2, shift: 1.6, on: 1.8, warn: 2.2 };
 const BOLT_SPEED = 12;
 /** How hard a cannon bolt knocks you sideways (and up). */
 const BOLT_KNOCK = { side: 9, up: 6 };
+/** The notable stages' achievements, for getting past them (by the stage's name). */
+const PASSED: Record<string, string> = { 'Floor is Lava': 'lava_lake', Crumble: 'crumble', Blink: 'blink', 'The Spiral': 'spiral', Crossfire: 'crossfire' };
+/** A run this quick (seconds) earns Speedrunner. */
+const SPEEDRUN = 120;
 
 /** One player's run: which stage they're on, their clock and falls. */
 interface Run {
@@ -104,6 +108,7 @@ function onStart(p: Player) {
 
 /** Back to the checkpoint (or the finish island, once finished). Falling off the start begins the run afresh. */
 function respawn(p: Player, run: Run, why: 'fell' | 'lava' | 'reset') {
+  if (why === 'lava' && !run.practice) p.achieve('hot_feet');
   if (run.finished !== null) {
     p.teleport(course.finish, course.finishYaw, 0);
     return;
@@ -128,6 +133,11 @@ function restartRun(p: Player) {
 }
 
 function reach(game: GameContext, p: Player, run: Run, stage: number) {
+  // The stages got past, and their achievements (a practice run earns none, as it doesn't count).
+  for (let i = run.stage; i < stage && !run.practice; i++) {
+    const id = PASSED[course.stages[i].name];
+    if (id) p.achieve(id);
+  }
   run.stage = stage;
   const s = course.stages[stage];
   p.hud.banner(`Stage ${stage + 1} · ${s.name}`, s.hint, { duration: 3, color: GOLD });
@@ -155,6 +165,11 @@ function finish(game: GameContext, p: Player, run: Run, now: number) {
     // Theirs for the visit; on the leaderboard for good if they're signed in.
     p.store.set('best', time);
     if (p.account) game.store.set(`board:${p.account.id}`, { name: p.name, time });
+  }
+  if (counts) {
+    p.achieve('finish');
+    if (time < SPEEDRUN) p.achieve('speedrun');
+    if (run.falls === 0) p.achieve('flawless');
   }
   p.audio.play('victory');
   game.fx.fireworks(course.finish, 6);

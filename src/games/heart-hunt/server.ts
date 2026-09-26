@@ -17,8 +17,9 @@ export default defineServer(shared, {
     game.items.define('heart', {
       kind: 'misc',
       name: 'Heart',
-      onPickup(g) {
+      onPickup(g, _count, player) {
         found++;
+        player.achieve('first_heart'); // awarded once: after that it does nothing
         g.audio.play('pickup');
         return true; // consumed instead of added to the inventory
       },
@@ -53,6 +54,11 @@ export default defineServer(shared, {
     game.hud.widget('tally', { found, hearts: Array.from({ length: 10 }, (_, i) => (i < found ? 'found' : 'missing')) });
     if (found === 10 && !won) {
       won = true;
+      // A hunt everyone shares: all ten found is everyone's, and quickly if the clock's under 2:00.
+      for (const p of game.players) {
+        p.achieve('all_hearts');
+        if (game.clock.now < 120) p.achieve('speedy');
+      }
       game.fx.fireworks(game.player.position, 4);
       game.audio.play('victory');
       game.hud.screen({

@@ -599,9 +599,11 @@ export class Runtime {
       controls: def.controls,
       walks: this.walker,
       keys: { bound: this.settings.keys, game: this.input.keysFor },
+      achievements: def.achievements,
     };
     this.pause = new PauseMenu(this.ui, this.settings, pauseGame, this.input.keysFor, (s) => this.applySettings(s), () => this.input.lock());
     this.pause.onTime = (t) => this.link.send({ t: 'env', time: t });
+    this.gameHud.onAchievements = (earned, kept) => this.pause.setAchieved(earned, kept);
     this.pause.onRestart = () => {
       this.pause.hide();
       this.restart();

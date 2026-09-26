@@ -485,6 +485,8 @@ export class Sim {
     p.name = name;
     this.identify(p, account);
     p.achieved = new Set(account ? achieved : []);
+    // Their screen knows which of the game's achievements they have (the pause menu lists them).
+    if (this.def.achievements) this.presentation.send(p.id, 'hud', 'achievements', [[...p.achieved], !!account]);
     this.host.world.set_frozen(p.slot, true);
     this.emit('playerJoin', { player: p.api });
     // (Their first visit since claiming their name: told once, while they're here.)
@@ -645,7 +647,7 @@ export class Sim {
     p.achieved.add(id);
     const all = Object.keys(this.def.achievements ?? {}).length;
     const have = Object.keys(this.def.achievements ?? {}).filter((a) => p.achieved.has(a)).length;
-    this.presentation.send(p.id, 'hud', 'achievement', [{ title: def.title, description: def.description, kept: !!p.account, count: `${have} of ${all}` }]);
+    this.presentation.send(p.id, 'hud', 'achievement', [{ id, title: def.title, description: def.description, kept: !!p.account, count: `${have} of ${all}` }]);
     if (p.account) this.o.achieve?.(p.account.id, id);
     return true;
   }

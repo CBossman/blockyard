@@ -312,6 +312,8 @@ export class CaseRounds {
     if (!pl) return;
     // The round's the attackers' before anyone's caught in it (deaths after this don't count).
     this.endRound(this.attackers, `the case went off at ${pl.site.name}`);
+    // An achievement (meta.ts) for whoever planted it, a person still in the match.
+    if (!pl.by.player.bot && match.fighters.get(pl.by.player.id) === pl.by) pl.by.player.achieve('special_delivery');
     this.clearProps();
     g.hud.marker('case', null);
     const at = { x: pl.at.x, y: pl.at.y + 0.5, z: pl.at.z };

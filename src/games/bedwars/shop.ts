@@ -243,6 +243,7 @@ export class Shop {
     w[cur] -= n;
     p.audio.play('buy');
     p.hud.toast(`Bought ${o.label}`);
+    p.achieve('retail_therapy');
     this.open.get(p)?.handle.update(this.contents(p, t));
   }
 }

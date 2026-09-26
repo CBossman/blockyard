@@ -79,4 +79,12 @@ export default function obby() {
   const stuck = w[Math.min(best, w.length - 1)];
   console.log(`  ${result ?? 'no result'} after ${simulated.toFixed(0)} s of game time (${falls} falls), ${wall.toFixed(1)} s wall clock`);
   check(result !== undefined, `the bot didn't finish: stuck on stage ${stuck.stage + 1} heading for ${stuck.x}, ${stuck.y}, ${stuck.z} (waypoint ${best}/${w.length})`);
+
+  // Its achievements: past each notable stage and finished; quick, and with no falls, if it was.
+  const stat = (key: string) => String(h.find('hud', 'stat').filter((c) => c.args[0] === key).at(-1)?.args[2]);
+  const [m, sec] = stat('time').split(':').map(Number);
+  const passed = ['lava_lake', 'crumble', 'blink', 'spiral', 'crossfire', 'finish'];
+  check(passed.every((id) => me.achieved(id)), `the bot's achievements: ${passed.filter((id) => !me.achieved(id))} missing`);
+  check(me.achieved('speedrun') === m * 60 + sec < 120, `Speedrunner in ${stat('time')}: ${me.achieved('speedrun')}`);
+  check(me.achieved('flawless') === (stat('falls') === '0'), `Sure-Footed with ${stat('falls')} falls: ${me.achieved('flawless')}`);
 }

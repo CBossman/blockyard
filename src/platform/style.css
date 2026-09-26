@@ -754,7 +754,11 @@ body {
   box-shadow: none;
 }
 
-/* The profile: every game's achievements, over the home page. */
+/* The profile: every game's achievements, over the home page (out of its grid, over all of it). */
+.home > .profile-screen {
+  position: absolute;
+  inset: 0;
+}
 .profile-screen {
   z-index: 10;
   display: grid;

@@ -15,7 +15,7 @@ import { BLURBS, defineWeapons, feedIcon, LETHAL_BLURBS, LETHAL_COUNT, LETHALS, 
 import { outfitId, setupProgression, type Progression } from './progression'; // [progression]
 import { killcam, killcamHolds } from './killcam';
 import { selfHarm, Streaks } from './streaks';
-import { STREAK_IDS, STREAKS } from './streaks/kinds';
+import { isStreak, STREAK_IDS, STREAKS } from './streaks/kinds';
 
 /**
  * Call of Blocky: fast pulp shootouts against bots and people, on Jackrabbit Lane (a
@@ -490,6 +490,13 @@ function onDeath(game: GameContext, victim: Player, source: unknown, weapon: str
     // KILLCAM hook (killcam.ts): the victim sees it again through the killer's eyes, then respawns.
     killcam(game, victim, killer, weapon, headshot, through, streaks.killcamView(victim, killer, weapon));
     // (Hook: whatever else counts a kill, progression say, hears of it here: `k` got `points`.)
+    // Achievements (meta.ts), a person's.
+    if (!killer.bot) {
+      killer.achieve('made_your_bones');
+      if (k.multi >= 3) killer.achieve('triple_feature');
+      if (headshot && through > 0) killer.achieve('knock_knock');
+      if (isStreak(weapon)) killer.achieve('death_from_above');
+    }
     // The mode's score.
     if (match.mode.id === 'ffa' && k.kills >= FFA_LIMIT) endMatch(game, killer);
     if (match.mode.id === 'tdm' && k.team !== null) {
@@ -512,8 +519,11 @@ function award(f: Fighter, points: number, title: string) {
   xp.earn(f.player, points, title); // [progression] the same, in XP (the ticker shows it)
 }
 
-/** The match is over: `winner` took the free-for-all, or `team` the team match. */
-function endMatch(game: GameContext, winner: Player | null, team?: Team) {
+/**
+ * The match is over: `winner` took the free-for-all, or `team` the team match. (`cheat`: ended by
+ * the `win` command, which earns no achievements.)
+ */
+function endMatch(game: GameContext, winner: Player | null, team?: Team, cheat = false) {
   if (match.phase === 'over') return;
   match.phase = 'over';
   overAt = game.clock.now;
@@ -547,6 +557,11 @@ function endMatch(game: GameContext, winner: Player | null, team?: Team) {
     s.best = Math.max(s.best, f.best);
     p.store.set('stats', s);
     p.hud.toast(`All time: ${s.wins} wins · ${s.kills} kills · best streak ${s.best}`);
+    // Achievements (meta.ts): a match played out, and won.
+    if (!cheat) {
+      p.achieve('on_the_payroll');
+      if (mine) p.achieve('top_billing');
+    }
   }
   // What's next: the rotation's next match in a public room, the same again in one's own; or,
   // with people in it, what they vote for once they've seen the scores.
@@ -588,6 +603,7 @@ function defineBriefcase(game: GameContext) {
       g.audio.play('streak', { at: player.position });
       g.fx.burst({ x: player.position.x, y: player.position.y + 1.2, z: player.position.z }, { color: '#ffcc00', count: 40, speed: 5, glow: 2, life: 0.8, gravity: 2 });
       nextBriefcase = g.clock.now + BRIEFCASE_EVERY;
+      if (!player.bot) player.achieve('whats_in_the_case');
       return true;
     },
   });
@@ -997,7 +1013,7 @@ export default defineServer(shared, {
       help: 'Vote to skip this match (its mode and map); again to take your vote back',
       run: (_a, _g, p) => vote.toggle(p) ?? undefined,
     });
-    game.commands.register('win', { help: 'End the match now', cheat: true, run: (_a, g, p) => endMatch(g, p, match.mode.teams ? (fighterOf(p)?.team ?? 0) : undefined) });
+    game.commands.register('win', { help: 'End the match now', cheat: true, run: (_a, g, p) => endMatch(g, p, match.mode.teams ? (fighterOf(p)?.team ?? 0) : undefined, true) });
     game.commands.register('team', {
       usage: '<0|1>',
       help: 'Change sides (a team mode)',
@@ -1146,8 +1162,11 @@ export default defineServer(shared, {
         p.speed = 1;
       }
       const q = p.position;
-      // Fallen out of the map, or overboard.
-      if (q.y < (match.map.sea ?? match.map.bounds.min.y - 4)) p.damage(1000, { source: 'world', knockback: 0 });
+      // Fallen out of the map, or overboard (an achievement, a hidden one).
+      if (q.y < (match.map.sea ?? match.map.bounds.min.y - 4)) {
+        p.damage(1000, { source: 'world', knockback: 0 });
+        if (match.map.sea !== undefined && !p.bot) p.achieve('sleeps_with_the_fishes');
+      }
       if (!p.bot) {
         if (p.input.pressed('KeyL')) loadoutMenu(game, f);
         personalHud(game, f, dt);

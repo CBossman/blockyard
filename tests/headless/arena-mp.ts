@@ -66,6 +66,10 @@ export default function arenaMultiplayer() {
   check(!calls(ann, 'screen').length, 'one down is not the end');
   check(player('Bob').alive && Math.hypot(player('Bob').position.x, player('Bob').position.z) < 3, `Bob back on the floor when the wave is won: ${JSON.stringify(player('Bob').position)}`);
   check(cleared === 6, `a reward set each: ${cleared} pickups`);
+  // The first wave is everyone's; not a scratch on Ann or Cat, but Bob fell.
+  check(['Ann', 'Bob', 'Cat'].every((n) => player(n).achieved('first_wave')), 'the first wave cleared: all three');
+  check(player('Ann').achieved('untouched') && player('Cat').achieved('untouched') && !player('Bob').achieved('untouched'), 'untouched: Ann and Cat, not Bob');
+  check(!player('Ann').achieved('first_blood'), 'no kills, no First Blood');
   // Each takes only their own: standing on the dais, Ann gets one bow, not three.
   for (const n of ['Bob', 'Cat']) player(n).teleport({ x: 20, y: 72, z: 0 });
   player('Ann').teleport({ x: 0.5, y: 72, z: 0.5 });

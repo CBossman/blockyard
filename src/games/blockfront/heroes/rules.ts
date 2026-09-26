@@ -62,6 +62,9 @@ export interface Heroes {
 /** The heroes' kinds of item, for `server.ts`'s `items`: their sabers. */
 export const heroItems = (): ItemKit[] => [sabers()];
 
+/** The weapon a bolt sent back by a hero's saber kills with (the hero's kill). */
+export const DEFLECTED = 'Deflected Bolt';
+
 /** A reflected bolt, on its way back to whoever fired it. */
 interface Reflected {
   hero: Player;
@@ -278,7 +281,7 @@ export function setupHeroes(game: GameContext, rules: HeroRules): Heroes {
         const r = reflected[i];
         if (r.at > now) continue;
         reflected.splice(i, 1);
-        if (r.shooter.alive && r.hero.alive) r.shooter.damage(r.damage, { source: r.hero, cause: 'gun', weapon: 'Deflected Bolt', part: 'body', knockback: 0.2 });
+        if (r.shooter.alive && r.hero.alive) r.shooter.damage(r.damage, { source: r.hero, cause: 'gun', weapon: DEFLECTED, part: 'body', knockback: 0.2 });
       }
       if (deflects.length) {
         send(MSG.deflect, { list: deflects } satisfies Deflects);

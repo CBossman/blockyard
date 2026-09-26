@@ -19,6 +19,8 @@ const TURN = 0.42;
 const CLIMB = 4;
 const LOW = 55;
 const HIGH = 170;
+/** A voyage this quick (seconds) earns Fair Winds. */
+const SWIFT = 6 * 60;
 
 interface ShipState {
   x: number;
@@ -47,6 +49,8 @@ let helm: Player | null = null;
 let lit: boolean[] = [];
 let startedAt = 0;
 let done = false;
+/** The ship went somewhere by `/warp` (a cheat): this voyage's beacons earn no achievements. */
+let warped = false;
 let wind: LoopHandle | null = null;
 /** When it last hit rock (one thud a bump). */
 let thudAt = -Infinity;
@@ -101,6 +105,7 @@ function sail(game: GameContext, dt: number) {
       // Ran into rock: a thud (one a bump), and it bounces back a little.
       if (Math.abs(s.speed) > 3 && game.clock.now - thudAt > 1) {
         thudAt = game.clock.now;
+        helm?.achieve('aground');
         game.audio.play('thud', { at: ship.position });
         for (const p of game.players) if (p.riding === ship) p.fx.shake(0.3, 0.3);
       }
@@ -109,6 +114,7 @@ function sail(game: GameContext, dt: number) {
     else s.climb = 0;
   }
   pose(s, ship.position, ship.quaternion);
+  if (helm && s.y >= HIGH) helm.achieve('cloud_nine');
   s.spin += (s.speed * 1.4 + (helm ? 1.5 : 0.3)) * dt;
   screw.position.set(PROPELLER.x, PROPELLER.y, PROPELLER.z);
   screw.quaternion.setFromAxisAngle(Z, s.spin);
@@ -117,6 +123,7 @@ function sail(game: GameContext, dt: number) {
 
 function takeHelm(game: GameContext, p: Player) {
   helm = p;
+  p.achieve('helmsman');
   p.teleport(ship.toWorld(HELM), s.yaw, -0.1);
   p.freeze(true);
   // Scroll out to see the ship from outside while steering (the camera circles her middle).
@@ -160,6 +167,14 @@ function light(game: GameContext, i: number, by: Player) {
   const n = lit.filter(Boolean).length;
   game.hud.banner(`${isle.name} is lit`, `${n} of ${ISLES.length} beacons`, { duration: 2.5, color: '#ffd35a' });
   game.hud.feed(`${by.name} lit the beacon on ${isle.name}`, { color: '#ffd35a' });
+  if (!warped) {
+    by.achieve('first_beacon');
+    // Lit while someone else steers: the crew's, both of them.
+    if (helm && helm !== by) {
+      by.achieve('crew');
+      helm.achieve('crew');
+    }
+  }
   radar(game);
   if (n === ISLES.length) finish(game);
 }
@@ -179,6 +194,12 @@ function finish(game: GameContext) {
   const time = game.clock.now - startedAt;
   const best = game.store.get<number>('best');
   if (best === undefined || time < best) game.store.set('best', time);
+  // Everyone aboard for it made the voyage.
+  if (!warped)
+    for (const p of game.players) {
+      p.achieve('all_beacons');
+      if (time < SWIFT) p.achieve('swift_voyage');
+    }
   game.audio.play('victory');
   game.clock.after(2.5, () =>
     game.hud.screen({
@@ -233,6 +254,7 @@ export default defineServer(shared, {
       run: ([n]) => {
         const isle = ISLES[Number(n) - 1];
         if (!isle) throw new Error('Which island? 1 to 5');
+        warped = true;
         // Everyone aboard goes with it (a solid prop put somewhere far takes its riders along).
         s = { ...s, x: isle.at.x + isle.radius + 9, y: isle.at.y + 1, z: isle.at.z, yaw: 0, speed: 0, turn: 0, climb: 0, roll: 0, pitch: 0 };
         pose(s, ship.position, ship.quaternion);
@@ -243,6 +265,7 @@ export default defineServer(shared, {
 
   start(game) {
     done = false;
+    warped = false;
     helm = null;
     lit = ISLES.map(() => false);
     shown.clear();
@@ -278,6 +301,7 @@ export default defineServer(shared, {
         if (p === helm) leaveHelm(game);
         aboard(p);
         p.hud.toast('Man overboard! Hauled back aboard.');
+        p.achieve('overboard');
       }
       if (!done)
         ISLES.forEach((isle, i) => {

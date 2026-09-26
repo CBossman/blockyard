@@ -39,7 +39,7 @@ export class Enemy implements Target {
   /** Who it's after, and for how much longer before it looks again. */
   private quarry: Quarry | null = null;
   private retarget = 0;
-  onDeath: ((e: Enemy, by?: Player) => void) | null = null;
+  onDeath: ((e: Enemy, by?: Player, kind?: 'laser' | 'torpedo') => void) | null = null;
 
   constructor(
     private game: GameContext,
@@ -67,7 +67,7 @@ export class Enemy implements Target {
     return this.craft.alive;
   }
 
-  hit(damage: number, at: Vec3, _kind?: 'laser' | 'torpedo', shooter?: Player) {
+  hit(damage: number, at: Vec3, kind?: 'laser' | 'torpedo', shooter?: Player) {
     const c = this.craft;
     if (!c.alive) return;
     c.hp -= damage;
@@ -77,7 +77,7 @@ export class Enemy implements Target {
     if (c.hp <= 0) {
       this.game.fx.explosion(c.pos, { size: 1.3 });
       c.remove();
-      this.onDeath?.(this, shooter);
+      this.onDeath?.(this, shooter, kind);
       return;
     }
     // Hit: break away.

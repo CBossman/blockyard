@@ -6,6 +6,8 @@ import type { Settings, ShadowQuality } from '../settings';
 
 type Change = (s: Settings) => void;
 
+const TROPHY = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7 3h10v2h3v3a4 4 0 0 1-4 4h-.4A5 5 0 0 1 13 14.9V17h3v2H8v-2h3v-2.1A5 5 0 0 1 8.4 12H8a4 4 0 0 1-4-4V5h3V3zm0 4H6v1a2 2 0 0 0 1 1.7V7zm10 0v2.7A2 2 0 0 0 18 8V7h-1zM6 20h12v2H6v-2z"/></svg>';
+
 /** What the pause menu says of the game being played, and what it offers. */
 export interface PauseGame extends GameControls {
   title: string;
@@ -18,6 +20,8 @@ export interface PauseGame extends GameControls {
   restart: boolean;
   /** The world's clock can be changed (time of day, day length): where the server takes it, and the game doesn't fix the time. */
   clock: boolean;
+  /** The game's achievements (its meta's). */
+  achievements?: Record<string, { title: string; description: string; hidden?: boolean }>;
 }
 
 /** Someone in the game, as the pause menu lists them. */
@@ -42,6 +46,11 @@ export class PauseMenu {
   private padKeys = h('div.pad-only');
   private roomLine = h('div.pause-room');
   private players = h('div.pause-players');
+  private feats = h('div.feats');
+  private featsHead = h('h3', {}, 'Achievements');
+  private earned: ReadonlySet<string> = new Set();
+  /** Signed in: what's earned is kept (a guest's lasts the visit). */
+  private kept = true;
   private panes: Record<Pane, HTMLElement>;
   private tabs: Record<Tab, { button: HTMLElement; body: HTMLElement } | null>;
   private navItems = new Map<Pane, HTMLElement>();
@@ -236,6 +245,7 @@ export class PauseMenu {
         {},
         h('section.pause-card', {}, h('h3', {}, 'How to play'), h('div.keys-only.help-keys'), this.padKeys),
         h('section.pause-card', {}, h('h3', {}, 'In this game'), this.players),
+        game.achievements && Object.keys(game.achievements).length ? h('section.pause-card', {}, this.featsHead, this.feats) : null,
       ),
       settings: h('div.pause-pane.settings', {}, tabBar, ...Object.values(this.tabs).filter((x) => !!x).map((x) => x.body)),
     };
@@ -276,6 +286,7 @@ export class PauseMenu {
     );
     parent.append(this.root);
     refreshKeys();
+    this.renderFeats();
     this.showTab('graphics');
     this.showPane('help');
   }
@@ -300,6 +311,29 @@ export class PauseMenu {
     const n = people.length;
     const room = this.game.room ? 'Private game' : 'Public game';
     this.roomLine.replaceChildren(h('span.live-dot'), `${room} · ${n} ${n === 1 ? 'player' : 'players'}`);
+  }
+
+  /** Which of the game's achievements the player has (the HUD hears as they join, and each one since). */
+  setAchieved(earned: ReadonlySet<string>, kept: boolean) {
+    this.earned = earned;
+    this.kept = kept;
+    this.renderFeats();
+  }
+
+  private renderFeats() {
+    const all = Object.entries(this.game.achievements ?? {});
+    if (!all.length) return;
+    const have = all.filter(([id]) => this.earned.has(id)).length;
+    this.featsHead.textContent = `Achievements · ${have} of ${all.length}${this.kept ? '' : ' · a guest’s last the visit'}`;
+    this.feats.replaceChildren(
+      ...all.map(([id, a]) => {
+        const done = this.earned.has(id);
+        const secret = a.hidden && !done;
+        const icon = h(`span.feat-icon${done ? '.done' : ''}`);
+        icon.innerHTML = TROPHY;
+        return h(`div.feat${done ? '.done' : ''}`, {}, icon, h('div.feat-text', {}, h('div.feat-title', {}, secret ? 'Hidden achievement' : a.title), h('div.feat-desc', {}, secret ? 'Keep playing to find it' : a.description)));
+      }),
+    );
   }
 
   private renderHelp() {

@@ -11,6 +11,8 @@ import { destroyer, shared, START } from './shared';
 
 /** Seconds a shot-down pilot waits before a new ship (if anyone's still flying). */
 const COMEBACK = 12;
+/** TIEs shot down, all time, for Rogue Leader. */
+const ROGUE_LEADER_KILLS = 100;
 const CALLSIGNS = ['Red Five', 'Red Two', 'Red Three', 'Red Four', 'Red Six', 'Red Seven', 'Red Eight', 'Red Nine', 'Red Ten', 'Red Eleven', 'Red Twelve', 'Gold Leader', 'Gold Two', 'Gold Three', 'Gold Four', 'Gold Five'];
 
 interface Wave {
@@ -34,6 +36,8 @@ let capital: Capital;
 /** `start` has set the battle up (a new game's setup clears this: nothing carries over). */
 let ready = false;
 const pilots = new Map<string, Pilot>();
+/** Pilots (by player id) who can't have Not a Scratch this battle: shot down, or launched once it was under way. */
+const scratched = new Set<string>();
 let enemies: Enemy[] = [];
 let wave = 0;
 let phase: 'waiting' | 'intro' | 'fight' | 'between' | 'won' | 'lost' = 'waiting';
@@ -80,6 +84,7 @@ function launch(game: GameContext, player: Player, announce: boolean) {
   const { at, yaw } = slot(pilots.size);
   const p = new Pilot(game, player, kinds(game).xwing, weapons, cs, at, yaw);
   pilots.set(player.id, p);
+  if (phase === 'fight' || phase === 'between') scratched.add(player.id);
   weapons.targets.push(p);
   player.hud.crosshair(false);
   player.hud.banner(cs.toUpperCase(), phase === 'fight' ? 'Join the fight' : 'Standing by', { duration: 2.5, color: '#ff6b5b' });
@@ -112,14 +117,26 @@ function spawnEnemy(game: GameContext, kind: EnemyKind, fromHangar: boolean) {
   }
   const toward = flying()[0]?.craft.pos ?? START;
   const e = new Enemy(game, kind, weapons, at, headingTo(at, toward).yaw);
-  e.onDeath = (_, by) => {
+  e.onDeath = (_, by, kind) => {
     const p = by && pilots.get(by.id);
-    if (p) p.kills++;
+    if (p) {
+      p.kills++;
+      scored(p.player, kind);
+    }
     const i = enemies.indexOf(e);
     for (const q of pilots.values()) q.player.hud.marker(`e${i}`, null);
   };
   enemies.push(e);
   weapons.targets.push(e);
+}
+
+/** A TIE shot down by a pilot: what it earns them. */
+function scored(player: Player, kind?: 'laser' | 'torpedo') {
+  player.achieve('first_kill');
+  if (kind === 'torpedo') player.achieve('stay_on_target');
+  const all = (player.store.get<number>('kills') ?? 0) + 1;
+  player.store.set('kills', all);
+  if (all >= ROGUE_LEADER_KILLS) player.achieve('rogue_leader');
 }
 
 function startWave(game: GameContext) {
@@ -169,6 +186,12 @@ function finish(game: GameContext, won: boolean) {
   const time = `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
   const team = [...pilots.values()].reduce((n, p) => n + p.kills, 0);
   const many = pilots.size > 1;
+  if (won) {
+    for (const p of pilots.values()) {
+      p.player.achieve('great_shot');
+      if (!scratched.has(p.id)) p.player.achieve('not_a_scratch');
+    }
+  }
   game.clock.after(won ? 6.5 : 2.5, () => {
     for (const p of pilots.values()) {
       const stats: [string, string][] = [['Time', time], ['Kills', String(p.kills)]];
@@ -270,6 +293,7 @@ function shipContacts() {
       // Ramming is a last resort: it only half-wrecks a fighter and hurts you more.
       const at = push(p.craft, e.craft, 14);
       e.hit(13, at, 'laser', p.player);
+      if (!e.alive) p.player.achieve('ramming_speed');
       p.crash(at, 0.7);
       p.writeBack();
     }
@@ -321,6 +345,7 @@ function cinematic(game: GameContext, dt: number) {
 function shotDown(game: GameContext, p: Pilot) {
   p.explode();
   p.backAt = game.clock.now + COMEBACK;
+  scratched.add(p.id);
   if (flying().length && phase !== 'won') {
     p.player.hud.banner('SHOT DOWN', `A new ship in ${COMEBACK} seconds`, { duration: 3, color: '#ff5b5b' });
     game.hud.feed(`${p.callsign} is down`, { color: '#ff8a7a' });
@@ -360,6 +385,7 @@ export default defineServer(shared, {
     types = null;
     ready = false;
     pilots.clear();
+    scratched.clear();
     enemies = [];
     phase = 'waiting';
     // (Its voices are each screen's, `client/sounds.ts`: played here by name.)
@@ -372,6 +398,8 @@ export default defineServer(shared, {
         const w = Number(n) - 1;
         if (!(w >= 0 && w < WAVES.length)) throw new Error('Waves are 1 to 3');
         for (const e of enemies) if (e.alive) e.hit(1e6, e.pos);
+        // Skipping waves isn't flying the whole battle.
+        for (const id of pilots.keys()) scratched.add(id);
         wave = w;
         startWave(game);
         return `Wave ${n}`;
@@ -395,6 +423,7 @@ export default defineServer(shared, {
     if (ready) weapons.clear();
     for (const p of pilots.values()) p.dispose();
     pilots.clear();
+    scratched.clear();
     enemies = [];
     wave = 0;
     incoming = 0;
@@ -404,7 +433,8 @@ export default defineServer(shared, {
     kinds(game);
     weapons = new Weapons(game);
     capital = new Capital(game, destroyer, weapons, {
-      generatorDown: (left) => {
+      generatorDown: (left, by) => {
+        by?.achieve('shields_down');
         if (!left) for (const p of pilots.values()) p.torpedoes += 2;
         game.hud.banner(left ? 'SHIELD GENERATOR DOWN' : 'SHIELDS ARE DOWN', left ? 'One more to go' : 'Hit the bridge! +2 torpedoes', { duration: 2.6, color: '#ffd23f' });
       },
