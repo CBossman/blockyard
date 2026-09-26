@@ -75,7 +75,10 @@ void main() {
   }
 
   float sky = vLight.x;
-  float blk = vLight.y;
+  // (Clamped: MSAA shades an edge pixel at its centre, which can be just off the triangle, and the
+  // light is extrapolated there, a hair below 0 where it changes across it: pow of that is NaN,
+  // which comes out black, dashes along the triangles' edges.)
+  float blk = max(vLight.y, 0.0);
   float ao = vLight.z;
   float aoF = 0.38 + 0.62 * ao * ao;
   float plantH = isCross ? fract(vUV.y) : 1.0;
