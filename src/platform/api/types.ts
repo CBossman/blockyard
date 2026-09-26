@@ -58,6 +58,23 @@ export interface GameMeta {
    * shared world everyone builds in (Sandbox).
    */
   instances?: boolean;
+  /**
+   * The game's achievements, by id: things to do in it, which the server awards
+   * (`player.achieve(id)`). The platform keeps each for the player's account, pops it up on their
+   * screen, and lists every game's on their profile (done, and still to do). They're the game's
+   * alone: they don't add up across games. A guest sees them pop up, but they last the visit.
+   */
+  achievements?: Record<string, AchievementDef>;
+}
+
+/** One of a game's achievements (`GameMeta.achievements`). */
+export interface AchievementDef {
+  /** Short: "First Blood". */
+  title: string;
+  /** How it's earned, as the profile says it: "Take down another player". */
+  description: string;
+  /** Kept off the profile until someone earns it (a surprise): "Hidden achievement" till then. */
+  hidden?: boolean;
 }
 
 /**
@@ -1128,6 +1145,14 @@ export interface PlayerApi {
    * otherwise, and after this visit.
    */
   readonly adopted: string | null;
+  /**
+   * Award one of the game's achievements (`meta.achievements`): kept for their account (a guest's
+   * lasts the visit), and it pops up on their screen. True the first time; false if they had it
+   * already, or they're a bot. An id the game doesn't list is a mistake: it's reported, and false.
+   */
+  achieve(id: string): boolean;
+  /** Whether they have one of the game's achievements. */
+  achieved(id: string): boolean;
   /** This player's screen: HUD calls here reach only them (their wallet, their shop, their toasts). */
   readonly hud: HudApi;
   /** Sounds only this player hears (their coins, their kill). */

@@ -1,5 +1,6 @@
 import { h } from './dom';
 import { AccountCorner } from './account';
+import { Profile, tally, type Earned } from './profile';
 import { hintChips, keyHints, type GameControls } from './controls';
 
 /** Playing on a game server: the home page asks for a name, and says who's on. */
@@ -21,6 +22,7 @@ interface ListedGame {
   tagline?: string;
   accent?: string;
   cover?: string;
+  achievements?: Record<string, { title: string; description: string; hidden?: boolean }>;
 }
 
 /** Blockyard's mark: a grass block, drawn isometric. */
@@ -70,6 +72,11 @@ export class TitleScreen {
   private account: AccountCorner;
   /** For a guest: what's kept, and a way to sign in. */
   private guest: HTMLElement;
+  /** The game on show's achievements (how many, how many earned): opens the profile. */
+  private feats: HTMLElement;
+  private profile: Profile;
+  /** What the player has earned, as last asked (null: a guest, or not asked yet). */
+  private earned: Earned | null = null;
   private fill: HTMLElement;
   private label: HTMLElement;
   private button: HTMLButtonElement;
@@ -106,7 +113,12 @@ export class TitleScreen {
     this.account.onChange = (me) => {
       if (me) this.nameInput.value = me.name;
       this.guest.classList.toggle('hidden', !!me || !this.game?.online);
+      void this.refreshEarned();
     };
+    this.profile = new Profile(games);
+    this.profile.onSignIn = () => this.account.signIn();
+    this.account.onProfile = () => this.openProfile();
+    this.feats = h('button.home-feats.hidden', { onclick: () => this.openProfile(this.game?.current) });
     const signIn = h('button.home-guest-signin', { onclick: () => this.account.signIn() }, 'Sign in with Discord');
     this.guest = h('div.home-guest.hidden', {}, 'Playing as a guest: what you earn lasts this visit. ', signIn, ' to keep it.');
     this.actions = h('div.home-actions', {}, h('label.home-name', {}, h('span', {}, 'Playing as'), this.nameInput), this.button);
@@ -120,8 +132,9 @@ export class TitleScreen {
       this.cover,
       h('div.home-scrim'),
       h('header.home-top', {}, h('div.home-brand', {}, mark, h('span.home-logo', {}, 'Blockyard'), h('span.home-pitch', {}, 'Block games anyone can build, played together')), h('div.home-top-right', {}, this.online, this.account.root)),
-      h('main.home-hero', {}, this.kicker, this.heading, this.tagline, this.status, this.actions, this.guest, this.rooms, this.hints),
+      h('main.home-hero', {}, this.kicker, this.heading, this.tagline, this.feats, this.status, this.actions, this.guest, this.rooms, this.hints),
       this.shelf,
+      this.profile.root,
     );
     // The mouse wheel runs the shelf sideways, when there are more games than fit.
     this.shelf.addEventListener('wheel', (e) => {
@@ -139,12 +152,35 @@ export class TitleScreen {
     this.feature(g.current, g.title);
     this.actions.querySelector('.home-name')?.classList.toggle('hidden', !g.online);
     if (g.online) this.account.use(g.online.server.replace(/^ws/, 'http').replace(/\/+$/, ''));
+    // (Back from a game: what was earned there.)
+    void this.refreshEarned();
     this.guest.classList.toggle('hidden', !g.online || !this.account.loaded || !!this.account.me);
     this.renderRooms(g.online ?? null);
     this.renderHints(g);
     this.here = null;
     window.clearInterval(this.poll);
     if (g.online) this.watchCounts(g.online);
+  }
+
+  /** Ask again what the player has earned (signed in), and show it. */
+  private async refreshEarned() {
+    this.earned = await this.account.earned();
+    if (this.game) this.renderFeats(this.game.current);
+  }
+
+  /** The line under the game's name: its achievements, and how many are earned. */
+  private renderFeats(id: string) {
+    const g = this.games.find((x) => x.id === id);
+    const { have, all } = g ? tally(g, this.earned) : { have: 0, all: 0 };
+    this.feats.classList.toggle('hidden', !all);
+    if (!all) return;
+    this.feats.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7 3h10v2h3v3a4 4 0 0 1-4 4h-.4A5 5 0 0 1 13 14.9V17h3v2H8v-2h3v-2.1A5 5 0 0 1 8.4 12H8a4 4 0 0 1-4-4V5h3V3zm0 4H6v1a2 2 0 0 0 1 1.7V7zm10 0v2.7A2 2 0 0 0 18 8V7h-1zM6 20h12v2H6v-2z"/></svg>';
+    this.feats.append(h('span', {}, this.account.me ? `${have} of ${all} achievements` : `${all} achievements to earn`));
+  }
+
+  private openProfile(game?: string) {
+    this.profile.show(this.account.me, this.earned, game);
+    void this.refreshEarned().then(() => this.profile.open && this.profile.show(this.account.me, this.earned, game));
   }
 
   /** Picked another game: show it chosen at once, while the switch happens behind. */
@@ -164,6 +200,7 @@ export class TitleScreen {
     this.cover.style.backgroundImage = entry?.cover ? `url("${entry.cover}")` : '';
     this.heading.textContent = this.title;
     this.tagline.textContent = entry?.tagline ?? '';
+    this.renderFeats(id);
     this.kicker.replaceChildren();
     this.status.replaceChildren();
     this.status.classList.remove('error');

@@ -196,6 +196,7 @@ export function serve(o: ServeOptions): Promise<GameServer> {
         room.watching = watching;
       },
       log: room.log,
+      achieve: (account, id) => o.accounts?.achieve(account, room.def.id, id),
     });
     return {
       host: core.host,
@@ -223,6 +224,7 @@ export function serve(o: ServeOptions): Promise<GameServer> {
             room.playing = m.playing;
             room.watching = m.watching;
           } else if (m.t === 'log') room.log(m.line);
+          else if (m.t === 'achieve') o.accounts?.achieve(m.account, room.def.id, m.id);
           else if (m.t === 'failed') failed(room, link, m.text);
         });
         worker.on('error', (err: Error) => failed(room, link, err.stack ?? err.message));
@@ -377,7 +379,7 @@ export function serve(o: ServeOptions): Promise<GameServer> {
     // their account if they're signed in.
     const id = `c${nextClient++}`;
     let account = auth?.who(req) ?? null;
-    const who: Who = { account: account && { id: account.id, name: account.name, avatar: account.avatar } };
+    const who: Who = account ? { account: { id: account.id, name: account.name, avatar: account.avatar }, achieved: o.accounts!.achievedIn(account.id, room.def.id) } : { account: null };
     if (account) accountOf.set(id, { id: account.id, ws });
     room.sockets.set(id, ws);
     room.link ??= start(room);

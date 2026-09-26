@@ -117,6 +117,8 @@ export interface SimOptions {
   room?: string;
   /** Replays (`game.replay`): the host keeps the room's history. Without one, `replay.show` shows nothing. */
   replay?: ReplayBackend;
+  /** A signed-in player earned one of the game's achievements (`player.achieve`): keep it for their account. */
+  achieve?: (account: string, id: string) => void;
   /**
    * Game code threw (a timer, `update`, an entity's AI): report it and carry on with the tick,
    * so one bug doesn't stop the whole game. Without it, errors are thrown.
@@ -466,7 +468,7 @@ export class Sim {
    * player's place (`game.player`) is taken first if it's vacant; anyone else is new, at the
    * spawn. The game hears `playerJoin`.
    */
-  join(name = 'Player', account: PlayerAccount | null = null): PlayerSim {
+  join(name = 'Player', account: PlayerAccount | null = null, achieved: readonly string[] = []): PlayerSim {
     let p = this.local;
     if (p.vacant) {
       p.vacant = false;
@@ -482,6 +484,7 @@ export class Sim {
     }
     p.name = name;
     this.identify(p, account);
+    p.achieved = new Set(account ? achieved : []);
     this.host.world.set_frozen(p.slot, true);
     this.emit('playerJoin', { player: p.api });
     // (Their first visit since claiming their name: told once, while they're here.)
@@ -611,6 +614,7 @@ export class Sim {
       ctx: () => this.ctx,
       emit: (k, e) => this.emit(k, e),
       now: () => this.time,
+      achieve: (who, a) => this.achieve(who, a),
     });
     if (this.def.player?.build)
       p.creative = new CreativeBuild(
@@ -622,6 +626,28 @@ export class Sim {
         (x, y, z, id, against) => this.placeBlockAt(x, y, z, id, p.api, { against }),
       );
     return p;
+  }
+
+  /**
+   * `player.achieve`: one of the game's achievements, the first time they earn it: it pops up on
+   * their screen, and a signed-in player's is kept for their account (a guest's, for the visit).
+   */
+  private achieve(p: PlayerSim, id: string): boolean {
+    const def = this.def.achievements?.[id];
+    if (!def) {
+      // A mistake in the game: reported (thrown, without a handler), and nothing's awarded.
+      const err = new Error(`player.achieve: "${id}" isn't one of ${this.def.id}'s achievements (meta.achievements)`);
+      if (!this.o.error) throw err;
+      this.o.error(err);
+      return false;
+    }
+    if (p.bot || p.vacant || p.achieved.has(id)) return false;
+    p.achieved.add(id);
+    const all = Object.keys(this.def.achievements ?? {}).length;
+    const have = Object.keys(this.def.achievements ?? {}).filter((a) => p.achieved.has(a)).length;
+    this.presentation.send(p.id, 'hud', 'achievement', [{ title: def.title, description: def.description, kept: !!p.account, count: `${have} of ${all}` }]);
+    if (p.account) this.o.achieve?.(p.account.id, id);
+    return true;
   }
 
   /** A command typed by a player. */
@@ -1145,6 +1171,15 @@ export class Sim {
         const slot = inv.slots.findIndex((st) => st?.item === id);
         if (slot >= 0) inv.select(slot);
         return `Gave ${count - left} ${def.name}`;
+      },
+    });
+    c.register('achieve', {
+      usage: '<achievement>',
+      help: "Earn one of the game's achievements (to see it pop up; a signed-in player's is kept)",
+      complete: (args) => (args.length <= 1 ? Object.keys(this.def.achievements ?? {}) : []),
+      run: ([id], _g, player) => {
+        if (!id || !this.def.achievements?.[id]) throw new Error(`Which achievement? ${Object.keys(this.def.achievements ?? {}).join(', ') || 'This game has none'}`);
+        return player.achieve(id) ? `Earned ${this.def.achievements[id].title}` : `You have ${this.def.achievements[id].title} already`;
       },
     });
     c.register('heal', {
