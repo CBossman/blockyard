@@ -1,6 +1,6 @@
 import type * as THREE from 'three';
 import type { ItemMove, ItemMoveControls, Penetration } from '../items';
-import type { ItemDefinition, ItemLook, SharedDefinition, SoundName, SynthVoice, Vec3 as PlainVec3 } from '../types';
+import type { Acoustics, ClientLoop, ItemDefinition, ItemLook, LoopVoice, SharedDefinition, SoundName, SynthVoice, Vec3 as PlainVec3 } from '../types';
 import type { ViewLayer } from './view';
 import type { ClientFigures } from './figures';
 import type { ClientHud } from './hud';
@@ -283,10 +283,20 @@ export interface ClientAudio {
    * A voice of the game's own (synthesised on each play, with real Web Audio: nothing is recorded
    * or sent), under a name `play` uses: here, the server's `audio.play`, and items' `sounds`. Define
    * them in `setup` (a kit's, then the game's: a later one of the same name replaces the earlier).
-   * A voice the game's server defines under the same name (its `audio.define`) takes precedence
-   * over one defined here.
+   * `reverb` is how much of the acoustics' reverb it takes (1 = all of it; 0 = none: a HUD's beep).
    */
-  define(name: string, voice: SynthVoice): void;
+  define(name: string, voice: SynthVoice, opts?: { reverb?: number }): void;
+  /**
+   * A continuous sound (a blade's hum, the wind, an engine): one of the game's (`defineLoop`) or
+   * the platform's (`engine`, `wind`), everywhere or at a spot. Its handle moves it, changes its
+   * pitch and loudness, and stops it; stop it when it's done (a kit's `dispose`). Silent until
+   * sound starts on this screen, then it plays as last `set`.
+   */
+  loop(name: string, opts?: { at?: PlainVec3; volume?: number; pitch?: number }): ClientLoop;
+  /** A continuous sound of the game's own, under a name `loop` uses: steady tones and noise. */
+  defineLoop(name: string, voice: LoopVoice): void;
+  /** How the world sounds from now on: distance muffling, the space's reverb (`Acoustics`). */
+  acoustics(a: Acoustics): void;
 }
 
 /**

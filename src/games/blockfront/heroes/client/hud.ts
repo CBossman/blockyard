@@ -28,43 +28,51 @@ const GLYPH: Record<PowerId, string> = {
 const CSS = `
 /* While a hero's panel is up it stands in for the hotbar (a saber alone) and the small health bar. */
 body.bfh-on .hotbar, body.bfh-on .healthbar { visibility: hidden; }
-.bfh-hero { position: absolute; left: 50%; bottom: 22px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: stretch; gap: 6px; width: min(560px, 92vw); pointer-events: none; font-family: var(--sans, system-ui); color: #fff; --blade: #5dff6a; }
+.bfh-hero { position: absolute; left: 50%; bottom: 20px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: stretch; gap: 7px; width: min(520px, 92vw); pointer-events: none; font-family: var(--sans, system-ui); color: #f3f5f7; --blade: #5dff6a; text-shadow: 0 1px 6px rgba(0, 0, 0, 0.55); animation: bfh-in 360ms cubic-bezier(0.2, 0.7, 0.2, 1); }
 .bfh-hero.off { display: none; }
+.bfh-hero { z-index: 0; }
+/* A soft shade behind, feathered out on every side, so it reads over snow and sky. */
+.bfh-hero::before { content: ''; position: absolute; inset: -26px -60px -20px; z-index: -1; pointer-events: none; background: radial-gradient(closest-side, rgba(5, 8, 12, 0.5), rgba(5, 8, 12, 0.28) 55%, transparent); }
 .bfh-top { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
-.bfh-name { font: 700 17px var(--pixel, 'Arial Black'); letter-spacing: 0.08em; text-transform: uppercase; color: var(--blade); text-shadow: 0 0 10px color-mix(in srgb, var(--blade) 70%, transparent), 0 1px 0 #000; }
-.bfh-title { font: 600 11px var(--sans); letter-spacing: 0.16em; text-transform: uppercase; opacity: 0.75; margin-left: 8px; color: #fff; text-shadow: 0 1px 0 #000; }
-.bfh-hp-n { font: 700 15px var(--pixel); text-shadow: 0 1px 0 #000; }
-.bfh-hp-n small { font-size: 11px; opacity: 0.6; }
-.bfh-bar { position: relative; height: 14px; background: rgba(8, 11, 16, 0.8); border: 1px solid rgba(255, 255, 255, 0.28); clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%); }
+.bfh-name { font: 500 22px/1 var(--pixel, sans-serif); letter-spacing: 0.14em; text-transform: uppercase; color: #f3f5f7; }
+.bfh-title { font: 600 10px var(--pixel); letter-spacing: 0.32em; text-transform: uppercase; color: color-mix(in srgb, var(--blade) 70%, white); margin-left: 12px; }
+.bfh-hp-n { font: 500 20px/1 var(--pixel); font-variant-numeric: tabular-nums; }
+.bfh-hp-n small { font-size: 12px; opacity: 0.5; letter-spacing: 0.06em; }
+.bfh-bar { position: relative; height: 5px; background: rgba(255, 255, 255, 0.14); }
 .bfh-bar > i { position: absolute; left: 0; top: 0; bottom: 0; width: calc(var(--fill, 1) * 100%); transition: width 0.12s linear; }
-.bfh-hp > i { background: linear-gradient(180deg, #fff 0%, var(--blade) 38%, color-mix(in srgb, var(--blade) 55%, #000) 100%); box-shadow: 0 0 12px var(--blade); }
-.bfh-hp.low > i { background: linear-gradient(180deg, #fff 0%, #ff3b30 40%, #7a0d08 100%); box-shadow: 0 0 14px #ff3b30; animation: bfh-pulse 0.6s ease-in-out infinite; }
-.bfh-hp > b { position: absolute; left: 0; top: 0; bottom: 0; width: calc(var(--lost, 1) * 100%); background: rgba(255, 255, 255, 0.55); transition: width 0.6s ease-out 0.25s; }
-.bfh-guard-row { display: flex; align-items: center; gap: 8px; }
+/* Health: twenty segments, white, what was lost fading after it. */
+.bfh-hp { -webkit-mask: repeating-linear-gradient(90deg, #000 0 calc(5% - 2px), transparent calc(5% - 2px) 5%); mask: repeating-linear-gradient(90deg, #000 0 calc(5% - 2px), transparent calc(5% - 2px) 5%); }
+.bfh-hp > i { background: #f3f5f7; }
+.bfh-hp.low > i { background: #ff5a4f; animation: bfh-pulse 1s ease-in-out infinite; }
+.bfh-hp > b { position: absolute; left: 0; top: 0; bottom: 0; width: calc(var(--lost, 1) * 100%); background: rgba(255, 90, 79, 0.7); transition: width 0.6s ease-out 0.25s; }
+.bfh-guard-row { display: flex; align-items: center; gap: 10px; }
 .bfh-hero.gun .bfh-guard-row { display: none; }
-.bfh-guard-l { font: 700 10px var(--pixel); letter-spacing: 0.14em; opacity: 0.8; min-width: 50px; text-shadow: 0 1px 0 #000; }
-.bfh-guard { flex: 1; height: 7px; }
-.bfh-guard > i { background: linear-gradient(90deg, #9fd8ff, #e9f6ff); box-shadow: 0 0 8px #9fd8ff; }
-.bfh-guard-row.up .bfh-guard-l { color: #9fd8ff; opacity: 1; }
-.bfh-guard-row.up .bfh-guard { border-color: #9fd8ff; }
-.bfh-guard-row.broken .bfh-guard-l { color: #ff3b30; opacity: 1; animation: bfh-pulse 0.3s ease-in-out infinite; }
-.bfh-guard-row.broken .bfh-guard > i { background: #ff3b30; box-shadow: 0 0 8px #ff3b30; }
-.bfh-powers { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 2px; }
-.bfh-p { position: relative; display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 6px; background: rgba(8, 11, 16, 0.78); border: 1px solid rgba(255, 255, 255, 0.22); overflow: hidden; }
-.bfh-p .ic { position: relative; flex: none; width: 34px; height: 34px; display: grid; place-items: center; font: 700 19px var(--sans); color: var(--blade); background: rgba(255, 255, 255, 0.06); border: 1px solid color-mix(in srgb, var(--blade) 55%, transparent); text-shadow: 0 0 8px var(--blade); }
-.bfh-p .cd { position: absolute; inset: 0; background: conic-gradient(rgba(4, 6, 10, 0.82) calc(var(--cd, 0) * 360deg), transparent 0); }
-.bfh-p .key { position: absolute; right: -1px; bottom: -1px; font: 700 10px var(--pixel); background: var(--hud-accent, #ffe81f); color: #111; padding: 0 3px; line-height: 13px; }
-.bfh-p .nm { font: 700 11px var(--sans); letter-spacing: 0.04em; line-height: 1.15; text-transform: uppercase; text-shadow: 0 1px 0 #000; }
-.bfh-p .st { font: 600 10px var(--sans); opacity: 0.7; letter-spacing: 0.08em; }
+.bfh-guard-l { font: 600 9px var(--pixel); letter-spacing: 0.3em; color: rgba(243, 245, 247, 0.6); min-width: 46px; }
+.bfh-guard { flex: 1; height: 2px; }
+.bfh-guard > i { background: #bfe6ff; box-shadow: 0 0 6px rgba(159, 216, 255, 0.8); }
+.bfh-guard-row.up .bfh-guard-l { color: #9fd8ff; }
+.bfh-guard-row.broken .bfh-guard-l { color: #ff5a4f; animation: bfh-pulse 0.5s ease-in-out infinite; }
+.bfh-guard-row.broken .bfh-guard > i { background: #ff5a4f; box-shadow: 0 0 6px #ff5a4f; }
+/* The powers: a round icon each, its cooldown sweeping round it, its key on a small tag. */
+.bfh-powers { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 6px; }
+.bfh-p { position: relative; display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; }
+.bfh-p .ic { position: relative; flex: none; width: 48px; height: 48px; border-radius: 50%; display: grid; place-items: center; font: 500 21px var(--sans); color: #f3f5f7; background: radial-gradient(circle at 50% 35%, rgba(255, 255, 255, 0.1), rgba(9, 13, 19, 0.7) 70%); box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.28), 0 4px 14px rgba(0, 0, 0, 0.35); transition: box-shadow 200ms ease, color 200ms ease; backdrop-filter: blur(6px); }
+.bfh-p .cd { position: absolute; inset: 0; border-radius: 50%; background: conic-gradient(rgba(5, 8, 12, 0.72) calc(var(--cd, 0) * 360deg), transparent 0); }
+.bfh-p .key { position: absolute; left: 50%; bottom: -6px; transform: translateX(-50%); min-width: 16px; padding: 0 4px; border-radius: 3px; font: 600 10px/15px var(--pixel); letter-spacing: 0.04em; text-shadow: none; background: #f3f5f7; color: #0b0f14; }
+.bfh-p .nm { margin-top: 4px; font: 600 11px/1.1 var(--pixel); letter-spacing: 0.2em; text-transform: uppercase; color: rgba(243, 245, 247, 0.9); }
+.bfh-p .st { font: 500 11px var(--pixel); letter-spacing: 0.12em; color: rgba(243, 245, 247, 0.5); font-variant-numeric: tabular-nums; }
+.bfh-p.cooling .ic { color: rgba(243, 245, 247, 0.45); }
 .bfh-p.cooling .nm { opacity: 0.55; }
-.bfh-p.ready { border-color: color-mix(in srgb, var(--blade) 60%, transparent); }
-.bfh-p.ready .st { color: var(--blade); opacity: 0.95; }
-.bfh-p.just { animation: bfh-ready 0.5s ease-out; }
-.bfh-p.on { border-color: var(--blade); box-shadow: inset 0 0 14px color-mix(in srgb, var(--blade) 45%, transparent); }
-.bfh-p .left { position: absolute; left: 0; bottom: 0; height: 2px; width: calc(var(--on, 0) * 100%); background: var(--blade); box-shadow: 0 0 6px var(--blade); }
-@keyframes bfh-pulse { 50% { opacity: 0.55; } }
-@keyframes bfh-ready { 0% { box-shadow: inset 0 0 24px var(--blade); } 100% { box-shadow: inset 0 0 0 transparent; } }
-@media (max-width: 700px) { .bfh-p .nm { font-size: 9px; } .bfh-p .st { display: none; } }
+.bfh-p.ready .ic { color: #fff; box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--blade) 80%, white), 0 0 14px color-mix(in srgb, var(--blade) 35%, transparent); }
+.bfh-p.ready .key { background: var(--hud-accent, #ffe81f); }
+.bfh-p.ready .st { color: color-mix(in srgb, var(--blade) 70%, white); }
+.bfh-p.just .ic { animation: bfh-ready 0.6s ease-out; }
+.bfh-p.on .ic { box-shadow: inset 0 0 0 2px var(--blade), 0 0 22px color-mix(in srgb, var(--blade) 55%, transparent); color: #fff; }
+.bfh-p .left { position: absolute; left: 50%; top: 0; width: 48px; height: 48px; margin-left: -24px; border-radius: 50%; background: conic-gradient(var(--blade) calc(var(--on, 0) * 360deg), transparent 0); -webkit-mask: radial-gradient(closest-side, transparent calc(100% - 2.5px), #000 calc(100% - 2px)); mask: radial-gradient(closest-side, transparent calc(100% - 2.5px), #000 calc(100% - 2px)); }
+@keyframes bfh-pulse { 50% { opacity: 0.5; } }
+@keyframes bfh-ready { 0% { transform: scale(1.12); box-shadow: inset 0 0 0 2px #fff, 0 0 26px var(--blade); } }
+@keyframes bfh-in { from { opacity: 0; transform: translate(-50%, 10px); } }
+@media (max-width: 700px) { .bfh-p .nm { font-size: 9px; letter-spacing: 0.1em; } .bfh-p .st { display: none; } }
 `;
 
 interface Card {
@@ -76,9 +84,10 @@ interface Card {
 
 /**
  * The hero HUD, bottom middle (it reads well over the shoulder, under the figure): the hero's
- * name and a big health bar (what was lost fading after it), the guard's meter (lit while it's up,
- * red when it's broken), and their three powers with their keys, each darkening as it cools down,
- * lit while one that lasts is on, flashing as it's ready again. It reads this screen's own state:
+ * name and a slim segmented health bar (what was lost fading after it), the guard's meter (lit
+ * while it's up, red when it's broken), and their three powers as round icons with their keys,
+ * each darkened by a sweep as it cools down, ringed while one that lasts is on, flaring as it's
+ * ready again. It reads this screen's own state:
  * their health, and their movement ability's (`client.me.abilities.hero`: the cooldowns and the
  * meter, counting down here as the server has them).
  */
