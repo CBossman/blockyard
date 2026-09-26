@@ -54,9 +54,11 @@ export function drawAvatar(canvas: HTMLCanvasElement, a: Avatar, wear: CosmeticD
     ctx.restore();
   };
   // Boxes seen straight on (from behind, turned round), the far ones first.
-  const boxes = (def: CosmeticDef | undefined, ox: number, oy: number, behindBody: boolean) => {
+  const boxes = (def: CosmeticDef | undefined, ox: number, oy: number, behindBody: boolean, part: 'all' | 'behind' | 'front' = 'all') => {
     if (!def?.model) return;
-    const list = def.model.boxes.map((b) => {
+    // (A hat's parts behind the face, as seen, go under the head; the rest over it.)
+    const facing = (b: { from: number[]; to: number[] }) => (back ? -Math.min(b.from[2], b.to[2]) : Math.max(b.from[2], b.to[2])) > 4;
+    const list = def.model.boxes.filter((b) => part === 'all' || facing(b) === (part === 'front')).map((b) => {
       const x0 = Math.min(b.from[0], b.to[0]);
       const x1 = Math.max(b.from[0], b.to[0]);
       const z = Math.max(b.from[2], b.to[2]);
@@ -84,9 +86,10 @@ export function drawAvatar(canvas: HTMLCanvasElement, a: Avatar, wear: CosmeticD
   face(f.body, cx - 4, ABOVE + 8, false);
   face(f.arm, cx - 8, ABOVE + 8, false);
   face(f.arm, cx + 4, ABOVE + 8, true);
+  boxes(hat, cx, ABOVE, false, 'behind');
   face(f.head, cx - 4, ABOVE, false);
   if (back) boxes(pack, cx, ABOVE + 8 + 12 * 0.28, true);
-  boxes(hat, cx, ABOVE, false);
+  boxes(hat, cx, ABOVE, false, 'front');
 }
 
 /** Just the face (the head's front, and the hat seen straight on), for the home page. */

@@ -1,8 +1,10 @@
 # Design: accounts, achievements and cosmetics
 
-Status: **approved** (2026-09-26); phase 1 (accounts) built. How the platform works now is in PLATFORM.md.
+Status: **approved** (2026-09-26); phases 1 (accounts), 2 (achievements) and 3 (avatars and cosmetics) built. How the platform works now is in PLATFORM.md.
 
-Decided (2026-09-26): the server's address is `play.blockyard.potrock.xyz`; guests' progress lasts
+Decided (2026-09-26): the look travels too: a player's avatar (a body made of choices, painted as a
+skin) is theirs in every game that doesn't dress its players, and players' box bodies moved onto the
+humanoid rig so everything worn follows the same joints on every kind of body. The server's address is `play.blockyard.potrock.xyz`; guests' progress lasts
 the visit only; cosmetics are on in every game unless it opts out of slots; and **achievements
 belong to their game**: each game's are its own, shown by game on the profile, with no platform-wide
 points or account level made from them (so no level rewards either).

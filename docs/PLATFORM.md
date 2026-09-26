@@ -1229,6 +1229,47 @@ Its server awards them: `player.achieve('first_heart')`. That's all a game write
 
 Achievements are the game's own: they don't add up across games. The home page shows how many of the game's a player has under its name, and their profile (from there, or the account menu) lists every game's, done and still to do. In development, `/achieve <id>` earns one, to see it pop up.
 
+## Avatars and cosmetics
+
+Every player has a **look** that travels with them from game to game, chosen in the locker on the home page (the face beside their name):
+
+- **An avatar**: skin tone, hair, eyes, a top, bottoms and shoes, each in its colours, painted as a Minecraft-style skin on every screen. It's what they wear in a game that doesn't dress its players itself (no `player.skin` or `player.model` of its own, and before any `player.setSkin` / `setModel`): Sandbox, Skyship, Sky Obby, the Arena, Heart Hunt. A guest makes one too (kept in the browser); a signed-in player's is kept for their account.
+- **Cosmetics** (signed in): a hat, something on the back, a title under their name and a name tag colour. They're shown in every game, on every kind of body: hats and back items sit on the head and between the shoulders of the platform's box humanoid and of glTF models on the humanoid rig alike, scaled to each head. A game can leave slots out: `cosmeticSlots: ['title', 'tag']` in its meta (a team colour the game sets with `player.color` always wins over a tag's).
+
+Players' bodies are on the humanoid rig (docs/HUMANOID.md), the box one included (`Models.humanoid({ skeleton: true })`: its body, arms and legs jointed at the waist, elbows and knees), so the figures kit animates every player the same way and what they wear follows their joints.
+
+A game adds to what players can earn by listing cosmetics in its meta and giving them in play:
+
+```ts
+export default defineMeta({
+  id: 'sandbox',
+  achievements: {
+    master_builder: { title: 'Master Builder', description: 'Place 1,000 blocks', reward: 'hard_hat' },
+  },
+  cosmetics: {
+    hard_hat: {
+      name: 'Hard Hat',
+      slot: 'hat',
+      how: 'Place 1,000 blocks',
+      model: {
+        boxes: [
+          { from: [-4.6, -1.5, -4.6], to: [4.6, 2.2, 4.6], color: '#f2c230' },
+          { from: [-5.4, -1.8, -5.4], to: [5.4, -1.2, 5.8], color: '#f2c230' },
+        ],
+      },
+    },
+    cloud_builder: { name: 'Cloud Builder', slot: 'title', text: 'Cloud Builder', how: 'Place a block high in the sky' },
+  },
+});
+```
+
+- A hat or back item is a `model` of coloured boxes in texels (16 to a block), sized for the box head (8 texels across, the origin at the middle of its top, +z toward the face) or the back (the origin between the shoulders, +z out behind). `glow: true` lights a box. Keep hats within about 12 texels across and 10 tall.
+- A title is `text`; a tag is a `color`.
+- `player.grant('hard_hat')` gives one (the game's own ids; everywhere it's `sandbox:hard_hat`), and an achievement's `reward` gives one with it. It pops up, and it's the player's for good (a guest is told signing in keeps such things).
+- The platform has a few free ones (a red cap, a beanie, headphones, a backpack, four tag colours); everything else is earned in some game.
+
+`/me/look` on the server says what a signed-in player wears and owns, and changes it (only what they own, one to a slot).
+
 ## Commands
 
 Press `/` or `T` in any game to open the command bar. Tab completes command names, item ids and entity types, Up and Down walk the history, and the game pauses while it's open.

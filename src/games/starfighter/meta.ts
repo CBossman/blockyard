@@ -22,10 +22,30 @@ export default defineMeta({
     barrel_roll: { title: 'Do a Barrel Roll!', description: 'Deflect an enemy laser with a barrel roll (Q or E)' },
     stay_on_target: { title: 'Stay on Target', description: 'Shoot down a TIE with a proton torpedo' },
     shields_down: { title: 'Shields Down', description: "Destroy one of the Star Destroyer's shield generators" },
-    great_shot: { title: 'Great Shot, Kid', description: 'Win the battle: bring down the Star Destroyer' },
+    great_shot: { title: 'Great Shot, Kid', description: 'Win the battle: bring down the Star Destroyer', reward: 'pilot_helmet' },
     not_a_scratch: { title: 'Not a Scratch', description: 'Win the battle from the first wave without being shot down' },
-    rogue_leader: { title: 'Rogue Leader', description: 'Shoot down 100 TIEs, all time' },
+    rogue_leader: { title: 'Rogue Leader', description: 'Shoot down 100 TIEs, all time', reward: 'rogue_leader' },
     ramming_speed: { title: 'Ramming Speed', description: 'Finish off a TIE by ramming it', hidden: true },
     return_to_sender: { title: 'Return to Sender', description: 'Destroy an enemy with its own laser, turned back by a barrel roll', hidden: true },
+  },
+  cosmetics: {
+    pilot_helmet: {
+      name: 'Pilot’s Helmet',
+      slot: 'hat',
+      how: 'Win the battle',
+      model: {
+        boxes: [
+          { from: [-4.6, 0, -4.6], to: [4.6, 1, 4.6], color: '#e56a2c' },
+          { from: [-4.8, -6, -4.6], to: [-4.2, 1, 4.6], color: '#e56a2c' },
+          { from: [4.2, -6, -4.6], to: [4.8, 1, 4.6], color: '#e56a2c' },
+          { from: [-4.6, -7, -4.8], to: [4.6, 1, -4.2], color: '#e56a2c' },
+          { from: [-0.6, 0, -4.8], to: [0.6, 1.2, 4.8], color: '#f0f0f0' },
+          { from: [-3.6, -1.4, 4.3], to: [3.6, 0, 4.9], color: '#2a2d33' },
+          { from: [-4.9, -4, -0.8], to: [-4.7, -2.4, 0.8], color: '#f0f0f0' },
+          { from: [4.7, -4, -0.8], to: [4.9, -2.4, 0.8], color: '#f0f0f0' },
+        ],
+      },
+    },
+    rogue_leader: { name: 'Rogue Leader', slot: 'title', text: 'Rogue Leader', how: 'Shoot down 100 TIEs' },
   },
 });

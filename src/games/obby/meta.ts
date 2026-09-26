@@ -22,9 +22,28 @@ export default defineMeta({
     blink: { title: 'Blink and Miss It', description: 'Get across the blinking platforms (stage 7)' },
     spiral: { title: 'Top of the Tower', description: 'Climb the spiral tower (stage 8)' },
     crossfire: { title: 'Under Fire', description: 'Get past the cannons (stage 9)' },
-    finish: { title: 'Head in the Clouds', description: 'Finish the course' },
-    speedrun: { title: 'Speedrunner', description: 'Finish the course in under two minutes' },
+    finish: { title: 'Head in the Clouds', description: 'Finish the course', reward: 'propeller_cap' },
+    speedrun: { title: 'Speedrunner', description: 'Finish the course in under two minutes', reward: 'speedrunner' },
     flawless: { title: 'Sure-Footed', description: 'Finish the course without a single fall' },
     hot_feet: { title: 'Hot Feet', description: 'Step in the lava', hidden: true },
+  },
+  cosmetics: {
+    propeller_cap: {
+      name: 'Propeller Cap',
+      slot: 'hat',
+      how: 'Finish the course',
+      model: {
+        boxes: [
+          { from: [-4.4, -2, 0], to: [0, 1, 4.4], color: '#e84a4a' },
+          { from: [0, -2, 0], to: [4.4, 1, 4.4], color: '#f2c230' },
+          { from: [-4.4, -2, -4.4], to: [0, 1, 0], color: '#3f7fe0' },
+          { from: [0, -2, -4.4], to: [4.4, 1, 0], color: '#4caf50' },
+          { from: [-4.4, -2, 4.4], to: [4.4, -1.4, 7], color: '#e84a4a' },
+          { from: [-0.4, 1, -0.4], to: [0.4, 3, 0.4], color: '#9aa0a8' },
+          { from: [-5, 3, -0.6], to: [5, 3.5, 0.6], color: '#f2c230' },
+        ],
+      },
+    },
+    speedrunner: { name: 'Speedrunner', slot: 'title', text: 'Speedrunner', how: 'Finish in under two minutes' },
   },
 });
