@@ -269,9 +269,10 @@ export interface ClientFx {
   flare(at: PlainVec3, size?: number): void;
   /**
    * Particles, with every knob: `color` in linear RGB; `spread` (how far round `at` they start),
-   * `up` (an extra push upward), `glow` (emissive), `collide` (they stop on blocks).
+   * `up` (an extra push upward), `velocity` (blocks a second every one of them starts with, on top
+   * of its random push: dust on the wind), `glow` (emissive), `collide` (they stop on blocks).
    */
-  particles(at: PlainVec3, color: [number, number, number], opts?: { count?: number; speed?: number; size?: number; gravity?: number; glow?: number; life?: number; spread?: number; up?: number; drag?: number; collide?: boolean }): void;
+  particles(at: PlainVec3, color: [number, number, number], opts?: { count?: number; speed?: number; size?: number; gravity?: number; glow?: number; life?: number; spread?: number; up?: number; velocity?: PlainVec3; drag?: number; collide?: boolean }): void;
   damageNumber(at: PlainVec3, amount: number, opts?: { crit?: boolean; color?: string }): void;
   fireworks(at: PlainVec3, count?: number): void;
 }
