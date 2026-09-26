@@ -324,15 +324,25 @@
   background: var(--bf-bad);
   box-shadow: 0 0 6px var(--bf-bad);
 }
-/* Hit from the side: a soft red arc on a ring round the crosshair, toward where it came from. */
+/*
+ * Hit from the side: an arc of a ring round the crosshair (the platform places each one out
+ * min(22vh, 180px) from the middle, turned toward where the hit came from), a bright line with a
+ * red haze inside it, fading out at both ends.
+ */
 .hurt-arrow {
-  width: 120px;
-  height: 20px;
+  --r: min(22vh, 180px);
+  width: 190px;
+  height: 44px;
   border: none;
-  border-top: 2px solid rgba(255, 70, 60, 0.9);
-  border-radius: 50% 50% 0 0 / 100% 100% 0 0;
-  background: radial-gradient(ellipse at 50% 0, rgba(255, 40, 30, 0.28), transparent 70%);
-  filter: drop-shadow(0 0 6px rgba(255, 30, 20, 0.8));
+  background: radial-gradient(circle at 50% calc(50% + var(--r)), transparent calc(var(--r) - 16px), rgba(255, 45, 35, 0.3) calc(var(--r) - 3px), rgba(255, 95, 80, 0.95) calc(var(--r) - 1.5px), rgba(255, 95, 80, 0.95) calc(var(--r) + 1px), transparent calc(var(--r) + 2.5px));
+  -webkit-mask: linear-gradient(90deg, transparent, #000 32%, #000 68%, transparent);
+  mask: linear-gradient(90deg, transparent, #000 32%, #000 68%, transparent);
+  filter: drop-shadow(0 0 4px rgba(255, 30, 20, 0.7));
+}
+/* A flash of the screen (a hit taken, a blast's glare): at the edges only, the middle clear. */
+.screen-flash {
+  -webkit-mask: radial-gradient(ellipse 75% 70% at center, transparent 35%, rgba(0, 0, 0, 0.6) 70%, #000 100%);
+  mask: radial-gradient(ellipse 75% 70% at center, transparent 35%, rgba(0, 0, 0, 0.6) 70%, #000 100%);
 }
 /* Taking a post: a thin ring round the crosshair in your side's colour. */
 .progress-ring {
@@ -345,12 +355,15 @@
   filter: drop-shadow(0 0 4px var(--c, #fff));
 }
 .dmg-number {
-  font: 600 15px var(--pixel);
-  letter-spacing: 0.04em;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
+  font: 500 16px/1 var(--pixel);
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+  color: rgba(243, 245, 247, 0.95) !important;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85), 0 0 8px rgba(0, 0, 0, 0.35);
 }
 .dmg-number.crit {
-  font-size: 19px;
+  font-size: 20px;
+  font-weight: 600;
   color: var(--bf-y) !important;
 }
 

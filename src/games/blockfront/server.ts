@@ -11,6 +11,7 @@ import { MAPS, mapById, type SpawnPoint } from './map';
 import { fighterOf, hostile, match, teamFighters, type Fighter, type Post } from './match';
 import { MODES, ROTATION, type MatchPlan, type ModeId } from './modes';
 import { COLORS, shared, trooperModel } from './shared';
+import { setupHits } from './hits'; // hits
 import { setupSkies, updateSkies } from './skies'; // skies
 import { other, TEAMS, type Team } from './teams';
 import { BLASTERS, COOL_AFTER, COOL_FULL, defineWeapons, feedIcon, weaponFor, weaponName } from './weapons';
@@ -706,6 +707,7 @@ export default defineServer(shared, {
     conquest = new Conquest(game);
     defineWeapons(game);
     setupSkies(game); // skies
+    setupHits(game); // hits
     // (A hurt hero falls back to the nearest post their side holds.)
     heroes = setupHeroes(game, { teamOf: (p) => fighterOf(p)?.team ?? null, hostile, retreat: (p) => nearestHeld(p) });
     heroes.define();
