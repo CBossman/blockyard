@@ -45,22 +45,35 @@ export function hits(): ClientKit {
       // The platform's own marker sounds go quiet: ours play for every hit, whatever landed it.
       a.define('hitmarker', () => {});
       a.define('kill', () => {});
-      a.define('bf_hit', (s) => {
-        // A dry, bright tick.
-        s.tone({ wave: 'sine', from: 2350 * s.pitch, to: 1900 * s.pitch, duration: 0.045, attack: 0.001, volume: 0.16 });
-        s.noise({ duration: 0.02, filter: 'highpass', from: 6000, volume: 0.07 });
-      });
-      a.define('bf_hit_head', (s) => {
-        // Brighter, with a glassy ring over it.
-        s.tone({ wave: 'sine', from: 3100 * s.pitch, to: 2700 * s.pitch, duration: 0.07, attack: 0.001, volume: 0.17, fm: { ratio: 2.41, depth: 0.4, to: 0.05 } });
-        s.noise({ duration: 0.025, filter: 'highpass', from: 7000, volume: 0.08 });
-      });
-      a.define('bf_kill', (s) => {
-        // The kill confirm: a low thud under two quick notes, a fifth apart, clean and short.
-        s.tone({ wave: 'sine', from: 160, to: 70, duration: 0.12, attack: 0.002, volume: 0.24 });
-        s.tone({ wave: 'triangle', from: 1320, duration: 0.07, attack: 0.002, volume: 0.1 });
-        s.tone({ wave: 'triangle', from: 1980, duration: 0.14, delay: 0.06, attack: 0.002, volume: 0.1, fm: { ratio: 2, depth: 0.2, to: 0 } });
-      });
+      // (Dry, all three: the HUD's own, they take no echo.)
+      a.define(
+        'bf_hit',
+        (s) => {
+          // A dry, bright tick.
+          s.tone({ wave: 'sine', from: 2350 * s.pitch, to: 1900 * s.pitch, duration: 0.045, attack: 0.001, volume: 0.16 });
+          s.noise({ duration: 0.02, filter: 'highpass', from: 6000, volume: 0.07 });
+        },
+        { reverb: 0 },
+      );
+      a.define(
+        'bf_hit_head',
+        (s) => {
+          // Brighter, with a glassy ring over it.
+          s.tone({ wave: 'sine', from: 3100 * s.pitch, to: 2700 * s.pitch, duration: 0.07, attack: 0.001, volume: 0.17, fm: { ratio: 2.41, depth: 0.4, to: 0.05 } });
+          s.noise({ duration: 0.025, filter: 'highpass', from: 7000, volume: 0.08 });
+        },
+        { reverb: 0 },
+      );
+      a.define(
+        'bf_kill',
+        (s) => {
+          // The kill confirm: a low thud under two quick notes, a fifth apart, clean and short.
+          s.tone({ wave: 'sine', from: 160, to: 70, duration: 0.12, attack: 0.002, volume: 0.456 });
+          s.tone({ wave: 'triangle', from: 1320, duration: 0.07, attack: 0.002, volume: 0.19 });
+          s.tone({ wave: 'triangle', from: 1980, duration: 0.14, delay: 0.06, attack: 0.002, volume: 0.19, fm: { ratio: 2, depth: 0.2, to: 0 } });
+        },
+        { reverb: 0 },
+      );
       client.on('bf.hit', (data) => {
         const d = data as Partial<Hit> | null;
         if (!d || typeof d.n !== 'number') return;

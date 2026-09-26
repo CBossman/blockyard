@@ -1,4 +1,5 @@
 import type { ClientKit, ClientLoop } from '@platform/client';
+import { climateAt } from './weather';
 
 /** Blaster voices a far-off fight is made of (`client/sounds.ts`): each side's. */
 const SIDES = [
@@ -7,8 +8,9 @@ const SIDES = [
 ];
 
 /**
- * The spaceport's air on each screen, while a match is on: the wind (a loop, gusting and dying
- * down), and a fight somewhere off across the flats: bursts of real blaster fire from one side,
+ * The air on each screen, while a match is on: the desert wind over the spaceport (a loop,
+ * gusting and dying down; Frostline has its own: `weather.ts`), and on either map a fight
+ * somewhere off across the flats: bursts of real blaster fire from one side,
  * the other answering, far enough off to be muffled and mostly their echo; now and then a blast.
  * The voices are `client/sounds.ts`'s. (The starfighters overhead are the server's: `skies.ts`.)
  */
@@ -42,14 +44,17 @@ export function ambience(): ClientKit {
         return { x: me.x + Math.cos(a) * d, y: me.y + up, z: me.z + Math.sin(a) * d };
       };
 
-      // The wind: easing toward a new strength every few seconds, now a lull, now a gust.
-      wind ??= client.audio.loop('amb_wind', { volume: 0 });
+      // The wind (the desert's: over the spaceport), easing toward a new strength every few seconds, now a lull, now a gust.
+      if (climateAt(client.camera.position) !== 'sand') {
+        wind?.stop();
+        wind = null;
+      } else wind ??= client.audio.loop('amb_wind', { volume: 0 });
       if (t >= turn) {
         turn = t + rand(1.5, 4.5);
         aim = Math.random() < 0.25 ? rand(0.7, 1) : rand(0.1, 0.5);
       }
       gust += (aim - gust) * Math.min(1, dt * 0.8);
-      wind.set({ volume: 0.065 + gust * 0.15, pitch: 0.75 + gust * 0.55 });
+      wind?.set({ volume: 0.065 + gust * 0.15, pitch: 0.75 + gust * 0.55 });
 
       // A fight far off: a burst from one side, the other side's answer a moment later.
       if (t >= fight) {

@@ -20,7 +20,7 @@ import { MAPS, type MapSpec } from '../map';
  * never starts any just in front of the camera, so nothing comes between the crosshair and a target.
  */
 
-type Climate = 'sand' | 'snow';
+export type Climate = 'sand' | 'snow';
 
 /** How each map's air behaves: its wind (where it blows toward, blocks a second, and in a gust), and its budget. */
 interface Air {
@@ -75,6 +75,12 @@ function mapAt(p: Vec3): MapSpec | null {
     if (p.x > min.x - 160 && p.x < max.x + 160 && p.z > min.z - 160 && p.z < max.z + 160) return m;
   }
   return null;
+}
+
+/** The climate where `p` is (the map it's over's), or null between the maps. */
+export function climateAt(p: Vec3): Climate | null {
+  const map = mapAt(p);
+  return (map && AIRS[map.id]?.climate) ?? null;
 }
 
 /**

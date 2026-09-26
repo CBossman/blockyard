@@ -159,8 +159,8 @@ function kick(client: Client, feet: Vec3) {
 function defineJumpVoices(client: Client) {
   const a = client.audio;
   a.define('bfh_jump', (s) => {
-    s.noise({ duration: 0.05, filter: 'lowpass', from: 900, to: 300, volume: 0.07 });
-    s.noise({ duration: 0.26, attack: 0.05, filter: 'bandpass', from: 380, to: 1000, q: 1.2, volume: 0.075 });
+    s.noise({ duration: 0.05, filter: 'lowpass', from: 900, to: 300, volume: 0.112 });
+    s.noise({ duration: 0.26, attack: 0.05, filter: 'bandpass', from: 380, to: 1000, q: 1.2, volume: 0.12 });
   });
   a.define('bfh_jump2', (s) => {
     const p = s.pitch;
