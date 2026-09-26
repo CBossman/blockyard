@@ -2,6 +2,7 @@
   "name": "blockyard",
   "private": true,
   "version": "0.1.0",
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "wasm": "wasm-pack build engine --target web --release --out-dir pkg --out-name voxel_engine",
