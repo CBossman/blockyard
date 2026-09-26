@@ -1,4 +1,4 @@
-import { Blueprint, math, type GameContext, type Prop, type PropModel, type Vec3 } from '@platform';
+import { Blueprint, math, type GameContext, type Player, type Prop, type PropModel, type Vec3 } from '@platform';
 import type { Destroyer } from './destroyer';
 import { headingTo } from './craft';
 import type { Target, Weapons } from './weapons';
@@ -99,13 +99,13 @@ class WeakPoint implements Target {
     hp: number,
     readonly label: string,
     private blast: number,
-    private onDestroyed: () => void,
+    private onDestroyed: (by?: Player) => void,
   ) {
     this.pos = new math.Vector3(at.x, at.y, at.z);
     this.hp = this.maxHp = hp;
   }
 
-  hit(damage: number, at: Vec3, by: 'laser' | 'torpedo') {
+  hit(damage: number, at: Vec3, by: 'laser' | 'torpedo', shooter?: Player) {
     if (!this.alive) return;
     if (this.shielded) {
       this.game.fx.burst(at, { color: '#7ec8ff', count: 10, speed: 4, size: 0.15, gravity: 0 });
@@ -119,7 +119,7 @@ class WeakPoint implements Target {
       this.game.world.explode(this.pos, this.blast);
       this.game.fx.explosion(this.pos, { size: 4 });
       this.game.fx.shake(0.5, 0.8);
-      this.onDestroyed();
+      this.onDestroyed(shooter);
     }
   }
 }
@@ -137,16 +137,16 @@ export class Capital {
     private game: GameContext,
     readonly ship: Destroyer,
     weapons: Weapons,
-    events: { generatorDown(left: number): void; bridgeDown(): void },
+    events: { generatorDown(left: number, by?: Player): void; bridgeDown(): void },
   ) {
     const model = game.props.model(turretBuild(), { scale: 0.5 });
     this.turrets = ship.turrets.map((m) => new Turret(game, model, m, weapons));
     this.generators = ship.generators.map(
       (g) =>
-        new WeakPoint(game, g, 6, 220, 'SHIELD GEN', 6.5, () => {
+        new WeakPoint(game, g, 6, 220, 'SHIELD GEN', 6.5, (by) => {
           const left = this.generators.filter((x) => x.alive).length;
           if (left === 0) this.bridge.shielded = false;
-          events.generatorDown(left);
+          events.generatorDown(left, by);
         }),
     );
     this.bridge = new WeakPoint(game, ship.bridge, 9, 260, 'BRIDGE', 9, () => {

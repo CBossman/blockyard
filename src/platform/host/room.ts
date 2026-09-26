@@ -29,6 +29,8 @@ export interface RoomOut {
   send(client: string, text: string): void;
   counts(playing: number, watching: number): void;
   log(line: string): void;
+  /** A signed-in player earned one of the game's achievements: the server keeps it for their account. */
+  achieve?(account: string, id: string): void;
 }
 
 /**
@@ -100,6 +102,7 @@ export class RoomCore {
       radius: 8,
       store,
       onError: (err) => out.log(`error: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}`),
+      onAchieve: (account, id) => out.achieve?.(account, id),
     });
     if (store) this.host.persist();
     out.log(kept ? `started, carrying on the kept world (seed ${this.host.seed})` : `started a new world (seed ${this.host.seed})`);

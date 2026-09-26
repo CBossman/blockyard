@@ -5,7 +5,8 @@ import { CLASSES, CLASS_IDS, type ClassId } from './classes';
 import { Conquest, type PostNews } from './conquest';
 import { HEROES, HERO_IDS, type HeroId } from './heroes/defs';
 import { HERO_GUNS, isHeroGun } from './heroes/guns';
-import { heroItems, setupHeroes, type Heroes } from './heroes/rules';
+import { FORCE } from './heroes/powers';
+import { DEFLECTED, heroItems, setupHeroes, type Heroes } from './heroes/rules';
 import { BOARD_COLUMNS, CONQUEST, STATUS } from './hud';
 import { MAPS, mapById, type SpawnPoint } from './map';
 import { fighterOf, hostile, match, teamFighters, type Fighter, type Post } from './match';
@@ -48,6 +49,10 @@ const HEROES_A_SIDE = 2;
 const BP = { kill: 100, headshot: 25, hero: 250, capture: 200, neutralise: 80 };
 /** How long after spawning a pick in the menu still changes what they carry now. */
 const REARM = 4;
+/** Achievements (meta.ts): the kills that are the Force's, the saber's, and all-time kills for `galactic_veteran`. */
+const FORCE_KILLS = new Set<string>([FORCE.push, FORCE.pull, FORCE.leap, FORCE.choke, FORCE.lightning, FORCE.chain, FORCE.aura]);
+const saberKill = (weapon: string | undefined) => !!weapon && (weapon.startsWith('saber_') || weapon === FORCE.rush || weapon === FORCE.throw);
+const VETERAN = 100;
 /** Seconds of protection spawning at their side's base. */
 const BASE_PROTECT = 3;
 /** The third-person camera: over the right shoulder, a few blocks back. */
@@ -277,7 +282,8 @@ function heroFor(f: Fighter): HeroId {
   return pick ?? mine[Math.floor(Math.random() * mine.length)];
 }
 
-function becomeHero(game: GameContext, f: Fighter, id: HeroId) {
+/** (`cheat`: the `hero` command's, which earns no achievement.) */
+function becomeHero(game: GameContext, f: Fighter, id: HeroId, cheat = false) {
   const h = HEROES[id];
   if (f.hero !== id && !heroMode()) f.bp -= h.cost;
   f.hero = id;
@@ -290,6 +296,8 @@ function becomeHero(game: GameContext, f: Fighter, id: HeroId) {
   game.hud.feed([{ text: f.player.name, color: TEAMS[f.team].color }, ` is ${h.name}`]);
   game.hud.banner(h.name.toUpperCase(), `${h.title} · for the ${TEAMS[f.team].name}`, { color: h.blade, duration: 2.2 });
   game.audio.play('hero_arrives');
+  // An achievement (meta.ts): a hero paid for with battle points.
+  if (!cheat && !f.player.bot) f.player.achieve('chosen_one');
 }
 
 /** The deployment menu (H, and on every death): class, hero, where to spawn. */
@@ -460,6 +468,15 @@ function onDeath(game: GameContext, victim: Player, source: unknown, weapon: str
       { text: victim.name, color: TEAMS[v.team].color },
     ]);
     victim.hud.banner('KILLED BY', `${killer.name}${weapon ? ` · ${k.hero && weapon.startsWith('saber_') ? 'a saber' : (HERO_GUNS[weapon]?.name ?? weaponName(weapon))}` : ''}`, { color: COLORS.red, duration: RESPAWN - 0.5 });
+    // Achievements (meta.ts), a person's.
+    if (!killer.bot) {
+      killer.achieve('dont_get_cocky');
+      if (wasHero && !k.hero) killer.achieve('giant_killer');
+      if (saberKill(weapon)) killer.achieve('elegant_weapon');
+      if (weapon && FORCE_KILLS.has(weapon)) killer.achieve('use_the_force');
+      if (weapon === DEFLECTED) killer.achieve('return_to_sender');
+      if ((killer.store.get<AllTime>('stats')?.kills ?? 0) + k.kills >= VETERAN) killer.achieve('galactic_veteran');
+    }
     // The death cam: a moment on the ground, then round whoever did it until they deploy again.
     if (!victim.bot) game.clock.after(0.9, () => !victim.alive && killer.alive && victim.camera.orbit(killer, { distance: 6, min: 6, max: 6, wheel: false }));
   } else {
@@ -475,7 +492,9 @@ function onPost(game: GameContext, n: PostNews) {
     for (const f of n.by) {
       f.captures++;
       earn(f, BP.capture);
-      if (!f.player.bot) f.player.hud.pop('POST CAPTURED', { sub: `+${BP.capture}`, color: t.color });
+      if (f.player.bot) continue;
+      f.player.hud.pop('POST CAPTURED', { sub: `+${BP.capture}`, color: t.color });
+      f.player.achieve('high_ground');
     }
     game.hud.feed([{ text: t.short, color: t.color }, ` took ${where}`]);
     for (const f of fighters.values()) {
@@ -493,7 +512,8 @@ function onPost(game: GameContext, n: PostNews) {
   boardDirty = true;
 }
 
-function endMatch(game: GameContext, winner: Team) {
+/** The match is over, `winner` taking it. (`cheat`: ended by the `win` command, which earns no achievements.) */
+function endMatch(game: GameContext, winner: Team, cheat = false) {
   if (match.phase === 'over') return;
   match.phase = 'over';
   overAt = game.clock.now;
@@ -514,6 +534,11 @@ function endMatch(game: GameContext, winner: Team) {
     s.deaths += f.deaths;
     p.store.set('stats', s);
     alltime.set(p.id, `All time · ${s.wins} ${s.wins === 1 ? 'win' : 'wins'} in ${s.games} · ${s.kills} kills`);
+    // Achievements (meta.ts): a match played out, and won.
+    if (!cheat) {
+      p.achieve('reporting_for_duty');
+      if (won) p.achieve('medal_ceremony');
+    }
   }
   // What's next: the rotation's next match in a public room; the same again in one's own.
   if (game.room === 'public') plan = ROTATION[++turn % ROTATION.length];
@@ -799,7 +824,7 @@ export default defineServer(shared, {
         const h = HEROES[id as HeroId];
         if (h.team !== f.team) setSide(g, f, h.team);
         f.bp = Math.max(f.bp, h.cost);
-        becomeHero(g, f, id as HeroId);
+        becomeHero(g, f, id as HeroId, true);
         return h.name;
       },
     });
@@ -836,7 +861,7 @@ export default defineServer(shared, {
         return planName(plan);
       },
     });
-    game.commands.register('win', { help: 'End the match now', cheat: true, run: (_a, g, p) => endMatch(g, fighterOf(p)?.team ?? 0) });
+    game.commands.register('win', { help: 'End the match now', cheat: true, run: (_a, g, p) => endMatch(g, fighterOf(p)?.team ?? 0, true) });
   },
 
   start(game) {

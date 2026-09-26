@@ -1,4 +1,5 @@
 import { h } from './dom';
+import type { Earned } from './profile';
 
 /** Who's signed in (`GET /me` on the game server). */
 export interface SignedIn {
@@ -25,6 +26,8 @@ export class AccountCorner {
   onChange: ((me: SignedIn | null) => void) | null = null;
   /** Something to say on the page (signing in failed, say). */
   onSay: ((text: string) => void) | null = null;
+  /** "Achievements" in the menu: open the profile. */
+  onProfile: (() => void) | null = null;
   private http: string | null = null;
   private menuOpen = false;
 
@@ -60,6 +63,17 @@ export class AccountCorner {
         this.render();
         this.onChange?.(me);
       });
+  }
+
+  /** The achievements they've earned in every game (signed in; null for a guest, or if it can't be had). */
+  async earned(): Promise<Earned | null> {
+    if (!this.me || !this.http) return null;
+    try {
+      const r = await fetch(`${this.http}/me/achievements`, { credentials: 'include' });
+      return r.ok ? ((await r.json()) as { achievements: Earned }).achievements : null;
+    } catch {
+      return null;
+    }
   }
 
   /** Take a new name (signed in): the name as kept, or throws with why not. */
@@ -107,6 +121,7 @@ export class AccountCorner {
       'div.home-menu',
       { role: 'menu' },
       h('div.home-menu-head', {}, 'Signed in with Discord'),
+      h('button.home-menu-item', { onclick: () => (this.toggleMenu(false), this.onProfile?.()) }, 'Your achievements'),
       h('button.home-menu-item', { onclick: () => void this.signOut() }, 'Sign out'),
       remove,
     );

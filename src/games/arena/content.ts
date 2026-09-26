@@ -223,6 +223,8 @@ const wardenAI: Behavior = (self, game, dt) => {
           const pp = pl.position;
           const dist = Math.hypot(pp.x - p.x, pp.z - p.z);
           if (dist < 8 && pl.onGround) pl.damage(Math.round(10 * (1 - dist / 10)), { source: self, knockback: 2.2 });
+          // In the air as it lands: jumped clean over it.
+          else if (dist < 8 && pl.alive) pl.achieve('slam_dodge');
         }
         s.phase = 'recover';
         s.timer = 1.1 * tempo;

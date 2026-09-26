@@ -75,4 +75,12 @@ export default function arena() {
   const wall = (performance.now() - t0) / 1000;
   console.log(`  ${result ?? 'no result'} after ${simulated.toFixed(0)} s of game time, ${wall.toFixed(1)} s wall clock (${(simulated / wall).toFixed(0)}× real time)`);
   check(result === 'Victory!', `expected Victory!, got ${result ?? 'nothing'} (objective calls: ${h.find('hud', 'objective').length})`);
+  // Achievements along the way: the first kill, the first wave, the win, and (never down) the win unbroken.
+  const missing = ['first_blood', 'first_wave', 'champion', 'unbroken'].filter((a) => !me.achieved(a));
+  check(!missing.length, `achievements not earned: ${missing.join(', ')}`);
+  const popped = h.find('hud', 'achievement').map((c) => (c.args[0] as { title: string }).title);
+  check(popped.includes('Champion') && popped.includes('Warmed Up'), `achievements popped up: ${popped.join(', ')}`);
+  const slain = (h.find('hud', 'screen').at(-1)?.args[1] as { stats: [string, string][] }).stats.find(([k]) => k === 'Monsters slain')?.[1];
+  check(String(me.store.get<number>('kills')) === slain, `kills kept all-time: ${me.store.get('kills')} of ${slain}`);
+  console.log(`  achievements: ${popped.join(', ')}`);
 }

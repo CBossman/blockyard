@@ -72,7 +72,7 @@ export class Auth {
 
   /** Answer an `/auth/…` or `/me` request: true if it was one. */
   handle(req: IncomingMessage, res: ServerResponse, path: string): boolean {
-    if (path === '/me' || path === '/me/name' || path === '/auth/logout') {
+    if (path === '/me' || path === '/me/name' || path === '/me/achievements' || path === '/auth/logout') {
       this.cors(req, res);
       if (req.method === 'OPTIONS') {
         res.writeHead(204, { 'Access-Control-Allow-Methods': 'GET, POST, DELETE', 'Access-Control-Allow-Headers': 'Content-Type', 'Access-Control-Max-Age': '600' }).end();
@@ -103,6 +103,12 @@ export class Auth {
       case '/me/name':
         void this.rename(req, res);
         return true;
+      case '/me/achievements': {
+        const account = this.account(req);
+        if (!account) this.fail(res, 401, 'Not signed in');
+        else res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }).end(JSON.stringify({ achievements: this.o.accounts.achievements(account.id) }));
+        return true;
+      }
     }
     return false;
   }

@@ -59,6 +59,20 @@ interface ShownWidget {
  * come over the wire, and place what they follow every frame with `locate`.) The game's own
  * widgets (`hud.define`) arrive as definitions, then as data: `widget`, `widgetSet`, `widgetRemove`.
  */
+/** An achievement earned, as the host says it (see `Sim.achieve`). */
+interface AchievementPop {
+  id: string;
+  title: string;
+  description: string;
+  /** Kept for their account (false: a guest's, for the visit). */
+  kept: boolean;
+  /** How many of the game's they have now: "3 of 8". */
+  count?: string;
+}
+
+/** A trophy, for the achievement card. */
+const TROPHY = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7 3h10v2h3v3a4 4 0 0 1-4 4h-.4A5 5 0 0 1 13 14.9V17h3v2H8v-2h3v-2.1A5 5 0 0 1 8.4 12H8a4 4 0 0 1-4-4V5h3V3zm0 4H6v1a2 2 0 0 0 1 1.7V7zm10 0v2.7A2 2 0 0 0 18 8V7h-1zM6 20h12v2H6v-2z"/></svg>';
+
 export class GameHud implements Omit<HudApi, 'marker' | 'radar' | 'scoreboard' | 'define' | 'widget'> {
   readonly root: HTMLElement;
   private hearts: HTMLElement;
@@ -73,6 +87,14 @@ export class GameHud implements Omit<HudApi, 'marker' | 'radar' | 'scoreboard' |
   private bossName: HTMLElement;
   private toastEl: HTMLElement;
   private toastTimer = 0;
+  /** Achievements earned (`player.achieve`), shown one after another. */
+  private achievementEl: HTMLElement;
+  private popQueue: AchievementPop[] = [];
+  /** The game's achievements the player has (`achievements`, and each one since). */
+  private earned = new Set<string>();
+  /** They changed (the pause menu lists them). */
+  onAchievements: ((earned: ReadonlySet<string>, kept: boolean) => void) | null = null;
+  private achievementTimer = 0;
   private flashEl: HTMLElement;
   private hitEl: HTMLElement;
   private numbers: FloatingNumber[] = [];
@@ -151,6 +173,7 @@ export class GameHud implements Omit<HudApi, 'marker' | 'radar' | 'scoreboard' |
     this.bossFill = h('div.boss-fill');
     this.boss = h('div.bossbar', {}, this.bossName, h('div.boss-track', {}, this.bossFill));
     this.toastEl = h('div.game-toast');
+    this.achievementEl = h('div.achievement');
     this.flashEl = h('div.screen-flash');
     this.hitEl = h('div.hitmarker');
     this.metersEl = h('div.meters');
@@ -181,6 +204,7 @@ export class GameHud implements Omit<HudApi, 'marker' | 'radar' | 'scoreboard' |
       this.statsEl,
       this.boss,
       this.toastEl,
+      this.achievementEl,
       this.feedEl,
       this.progressEl,
       this.metersEl,
@@ -586,6 +610,52 @@ export class GameHud implements Omit<HudApi, 'marker' | 'radar' | 'scoreboard' |
       m.el.style.setProperty('--s', `${px}px`);
       m.el.style.setProperty('--a', `${Math.atan2(-y, x)}rad`);
     }
+  }
+
+  /**
+   * One of the game's achievements, earned (the platform's, from `player.achieve`): a card at the
+   * top of the screen for a few seconds; several wait their turn.
+   */
+  achievement(a: AchievementPop) {
+    this.earned.add(a.id);
+    this.onAchievements?.(this.earned, a.kept);
+    this.popQueue.push(a);
+    if (this.popQueue.length === 1) this.nextAchievement();
+  }
+
+  /** Which of the game's achievements the player has (as they joined), and whether they're kept (signed in). */
+  achievements(ids: string[], kept: boolean) {
+    this.earned = new Set(ids);
+    this.onAchievements?.(this.earned, kept);
+  }
+
+  private nextAchievement() {
+    const a = this.popQueue[0];
+    if (!a) return;
+    const icon = h('div.achievement-icon');
+    icon.innerHTML = TROPHY;
+    this.achievementEl.replaceChildren(
+      icon,
+      h(
+        'div.achievement-text',
+        {},
+        h('div.achievement-kicker', {}, `Achievement unlocked${a.count ? ` · ${a.count}` : ''}`),
+        h('div.achievement-title', {}, a.title),
+        h('div.achievement-desc', {}, a.description),
+        a.kept ? null : h('div.achievement-note', {}, 'Playing as a guest: sign in on the home page to keep it'),
+      ),
+    );
+    this.achievementEl.classList.remove('show');
+    void this.achievementEl.offsetWidth;
+    this.achievementEl.classList.add('show');
+    window.clearTimeout(this.achievementTimer);
+    this.achievementTimer = window.setTimeout(() => {
+      this.achievementEl.classList.remove('show');
+      this.achievementTimer = window.setTimeout(() => {
+        this.popQueue.shift();
+        this.nextAchievement();
+      }, 400);
+    }, 4200);
   }
 
   toast(text: string) {

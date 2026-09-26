@@ -27,8 +27,10 @@ interface Shot {
   halo?: Prop;
   marker?: string;
   age?: number;
-  /** The player who fired it. */
+  /** The player who fired it (or turned it back with a barrel roll). */
   shooter?: Player;
+  /** An enemy laser turned back by a barrel roll. */
+  deflected?: boolean;
 }
 
 const _a = new math.Vector3();
@@ -140,6 +142,7 @@ export class Weapons {
       if (hit) {
         const at = { x: s.pos.x + dir.x * hitT, y: s.pos.y + dir.y * hitT, z: s.pos.z + dir.z * hitT };
         hit.hit(s.damage, at, s.kind, s.shooter);
+        if (s.deflected && !hit.alive) s.shooter?.achieve('return_to_sender');
         this.impact(s, at);
         this.drop(i);
         continue;
@@ -178,18 +181,23 @@ export class Weapons {
     this.shots.splice(i, 1);
   }
 
-  /** Enemy lasers near a point (barrel rolls deflect them). */
-  deflect(center: Vec3, radius: number, team: 'rebel' | 'empire') {
+  /** Enemy lasers near a point (barrel rolls deflect them), turned back as `by`'s: how many. */
+  deflect(center: Vec3, radius: number, team: 'rebel' | 'empire', by?: Player): number {
+    let n = 0;
     for (const s of this.shots) {
       if (s.team === team || s.kind !== 'laser') continue;
       if (_a.set(s.pos.x - center.x, s.pos.y - center.y, s.pos.z - center.z).lengthSq() < radius * radius) {
         s.vel.multiplyScalar(-1).applyQuaternion(_q.setFromAxisAngle(_a.normalize(), (Math.random() - 0.5) * 1.2));
         s.team = team;
+        s.shooter = by;
+        s.deflected = true;
+        n++;
         s.prop.quaternion.setFromUnitVectors(FWD, _d.copy(s.vel).normalize());
         s.prop.launch(s.pos, s.vel);
         this.game.fx.burst(s.pos, { color: '#bfffd0', count: 5, speed: 2, size: 0.1, gravity: 0 });
       }
     }
+    return n;
   }
 
   clear() {

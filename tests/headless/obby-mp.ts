@@ -6,12 +6,12 @@ import { check, games } from './_harness';
 
 /**
  * Sky Obby together: each player has their own stage, clock and falls; the others hear when
- * someone reaches a checkpoint or finishes; the finish screen and the best time are the
- * finisher's alone.
+ * someone reaches a checkpoint or finishes; the finish screen, the best time and the achievements
+ * are the finisher's alone; a practice run (the `/stage` cheat) earns none.
  */
 export default function obbyMultiplayer() {
   const def = games.find((g) => g.id === 'obby')!;
-  const host = new GameHost(def, { engine: readFileSync('engine/pkg/voxel_engine_bg.wasm'), seed: 5, remote: true, radius: 6, budget: Infinity, player: { id: 'p1', name: 'Player' } });
+  const host = new GameHost(def, { engine: readFileSync('engine/pkg/voxel_engine_bg.wasm'), seed: 5, remote: true, radius: 6, budget: Infinity, cheats: true, player: { id: 'p1', name: 'Player' } });
   const game = host.sim.ctx;
   const events = new Map<string, HostEvent[]>();
   const step = (n = 1) => {
@@ -59,6 +59,18 @@ export default function obbyMultiplayer() {
   check(calls(bob, 'feed').some((a) => a[0].startsWith('Ann finished in ')), 'Bob hears Ann finished');
   check(typeof player('Ann').store.get('best') === 'number' && player('Bob').store.get('best') === undefined, 'Ann’s best time is kept');
   check(game.store.get<{ name: string }>('board:ann')?.name === 'Ann' && game.store.get('board:bob') === undefined, 'and on the leaderboard');
+
+  // Ann's achievements: past the notable stages, finished, quickly (teleported), but with a fall.
+  const earned = ['lava_lake', 'crumble', 'blink', 'spiral', 'crossfire', 'finish', 'speedrun'];
+  check(earned.every((id) => player('Ann').achieved(id)) && !player('Ann').achieved('flawless'), `Ann's achievements: ${earned.filter((id) => !player('Ann').achieved(id))} missing`);
+  check(!earned.some((id) => player('Bob').achieved(id)), 'Bob has none');
+  // Bob practises the lava lake (the /stage cheat) and gets past it: a practice run earns nothing.
+  host.command(bob, { t: 'exec', id: 1, line: 'stage 4' });
+  step(3);
+  player('Bob').teleport(course.stages[4].spawn, course.stages[4].yaw);
+  step(3);
+  check(last(bob, 'objective')?.[0] === 'Stage 5/10 · Crumble', `Bob past the lava: ${last(bob, 'objective')}`);
+  check(!player('Bob').achieved('lava_lake'), 'a practice run earns no achievements');
 
   // The blinking platforms take turns: a red cell is gone at some point in a cycle.
   const red = course.blinkA[0];

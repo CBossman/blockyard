@@ -6,7 +6,7 @@ Every game is played on a game server: its rules run there, and each player's br
 
 | File | Made with | Runs | What goes in it |
 | --- | --- | --- | --- |
-| `meta.ts` | `defineMeta` | the launcher, and both sides | what the home page lists: `id`, `title`, `tagline`, `accent`, `cover`, `controls`, `gamepad`, `instances`. Tiny, and it imports nothing but `@platform` (and its cover picture, by URL) |
+| `meta.ts` | `defineMeta` | the launcher, and both sides | what the home page lists: `id`, `title`, `tagline`, `accent`, `cover`, `controls`, `gamepad`, `instances`, `achievements`. Tiny, and it imports nothing but `@platform` (and its cover picture, by URL) |
 | `shared.ts` | `defineShared` | the server and every screen | what both sides must agree on: `world` (terrain, `structures`, `terraform`, `destructible`), `blocks` and their painters, `player` (movement, abilities, hotbar, skin, model), `guns`, `vehicles`, `hud`, `cheats`. Data, and pure functions both run the same way (structure builders, block painters, vehicles' and abilities' steps). It starts from the meta: `defineShared({ ...meta, world: { ... } })` |
 | `server.ts` | `defineServer(shared, { setup, start, update })` | the server only | the rules: items and entities, events, bots, scoring, the HUD calls. Never sent to a browser |
 | `client.ts` | `defineClient(shared, { ... })` (`@platform/client`) | each player's screen only | what the screen does of its own: the kits it uses (`@platform/client/kits`), and its own code (see "Client code") |
@@ -89,7 +89,7 @@ src/games/
 
 ## Hello, game
 
-`src/games/heart-hunt/` is a complete game in about 70 lines. It builds a pedestal as a blueprint, flattens the land around it, scatters ten glowing hearts, counts pickups and shows a victory screen. What the launcher shows (`meta.ts`):
+`src/games/heart-hunt/` is a complete game in about 70 lines. It builds a pedestal as a blueprint, flattens the land around it, scatters ten glowing hearts, counts pickups, shows a victory screen and awards three achievements (its meta lists them: see "Achievements"). What the launcher shows (`meta.ts`):
 
 ```ts
 import { defineMeta } from '@platform';
@@ -133,7 +133,7 @@ export default defineServer(shared, {
     // What a heart does; how it looks is each screen's (client.ts).
     game.items.define('heart', {
       kind: 'misc', name: 'Heart',
-      onPickup: (g) => (found++, g.audio.play('pickup'), true), // consume on touch
+      onPickup: (g, _count, player) => (found++, player.achieve('first_heart'), g.audio.play('pickup'), true), // consume on touch
     });
   },
 
@@ -148,7 +148,7 @@ export default defineServer(shared, {
 
   update(game) {
     game.hud.objective(`Hearts: ${found} / 10`);
-    // ... show game.hud.screen({ title: 'You win!', ... }) at 10
+    // ... at 10: everyone's player.achieve('all_hearts'), and game.hud.screen({ title: 'You win!', ... })
   },
 });
 ```
@@ -1208,6 +1208,26 @@ game.events.on('playerJoin', ({ player }) => {
 ```
 
 Call of Blocky keeps each player's XP, and so their level and unlocks, in `player.store` (`src/games/callofblocky/progression.ts`); Bed Wars and Blockfront their all-time numbers, which they show on their result screens; Sky Obby each player's best time, and a leaderboard of signed-in players' in `game.store`.
+
+## Achievements
+
+A game lists its achievements in its meta, so the home page and players' profiles show them without loading the game:
+
+```ts
+export default defineMeta({
+  id: 'heart-hunt',
+  title: 'Heart Hunt',
+  achievements: {
+    first_heart: { title: 'Sweetheart', description: 'Find your first heart' },
+    all_hearts: { title: 'Heart of Gold', description: 'Find all ten hearts' },
+    speedy: { title: 'Cupid', description: 'Find all ten in under two minutes', hidden: true },
+  },
+});
+```
+
+Its server awards them: `player.achieve('first_heart')`. That's all a game writes. The first time, the platform keeps it for the player's account and pops a card up on their screen ("Achievement unlocked · 1 of 3"); after that it returns false and does nothing. `player.achieved(id)` asks whether they have one. A guest sees theirs pop up too, marked as lasting the visit. Bots never earn them. An id the meta doesn't list is a mistake: it's reported, and nothing is awarded. A `hidden` one shows on the profile as "Hidden achievement" until it's earned.
+
+Achievements are the game's own: they don't add up across games. The home page shows how many of the game's a player has under its name, and their profile (from there, or the account menu) lists every game's, done and still to do. In development, `/achieve <id>` earns one, to see it pop up.
 
 ## Commands
 

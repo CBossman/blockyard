@@ -15,4 +15,6 @@ export default function bedwars() {
   console.log(`  ${lastScreen(h) ?? 'no result'} after ${simulated.toFixed(0)} s of game time, ${wall.toFixed(1)} s wall clock · ${beds} beds broken · ${kills} kills`);
   check(beds >= 1, 'no bed was broken');
   check(lastScreen(h) === 'GAME OVER', `expected GAME OVER for the idle player, got ${lastScreen(h) ?? 'nothing'}`);
+  // The bots' kills and beds are nobody's achievements; the idle player earned none.
+  check(!h.find('hud', 'achievement').length, `achievements for an idle player: ${h.find('hud', 'achievement').map((c) => (c.args[0] as { title: string }).title).join(', ')}`);
 }

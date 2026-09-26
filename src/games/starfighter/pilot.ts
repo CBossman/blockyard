@@ -118,7 +118,7 @@ export class Pilot implements Target {
     // A barrel roll: the whoosh, and enemy lasers near the ship glance off.
     if (s.rollDir !== 0) {
       if (this.rolled === 0) p.audio.play('whoosh', { volume: 0.7, pitch: 1.3 });
-      this.weapons.deflect(c.pos, c.radius * 1.4, 'rebel');
+      if (this.weapons.deflect(c.pos, c.radius * 1.4, 'rebel', p)) p.achieve('barrel_roll');
     }
     this.rolled = s.rollDir;
     // What the ship hit since the last tick.

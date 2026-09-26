@@ -65,6 +65,11 @@ function record(p: Player, t: Team, won: boolean): AllTime {
   return r;
 }
 
+/** Wins, all time, for Bed Wars Veteran. */
+const VETERAN_WINS = 10;
+/** A bed broken this soon into the match (seconds) is Early Riser. */
+const EARLY_BED = 120;
+
 const BOT_SKILL = [0.8, 0.95, 0.88];
 const BOT_NAMES: Record<string, string> = { blue: 'Blue', green: 'Green', yellow: 'Yellow', red: 'Red' };
 
@@ -123,6 +128,9 @@ function announceDeath(game: GameContext, victim: Team, killer: Team | null, fel
     if (p) {
       if (got.length) p.hud.feed(got.join('  '), { color: '#9fe88a' });
       p.audio.play(final ? 'final_kill' : 'crit', { volume: 0.7 });
+      p.achieve('first_blood');
+      if (final) p.achieve('final_kill');
+      if (fell) p.achieve('into_the_void');
     }
   }
   victim.wallet = emptyWallet();
@@ -165,6 +173,10 @@ function destroyBed(game: GameContext, owner: Team, by: Team | null) {
   game.fx.burst({ x: c.x + 0.5, y: c.y + 0.6, z: c.z + 0.5 }, { color: owner.css, count: 40, speed: 5, size: 0.14 });
   game.audio.play('bed_break');
   if (by) by.beds++;
+  if (by?.player) {
+    by.player.achieve('rude_awakening');
+    if (match.now < EARLY_BED) by.player.achieve('early_riser');
+  }
   const how = by ? ` by ${who(by)}` : match.suddenDeath ? ' by sudden death' : '';
   // Its owner hears it their way; everyone else sees whose bed went.
   for (const p of game.players) {
@@ -279,8 +291,11 @@ const stats = (t: Team, all: AllTime): [string, string][] => [
   ['All-time kills', String(all.kills)],
 ];
 
-/** The match is over: `winner` is the last team standing (null: no one's left playing). */
-function finish(game: GameContext, winner: Team | null) {
+/**
+ * The match is over: `winner` is the last team standing (null: no one's left playing). `cheat`:
+ * ended by the `bw` command, which earns no achievements.
+ */
+function finish(game: GameContext, winner: Team | null, cheat = false) {
   if (match.over) return;
   match.over = true;
   shop.closeAll();
@@ -289,6 +304,11 @@ function finish(game: GameContext, winner: Team | null) {
     const t = match.seatOf(p);
     const won = !!t && t === winner;
     const all = t ? record(p, t, won) : null;
+    if (won && all && !cheat) {
+      p.achieve('first_win');
+      if (t.bed) p.achieve('sweet_dreams');
+      if (all.wins >= VETERAN_WINS) p.achieve('veteran');
+    }
     p.audio.play(won ? 'victory' : 'defeat');
     game.clock.after(won ? 1.8 : 1.4, () =>
       p.hud.screen({
@@ -493,7 +513,7 @@ export default defineServer(shared, {
           return `${t.name} bed destroyed`;
         }
         if (cmd === 'win' || cmd === 'lose') {
-          finish(g, cmd === 'win' ? mine : (match.teams.find((t) => t !== mine) ?? null));
+          finish(g, cmd === 'win' ? mine : (match.teams.find((t) => t !== mine) ?? null), true);
           return '';
         }
         if (cmd === 'time') {

@@ -70,6 +70,11 @@ export default function bedwarsMultiplayer() {
     .flatMap((a) => a)
     .find((o): o is { title: string; sections: { title: string; entries: { label: string; icon?: IconRef }[] }[] } => typeof o === 'object' && o !== null && 'sections' in o);
   check(shop?.title === 'Item Shop', `Ann's shop opened: ${JSON.stringify(calls(ann.id, 'menu')).slice(0, 200)}`);
+  // She buys wool: her first purchase.
+  const wool = shop.sections[0].entries[0] as unknown as { label: string; onSelect: { $cb: number } };
+  host.command(ann.id, { t: 'message', msg: { t: 'callback', player: '', id: wool.onSelect.$cb } });
+  step(2);
+  check(pa.api.inventory.count('wool_red') === 16 && pa.api.achieved('retail_therapy'), `bought ${wool.label}: Retail Therapy`);
 
   // PvP: Bob stands in front of Ann; Ann swings until he's down. What he carries, he keeps.
   pb.api.inventory.give('wool_blue', 16);
@@ -92,6 +97,7 @@ export default function bedwarsMultiplayer() {
   }
   check(lowest < hp0, `Ann's sword hurt Bob: ${hp0} -> ${lowest}`);
   check(!pb.api.alive, 'Ann killed Bob');
+  check(pa.api.achieved('first_blood') && !pa.api.achieved('final_kill') && !pb.api.achieved('first_blood'), 'First Blood for Ann (not a final kill: his bed stands)');
   step(2);
   check(feed().some((f) => /Bob was (slain|knocked into the void) by Ann/.test(f)), `kill credit in the feed: ${feed().slice(-3).join(' | ')}`);
   check(calls(bob.id, 'banner').some((a) => a[0] === 'YOU DIED!') && !calls(ann.id, 'banner').some((a) => a[0] === 'YOU DIED!'), 'only Bob is told he died');
@@ -118,6 +124,7 @@ export default function bedwarsMultiplayer() {
   host.sim.breakBlockAt(greenBed.x, greenBed.y, greenBed.z, pa.api);
   step(2);
   check(!teams()[2].bed, 'green bed broken');
+  check(pa.api.achieved('rude_awakening') && pa.api.achieved('early_riser'), 'Rude Awakening, and (inside two minutes) Early Riser');
   check(calls(cat.id, 'banner').some((a) => a[0] === 'BED DESTROYED!') && calls(ann.id, 'banner').some((a) => a[0] === 'BED DESTRUCTION'), 'bed news, each their way');
 
   // The end: everyone but Ann is out.
@@ -125,6 +132,9 @@ export default function bedwarsMultiplayer() {
   step(70);
   const title = (id: string) => (calls(id, 'screen').at(-1)?.[1] as { title?: string } | undefined)?.title;
   check(title(ann.id) === 'VICTORY!' && title(cat.id) === 'GAME OVER', `result screens: Ann ${title(ann.id)}, Cat ${title(cat.id)}`);
+  check(!pa.api.achieved('first_win'), "a win by the cheat earns no achievement");
+  const popped = calls(ann.id, 'achievement').map((a) => (a[0] as { title: string }).title);
+  check(popped.join() === 'Retail Therapy,First Blood,Rude Awakening,Early Riser', `Ann's achievements popped up: ${popped.join(', ')}`);
   const errors = (events.get(ann.id) ?? []).filter((e) => e.t === 'error');
   check(!errors.length, `the game threw: ${errors.map((e) => (e.t === 'error' ? e.text.slice(0, 300) : '')).join(' | ')}`);
   console.log(`  seats, wallets, PvP kill, takeover, leaving, beds and results per player · feed: ${feed().slice(-4).join(' | ')}`);

@@ -43,6 +43,25 @@ const fresh = () => ({
 });
 const state = fresh();
 
+/**
+ * Each fighter's own fight, for their achievements (by player id, from when they're armed): the
+ * wave they joined in (0: from the start), whether they've fallen, whether they've been hurt this
+ * wave, and the weapons they've slain with.
+ */
+interface Run {
+  from: number;
+  fell: boolean;
+  hurt: boolean;
+  arms: Set<string>;
+}
+const runs = new Map<string, Run>();
+
+/** The weapons Master of Arms asks for, by the item a monster was slain with. */
+const ARMS: Record<string, string> = { bow: 'bow', wooden_sword: 'sword', stone_sword: 'sword', iron_sword: 'sword', diamond_sword: 'sword', pike: 'pike', battle_axe: 'axe' };
+const ALL_ARMS = new Set(Object.values(ARMS)).size;
+/** Monsters slain, all time, for Arena Veteran. */
+const VETERAN_KILLS = 250;
+
 /** Monsters per wave grow with the party: half as many again for each extra fighter. */
 const crowd = (game: GameContext) => 1 + 0.5 * Math.max(0, game.players.length - 1);
 
@@ -65,6 +84,7 @@ function startWave(game: GameContext, n: number) {
   const rest = state.queue.filter((t) => t !== 'warden').sort(() => game.rng.next() - 0.5);
   state.queue = [...boss, ...rest];
   state.spawnTimer = 1.2;
+  for (const r of runs.values()) r.hurt = false;
   game.hud.banner(n === WAVES.length ? 'Final Wave' : `Wave ${n}`, w.name, { duration: 2.6, color: n === WAVES.length ? '#c9a2ff' : undefined });
   game.audio.play('wave');
   // Dusk falls as the fight goes on.
@@ -106,6 +126,10 @@ function spawnNext(game: GameContext) {
 function waveCleared(game: GameContext) {
   const w = WAVES[state.wave - 1];
   const last = state.wave >= WAVES.length;
+  for (const p of game.players) {
+    if (p.alive && runs.get(p.id)?.hurt === false) p.achieve('untouched');
+    if (state.wave === 1) p.achieve('first_wave');
+  }
   for (const p of game.players) if (!p.alive) rejoin(game, p, !last);
   if (last) return victory(game);
   state.phase = 'intermission';
@@ -126,6 +150,7 @@ function waveCleared(game: GameContext) {
 /** A starting sword, and (arriving late) the weapons and arrows the waves so far gave out. */
 function arm(p: Player) {
   p.inventory.give('wooden_sword');
+  runs.set(p.id, { from: state.wave, fell: false, hurt: state.phase === 'fighting', arms: new Set() });
   const cleared = state.phase === 'fighting' ? state.wave - 1 : state.phase === 'intermission' || state.phase === 'victory' ? state.wave : 0;
   for (const w of WAVES.slice(0, cleared)) {
     for (const r of w.reward ?? []) {
@@ -134,6 +159,21 @@ function arm(p: Player) {
     }
   }
   p.inventory.select(0);
+}
+
+/** A monster slain by a fighter: what it earns them. */
+function slain(p: Player, type: string, weapon?: string) {
+  p.achieve('first_blood');
+  const all = (p.store.get<number>('kills') ?? 0) + 1;
+  p.store.set('kills', all);
+  if (all >= VETERAN_KILLS) p.achieve('veteran');
+  const r = runs.get(p.id);
+  const kind = weapon && ARMS[weapon];
+  if (r && kind) {
+    r.arms.add(kind);
+    if (r.arms.size === ALL_ARMS) p.achieve('master_of_arms');
+  }
+  if (type === 'warden' && weapon === 'wooden_sword') p.achieve('splinters');
 }
 
 /** Someone fell with others still fighting: they watch from the stands until the wave's won. */
@@ -164,6 +204,11 @@ function checkWipe(game: GameContext) {
 
 function victory(game: GameContext) {
   state.phase = 'victory';
+  for (const p of game.players) {
+    p.achieve('champion');
+    const r = runs.get(p.id);
+    if (r && r.from === 0 && !r.fell) p.achieve('unbroken');
+  }
   const time = game.clock.now - state.startedAt;
   game.hud.banner('VICTORY', 'The arena is yours', { duration: 3.5, color: '#ffd36b' });
   game.audio.play('victory');
@@ -224,21 +269,28 @@ export default defineServer(shared, {
   items: [bows(), melee(), consumables()],
   setup(game) {
     Object.assign(state, fresh());
+    runs.clear();
     // (Its voices and its items' looks are each screen's, `client/`: played and named here.)
     defineArt(game);
     defineItems(game);
     defineMonsters(game);
-    game.events.on('entityDeath', ({ killer }) => {
-      if (killer !== 'world' && killer?.kind === 'player') state.kills++;
+    game.events.on('entityDeath', ({ entity, killer, weapon }) => {
+      if (killer === 'world' || killer?.kind !== 'player') return;
+      state.kills++;
+      slain(killer, entity.type, weapon);
     });
     game.events.on('entityDamage', ({ amount, source }) => {
       if (source !== 'world' && source?.kind === 'player') state.damageDealt += amount;
     });
-    game.events.on('playerDamage', ({ amount }) => {
+    game.events.on('playerDamage', ({ player, amount }) => {
       state.damageTaken += amount;
+      const r = runs.get(player.id);
+      if (r) r.hurt = true;
     });
     game.events.on('playerDeath', ({ player }) => {
       if (state.phase !== 'countdown' && state.phase !== 'fighting' && state.phase !== 'intermission') return;
+      const r = runs.get(player.id);
+      if (r) r.fell = true;
       if (game.players.some((p) => p.alive)) fall(game, player);
       else defeat(game);
     });
@@ -262,6 +314,7 @@ export default defineServer(shared, {
 
   start(game) {
     Object.assign(state, fresh(), { startedAt: game.clock.now });
+    runs.clear();
     game.env.time = 0.66;
     if (!game.players.length) {
       state.phase = 'waiting';

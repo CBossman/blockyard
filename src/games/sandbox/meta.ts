@@ -15,4 +15,12 @@ export default defineMeta({
     ['E', 'blocks'],
     ['MMB', 'pick the block you look at'],
   ],
+  achievements: {
+    first_block: { title: 'Groundbreaker', description: 'Place your first block' },
+    picker: { title: 'Fresh from the Picker', description: 'Place one of Sandbox’s own blocks: a crate, marble, a paper lantern… (E opens the picker)' },
+    flight: { title: 'Take Flight', description: 'Fly 30 blocks above the ground (double-tap Space)' },
+    sky_high: { title: 'Cloud Builder', description: 'Place a block high in the sky (height 200 or more)' },
+    master_builder: { title: 'Master Builder', description: 'Place 1,000 blocks' },
+    wanderer: { title: 'Far and Away', description: 'Travel 1,000 blocks from the spawn', hidden: true },
+  },
 });

@@ -42,6 +42,13 @@ const SETUP = `
     created TEXT NOT NULL DEFAULT (datetime('now'))
   );
   CREATE INDEX IF NOT EXISTS sessions_account ON sessions (account);
+  CREATE TABLE IF NOT EXISTS achievements (
+    account TEXT NOT NULL REFERENCES accounts (id) ON DELETE CASCADE,
+    game TEXT NOT NULL,
+    id TEXT NOT NULL,
+    at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (account, game, id)
+  );
 `;
 
 /** How long a sign-in lasts (seconds). */
@@ -149,7 +156,24 @@ export class Accounts {
     this.db.prepare('DELETE FROM sessions WHERE hash = ?').run(hash(token));
   }
 
-  /** Gone: the account and its sessions (the games' data for it is the server's to clear). */
+  /** One of a game's achievements, earned (kept once: the first time counts). */
+  achieve(account: string, game: string, id: string) {
+    this.db.prepare('INSERT INTO achievements (account, game, id) VALUES (?, ?, ?) ON CONFLICT DO NOTHING').run(account, game, id);
+  }
+
+  /** The achievements an account has in one game. */
+  achievedIn(account: string, game: string): string[] {
+    return (this.db.prepare('SELECT id FROM achievements WHERE account = ? AND game = ?').all(account, game) as { id: string }[]).map((r) => r.id);
+  }
+
+  /** Every achievement an account has, by game: when each was earned (UTC, `2026-09-26 18:04:11`). */
+  achievements(account: string): Record<string, Record<string, string>> {
+    const out: Record<string, Record<string, string>> = {};
+    for (const r of this.db.prepare('SELECT game, id, at FROM achievements WHERE account = ?').all(account) as { game: string; id: string; at: string }[]) (out[r.game] ??= {})[r.id] = r.at;
+    return out;
+  }
+
+  /** Gone: the account, its sessions and achievements (the games' data for it is the server's to clear). */
   delete(id: string) {
     this.db.prepare('DELETE FROM accounts WHERE id = ?').run(id);
   }

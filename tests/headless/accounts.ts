@@ -24,6 +24,8 @@ function player(port: number, name: string, origin: string, cookie?: string, hol
   const ws = new WebSocket(`ws://localhost:${port}/heart-hunt`, { origin, headers: cookie ? { Cookie: cookie } : {} });
   const frames = new FrameReader<SimFrame>();
   let frame: SimFrame | null = null;
+  /** The achievements that popped up on this screen. */
+  const pops: { title: string; kept: boolean; count?: string }[] = [];
   let closed: { code: number; reason: string } | null = null;
   let welcomed = false;
   const play = () => ws.send(encode({ t: 'start', name } satisfies ClientCommand));
@@ -33,10 +35,16 @@ function player(port: number, name: string, origin: string, cookie?: string, hol
       welcomed = true;
       if (!hold) play();
     }
-    else if ((m as WireBatch).f !== undefined) frame = frames.read((m as WireBatch).f);
+    else {
+      const b = m as WireBatch;
+      for (const e of b.events) if (e.t === 'call' && e.call.target === 'hud' && e.call.method === 'achievement') pops.push(e.call.args[0] as (typeof pops)[number]);
+      if (b.f !== undefined) frame = frames.read(b.f);
+    }
   });
   ws.on('close', (code, reason) => (closed = { code, reason: String(reason) }));
   return {
+    pops,
+    send: (c: ClientCommand) => ws.send(encode(c)),
     play,
     welcomed: () => welcomed,
     names: () => (frame as SimFrame | null)?.players.map((p) => p.name) ?? [],
@@ -176,6 +184,71 @@ export default async function accounts() {
     await srv.close();
   }
   await inWorker();
+  await achievements();
+}
+
+/**
+ * Achievements: a game's own (its meta), awarded on the server (`player.achieve`), popping up on the
+ * player's screen, kept once for a signed-in player's account (and theirs again when they come
+ * back), a guest's for the visit; `/me/achievements` lists them; an id the game doesn't have is a
+ * mistake, reported; deleting the account takes them too.
+ */
+async function achievements() {
+  const accounts = Accounts.open(':memory:');
+  const base = games.find((g) => g.id === 'heart-hunt')!;
+  const def = { ...base, achievements: { ...base.achievements, t_found: { title: 'Found One', description: 'Find a heart' }, t_secret: { title: 'Secret', description: 'Shh', hidden: true } } };
+  const all = Object.keys(def.achievements).length;
+  const logs: string[] = [];
+  const srv = await serve({ games: [def], port: 0, seed: 1, wasm: readFileSync('engine/pkg/voxel_engine_bg.wasm'), accounts, sites: [SITE], dev: true, cheats: true, log: (l) => logs.push(l) });
+  const base$ = `http://localhost:${srv.port}`;
+  try {
+    const cookie = (await fetch(`${base$}/auth/dev?name=Ann`)).headers.getSetCookie()[0].split(';')[0];
+    const annId = accounts.session(cookie.split('=')[1])!.id;
+    let a = player(srv.port, 'x', SITE, cookie);
+    await until('Ann in', () => a.names().includes('Ann'));
+    const host = srv.host(def.id)!;
+    const ann = () => host.sim.players.find((p) => p.name === 'Ann')!.api;
+    check(ann().achieve('t_found') && !ann().achieve('t_found') && ann().achieved('t_found'), 'earned once, then had');
+    await until('it pops up', () => a.pops.length === 1);
+    check(a.pops[0].title === 'Found One' && a.pops[0].kept && a.pops[0].count === `1 of ${all}`, `her screen: ${JSON.stringify(a.pops)}`);
+    check(accounts.achievedIn(annId, def.id).join() === 't_found', 'kept for her account');
+    const listed = (await (await fetch(`${base$}/me/achievements`, { headers: { Cookie: cookie, Origin: SITE } })).json()) as { achievements: Record<string, Record<string, string>> };
+    check(!!listed.achievements[def.id]?.t_found, `/me/achievements: ${JSON.stringify(listed)}`);
+    // A cheat (development servers) earns one too.
+    a.send({ t: 'exec', id: 1, line: 'achieve t_secret' });
+    await until('the cheat', () => a.pops.length === 2);
+    check(ann().achieved('t_secret') && a.pops[1].count === `2 of ${all}`, 'the /achieve cheat');
+    // Not one of the game's: reported, nothing earned.
+    check(!ann().achieve('nope') && logs.some((l) => l.includes(`"nope" isn't one of`)), 'an id the game lacks is reported');
+
+    // A guest: it pops up, for the visit only.
+    const g = player(srv.port, 'Gus', SITE);
+    await until('Gus in', () => a.names().includes('Gus'));
+    const gus = host.sim.players.find((p) => p.name === 'Gus')!.api;
+    check(gus.achieve('t_found'), "a guest's first");
+    await until("the guest's pops up", () => g.pops.length === 1);
+    check(!g.pops[0].kept, 'marked as not kept');
+    check(Object.keys(accounts.achievements(annId)).length === 1, 'nothing kept for a guest');
+
+    // Ann comes back: she has hers.
+    a.close();
+    await until('Ann gone', () => !host.sim.players.some((p) => p.name === 'Ann' && !p.vacant));
+    a = player(srv.port, 'x', SITE, cookie);
+    await until('Ann back', () => g.names().includes('Ann'));
+    check(ann().achieved('t_found') && ann().achieved('t_secret') && !ann().achieve('t_found'), 'back again, she has them');
+
+    // Deleting her account takes them.
+    await fetch(`${base$}/me`, { method: 'DELETE', headers: { Cookie: cookie, Origin: SITE } });
+    check(Object.keys(accounts.achievements(annId)).length === 0, 'deleted with the account');
+    a.close();
+    g.close();
+    console.log(`  achievements: once, popping up (${all} in all), kept for an account and back when she is, a guest's for the visit, /me/achievements, the cheat, mistakes reported, deleted with the account`);
+  } catch (err) {
+    console.log(logs.slice(-20).join('\n'));
+    throw err;
+  } finally {
+    await srv.close();
+  }
 }
 
 /** A room in a worker thread (as on a real server) hears who's signed in too. */

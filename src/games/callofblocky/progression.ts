@@ -292,6 +292,8 @@ export function setupProgression(game: GameContext): Progression {
       game.clients.send(p, 'xp.level', { level: now, unlocks } satisfies LevelUp);
       game.hud.feed([{ text: p.name, color: COLORS.gold }, ` made level ${now}`]);
     }
+    // An achievement (meta.ts): level 10, with XP earned in play (not the `xp` command's).
+    if (!opts.cheat && now >= 10) p.achieve('made_man');
   }
 
   const has = (p: Player, id: string) => p.bot || levelOf(total(tally(p))) >= unlockLevel(id);

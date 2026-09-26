@@ -14,4 +14,15 @@ export default defineMeta({
     ['RMB', 'place block · use item'],
     ['RMB', 'talk to the shopkeeper'],
   ],
+  achievements: {
+    first_blood: { title: 'First Blood', description: 'Take down an enemy' },
+    retail_therapy: { title: 'Retail Therapy', description: 'Buy something from the Item Shop' },
+    rude_awakening: { title: 'Rude Awakening', description: "Break an enemy team's bed" },
+    final_kill: { title: 'Lights Out', description: 'Get a final kill: take down an enemy whose bed is gone' },
+    into_the_void: { title: 'Into the Void', description: 'Knock an enemy off the islands into the void' },
+    first_win: { title: 'Last Team Standing', description: 'Win a match' },
+    sweet_dreams: { title: 'Sweet Dreams', description: 'Win a match with your own bed still standing' },
+    veteran: { title: 'Bed Wars Veteran', description: 'Win 10 matches, all time' },
+    early_riser: { title: 'Early Riser', description: 'Break a bed in the first two minutes of a match', hidden: true },
+  },
 });

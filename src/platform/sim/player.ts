@@ -133,6 +133,8 @@ export interface PlayerSimParts {
   emit<K extends keyof GameEvents>(event: K, e: GameEvents[K]): void;
   /** Host time (`SimFrame.t`). */
   now(): number;
+  /** `player.achieve`: award one of the game's achievements (true the first time). */
+  achieve(p: PlayerSim, id: string): boolean;
 }
 
 /**
@@ -190,6 +192,8 @@ export class PlayerSim {
   adopted: string | null = null;
   /** `player.store` (the simulation sets it as they join: their account's, or a guest's for this visit). */
   store: StoreApi = guestStore();
+  /** The game's achievements they have (their account's, as they joined, and any since). */
+  achieved = new Set<string>();
   model: ModelSpec | null = null;
   color: string | null = null;
   /** A clip their figure plays (`animate`), and how many they've asked for. */
@@ -595,6 +599,8 @@ export class PlayerSim {
       get adopted() {
         return me.adopted;
       },
+      achieve: (id) => this.p.achieve(this, id),
+      achieved: (id) => me.achieved.has(id),
       hud: present.hud(this.id),
       audio: present.audio(this.id),
       fx: present.fx(this.id),
