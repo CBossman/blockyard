@@ -281,6 +281,50 @@ export class HumanoidRig {
         }
       };
       walk(node, new THREE.Matrix4());
+      return box.isEmpty() ? skinned(bone) : box;
+    };
+    // A skinned model's: the vertices that mostly follow the joint (or the bones under it that
+    // aren't the rig's: hair, a hat's). Each where the skin has it now, in the joint's own space (so
+    // however it's posed, and however the file packs its vertices), then as the joint rests.
+    const skinned = (bone: Bone) => {
+      const node = f.nodes[bone];
+      const own = new Set<THREE.Object3D>();
+      const collect = (o: THREE.Object3D) => {
+        own.add(o);
+        for (const c of o.children) if (!joints.has(c)) collect(c);
+      };
+      collect(node);
+      this.body.updateMatrixWorld(true);
+      const unit = new THREE.Vector3();
+      new THREE.Matrix4().copy(this.body.matrixWorld).invert().multiply(node.matrixWorld).decompose(new THREE.Vector3(), new THREE.Quaternion(), unit);
+      const toNode = new THREE.Matrix4().copy(node.matrixWorld).invert();
+      const rest = new THREE.Matrix4().compose(f.at[bone], f.turn[bone], unit);
+      const box = new THREE.Box3();
+      const v = new THREE.Vector3();
+      this.body.traverse((o) => {
+        const sm = o as THREE.SkinnedMesh;
+        if (!sm.isSkinnedMesh) return;
+        const mine = new Set<number>();
+        sm.skeleton.bones.forEach((b, i) => own.has(b) && mine.add(i));
+        if (!mine.size) return;
+        const index = sm.geometry.getAttribute('skinIndex');
+        const weight = sm.geometry.getAttribute('skinWeight');
+        const toJoint = new THREE.Matrix4().multiplyMatrices(toNode, sm.matrixWorld);
+        for (let i = 0; i < index.count; i++) {
+          let best = -1;
+          let most = 0;
+          for (let k = 0; k < 4; k++) {
+            const w = weight.getComponent(i, k);
+            if (w > most) {
+              most = w;
+              best = index.getComponent(i, k);
+            }
+          }
+          if (!mine.has(best)) continue;
+          sm.getVertexPosition(i, v);
+          box.expandByPoint(v.applyMatrix4(toJoint).applyMatrix4(rest));
+        }
+      });
       return box.isEmpty() ? null : box;
     };
     const k = Math.max(0.3, f.at.hips.y / 0.95);
