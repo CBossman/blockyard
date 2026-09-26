@@ -8,7 +8,7 @@ import * as ships from './ships';
  * Mos Blockley Spaceport: a sun-baked town of plaster domes in a canyon, the Rebels' hangar dug
  * into its west wall and the Empire's garrison against its east one.
  *
- * - **A, the Rebel hangar** (west, the Rebels' for good): a vaulted hangar, two X-winged fighters
+ * - **A, the Rebel hangar** (west, the Rebels' for good): a vaulted hangar, two Vox-wings
  *   parked inside, a gantry across its back; its mouth opens east onto an apron, doors north and
  *   south onto the back ways.
  * - **B, the market** (south-west, the Rebels' at the start): a paved square of stalls under
@@ -30,7 +30,7 @@ import * as ships from './ships';
  * the top of the bay's ring wall (ladders), the hangar's gantry, the freighter's back. Everything
  * else is built so nothing a bot can climb from the street reaches a roof (every house is at least
  * five high), and nowhere it can drop into is a pocket it can't walk out of (`fillPockets`).
- * Beyond the canyon's rim the dunes roll off to a star destroyer's wreck lying on its side.
+ * Beyond the canyon's rim the dunes roll off to a Star Demolisher's wreck lying on its side.
  */
 
 const FLOOR = 64;
@@ -1113,7 +1113,7 @@ function streets() {
 // ---------------------------------------------------------------------------------------------
 
 /**
- * Out in the dunes south of the canyon, the wreck of a star destroyer lying across the horizon on
+ * Out in the dunes south of the canyon, the wreck of a Star Demolisher lying across the horizon on
  * its side, its decks and bridge tower toward the town, its nose buried in the west and its stern
  * reared up in the east: the town's landmark from anywhere.
  */

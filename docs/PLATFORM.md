@@ -36,11 +36,11 @@ src/games/
     client/sounds.ts    the beacon's bell, the hull's thud (client.audio.define)
   starfighter/          a Star Fox-style dogfighter: no walking, the game flies the camera
     server.ts           waves, HUD, win/lose
-    shared.ts flight.ts the X-wing as a vehicle (its step runs on the pilot's screen too)
+    shared.ts flight.ts the Vox-wing as a vehicle (its step runs on the pilot's screen too)
     ships.ts            the fighters, as Blueprints (meshed into movable props)
     destroyer.ts        the capital ship, as a world structure
     craft.ts pilot.ts enemies.ts weapons.ts capital.ts   collisions, AI, lasers, the boss
-    client/sounds.ts    lasers, torpedoes, the capital ship's horn, the TIE howl (client.audio.define)
+    client/sounds.ts    lasers, torpedoes, the capital ship's horn, the Bowtie howl (client.audio.define)
     layout.ts           where the battle is
     previews/           dev-only previews of the ships and the capital ship
   bedwars/              Bed Wars against three bots: sky islands, mining, building, a shop
@@ -965,7 +965,7 @@ export const shared = defineShared({
 - **Input:** `game.input.isDown('KeyW')`, `pressed(code)`, `button(0)`, `buttonPressed(2)`, and `mouseX` / `mouseY` / `wheel` deltas while the mouse is captured. A controller's buttons press keys and mouse buttons, and its right stick moves the mouse (see Controllers), so a vehicle steered by the mouse steers with the stick too. Everything reads as idle while paused (or a menu's open, or they're typing in chat), so games never need to check, and while the player's dead; `pressed(code, { dead: true })` hears a dead player's keys too, for a vote or a menu they can still use. `consume(button | key)` claims an input for the rest of the frame, so the built-in systems (which run after your `update`) ignore it.
 - **Math:** `import { math } from '@platform'` gives `Vector3`, `Quaternion`, `Euler`, `Matrix4` and `MathUtils`.
 - **Props** are movable objects:
-  - `props.model(blueprint, { scale, pivot })` meshes a Blueprint once. The mesh uses the world's block textures, with ambient occlusion, sun shadows and glowing blocks. At `scale: 0.25`, each block is a quarter metre, which is how the Starfighter builds detailed X-wings.
+  - `props.model(blueprint, { scale, pivot })` meshes a Blueprint once. The mesh uses the world's block textures, with ambient occlusion, sun shadows and glowing blocks. At `scale: 0.25`, each block is a quarter metre, which is how the Starfighter builds detailed Vox-wings.
   - `props.spawn(model, { solid })` places a copy; move it through its `position` and `quaternion`. `flash(color)` tints it briefly for hits. `solid: true` makes it something to stand on and ride (see *Ships, lifts and moving platforms* below).
   - `props.bolt({ color, length, width, flicker, far })` is a glowing streak along its -z, for lasers, tracers and engine flames. `flicker` makes it waver on its own; past `far` blocks from each player's camera it grows with the distance, so it stays visible.
   - `prop.attach(parent)`: it rides on another prop (engine flames on a ship, a turret on a tank), its `position` and `quaternion` now on the parent. It goes wherever the parent goes without being moved each tick, and goes when the parent is removed.
@@ -982,7 +982,7 @@ export const shared = defineShared({
 - Sounds include `laser`, `laser_enemy`, `explosion`, `explosion_big`, `torpedo`, `lock`, `alarm`, `whoosh` and `flyby`.
 - `audio.loop('engine')` returns a handle whose `set({ volume, pitch })` follows the throttle (in steps: a steady engine sends nothing).
 
-`src/games/starfighter/` is the reference: the X-wing is a vehicle (`flight.ts`), the TIEs fly themselves with the same physics, and every pilot has their own HUD.
+`src/games/starfighter/` is the reference: the Vox-wing is a vehicle (`flight.ts`), the Bowties fly themselves with the same physics, and every pilot has their own HUD.
 
 ## Ships, lifts and moving platforms
 
@@ -1162,7 +1162,7 @@ client.audio.define('laser', (s) => {
 });
 ```
 
-- `s.tone` is an oscillator sweep with an envelope and optional lowpass (which can sweep: `lowpass: { freq, to, time }`), highpass, bandpass (`bandpass: { freq, to, q }`) or vibrato. Starfighter's TIE howl is three detuned, wavering sawtooths through a sweeping bandpass.
+- `s.tone` is an oscillator sweep with an envelope and optional lowpass (which can sweep: `lowpass: { freq, to, time }`), highpass, bandpass (`bandpass: { freq, to, q }`) or vibrato. Starfighter's Bowtie howl is three detuned, wavering sawtooths through a sweeping bandpass.
   - `glide: [[seconds, hz], …]` gives the pitch a path instead of `to`: a blaster bolt's chirp falls fast then slower, a swung blade rises and falls.
   - `fm: { ratio, depth, to }` bends it with a sine at `ratio` times its frequency: whole ratios make it richer (brass, buzz); others ring like metal (1.41, 2.76).
   - `drive` (0..1) adds grit.

@@ -95,9 +95,9 @@ function radiusOf(bp: Blueprint): number {
 }
 
 // ---------------------------------------------------------------------------------------------
-// T-65 X-wing: ~49 long (nose z = -26 to exhausts z = +22), ~45 across the open S-foils.
+// Vox-wing: ~49 long (nose z = -26 to exhausts z = +22), ~45 across the open S-foils.
 
-export function xwing(): ShipDesign {
+export function voxwing(): ShipDesign {
   const bp = canvas(24, 12, 27);
   const NOSE = -26;
   const TAIL = 21; // rear bulkhead of the fuselage
@@ -230,11 +230,11 @@ export function xwing(): ShipDesign {
 }
 
 // ---------------------------------------------------------------------------------------------
-// TIE cockpit ball shared by both TIEs: ~13 across, round front window with a spoked frame.
+// Bowtie cockpit ball shared by both Bowties: ~13 across, round front window with a spoked frame.
 
 const BALL_R = 6.5;
 
-function tieBall(bp: Blueprint): { chin: Vec3[]; exhausts: Vec3[] } {
+function bowtieBall(bp: Blueprint): { chin: Vec3[]; exhausts: Vec3[] } {
   bp.fill({ x: -7, y: -7, z: -4 }, { x: 7, y: 7, z: 7 }, (x, y, z) => {
     if (Math.hypot(x, y, z) > BALL_R) return undefined;
     if (z === -4) return 'gray_concrete'; // dark collar around the window
@@ -271,7 +271,7 @@ function tieBall(bp: Blueprint): { chin: Vec3[]; exhausts: Vec3[] } {
  * bend), spokes run from `hub` to each of `corners`. Black panel, grey frame and spokes; the frame
  * also thickens by the x offsets in `rim` (outward is +).
  */
-function tieWing(bp: Blueprint, outline: Pt[], hub: Pt, corners: Pt[], xAt: (y: number) => number, rim: number[]) {
+function bowtieWing(bp: Blueprint, outline: Pt[], hub: Pt, corners: Pt[], xAt: (y: number) => number, rim: number[]) {
   const zs = outline.map((p) => p[0]);
   const ys = outline.map((p) => p[1]);
   for (let y = Math.floor(Math.min(...ys)); y <= Math.ceil(Math.max(...ys)); y++)
@@ -293,28 +293,28 @@ function tieWing(bp: Blueprint, outline: Pt[], hub: Pt, corners: Pt[], xAt: (y: 
 }
 
 /** Pylons from the ball out to the wing hubs at x = ±xWing, with a cap on the outer face. */
-function tiePylons(bp: Blueprint, xWing: number) {
+function bowtiePylons(bp: Blueprint, xWing: number) {
   tubeX(bp, 0, 0, 6, xWing + 2, (x) => (x <= 7 ? 2.6 : x < xWing - 1 ? 1.5 : x === xWing - 1 ? 3 : 2), (_d, x) => (x <= 7 || x >= xWing - 1 ? 'gray_concrete' : 'light_gray_concrete'));
 }
 
 // ---------------------------------------------------------------------------------------------
-// TIE/ln fighter: ball between two tall hexagonal wing panels at x = ±13.
+// Bowtie fighter: ball between two tall hexagonal wing panels at x = ±13.
 
-export function tieFighter(): ShipDesign {
+export function bowtieFighter(): ShipDesign {
   const bp = canvas(16, 17, 15);
-  const { chin, exhausts } = tieBall(bp);
+  const { chin, exhausts } = bowtieBall(bp);
   const hex: Pt[] = [[-13, 0], [-7, 15], [7, 15], [13, 0], [7, -15], [-7, -15]];
-  tieWing(bp, hex, [0, 0], hex, () => 13, [-1, 1]);
-  tiePylons(bp, 13);
+  bowtieWing(bp, hex, [0, 0], hex, () => 13, [-1, 1]);
+  bowtiePylons(bp, 13);
   return { blueprint: bp, guns: chin, engines: exhausts, radius: radiusOf(bp) };
 }
 
 // ---------------------------------------------------------------------------------------------
-// TIE interceptor: same ball, dagger wings bent in toward the ball, cannons on the four tips.
+// Bowtie interceptor: same ball, dagger wings bent in toward the ball, cannons on the four tips.
 
-export function tieInterceptor(): ShipDesign {
+export function bowtieInterceptor(): ShipDesign {
   const bp = canvas(16, 18, 16);
-  const { exhausts } = tieBall(bp);
+  const { exhausts } = bowtieBall(bp);
   const up: Pt = [-10, 17];
   const low: Pt = [-10, -17];
   const upRear: Pt = [6, 7];
@@ -322,8 +322,8 @@ export function tieInterceptor(): ShipDesign {
   const dagger: Pt[] = [up, upRear, [4, 0], lowRear, low, [-4, 0]];
   // Flat through the hub, then bent in toward the ball (a block every 2-3 rows) toward the tips.
   const xAt = (y: number) => 13 - Math.max(0, Math.floor((Math.abs(y) - 3) / 2.5));
-  tieWing(bp, dagger, [0, 0], [up, upRear, lowRear, low], xAt, [1]);
-  tiePylons(bp, 13);
+  bowtieWing(bp, dagger, [0, 0], [up, upRear, lowRear, low], xAt, [1]);
+  bowtiePylons(bp, 13);
   const guns: Vec3[] = [];
   for (const sx of [-1, 1])
     for (const sy of [-1, 1]) {

@@ -1,5 +1,5 @@
 import { defineServer, math, type GameContext, type Player, type Vec3 } from '@platform';
-import { tieFighter, tieInterceptor, xwing } from './ships';
+import { bowtieFighter, bowtieInterceptor, voxwing } from './ships';
 import { shipType, headingTo, type ShipType } from './craft';
 import { Weapons, type Target } from './weapons';
 import { Pilot } from './pilot';
@@ -11,26 +11,26 @@ import { destroyer, shared, START } from './shared';
 
 /** Seconds a shot-down pilot waits before a new ship (if anyone's still flying). */
 const COMEBACK = 12;
-/** TIEs shot down, all time, for Rogue Leader. */
+/** Bowties shot down, all time, for Rogue Leader. */
 const ROGUE_LEADER_KILLS = 100;
 const CALLSIGNS = ['Red Five', 'Red Two', 'Red Three', 'Red Four', 'Red Six', 'Red Seven', 'Red Eight', 'Red Nine', 'Red Ten', 'Red Eleven', 'Red Twelve', 'Gold Leader', 'Gold Two', 'Gold Three', 'Gold Four', 'Gold Five'];
 
 interface Wave {
   title: string;
   sub: string;
-  ties: number;
+  bowties: number;
   interceptors: number;
   boss?: boolean;
 }
 
 const WAVES: Wave[] = [
-  { title: 'WAVE 1', sub: 'TIE squadron inbound', ties: 5, interceptors: 0 },
-  { title: 'WAVE 2', sub: 'Interceptors on your tail', ties: 5, interceptors: 3 },
-  { title: 'THE STAR DESTROYER', sub: 'Knock out its shield generators', ties: 3, interceptors: 2, boss: true },
+  { title: 'WAVE 1', sub: 'Bowtie squadron inbound', bowties: 5, interceptors: 0 },
+  { title: 'WAVE 2', sub: 'Interceptors on your tail', bowties: 5, interceptors: 3 },
+  { title: 'THE STAR DEMOLISHER', sub: 'Knock out its shield generators', bowties: 3, interceptors: 2, boss: true },
 ];
 
 // Game state (reset in start).
-let types: { xwing: ShipType; tie: EnemyKind; interceptor: EnemyKind } | null = null;
+let types: { voxwing: ShipType; bowtie: EnemyKind; interceptor: EnemyKind } | null = null;
 let weapons: Weapons;
 let capital: Capital;
 /** `start` has set the battle up (a new game's setup clears this: nothing carries over). */
@@ -51,11 +51,11 @@ let cineAngle = 0;
 
 function kinds(game: GameContext) {
   if (types) return types;
-  const tie = shipType(game, tieFighter());
-  const interceptor = shipType(game, tieInterceptor());
+  const bowtie = shipType(game, bowtieFighter());
+  const interceptor = shipType(game, bowtieInterceptor());
   types = {
-    xwing: shipType(game, xwing()),
-    tie: { type: tie, hp: 24, speed: 40, agility: 1.35, fireRate: 0.16, score: 100 },
+    voxwing: shipType(game, voxwing()),
+    bowtie: { type: bowtie, hp: 24, speed: 40, agility: 1.35, fireRate: 0.16, score: 100 },
     interceptor: { type: interceptor, hp: 32, speed: 52, agility: 1.9, fireRate: 0.12, score: 150 },
   };
   return types;
@@ -82,7 +82,7 @@ function callsign(): string {
 function launch(game: GameContext, player: Player, announce: boolean) {
   const cs = callsign();
   const { at, yaw } = slot(pilots.size);
-  const p = new Pilot(game, player, kinds(game).xwing, weapons, cs, at, yaw);
+  const p = new Pilot(game, player, kinds(game).voxwing, weapons, cs, at, yaw);
   pilots.set(player.id, p);
   if (phase === 'fight' || phase === 'between') scratched.add(player.id);
   weapons.targets.push(p);
@@ -130,7 +130,7 @@ function spawnEnemy(game: GameContext, kind: EnemyKind, fromHangar: boolean) {
   weapons.targets.push(e);
 }
 
-/** A TIE shot down by a pilot: what it earns them. */
+/** A Bowtie shot down by a pilot: what it earns them. */
 function scored(player: Player, kind?: 'laser' | 'torpedo') {
   player.achieve('first_kill');
   if (kind === 'torpedo') player.achieve('stay_on_target');
@@ -145,14 +145,14 @@ function startWave(game: GameContext) {
   game.hud.banner(w.title, w.sub, { duration: 3, color: w.boss ? '#ff6b5b' : '#ffd23f' });
   game.audio.play(w.boss ? 'capital_horn' : 'wave');
   const k = kinds(game);
-  const ties = Math.round(w.ties * crowd());
+  const bowties = Math.round(w.bowties * crowd());
   const interceptors = Math.round(w.interceptors * crowd());
-  incoming = ties + interceptors;
+  incoming = bowties + interceptors;
   const arrive = (kind: EnemyKind, hangar: boolean) => () => {
     incoming--;
     spawnEnemy(game, kind, hangar);
   };
-  for (let i = 0; i < ties; i++) game.clock.after(i * 0.6, arrive(k.tie, !!w.boss || i % 2 === 0));
+  for (let i = 0; i < bowties; i++) game.clock.after(i * 0.6, arrive(k.bowtie, !!w.boss || i % 2 === 0));
   for (let i = 0; i < interceptors; i++) game.clock.after(1.5 + i * 0.8, arrive(k.interceptor, false));
   if (w.boss) {
     capital.active = true;
@@ -199,7 +199,7 @@ function finish(game: GameContext, won: boolean) {
       stats.push(['Hull', `${Math.round(p.down ? 0 : p.hull)}%`]);
       p.player.hud.screen({
         title: won ? 'Victory!' : 'Shot Down',
-        subtitle: won ? `The Star Destroyer is finished. Great shot, ${many ? p.callsign : 'kid'}.` : `${many ? 'Your squadron' : 'You'} fell during ${WAVES[wave].title.toLowerCase()}.`,
+        subtitle: won ? `The Star Demolisher is finished. Great shot, ${many ? p.callsign : 'kid'}.` : `${many ? 'Your squadron' : 'You'} fell during ${WAVES[wave].title.toLowerCase()}.`,
         tone: won ? 'victory' : 'defeat',
         stats,
         buttons: [
@@ -439,7 +439,7 @@ export default defineServer(shared, {
         game.hud.banner(left ? 'SHIELD GENERATOR DOWN' : 'SHIELDS ARE DOWN', left ? 'One more to go' : 'Hit the bridge! +2 torpedoes', { duration: 2.6, color: '#ffd23f' });
       },
       bridgeDown: () => {
-        game.hud.banner('DIRECT HIT', 'The Star Destroyer is breaking up', { duration: 3.5, color: '#ffd23f' });
+        game.hud.banner('DIRECT HIT', 'The Star Demolisher is breaking up', { duration: 3.5, color: '#ffd23f' });
         // Swing the cameras out to watch it go.
         cine = 0;
         // Start south-west of the tower and swing west, over the sea (the ridge is to the east).
@@ -497,7 +497,7 @@ export default defineServer(shared, {
         if (reinforce <= 0 && alive < 4 + pilots.size) {
           reinforce = 9 / crowd();
           const k = kinds(game);
-          spawnEnemy(game, Math.random() < 0.35 ? k.interceptor : k.tie, true);
+          spawnEnemy(game, Math.random() < 0.35 ? k.interceptor : k.bowtie, true);
         }
         game.hud.objective(capital.bridge.shielded ? `Shield generators: ${capital.generators.filter((g) => g.alive).length} left` : 'Destroy the bridge!');
       } else {
