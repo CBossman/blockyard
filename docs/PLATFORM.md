@@ -1248,7 +1248,7 @@ hud: {
   theme: {
     display: "'Bangers', Impact, sans-serif",   // titles, banners, big numbers
     text: "'Archivo', system-ui, sans-serif",
-    fonts: ['Bangers', 'Archivo'],              // fetched from Google Fonts
+    fonts: ['Bangers', 'Archivo'],              // fetched from Google Fonts ('Barlow:300;500' names the weights: else 400 and 700)
     colors: { accent: '#ffcc00', ink: '#111', paper: '#fdf1d6', text: '#111', danger: '#e63946', good: '#ffcc00' },
     css: hudCss,                                // import hudCss from './hud.css?raw': the game's own look
   },

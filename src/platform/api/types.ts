@@ -135,7 +135,10 @@ export interface HudTheme {
   display?: string;
   /** Font for everything else. */
   text?: string;
-  /** Google Fonts families to load for them, e.g. `['Bangers', 'Anton']`. */
+  /**
+   * Google Fonts families to load for them, e.g. `['Bangers', 'Anton']`; weights after a colon
+   * (`'Barlow Condensed:300;500;600'`), else 400 and 700.
+   */
   fonts?: string[];
   /**
    * `accent`: highlights and your own row; `ink`: outlines and shadows; `paper`: panel
