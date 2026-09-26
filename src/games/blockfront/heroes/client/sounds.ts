@@ -7,9 +7,8 @@ import { blaster, chirp, vent } from '../../client/sounds';
  * name): a saber's hum (a loop each blade keeps, its pitch and loudness rising as it's swung:
  * `fx.ts`), its ignition, swings, cuts, clashes and deflections; the Force's push and pull, a
  * choke, lightning's crackle, the aura and the rage; the thrown saber's whirl; a leap and its
- * landing; every hero's jump, a second one in the air, a landing; the bowcaster and its bursting
- * quarrels, a Wookiee's roar and charge; a wrist rocket, a flamethrower, a jetpack. All made here
- * from oscillators and noise.
+ * landing; the bowcaster and its bursting quarrels, a Wookiee's roar and charge; a wrist rocket,
+ * a flamethrower, a jetpack. All made here from oscillators and noise.
  */
 
 const rnd = (a: number, b: number) => a + Math.random() * (b - a);
@@ -216,25 +215,8 @@ export function defineHeroSounds(client: Client) {
     for (let i = 0; i < 5; i++) s.noise({ duration: 0.015, delay: rnd(0.05, 0.4), filter: 'highpass', from: 3000, to: 2500, volume: rnd(0.05, 0.12) });
     buzz(s, { from: 100, to: 60, duration: 0.4, volume: 0.07 });
   });
-  // ---- Every hero's jump (`jumps.ts`); levels at the rest's.
-  /** Off the ground: a scuff and a soft rush of air. */
-  a.define('bfh_jump', (s) => {
-    s.noise({ duration: 0.05, filter: 'lowpass', from: 900, to: 300, volume: 0.07 });
-    s.noise({ duration: 0.3, attack: 0.05, filter: 'bandpass', from: 380, to: 1000, q: 1.2, volume: 0.07 });
-  });
-  /** A second jump in the air: an airy whoosh, a faint shimmer over it. */
-  a.define('bfh_jump2', (s) => {
-    const p = s.pitch;
-    s.noise({ duration: 0.35, attack: 0.04, filter: 'bandpass', from: 600, to: 1700, q: 1.4, volume: 0.1 });
-    s.tone({ wave: 'sine', from: 880 * p, to: 1320 * p, duration: 0.32, volume: 0.022, attack: 0.05 });
-    s.tone({ wave: 'sine', from: 1320 * p, to: 1980 * p, duration: 0.26, delay: 0.05, volume: 0.012, attack: 0.05 });
-  });
-  /** Down again: a thud (the harder they land, the louder it's played). */
-  a.define('bfh_land', (s) => {
-    const p = s.pitch;
-    s.noise({ duration: 0.16, filter: 'lowpass', from: 700, to: 120, volume: 0.18 });
-    s.tone({ wave: 'sine', from: 95 * p, to: 42 * p, duration: 0.2, volume: 0.22 });
-    s.noise({ duration: 0.09, filter: 'bandpass', from: 2400, to: 1200, q: 1, volume: 0.03, delay: 0.02 });
+  a.define('bfh_force_jump', (s) => {
+    s.noise({ duration: 0.18, attack: 0.04, filter: 'bandpass', from: 500, to: 1300, q: 1.5, volume: 0.108 });
   });
 
   // ---- Chewblocca's ----

@@ -14,7 +14,8 @@ import { HeroScene } from './state';
  *
  * All of it is this screen's own, from how it draws them: our own hero as our movement has it
  * (run ahead, so it answers at once), everyone else's figure as it's drawn; their second jumps
- * from the scene (`flips`: ours from our movement, theirs from the server's word).
+ * from the scene (`flips`: ours from our movement, theirs from the server's word). Its voices are
+ * its own (`defineJumpVoices`).
  */
 export function heroJumps(scene: HeroScene): ClientKit {
   /** Each hero seen: in the air, how fast they rise (as drawn), their fastest fall this jump, their last second jump. */
@@ -23,6 +24,9 @@ export function heroJumps(scene: HeroScene): ClientKit {
   const rings: { at: Vec3; born: number; r0: number; r1: number; kind: Ground; n: number }[] = [];
   return {
     name: 'blockfront.heroes.jumps',
+    setup(client: Client) {
+      defineJumpVoices(client);
+    },
     frame(client: Client, dt: number) {
       const now = scene.now;
       const seen = new Set<string>();
@@ -145,4 +149,29 @@ function kick(client: Client, feet: Vec3) {
   client.fx.flare(at, 0.8);
   client.fx.particles(at, [1, 0.72, 0.3], { count: 10, speed: 3, size: 0.12, gravity: 18, glow: 3, life: 0.2, spread: 0.1, collide: false });
   client.fx.particles({ x: at.x, y: at.y - 0.5, z: at.z }, [0.6, 0.57, 0.55], { count: 6, speed: 1.2, size: 0.18, gravity: 1.5, life: 0.7, spread: 0.2, collide: false });
+}
+
+/**
+ * The jumps' voices (levels at `sounds.ts`'s): off the ground, a scuff and a soft rush of air; a
+ * second jump, an airy whoosh with a faint shimmer over it; down again, a thud (played louder the
+ * harder they land, lower for the heavy ones).
+ */
+function defineJumpVoices(client: Client) {
+  const a = client.audio;
+  a.define('bfh_jump', (s) => {
+    s.noise({ duration: 0.05, filter: 'lowpass', from: 900, to: 300, volume: 0.07 });
+    s.noise({ duration: 0.26, attack: 0.05, filter: 'bandpass', from: 380, to: 1000, q: 1.2, volume: 0.075 });
+  });
+  a.define('bfh_jump2', (s) => {
+    const p = s.pitch;
+    s.noise({ duration: 0.3, attack: 0.04, filter: 'bandpass', from: 600, to: 1700, q: 1.4, volume: 0.1 });
+    s.tone({ wave: 'sine', from: 880 * p, glide: [[0.3, 1320 * p]], duration: 0.3, attack: 0.05, volume: 0.022, fm: { ratio: 2, depth: 0.3 } });
+    s.tone({ wave: 'sine', from: 1320 * p, glide: [[0.25, 1980 * p]], duration: 0.25, delay: 0.05, attack: 0.05, volume: 0.012 });
+  });
+  a.define('bfh_land', (s) => {
+    const p = s.pitch;
+    s.noise({ duration: 0.03, filter: 'highpass', from: 2400, to: 1400, volume: 0.05 });
+    s.tone({ wave: 'sine', from: 95 * p, to: 40 * p, duration: 0.22, attack: 0.003, volume: 0.22 });
+    s.noise({ duration: 0.2, attack: 0.005, filter: 'lowpass', from: 700, to: 90, volume: 0.18 });
+  });
 }

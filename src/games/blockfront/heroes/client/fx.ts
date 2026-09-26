@@ -316,18 +316,19 @@ export function heroFx(scene: HeroScene): ClientKit {
         const rage = scene.on(id, 'rage');
         // Its own sweep: where it was, carried along as far as its hero went since (a running or
         // leaping hero's blade doesn't streak for that alone).
-        const from = was?.at ?? b.at;
-        const moved = { x: b.at.x - from.x, y: b.at.y - from.y, z: b.at.z - from.z };
-        const prev = was ? { base: add(was.base, moved), tip: add(was.tip, moved) } : null;
-        if (prev) trail(B, beam, prev, b, rage, now);
+        if (was) {
+          const from = was.at ?? b.at;
+          const went = { x: b.at.x - from.x, y: b.at.y - from.y, z: b.at.z - from.z };
+          trail(B, beam, { base: add(was.base, went), tip: add(was.tip, went) }, b, rage, now);
+        }
         // Its hum, near by: rising and swelling as the blade's swung (a swing's the hum swept past).
         const d = dist(cam, b.tip);
         let h = hums.get(id);
         if (!h && d < HUM_NEAR) hums.set(id, (h = { loop: client.audio.loop(humOf(b.hero, 0).voice, { at: mid(b), volume: 0 }), speed: 0 }));
         if (h && d > HUM_FAR) hush(id);
         else if (h) {
-          const swept = prev && dt > 0 ? dist(prev.tip, b.tip) / dt : 0;
-          h.speed += (Math.min(40, swept) - h.speed) * Math.min(1, dt * 14);
+          const moved = was && dt > 0 ? dist(was.tip, b.tip) / dt : 0;
+          h.speed += (Math.min(40, moved) - h.speed) * Math.min(1, dt * 14);
           const tone = humOf(b.hero, h.speed);
           h.loop.set({ at: mid(b), pitch: tone.pitch, volume: tone.volume });
         }
