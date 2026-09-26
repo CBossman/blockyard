@@ -58,13 +58,13 @@ export const LOOKS: Record<string, ItemLook> = {
     hold: { style: 'gun', model: HeldModels.gltf(url('hero_bowcaster')), gun: FP },
     tracer: '#5dff6a',
     // (Its twang-boom: heroes/client/sounds.ts.)
-    sounds: { use: 'bfh_bowcaster', reload: 'vent', empty: 'overheat' },
+    sounds: { use: 'bfh_bowcaster', reload: 'bowcaster_recock', empty: 'overheat' },
   },
   hero_ee3: {
     icon: { gltf: url('hero_ee3') },
     hold: { style: 'gun', model: HeldModels.gltf(url('hero_ee3')), gun: FP },
     tracer: TEAMS[1].bolt,
-    sounds: { use: 'blaster_pistol', reload: 'vent', empty: 'overheat' },
+    sounds: { use: 'blaster_ee3', reload: 'vent_ee3', empty: 'overheat' },
   },
   ...Object.fromEntries(
     SABER_HEROES.map((id) => [

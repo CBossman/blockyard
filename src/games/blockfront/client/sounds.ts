@@ -33,7 +33,7 @@ const rnd = (a: number, b: number) => a + Math.random() * (b - a);
  * A falling chirp's path: from `top` to `bottom` Hz over `fall` seconds, fast at first then slower,
  * as a wave in a struck wire spreads (the high part arrives first): f = top / (1 + t/τ)².
  */
-function chirp(top: number, bottom: number, fall: number, points = 7): [number, number][] {
+export function chirp(top: number, bottom: number, fall: number, points = 7): [number, number][] {
   const k = Math.sqrt(top / bottom) - 1;
   const out: [number, number][] = [];
   for (let i = 1; i <= points; i++) {
@@ -44,7 +44,7 @@ function chirp(top: number, bottom: number, fall: number, points = 7): [number, 
 }
 
 /** How a blaster sounds (see `blaster`). */
-interface Shot {
+export interface Shot {
   /** The chirp: where it starts and ends (Hz) and how long it takes to fall (seconds). */
   top: number;
   bottom: number;
@@ -65,9 +65,9 @@ interface Shot {
  * an octave down for body), the echoes after it, a snap of noise and a thump. Each shot differs a
  * little (the wire never rings the same twice).
  */
-function blaster(s: SynthKit, o: Shot) {
+export function blaster(s: SynthKit, o: Shot) {
   const p = s.pitch * rnd(0.97, 1.03);
-  const v = o.loud * 0.8;
+  const v = o.loud * 0.72;
   const ring = (delay: number, stretch: number, vol: number) => {
     const fall = o.fall * stretch;
     const top = o.top * p * (stretch > 1 ? 0.8 : 1);
@@ -113,11 +113,11 @@ function cymbal(s: SynthKit, at: number, loud = 1, swell = 0) {
 }
 
 /** A vent: a clack as it opens, steam hissing out for `len` seconds, a clunk and a rising tick as it's cool. */
-function vent(s: SynthKit, len: number) {
+export function vent(s: SynthKit, len: number) {
   s.noise({ duration: 0.04, filter: 'bandpass', from: 1800, to: 1300, q: 4, volume: 0.25 });
   s.tone({ wave: 'sine', from: 200, to: 90, duration: 0.07, volume: 0.18 });
-  s.noise({ duration: len * 0.6, attack: 0.03, hold: len * 0.25, delay: 0.03, filter: 'highpass', from: 5200, to: 2600, volume: 0.13 });
-  s.noise({ duration: len * 0.5, attack: 0.05, delay: 0.03, filter: 'bandpass', from: 2400, to: 900, q: 1.5, volume: 0.06 });
+  s.noise({ duration: len * 0.6, attack: 0.03, hold: len * 0.25, delay: 0.03, filter: 'highpass', from: 5200, to: 2600, volume: 0.05 });
+  s.noise({ duration: len * 0.5, attack: 0.05, delay: 0.03, filter: 'bandpass', from: 2400, to: 900, q: 1.5, volume: 0.03 });
   s.tone({ wave: 'sine', from: 1400, to: 300, duration: len * 0.8, delay: 0.05, volume: 0.035 });
   s.noise({ duration: 0.03, delay: len - 0.12, filter: 'bandpass', from: 1500, to: 1100, q: 4, volume: 0.26 });
   s.tone({ wave: 'triangle', from: 620, glide: [[0.05, 930]], duration: 0.12, delay: len - 0.08, volume: 0.1 });
@@ -134,7 +134,7 @@ export function defineSounds(client: Client) {
   a.define('blaster_heavy_rebels', (s) => blaster(s, { top: 3300, bottom: 300, fall: 0.085, echoes: 1, gap: 0.026, metal: 0.7, grit: 0.1, thump: 0.55, snap: 0.7, loud: 0.85 }));
   a.define('blaster_heavy_empire', (s) => blaster(s, { top: 2800, bottom: 220, fall: 0.08, echoes: 1, gap: 0.024, metal: 0.4, grit: 0.45, thump: 0.6, snap: 0.9, loud: 0.85 }));
   const cycler = (s: SynthKit, o: { top: number; bottom: number; grit: number; metal: number }) => {
-    blaster(s, { ...o, fall: 0.3, echoes: 3, gap: 0.055, thump: 1, snap: 1.3, loud: 1.1 });
+    blaster(s, { ...o, fall: 0.3, echoes: 3, gap: 0.055, thump: 1, snap: 1.3, loud: 0.9 });
     // The crack of it, the boom rolling after.
     s.noise({ duration: 0.12, filter: 'highpass', from: 3000, to: 900, volume: 0.3 });
     s.tone({ wave: 'sine', from: 95 * s.pitch, to: 32, duration: 0.7, attack: 0.004, volume: 0.45 });
@@ -213,7 +213,7 @@ export function defineSounds(client: Client) {
     s.tone({ wave: 'sine', from: 180, to: 520, duration: 0.15, attack: t, volume: 0.1, fm: { ratio: 2, depth: 0.2 } });
   });
   a.define('toss', (s) => {
-    s.noise({ duration: 0.16, attack: 0.05, filter: 'bandpass', from: 450, to: 1600, q: 1.3, volume: 0.5 });
+    s.noise({ duration: 0.16, attack: 0.05, filter: 'bandpass', from: 450, to: 1600, q: 1.3, volume: 0.35 });
   });
   a.define('clink', (s) => {
     const p = s.pitch;
@@ -240,8 +240,8 @@ export function defineSounds(client: Client) {
 
   // ---- UI ----
   a.define('post_gained', (s) => {
-    brass(s, note(-2), 0, 0.3, 1.2, 2600);
-    brass(s, note(3), 0.13, 0.85, 1.3, 2800);
+    brass(s, note(-2), 0, 0.3, 0.8, 2600);
+    brass(s, note(3), 0.13, 0.85, 0.85, 2800);
     s.tone({ wave: 'triangle', from: note(15), duration: 0.4, hold: 0.1, delay: 0.14, volume: 0.05 });
   });
   a.define('post_lost', (s) => {
@@ -276,16 +276,16 @@ export function defineSounds(client: Client) {
 
   // ---- Stingers: the match opening, victory, defeat ----
   a.define('match_start', (s) => {
-    drum(s, 49, 0);
-    drum(s, 49, 0.2, 0.7);
+    drum(s, 49, 0, 0.8);
+    drum(s, 49, 0.2, 0.56);
     cymbal(s, 0.3, 0.6, 0.8);
     // A rising call: up a fourth, up again, and a held chord.
-    brass(s, note(-14), 0.38, 0.28, 1.2);
-    brass(s, note(-9), 0.62, 0.28, 1.2);
-    brass(s, note(-7), 0.86, 0.26, 1.1);
-    for (const n of [-9, -5, 0]) brass(s, note(n), 1.12, 1.7, 1.1, 2400);
-    brass(s, note(-21), 1.12, 1.7, 1.1, 1200);
-    drum(s, 41, 1.12, 0.9);
+    brass(s, note(-14), 0.38, 0.28, 0.96);
+    brass(s, note(-9), 0.62, 0.28, 0.96);
+    brass(s, note(-7), 0.86, 0.26, 0.88);
+    for (const n of [-9, -5, 0]) brass(s, note(n), 1.12, 1.7, 0.88, 2400);
+    brass(s, note(-21), 1.12, 1.7, 0.88, 1200);
+    drum(s, 41, 1.12, 0.72);
     cymbal(s, 1.12, 0.7);
   });
   a.define('victory', (s) => {
@@ -336,8 +336,8 @@ export function defineSounds(client: Client) {
     for (const d of [1, 1.02]) s.tone({ wave: 'sawtooth', from: 80 * d * p, glide: [[0.9, 100 * d * p], [2.5, 58 * d * p]], duration: 1.6, attack: 0.85, volume: 0.091, lowpass: { freq: 900, to: 450 }, drive: 0.25 });
     s.tone({ wave: 'triangle', from: 1300 * p, glide: [[0.9, 1500 * p], [2.4, 900 * p]], duration: 1.5, attack: 0.8, volume: 0.042, vibrato: { rate: 6, depth: 8 } });
   });
-  a.define('amb_sky_laser', (s) => blaster(s, { top: 3000, bottom: 200, fall: 0.2, echoes: 1, gap: 0.04, metal: 0.8, grit: 0.1, thump: 0.5, snap: 0.5, loud: 0.35 }));
-  a.define('amb_sky_laser_imp', (s) => blaster(s, { top: 2400, bottom: 160, fall: 0.18, echoes: 1, gap: 0.035, metal: 0.4, grit: 0.5, thump: 0.5, snap: 0.6, loud: 0.35 }));
+  a.define('amb_sky_laser', (s) => blaster(s, { top: 3000, bottom: 200, fall: 0.2, echoes: 1, gap: 0.04, metal: 0.8, grit: 0.1, thump: 0.5, snap: 0.5, loud: 0.22 }));
+  a.define('amb_sky_laser_imp', (s) => blaster(s, { top: 2400, bottom: 160, fall: 0.18, echoes: 1, gap: 0.035, metal: 0.4, grit: 0.5, thump: 0.5, snap: 0.6, loud: 0.25 }));
 
   // ---- The thermal detonator going off (client/detonator.ts, over the platform's blast) ----
   a.define('detonator_blast', (s) => {

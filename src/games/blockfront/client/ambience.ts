@@ -76,7 +76,7 @@ export function ambience(): ClientKit {
         const due = shots.filter((s) => s.at <= t);
         if (due.length) {
           shots = shots.filter((s) => s.at > t);
-          for (const s of due) client.audio.play(s.voice, { at: { x: s.x, y: s.y, z: s.z }, volume: 0.5, pitch: rand(0.94, 1.04) });
+          for (const s of due) client.audio.play(s.voice, { at: { x: s.x, y: s.y, z: s.z }, volume: 0.35, pitch: rand(0.94, 1.04) });
         }
       }
       if (t >= boom) {
