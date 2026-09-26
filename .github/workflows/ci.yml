@@ -27,7 +27,9 @@ env:
 jobs:
   engine:
     name: Engine tests
-    runs-on: ubuntu-latest
+    # On a Mac: the physics fingerprint tests hash results to the last bit, through the
+    # platform's exp and sin, and their prints were taken on Apple silicon (Linux's libm differs).
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
