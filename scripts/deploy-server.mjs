@@ -25,11 +25,11 @@ const build = `server-${buildHash(['dist-server', 'engine/pkg/voxel_engine_bg.wa
 // Every machine's image tag: the label of the release it runs.
 let live = [];
 try {
-  live = JSON.parse(execSync(`fly image show -a ${app} --json`, { encoding: 'utf8' })).map((m) => m.Tag);
+  live = JSON.parse(execSync(`flyctl image show -a ${app} --json`, { encoding: 'utf8' })).map((m) => m.Tag);
 } catch {}
 if (flag('--if-changed') && live.length && live.every((tag) => tag === build)) {
   console.log(`The server (${app}) is already this build (${build}): nothing to deploy.`);
 } else {
   console.log(`Deploying the server: ${[...new Set(live)].join(', ') || 'unknown'} -> ${build}`);
-  run(`fly deploy --remote-only --image-label ${build}`);
+  run(`flyctl deploy --remote-only --image-label ${build}`);
 }
