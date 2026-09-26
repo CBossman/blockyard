@@ -135,7 +135,10 @@ export interface HudTheme {
   display?: string;
   /** Font for everything else. */
   text?: string;
-  /** Google Fonts families to load for them, e.g. `['Bangers', 'Anton']`. */
+  /**
+   * Google Fonts families to load for them, e.g. `['Bangers', 'Anton']`; weights after a colon
+   * (`'Barlow Condensed:300;500;600'`), else 400 and 700.
+   */
   fonts?: string[];
   /**
    * `accent`: highlights and your own row; `ink`: outlines and shadows; `paper`: panel
@@ -2247,18 +2250,17 @@ export interface LoopHandle {
 }
 
 /**
- * What a game-defined sound gets to make noise with. Frequencies are Hz; times are seconds from
- * the start of the sound; `pitch` is the play call's pitch multiplier (apply it yourself).
- * `ctx` / `out` / `t` are there for anything the helpers don't cover (raw WebAudio into `out`).
- */
-/**
- * What a voice makes its sound from. A voice is recorded as the layers it makes and sent to each
- * player's client, so it's built only from `tone` and `noise` (no raw Web Audio).
+ * What a voice (a game-defined sound, `client.audio.define`) makes its sound from: layers of
+ * tones and noise, each with its own envelope. Frequencies are Hz; times are seconds from the
+ * start of the sound; `pitch` is the play's pitch multiplier (apply it yourself).
+ *
+ * Each layer rises over `attack`, stays at its `volume` for `hold`, then dies away over `duration`
+ * (so it lasts `attack + hold + duration`).
  */
 export interface SynthKit {
   /** The play's pitch (1 = as written): multiply frequencies by it. */
   readonly pitch: number;
-  /** An oscillator sweeping `from` -> `to` (exponential), with an attack / decay envelope. */
+  /** An oscillator sweeping `from` -> `to` (exponential) over `duration`, or along `glide`. */
   tone(o: {
     wave?: OscillatorType;
     from: number;
@@ -2267,16 +2269,80 @@ export interface SynthKit {
     volume?: number;
     delay?: number;
     attack?: number;
-    lowpass?: number;
+    /** Seconds at full volume after the attack, before it dies away: a held note, a steady hum. */
+    hold?: number;
+    /**
+     * The pitch's path instead of `to`: `[seconds, Hz]` points it slides through (exponentially)
+     * from `from`. A blaster's bolt drops fast, then slower (`[[0.01, 1800], [0.04, 700], [0.15, 300]]`);
+     * a swung blade rises and falls.
+     */
+    glide?: [number, number][];
+    /**
+     * Frequency modulation: a sine at `ratio` times the tone's frequency bends its pitch by `depth`
+     * times that frequency, easing to `to` times by the end if given. Whole ratios make it richer
+     * (brass, buzz); others ring like metal (1.41, 2.76). `depth` 0.3 shimmers, 1 is rich, 3 clangs.
+     */
+    fm?: { ratio: number; depth: number; to?: number };
+    /** Distortion, 0..1: grit, crackle, a harsher edge. */
+    drive?: number;
+    /** A lowpass filter (Hz), or one sweeping from `freq` to `to` over `time` seconds (default the whole tone). */
+    lowpass?: number | { freq: number; to?: number; q?: number; time?: number };
+    /** A highpass filter (Hz): thins the bottom out. */
+    highpass?: number;
     /** A bandpass filter, sweeping from `freq` to `to` over the duration if given. */
     bandpass?: { freq: number; to?: number; q?: number };
     vibrato?: { rate: number; depth: number };
   }): void;
-  /** Filtered white noise, the filter sweeping `from` -> `to`. */
-  noise(o: { duration: number; from: number; to?: number; filter?: BiquadFilterType; q?: number; volume?: number; delay?: number }): void;
+  /** Filtered white noise, the filter sweeping `from` -> `to` over `duration`. */
+  noise(o: { duration: number; from: number; to?: number; filter?: BiquadFilterType; q?: number; volume?: number; delay?: number; attack?: number; hold?: number }): void;
 }
 
 export type SynthVoice = (s: SynthKit) => void;
+
+/**
+ * A continuous sound's layers (`client.audio.defineLoop`): steady tones and noise. The loop's
+ * `pitch` moves every frequency (and filter) of them together, its `volume` their loudness.
+ */
+export interface LoopKit {
+  /** A steady oscillator at `freq` Hz (see `SynthKit.tone` for `fm`, `drive`, `vibrato`). */
+  tone(o: {
+    wave?: OscillatorType;
+    freq: number;
+    volume?: number;
+    lowpass?: number;
+    highpass?: number;
+    bandpass?: { freq: number; q?: number };
+    vibrato?: { rate: number; depth: number };
+    fm?: { ratio: number; depth: number };
+    drive?: number;
+  }): void;
+  /** Steady noise through a filter at `freq` Hz. */
+  noise(o: { freq: number; filter?: BiquadFilterType; q?: number; volume?: number }): void;
+}
+
+export type LoopVoice = (l: LoopKit) => void;
+
+/** A continuous sound on this screen (`client.audio.loop`): moved, changed and stopped as it goes. */
+export interface ClientLoop {
+  /** Its loudness (0..1), its pitch (1 = as defined; it scales every frequency) and where it is (none: everywhere). */
+  set(o: { volume?: number; pitch?: number; at?: Vec3 | null }): void;
+  stop(): void;
+}
+
+/**
+ * How the world sounds on this screen (`client.audio.acoustics`), for every sound from then on.
+ * Without it sounds only fade with distance, dry.
+ */
+export interface Acoustics {
+  /** Distance muffles: a sound far off loses its highs, as through air (1: as outdoors; 2: thicker; 0: never). */
+  air?: number;
+  /**
+   * A shared reverb, the space's echo: how much of each sound goes into it close by (`near`) and
+   * 100 blocks off (`far`); how long its tail rings (`seconds`), and how dark it is (`damp`, 0..1).
+   * Far sounds come mostly as their echo. A voice can take less of it or none (`define`'s `reverb`).
+   */
+  reverb?: { near?: number; far?: number; seconds?: number; damp?: number };
+}
 
 export interface AudioApi {
   /**

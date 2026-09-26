@@ -75,9 +75,9 @@ export const shared = defineShared({
     healthBars: true,
     nameTags: 'sight',
     theme: {
-      display: "'Orbitron', 'Arial Black', sans-serif",
-      text: "'Titillium Web', 'Helvetica Neue', system-ui, sans-serif",
-      fonts: ['Orbitron', 'Titillium Web'],
+      display: "'Barlow Condensed', 'Arial Narrow', 'Helvetica Neue', sans-serif",
+      text: "'Barlow', 'Helvetica Neue', system-ui, sans-serif",
+      fonts: ['Barlow Condensed:300;400;500;600;700', 'Barlow:400;500;600'],
       colors: { accent: COLORS.yellow, ink: COLORS.ink, paper: COLORS.ink, text: COLORS.paper, danger: COLORS.red, good: COLORS.paper },
       css: THEME_CSS,
     },
