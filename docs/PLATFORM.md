@@ -332,7 +332,7 @@ Under the hood `world/blocks.ts` turns the definitions into the engine's block v
 
 ## Player
 
-`player` options: `build` (creative: break and place blocks from a block hotbar; for survival building see the `building` kit), `fly`, `health` (half-hearts; `false` = invulnerable), `regen`, `fallDamage`, `hotbar: 'blocks' | 'items'`, `skin` (a Minecraft-layout skin, default `Skins.player`; it's also the first-person arm), and `controller`:
+`player` options: `build` (creative: break and place blocks from a block hotbar; for survival building see the `building` kit), `fly`, `health` (half-hearts; `false` = invulnerable), `regen`, `fallDamage`, `hotbar: 'blocks' | 'items'`, `model` or `skin` (a body for every player instead of their own avatars: a model, or a Minecraft-layout skin, also their first-person arm), and `controller`:
 - `'walk'` (default) is the first-person player.
 - `'none'` removes the walking body, hand and hotbar. The game drives the camera and reads the controls itself, which is what vehicles, flight and top-down games need (next section). `player.position` then stays wherever you last `teleport` it: that's the point mobs chase and pickups fly to, so move it with your vehicle if you use those, and ignore it if you don't.
 
@@ -447,7 +447,7 @@ Games are written so the same code works with one player or many:
 
 - **`game.players`** lists everyone playing. With one person playing it has exactly one, and **`game.player`** is that player (the first to join), which is why a game written for one player can keep using `game.player`, `game.hud`, `game.input` and `game.camera` as they are.
 - **Each player** has an `id`, a `name`, their own `inventory`, `health` and `viewModel`, and their own screen and controls: **`player.hud`** reaches only them (their wallet, their shop, their toasts), **`player.audio`** plays sounds only they hear, **`player.fx`** shakes and flashes only their screen (they were hit), `player.input` is their keyboard and mouse, `player.camera` their camera. **`game.hud`** is everyone's screen (banners, the scoreboard), `game.audio` everyone's speakers.
-- **How others see them.** Each player appears to the others as a figure that walks, swings and holds what's in their hand. `player.setSkin([u, v], atlas)` dresses it (a Minecraft-layout skin in one of your atlases; their own first-person arm wears it too), and `player.color` colours their name above it (team colours).
+- **How others see them.** Each player appears to the others as a figure that walks, swings and holds what's in their hand: their avatar (their own character, from the locker), unless the game gives them a body (`player.setModel`, or a box skin with `player.setSkin`). `player.setUniform({ topColor })` keeps them themselves in the game's colours (a team's kit), and `player.color` colours their name above them (team colours).
 - **Who did it.** Damage sources, killers and block events are an `Actor`: an `Entity`, a `Player`, or `'world'`. Tell them apart with `kind` (`'entity'` or `'player'`): `if (killer !== 'world' && killer?.kind === 'player') kills++`.
 - **Callbacks name the player**: `use(game, player)`, `onPickup(game, count, player)`, command `run(args, game, player)`, the `pickup`, `playerDamage` and `playerDeath` events, and the kits' handlers. Use that player rather than `game.player`, and a potion heals whoever drank it.
 - **Mobs pick their target**: `self.nearestPlayer()`, then `moveTo`, `lookAt`, `canSee`, `distanceTo`, `shoot` and `damage` it. The built-in `Behaviors` all hunt the nearest player.
@@ -464,7 +464,7 @@ http://localhost:5173/?server=ws://localhost:8787&game=sandbox
 
 With no games named, a server hosts every game in the launcher. Development games (the ones behind `?game=` alone, like High Noon, `moves` or the previews) are hosted only by a server in development mode (`npm run dev`, or `npm run server -- --dev`).
 
-The server runs the game at 30 steps a second whether or not anyone's watching a given frame. The first to join is `game.player`; everyone else arrives at the spawn and the game hears `playerJoin`. When the first player leaves, the next to join takes their place, so `game.player` always works. Everyone sees everyone else as a figure with their name above it, wearing the game's player skin (or their own, `player.setSkin`). Your own movement is predicted: it happens the moment you press a key, and the server's word only corrects it when something you couldn't know about happened (a knockback, a teleport). A restart (a "Play again" button, or Restart match in the pause menu) restarts the game for everyone. Players can restart the game or change its time of day from the pause menu only in a game of their own: in the public game, which is everyone's, the server turns both down (unless it runs with `--cheats`, as development servers do). `game.exit()` sends back to the launcher only the player whose button or command called it.
+The server runs the game at 30 steps a second whether or not anyone's watching a given frame. The first to join is `game.player`; everyone else arrives at the spawn and the game hears `playerJoin`. When the first player leaves, the next to join takes their place, so `game.player` always works. Everyone sees everyone else as a figure with their name above it: their avatar, or the body the game gives them. Your own movement is predicted: it happens the moment you press a key, and the server's word only corrects it when something you couldn't know about happened (a knockback, a teleport). A restart (a "Play again" button, or Restart match in the pause menu) restarts the game for everyone. Players can restart the game or change its time of day from the pause menu only in a game of their own: in the public game, which is everyone's, the server turns both down (unless it runs with `--cheats`, as development servers do). `game.exit()` sends back to the launcher only the player whose button or command called it.
 
 **What a server keeps.** Each server has a SQLite database (`data/<game>.sqlite`, or `--db path`). It holds the world's seed, so restarting the server carries on the same world; for games that keep their world (`world.persist`, like Sandbox) its builds and time of day, and each signed-in player's place (where they stood, which way they faced, whether they were flying, their block hotbar; a guest starts at the spawn each time); and your game's `game.store` and each player's `player.store`. It's saved every 30 seconds, when a game stops for want of players, and when the server stops (Ctrl-C). `--new` starts a fresh world and sets the old database aside. Two players with one name at the same time (one account in two tabs) become "Ann" and "Ann 2".
 
@@ -1014,7 +1014,7 @@ update(game, dt) {
 ```ts
 game.entities.define('zombie', {
   name: 'Zombie',
-  model: Models.humanoid({ skin: [0, 0], atlas: 'mine' }), // or Models.spider(...); build: 'thin' | 'large', scale, extras
+  model: Models.character({ skin: '#7a9a5e', face: 'glow', eyes: '#e4ff8a', ragged: true }), // or Models.gltf(...), Models.humanoid(...), Models.spider(...)
   hitbox: { width: 0.6, height: 1.95 },
   health: 20,
   speed: 3.2,
@@ -1033,7 +1033,7 @@ const z = game.entities.spawn('zombie', { x: 10, y: 71, z: 0 });
 - `invulnerable: true` ignores all damage (shopkeepers, scenery). `entity.armor` (0..20) reduces damage like the player's. `entities.raycast(origin, dir, reach)` finds the one under a crosshair; the `interactions` kit turns that into right-click-to-talk.
 - Mobs can fight each other and build: `other.damage(n, { source: self })` hurts another entity with the right knockback and kill credit, and the building kit's `placeBlock(x, y, z, 'red_wool', self)` / `breakBlock` let them bridge and dig under the game's block rules. The Bed Wars bots (`src/games/bedwars/bots.ts`) are built that way: they fortify their bed, gather and shop, find routes across the void (bridging as they go) and through defences (digging), and fight.
 
-Box models use the Minecraft skin UV layout, so any 64×64 humanoid skin works. The only built-in skin is `Skins.player`; mobs come from your own atlas. `extras` adds parts of your own to a humanoid (the Warden's crown is one, with `parent: 'head'`).
+People and humanoid monsters are best made characters (`Models.character`, under Avatars and cosmetics): the platform's style, on the rig, holding what they're given (`held`). Box models (`Models.humanoid`, `Models.spider`) use the Minecraft skin UV layout, so any 64×64 humanoid skin works, from your own atlas; `extras` adds parts of your own to a box humanoid (`parent: 'head'` for a hat).
 
 ## glTF and GLB models
 
@@ -1233,10 +1233,26 @@ Achievements are the game's own: they don't add up across games. The home page s
 
 Every player has a **look** that travels with them from game to game, chosen in the locker on the home page (the face beside their name):
 
-- **An avatar**: skin tone, hair, eyes, a top, bottoms and shoes, each in its colours, painted as a Minecraft-style skin on every screen. It's what they wear in a game that doesn't dress its players itself (no `player.skin` or `player.model` of its own, and before any `player.setSkin` / `setModel`): Sandbox, Skyship, Sky Obby, the Arena, Heart Hunt. A guest makes one too (kept in the browser); a signed-in player's is kept for their account.
-- **Cosmetics** (signed in): a hat, something on the back, a title under their name and a name tag colour. They're shown in every game, on every kind of body: hats and back items sit on the head and between the shoulders of the platform's box humanoid and of glTF models on the humanoid rig alike, scaled to each head. A game can leave slots out: `cosmeticSlots: ['title', 'tag']` in its meta (a team colour the game sets with `player.color` always wins over a tag's).
+- **An avatar**: who they are, one of the platform's characters (below): a build, skin tone, hair, a face (lashes, freckles, specs, a beard …), eye colour, a top, bottoms and shoes, each in its colours. It's who they are in every game that doesn't dress its players itself (no `player.model` or `player.skin` of its own, and before any `player.setModel` / `setSkin`): Sandbox, Skyship, Sky Obby, the Arena, Heart Hunt, Bed Wars (in its team's kit). A guest makes one too (kept in the browser; their first is a random person); a signed-in player's is kept for their account. Bots get someone of their own.
+- **Cosmetics** (signed in): a hat, something on the back, a title under their name and a name tag colour. They're shown in every game, on every kind of body: hats and back items sit on the head and between the shoulders of any figure on the humanoid rig (the platform's characters, Call of Blocky's and Blockfront's fighters, a glTF model of your own), scaled to each head; under a hat, a character's hair is cut close. A game can leave slots out: `cosmeticSlots: ['title', 'tag']` in its meta (a team colour the game sets with `player.color` always wins over a tag's).
 
-Players' bodies are on the humanoid rig (docs/HUMANOID.md), the box one included (`Models.humanoid({ skeleton: true })`: its body, arms and legs jointed at the waist, elbows and knees), so the figures kit animates every player the same way and what they wear follows their joints.
+**Characters.** The platform's people are micro-voxel figures in Call of Blocky's and Blockfront's style (24 voxels a metre, a big head, big fists and boots, on the humanoid rig: docs/HUMANOID.md), built on each screen from a look: players' avatars are ones, and a game can make its own townsfolk and monsters the same way:
+
+```ts
+game.entities.define('zombie', {
+  name: 'Zombie',
+  model: Models.character({ build: 'broad', skin: '#7a9a5e', face: 'glow', eyes: '#e4ff8a', top: 'shirt', topColor: '#50708f', ragged: true }),
+  // ...
+});
+game.entities.define('guard', { name: 'Guard', model: Models.character({ build: 'heavy', hair: 'crew', top: 'tunic', topColor: '#2f5fb8' }), held: 'iron_sword' /* ... */ });
+```
+
+- A look (`CharacterLook`) is styles by name and colours as CSS hex, all optional: `build` (`slim`, `broad`, `heavy`, and `curvy`), `skin`, `eyes`, `hair` (`short`, `crew`, `buzz`, `slick`, `swept`, `long`, `pomp`, `bob`, `pony`, `bun`, `afro`, `mohawk`, `bald`) and `hairColor`, `facialHair`, `face` (`lashes`, `lipstick`, `freckles`, `shades`, `specs`; for monsters `glow`, eyes glowing their colour, and `skull`), `top` (`tee`, `shirt`, `hoodie`, `sweater`, `suit`, `jacket`, `track`, `camp`, `aloha`, `tank`, `tunic`, `apron`; `ribs`, a skeleton's) with `topColor` and `accent` (a tie, stripes, panels, a print, the trim), `bottom` (`trousers`, `jeans`, `shorts`, `skirt`, `joggers`) and `bottomColor`, `shoes` (`sneakers`, `shoes`, `boots`, `flats`) and `shoeColor`, `hat` (`crown`, `fedora`, `cap`) and `ragged` (holes and frayed hems). `Models.character(look, { scale })` makes one bigger (the Arena's Warden is 1.95).
+- `player.setUniform({ top: 'tunic', topColor: '#c23a30' })` dresses a player's avatar in the game's colours (a team's kit: their top, bottoms and shoes, styles and colours) over what they chose; who they are stays theirs. Null gives them their own clothes back. Bed Wars' teams are dressed that way.
+- An entity holds an item in its right hand with `held` (in its definition, or `entity.held = 'stone_sword'` as it gears up), as a player's figure does.
+- Each is one mesh and one draw call (a few thousand triangles), built in a few milliseconds the first time its look is seen; they fight, hold guns and swords, and wear what's worn as the fighters do.
+
+Every player's body is on the humanoid rig (docs/HUMANOID.md): a character, a glTF model, or a game's own box humanoid in a skin of its own (`Models.humanoid({ skeleton: true })`: its body, arms and legs jointed at the waist, elbows and knees), so the figures kit animates every player the same way and what they wear follows their joints.
 
 A game adds to what players can earn by listing cosmetics in its meta and giving them in play:
 
@@ -1263,7 +1279,7 @@ export default defineMeta({
 });
 ```
 
-- A hat or back item is a `model` of coloured boxes in texels (16 to a block), sized for the box head (8 texels across, the origin at the middle of its top, +z toward the face) or the back (the origin between the shoulders, +z out behind). `glow: true` lights a box. Keep hats within about 12 texels across and 10 tall.
+- A hat or back item is a `model` of coloured boxes in texels, drawn for a head 8 texels across (the origin at the middle of its top, +z toward the face) or the back (the origin between the shoulders, +z out behind), and scaled to each figure's own (a character's head is 12 voxels across, so a hat's texel is about a voxel and a half). `glow: true` lights a box. Keep hats within about 12 texels across and 10 tall.
 - A title is `text`; a tag is a `color`.
 - `player.grant('hard_hat')` gives one (the game's own ids; everywhere it's `sandbox:hard_hat`), and an achievement's `reward` gives one with it. It pops up, and it's the player's for good (a guest is told signing in keeps such things).
 - The platform has a few free ones (a red cap, a beanie, headphones, a backpack, four tag colours); everything else is earned in some game.

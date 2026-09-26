@@ -1,40 +1,53 @@
+import { STYLES, type CharacterLook, type Uniform } from './character/look';
+
 /**
- * A player's avatar: the body they wear in every game that doesn't dress its players itself, made
- * of choices (skin tone, hair, top, bottoms, shoes and their colours) and painted as a skin on
- * each screen. It travels as a short code (`avatarCode`): on the wire it's the name of the skin's
- * atlas (`avatar:<code>`), which every screen paints the same from the code alone.
+ * A player's avatar: the person they are in every game that doesn't dress its players itself, one
+ * of the platform's characters (`Models.character`) made of choices: their build, skin, hair and
+ * face, and what they wear. It travels as a short code (`avatarCode`), and every screen builds the
+ * same figure from it. A game can put them in its colours (`player.setUniform`: a team's) without
+ * changing who they are.
  */
 export interface Avatar {
+  build: number;
+  curvy: number;
   tone: number;
   hair: number;
   hairColor: number;
+  facialHair: number;
+  face: number;
   eyes: number;
   top: number;
   topColor: number;
+  accent: number;
   bottom: number;
   bottomColor: number;
   shoes: number;
+  shoeColor: number;
 }
 
 /** The choices, in the order the code keeps them. */
-export const AVATAR_FIELDS = ['tone', 'hair', 'hairColor', 'eyes', 'top', 'topColor', 'bottom', 'bottomColor', 'shoes'] as const;
+export const AVATAR_FIELDS = ['build', 'curvy', 'tone', 'hair', 'hairColor', 'facialHair', 'face', 'eyes', 'top', 'topColor', 'accent', 'bottom', 'bottomColor', 'shoes', 'shoeColor'] as const;
 
-/** What each choice can be: names (for the locker) by index. */
+const CLOTH = ['Teal', 'Red', 'Orange', 'Yellow', 'Green', 'Forest', 'Sky', 'Navy', 'Purple', 'Pink', 'White', 'Grey', 'Charcoal', 'Black', 'Denim', 'Tan'];
+
+/** What each choice can be: names (for the locker) by index. The styles are `STYLES`' in order. */
 export const AVATAR_OPTIONS: Record<keyof Avatar, readonly string[]> = {
+  build: ['Slim', 'Broad', 'Heavy'],
+  curvy: ['Straight', 'Curvy'],
   tone: ['Porcelain', 'Fair', 'Light', 'Tan', 'Olive', 'Brown', 'Deep', 'Ebony'],
-  hair: ['Short', 'Long', 'Buzzed', 'Bun', 'Spiky', 'Bald', 'Curly', 'Side part'],
+  hair: ['Short', 'Crew cut', 'Buzzed', 'Slicked back', 'Swept', 'Long', 'Pompadour', 'Bob', 'Ponytail', 'Bun', 'Afro', 'Mohawk', 'Bald'],
   hairColor: ['Black', 'Dark brown', 'Brown', 'Auburn', 'Ginger', 'Blond', 'Platinum', 'Grey', 'Pink', 'Blue'],
+  facialHair: ['None', 'Stubble', 'Moustache', 'Goatee', 'Beard'],
+  face: ['Plain', 'Lashes', 'Lipstick', 'Freckles', 'Shades', 'Specs'],
   eyes: ['Brown', 'Hazel', 'Green', 'Blue', 'Grey', 'Violet'],
-  top: ['T-shirt', 'Hoodie', 'Jacket', 'Tank top', 'Tunic', 'Sweater'],
-  topColor: CLOTH_NAMES(),
-  bottom: ['Jeans', 'Shorts', 'Cargo pants', 'Joggers'],
-  bottomColor: CLOTH_NAMES(),
-  shoes: ['Black', 'White', 'Brown', 'Red', 'Blue', 'Green'],
+  top: ['T-shirt', 'Shirt', 'Hoodie', 'Sweater', 'Suit', 'Jacket', 'Track top', 'Bowling shirt', 'Aloha shirt', 'Tank top', 'Tunic', 'Apron'],
+  topColor: CLOTH,
+  accent: CLOTH,
+  bottom: ['Trousers', 'Jeans', 'Shorts', 'Skirt', 'Joggers'],
+  bottomColor: CLOTH,
+  shoes: ['Sneakers', 'Shoes', 'Boots', 'Flats'],
+  shoeColor: ['Black', 'White', 'Brown', 'Red', 'Blue', 'Green'],
 };
-
-function CLOTH_NAMES(): readonly string[] {
-  return ['Teal', 'Red', 'Orange', 'Yellow', 'Green', 'Forest', 'Sky', 'Navy', 'Purple', 'Pink', 'White', 'Grey', 'Charcoal', 'Black', 'Denim', 'Tan'];
-}
 
 /** Colours (hex) for the choices that are colours. */
 export const AVATAR_COLORS = {
@@ -45,19 +58,24 @@ export const AVATAR_COLORS = {
   shoes: [0x222226, 0xe8e8e4, 0x6b4a2e, 0xb8322c, 0x2f5fb0, 0x3b7a3a],
 };
 
-/** The default avatar (the platform's classic look: teal tunic, dark hair). */
-export const DEFAULT_AVATAR: Avatar = { tone: 2, hair: 0, hairColor: 1, eyes: 0, top: 4, topColor: 0, bottom: 0, bottomColor: 7, shoes: 0 };
+/** The default avatar: the platform's plain person (`PLAIN_LOOK`: a teal tee, jeans, dark hair). */
+export const DEFAULT_AVATAR: Avatar = { build: 1, curvy: 0, tone: 2, hair: 0, hairColor: 1, facialHair: 0, face: 0, eyes: 0, top: 0, topColor: 0, accent: 10, bottom: 1, bottomColor: 14, shoes: 0, shoeColor: 0 };
 
 const DIGITS = '0123456789abcdefghijklmnopqrstuvwxyz';
 
-/** An avatar as its code: a letter per choice (`a2019401070`). */
+/** An avatar as its code: `b` and a digit per choice. */
 export function avatarCode(a: Avatar): string {
-  return `a${AVATAR_FIELDS.map((f) => DIGITS[clampChoice(f, a[f])]).join('')}`;
+  return `b${AVATAR_FIELDS.map((f) => DIGITS[clampChoice(f, a[f])]).join('')}`;
 }
 
-/** An avatar from its code, or null if it isn't one (unknown choices come back as the first). */
+/**
+ * An avatar from its code, or null if it isn't one (unknown choices come back as the first). The
+ * first avatars' codes (`a`, a painted skin's choices) come back as the nearest person.
+ */
 export function parseAvatar(code: string | null | undefined): Avatar | null {
-  if (typeof code !== 'string' || code.length !== AVATAR_FIELDS.length + 1 || code[0] !== 'a') return null;
+  if (typeof code !== 'string') return null;
+  if (code.length === 10 && code[0] === 'a') return fromFirst(code);
+  if (code.length !== AVATAR_FIELDS.length + 1 || code[0] !== 'b') return null;
   const out = { ...DEFAULT_AVATAR };
   for (let i = 0; i < AVATAR_FIELDS.length; i++) {
     const v = DIGITS.indexOf(code[i + 1]);
@@ -67,14 +85,25 @@ export function parseAvatar(code: string | null | undefined): Avatar | null {
   return out;
 }
 
-/** The atlas an avatar's skin is painted into on each screen (its skin is at [0, 0]). */
-export function avatarAtlas(code: string): string {
-  return `avatar:${code}`;
+/** A code as it's kept now (an old one brought up to date), or null if it isn't one. */
+export function normalAvatar(code: string | null | undefined): string | null {
+  const a = parseAvatar(code);
+  return a ? avatarCode(a) : null;
 }
 
-/** The avatar an atlas name is (`avatar:<code>`), or null. */
-export function atlasAvatar(atlas: string | undefined): Avatar | null {
-  return atlas?.startsWith('avatar:') ? parseAvatar(atlas.slice(7)) : null;
+/** The first avatars (tone, hair, hair colour, eyes, top, its colour, bottoms, their colour, shoes) as today's. */
+function fromFirst(code: string): Avatar | null {
+  const d = [...code.slice(1)].map((c) => DIGITS.indexOf(c));
+  if (d.some((v) => v < 0)) return null;
+  const [tone, hair, hairColor, eyes, top, topColor, bottom, bottomColor, shoes] = d;
+  // Short, long, buzzed, bun, spiky, bald, curly, side part; t-shirt, hoodie, jacket, tank top,
+  // tunic, sweater; jeans, shorts, cargo pants, joggers.
+  const HAIR = [0, 5, 2, 9, 1, 12, 10, 4];
+  const TOP = [0, 2, 5, 9, 10, 3];
+  const BOTTOM = [1, 2, 0, 4];
+  const a: Avatar = { ...DEFAULT_AVATAR, tone, hair: HAIR[hair] ?? 0, hairColor, eyes, top: TOP[top] ?? 0, topColor, bottom: BOTTOM[bottom] ?? 1, bottomColor, shoeColor: shoes };
+  for (const f of AVATAR_FIELDS) a[f] = clampChoice(f, a[f]);
+  return a;
 }
 
 function clampChoice(f: keyof Avatar, v: number): number {
@@ -82,11 +111,41 @@ function clampChoice(f: keyof Avatar, v: number): number {
   return Number.isInteger(v) && v >= 0 && v < n ? v : 0;
 }
 
+const hex = (n: number) => `#${n.toString(16).padStart(6, '0')}`;
+
+/** An avatar (or its code; the default for none) as a character's look, in a game's uniform. */
+export function avatarLook(avatar: Avatar | string | null | undefined, uniform?: Uniform | null): CharacterLook {
+  const a = (typeof avatar === 'string' ? parseAvatar(avatar) : avatar) ?? DEFAULT_AVATAR;
+  const look: CharacterLook = {
+    build: STYLES.build[a.build],
+    curvy: a.curvy === 1,
+    skin: hex(AVATAR_COLORS.tone[a.tone]),
+    hair: STYLES.hair[a.hair],
+    hairColor: hex(AVATAR_COLORS.hairColor[a.hairColor]),
+    facialHair: STYLES.facialHair[a.facialHair],
+    face: STYLES.face[a.face],
+    eyes: hex(AVATAR_COLORS.eyes[a.eyes]),
+    top: STYLES.top[a.top],
+    topColor: hex(AVATAR_COLORS.cloth[a.topColor]),
+    accent: hex(AVATAR_COLORS.cloth[a.accent]),
+    bottom: STYLES.bottom[a.bottom],
+    bottomColor: hex(AVATAR_COLORS.cloth[a.bottomColor]),
+    shoes: STYLES.shoes[a.shoes],
+    shoeColor: hex(AVATAR_COLORS.shoes[a.shoeColor]),
+  };
+  if (uniform) for (const [k, v] of Object.entries(uniform)) if (v !== undefined && v !== null) (look as Record<string, unknown>)[k] = v;
+  return look;
+}
+
+export type { Uniform };
+
 /** A random avatar (a guest's first), from `rnd` (0..1). */
 export function randomAvatar(rnd: () => number = Math.random): Avatar {
   const out = { ...DEFAULT_AVATAR };
   for (const f of AVATAR_FIELDS) out[f] = Math.floor(rnd() * AVATAR_OPTIONS[f].length);
-  // (Mostly hair: bald is a choice, not a roll of the dice.)
-  if (out.hair === 5 && rnd() < 0.8) out.hair = 0;
+  // (Mostly hair, and mostly a plain face: bald, beards and make-up are choices, not rolls of the dice.)
+  if (out.hair === 12 && rnd() < 0.8) out.hair = 0;
+  if (rnd() < 0.55) out.facialHair = 0;
+  if (rnd() < 0.5) out.face = 0;
   return out;
 }

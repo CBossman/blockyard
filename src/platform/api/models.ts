@@ -1,4 +1,14 @@
+import { characterUrl, type CharacterLook } from '../character/look';
 import type { GltfSpec, HeldModelSpec, HumanoidJoint, ModelPart, ModelSpec } from './types';
+
+/**
+ * How the platform's characters hold things and fit first person (Call of Blocky's and Blockfront's
+ * fighters' numbers: big fists, things held bigger).
+ */
+export const CHARACTER_STYLE: Pick<GltfSpec, 'firstPerson' | 'poses'> = {
+  firstPerson: { scale: 1.0, hands: 0.62 },
+  poses: { heldScale: 0.68, pistolUnder: 0.6, gait: { width: 0.15 }, rifle: { hip: [-0.13, -0.22, 0.32], ads: [-0.05, -0.12, 0.36] } },
+};
 
 /** Origins of the built-in skins in the `builtin` entity atlas. Games bring their own (`items.atlas`). */
 export const Skins = {
@@ -64,6 +74,16 @@ export const Models = {
   gltf(url: string, opts: Omit<GltfSpec, 'url'> & { scale?: number } = {}): ModelSpec {
     const { scale, ...rest } = opts;
     return { rig: 'gltf', parts: [], atlas: '', scale: scale ?? 1, gltf: { url, ...rest } };
+  },
+
+  /**
+   * A person, built from a look on each screen: the platform's characters (players' avatars are
+   * ones), micro-voxel figures on the humanoid rig in Call of Blocky's and Blockfront's style, so
+   * whatever players wear fits them. Everything in the look is optional: `Models.character({ build:
+   * 'heavy', skin: '#7a9a5a', face: 'glow', eyes: '#ff3020', top: 'tee', ragged: true })` is a zombie.
+   */
+  character(look: CharacterLook = {}, opts: { scale?: number } = {}): ModelSpec {
+    return Models.gltf(characterUrl(look), { rig: 'humanoid', ...CHARACTER_STYLE, scale: opts.scale });
   },
 
   /** Eight legs (the Minecraft spider layout: head, thorax, abdomen, 16x2x2 legs). */

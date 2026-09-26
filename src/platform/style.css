@@ -976,9 +976,8 @@ body {
   transform: translateY(-1px);
 }
 .home-face {
-  width: 44px;
-  height: 44px;
-  image-rendering: pixelated;
+  width: 48px;
+  height: 48px;
 }
 
 /* The locker: their look, over the home page. */
@@ -1036,7 +1035,12 @@ body {
 }
 .locker-preview {
   width: 216px;
-  image-rendering: pixelated;
+  height: 360px;
+  cursor: grab;
+  touch-action: none;
+}
+.locker-preview:active {
+  cursor: grabbing;
 }
 .locker-tagline {
   display: flex;

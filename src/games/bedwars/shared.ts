@@ -1,5 +1,4 @@
 import { defineShared } from '@platform';
-import { BEDWARS_ATLAS, Skin } from './art';
 import { buildMap } from './map';
 import meta from './meta';
 
@@ -38,8 +37,6 @@ export const shared = defineShared({
     health: 20,
     regen: { delay: 5, perSecond: 0.5 },
     fallDamage: true,
-    skin: [Skin.red[0], Skin.red[1]],
-    skinAtlas: BEDWARS_ATLAS,
     // Players fight each other (swords, bows, fireballs).
     pvp: true,
   },

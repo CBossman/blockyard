@@ -11,7 +11,8 @@
 export * from './api/types';
 export * from './api/items';
 export { Blueprint } from './api/blueprint';
-export { Models, Skins, HeldModels, HumanoidJoints } from './api/models';
+export { Models, Skins, HeldModels, HumanoidJoints, CHARACTER_STYLE } from './api/models';
+export type { CharacterLook, Uniform, CharacterBuild, HairStyle, FacialHair, FaceDetail, TopStyle, BottomStyle, ShoeStyle, HeadWear } from './character/look';
 export { Behaviors } from './api/behaviors';
 export * as vec from './api/vec';
 export * as math from './api/math';

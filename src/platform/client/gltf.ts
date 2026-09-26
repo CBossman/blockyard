@@ -7,6 +7,8 @@ import type { GltfSpec, HeldModelSpec, ModelSpec } from '../api/types';
 import type { SharedUniforms } from '../render/pipeline';
 import { Shaders } from '../render/shaders';
 import type { AnimState, Figure } from '../render/entities';
+import { CHARACTER_SCHEME } from '../character/look';
+import { characterModel } from './character';
 import { ClipLayer, type ClipPlay } from './clips';
 import { HELD_SCALE, HumanoidRig, rigFrames, wearAnchor, type RigFrames } from './humanoid';
 
@@ -114,11 +116,21 @@ export class GltfLibrary {
 
   constructor(private shared: SharedUniforms) {}
 
-  /** Start fetching a file (once). */
+  /** Start fetching a file (once); a character's (`character:`) is built here instead, one a turn. */
   load(url: string) {
     if (this.files.has(url)) return;
     const file: File = { gltf: null, failed: false };
     this.files.set(url, file);
+    if (url.startsWith(CHARACTER_SCHEME)) {
+      this.toBuild.push(() => {
+        if (this.files.get(url) !== file) return;
+        file.gltf = characterModel(url);
+        file.failed = !file.gltf;
+        this.version++;
+      });
+      if (this.toBuild.length === 1) setTimeout(this.buildNext, 0);
+      return;
+    }
     this.loader
       .loadAsync(url)
       .then((g) => {
@@ -130,6 +142,13 @@ export class GltfLibrary {
         console.error(`Couldn't load the model ${url}: ${err instanceof Error ? err.message : String(err)}`);
       });
   }
+
+  /** Characters to build, a turn each (so a room of new faces doesn't stall a frame). */
+  private toBuild: (() => void)[] = [];
+  private buildNext = () => {
+    this.toBuild.shift()?.();
+    if (this.toBuild.length) setTimeout(this.buildNext, 0);
+  };
 
   /** A model already in hand under an address (one made in code, a test's): as if fetched. */
   adopt(url: string, gltf: GLTF) {
@@ -546,6 +565,7 @@ export class GltfLibrary {
     for (const i of this.items.values()) i.geometry.dispose();
     for (const a of this.arms.values()) for (const side of a ? [a.R, a.L] : []) for (const m of [...side.upper, ...side.forearm, ...side.fist]) m.geometry.dispose();
     this.arms.clear();
+    this.toBuild.length = 0;
     this.items.clear();
     this.icons.clear();
     this.files.clear();

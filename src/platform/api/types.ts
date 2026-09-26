@@ -9,6 +9,7 @@
 
 import type { Quaternion as MathQuaternion, Vector3 as MathVector3 } from 'three';
 import type { Blueprint } from './blueprint';
+import type { Uniform } from '../character/look';
 import type { ItemKind, ItemKit } from './items';
 
 export interface Vec3 {
@@ -1278,6 +1279,13 @@ export interface PlayerApi {
    */
   setModel(model: ModelSpec | null): void;
   /**
+   * Dress their avatar in the game's colours (a team's kit): the top, bottoms and shoes, styles and
+   * colours (`{ topColor: '#d33', accent: '#fff' }`), over what they chose; who they are (their
+   * build, face, hair) stays theirs. Null: their own clothes again. For players in their avatars
+   * (a game without `player.model` or `player.skin`, and none given them with `setModel`).
+   */
+  setUniform(uniform: Uniform | null): void;
+  /**
    * Play one of their model's animation clips (by name) on their figure, on every screen: an
    * emote, a victory pose, a reload of its own. It blends over the platform's own animation (the
    * whole body, or a `layer`); null stops it, fading out. Only on glTF models with the clip.
@@ -1983,6 +1991,8 @@ export interface EntityDefinition {
   bloodColor?: string;
   /** Ignores all damage (shopkeepers, scenery). */
   invulnerable?: boolean;
+  /** An item it holds in its right hand (by id), as a player's figure does (`Entity.held` changes it). */
+  held?: string;
 }
 
 export interface ProjectileSpec {
@@ -2051,6 +2061,8 @@ export interface Entity {
   setSpeed(multiplier: number): void;
   /** Tint the model (flash on wind-up). */
   glow(color: string | null): void;
+  /** The item in its right hand (by id; its type's `held` to begin with), or null: empty-handed. */
+  held: string | null;
   /**
    * Fire a projectile at a target, arcing for its gravity. `spread`: radians of error either way.
    * `lead`: allow for a moving target's motion while it flies (`true`: most of it, 0.8; or the

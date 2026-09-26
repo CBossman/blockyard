@@ -1210,7 +1210,7 @@ export class Runtime {
   /** The player's hands and what they hold, and (`hud`) their health and hotbar on the HUD. */
   private showPlayer(me: PlayerFrame, hud = true) {
     // A player model with a hand: their first-person arm is that part of it (once its file is here).
-    const model = me.model ?? this.def.player?.model;
+    const model = this.avatars.modelOf(me);
     const hand = model?.gltf?.hand;
     const arm = model?.gltf && hand ? `${model.gltf.url}|${hand}` : '';
     if (arm !== this.shown.arm) {

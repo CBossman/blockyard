@@ -103,7 +103,7 @@ export interface EntityFrame {
   hurt: number;
   /** Seconds since it died, or -1 while alive. */
   dying: number;
-  /** An item in its right hand (players' figures): its id. */
+  /** An item in its right hand (players' figures, and an entity's `held`): its id. */
   held?: string | null;
   /** Health, 0..1 (health bars over heads). */
   hp?: number;
@@ -158,6 +158,8 @@ class EntityImpl implements Entity {
   raised = false;
   casting = false;
   glowColor: string | null = null;
+  /** An item in its right hand (by id), or null. */
+  held: string | null;
   /** A clip it's playing (`animate`), and how many it's been asked to play. */
   clip: ClipFrame | null = null;
   clipSeq = 0;
@@ -173,6 +175,7 @@ class EntityImpl implements Entity {
   ) {
     this.health = def.health;
     this.maxHealth = def.health;
+    this.held = def.held ?? null;
   }
 
   private get o(): number {
@@ -718,6 +721,7 @@ export class EntitySim implements EntityApi {
         dying: e.alive ? -1 : e.dyingTime,
         hp: e.health / e.maxHealth,
         clip: e.clip ?? undefined,
+        ...(e.held ? { held: e.held } : {}),
       });
     }
     const p = this.projectiles;

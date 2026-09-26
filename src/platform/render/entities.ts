@@ -6,9 +6,6 @@ import type { SharedUniforms } from './pipeline';
 import { GltfLibrary, surfaceUniforms, type ItemMesh, type Surface } from '../client/gltf';
 import type { ClipPlay } from '../client/clips';
 import { HumanoidRig, wearAnchor } from '../client/humanoid';
-import { ATLAS as ART_ATLAS } from '../art';
-import { atlasAvatar } from '../avatar';
-import { avatarPixels } from './avatar';
 import type { FigureState } from '../api/client/figures';
 
 /** The built-in starter sprites (16x16, `builtin` atlas, row at y = 64). Games bring the rest. */
@@ -134,14 +131,7 @@ export class EntityGraphics {
   }
 
   atlas(name: string): Atlas {
-    let a = this.atlases.get(name);
-    // A player's avatar (`avatar:<code>`): its skin painted from the code, the first time it's needed.
-    const avatar = a ? null : atlasAvatar(name);
-    if (avatar) {
-      const { albedo, emissive } = avatarPixels(avatar);
-      this.addAtlas(name, ART_ATLAS, ART_ATLAS, albedo, emissive);
-      a = this.atlases.get(name);
-    }
+    const a = this.atlases.get(name);
     if (!a) throw new Error(`unknown atlas "${name}"`);
     return a;
   }

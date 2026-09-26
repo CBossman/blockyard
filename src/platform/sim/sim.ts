@@ -9,7 +9,7 @@ import { CreativeBuild } from './creative';
 import { EntitySim, type EntityFrame, type ProjectileFrame } from './entities';
 import { ItemSim, type PickupFrame } from './items';
 import { BotControlsImpl, guestStore, PlayerSim, type PlayerFrame } from './player';
-import { avatarAtlas, parseAvatar } from '../avatar';
+import { avatarCode, normalAvatar, randomAvatar } from '../avatar';
 
 /** Where `player.store` is kept in the game's data: `$player:<account id>:<key>`. */
 export const PLAYER_DATA = '$player:';
@@ -531,6 +531,10 @@ export class Sim {
   addBot(name: string): Bot {
     const p = this.newPlayer(`b${this.nextBot++}`, name);
     p.bot = new BotControlsImpl(() => p.eye);
+    // Someone of their own (the same bot, the same person, on every screen).
+    let h = 2166136261;
+    for (const c of `${name}|${p.id}`) h = Math.imul(h ^ c.charCodeAt(0), 16777619);
+    p.avatar = avatarCode(randomAvatar(mulberry32(h).next));
     const bot = Object.assign(p.api, { controls: p.bot }) as Bot;
     this.players.push(p);
     this.roster.push(p.api);
@@ -636,19 +640,13 @@ export class Sim {
   }
 
   /**
-   * A joining player's own look: their avatar (in a game that doesn't dress its players itself: no
-   * `player.skin` or `player.model` of its own; a game dressing them later replaces it) and the
-   * cosmetics they wear.
+   * A joining player's own look: their avatar (the person they are in a game that doesn't dress
+   * its players itself) and the cosmetics they wear.
    */
   private dress(p: PlayerSim, look: { avatar: string | null; wear: string[]; owned?: string[] }) {
-    p.avatar = look.avatar && parseAvatar(look.avatar) ? look.avatar : null;
+    p.avatar = normalAvatar(look.avatar);
     p.wear = p.account ? look.wear.slice(0, 8) : [];
     p.owns = new Set(p.account ? look.owned : []);
-    p.skin = null;
-    if (p.avatar && !this.def.player?.skin && !this.def.player?.model) {
-      p.skin = { uv: [0, 0], atlas: avatarAtlas(p.avatar) };
-      this.presentation.send(p.id, 'view', 'setSkin', [[0, 0], avatarAtlas(p.avatar)]);
-    }
   }
 
   /**

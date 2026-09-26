@@ -1,10 +1,11 @@
 import { defineServer, Models, type Actor, type GameContext, type Player } from '@platform';
 import { bows, building, consumables, interactions, melee, type Building, type Interactions } from '@platform/kits';
-import { BEDWARS_ATLAS, Skin, botSword, paintBedwarsAtlas } from './art';
+import { BEDWARS_ATLAS, paintBedwarsAtlas } from './art';
 import { Bot, type Target } from './bots';
 import { Fireballs } from './fireballs';
 import { defineItems } from './items';
 import { Nav } from './nav';
+import { BOT_LOOKS, SHOPKEEPER, UNIFORMS } from './people';
 import { BLOCK_ITEMS, map, shared } from './shared';
 import { Shop } from './shop';
 import {
@@ -18,6 +19,7 @@ import {
   PICK_ITEMS,
   RESPAWN_SECONDS,
   SUDDEN_DEATH_AT,
+  SWORD_ITEMS,
   swordItem,
   type Team,
 } from './state';
@@ -235,7 +237,7 @@ function seat(game: GameContext, p: Player) {
     return;
   }
   t.player = p;
-  p.setSkin([Skin[t.color][0], Skin[t.color][1]], BEDWARS_ATLAS);
+  p.setUniform(UNIFORMS[t.color]);
   p.color = t.css;
   if (!playing) return;
   const bot = t.body;
@@ -266,6 +268,7 @@ function spawnBot(game: GameContext, t: Team, firstLife: boolean) {
   const s = t.base.spawn;
   const e = game.entities.spawn(`bot_${t.color}`, s, { yaw: t.base.spawnYaw, data: { team: t.color } });
   t.body = e;
+  e.held = swordItem(t, t.sword);
   t.respawnAt = null;
   const skill = BOT_SKILL[nextBotSkill++ % BOT_SKILL.length];
   bots.set(e.id, new Bot(match, nav, build, fireballs, t, e, skill, firstLife));
@@ -274,7 +277,10 @@ function spawnBot(game: GameContext, t: Team, firstLife: boolean) {
 function applyGear() {
   for (const t of match.teams) {
     if (t.player) t.player.armor = armorPoints(t);
-    if (t.body?.alive) t.body.armor = armorPoints(t);
+    if (t.body?.alive) {
+      t.body.armor = armorPoints(t);
+      t.body.held = swordItem(t, t.sword);
+    }
   }
 }
 
@@ -405,10 +411,10 @@ export default defineServer(shared, {
 
     // Every team has a bot, playing it whenever no one else is.
     for (const t of match.teams) {
-      const skin = Skin[t.color];
       game.entities.define(`bot_${t.color}`, {
         name: BOT_NAMES[t.color],
-        model: Models.humanoid({ skin: [skin[0], skin[1]], atlas: BEDWARS_ATLAS, extras: [botSword(skin)] }),
+        model: Models.character({ ...BOT_LOOKS[t.color], ...UNIFORMS[t.color] }),
+        held: SWORD_ITEMS[0],
         hitbox: { width: 0.6, height: 1.8 },
         health: 20,
         speed: 4.3,
@@ -418,7 +424,7 @@ export default defineServer(shared, {
     }
     game.entities.define('shopkeeper', {
       name: 'Item Shop',
-      model: Models.humanoid({ skin: [Skin.shopkeeper[0], Skin.shopkeeper[1]], atlas: BEDWARS_ATLAS }),
+      model: Models.character(SHOPKEEPER),
       hitbox: { width: 0.6, height: 1.9 },
       health: 100,
       speed: 0,

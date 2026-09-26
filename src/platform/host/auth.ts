@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { SESSION_SECONDS, type Account, type Accounts, type DiscordUser } from './accounts';
-import { parseAvatar } from '../avatar';
+import { normalAvatar } from '../avatar';
 import { wearable, type Cosmetic } from '../cosmetics';
 
 /** Sign in with Discord: its application's id and secret (Fly secrets `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`). */
@@ -283,7 +283,7 @@ export class Auth {
       return this.fail(res, 400, 'Send { "avatar": "...", "wear": [...] }');
     }
     const change: { avatar?: string | null; wear?: string[] } = {};
-    if (asked.avatar === null || (typeof asked.avatar === 'string' && parseAvatar(asked.avatar))) change.avatar = asked.avatar as string | null;
+    if (asked.avatar === null || (typeof asked.avatar === 'string' && normalAvatar(asked.avatar))) change.avatar = asked.avatar === null ? null : normalAvatar(asked.avatar as string);
     else if (asked.avatar !== undefined) return this.fail(res, 400, "That isn't an avatar");
     if (Array.isArray(asked.wear)) change.wear = wearable(asked.wear.filter((w): w is string => typeof w === 'string').slice(0, 16), new Set(Object.keys(accounts.owned(account.id))), this.o.catalog ?? new Map());
     accounts.setLook(account.id, change);

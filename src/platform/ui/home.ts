@@ -2,8 +2,8 @@ import { h } from './dom';
 import { AccountCorner } from './account';
 import { Profile, tally, type Earned } from './profile';
 import { Locker, setGameNames, type Look } from './locker';
-import { drawFace } from './avatarview';
-import { avatarCode, parseAvatar, randomAvatar } from '../avatar';
+import { characterView } from './characterview';
+import { avatarCode, avatarLook, parseAvatar, randomAvatar } from '../avatar';
 import { cosmeticCatalog, type Cosmetic } from '../cosmetics';
 import type { CosmeticDef } from '../api/types';
 import { hintChips, keyHints, type GameControls } from './controls';
@@ -225,7 +225,8 @@ export class TitleScreen {
 
   private drawFace() {
     const hat = this.look.wear.map((id) => this.catalog.get(id)).find((c) => c?.slot === 'hat');
-    drawFace(this.face, this.look.avatar, hat, 4);
+    this.face.width = this.face.height = 96;
+    characterView().draw(this.face, avatarLook(this.look.avatar), hat ? [hat] : [], { face: true });
   }
 
   /** Their avatar's code, to play in (a signed-in player's account's is used anyway). */

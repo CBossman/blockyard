@@ -11,6 +11,11 @@ rest its own way (see *Other skeletons*).
 The engine draws the figure and knows the rig (its joints, how they map onto the model's own
 skeleton, the model's clips); it doesn't know guns, swords or stances. Those are the kit's.
 
+The platform's own characters (`Models.character`: players' avatars, and a game's people and
+monsters) are built to it on each screen, in code (`src/platform/character/build.ts`), the way Call
+of Blocky's fighters and Blockfront's troopers are built to files by their tools: micro-voxels at 24
+a metre, a part per joint, one mesh skinned rigidly on the joints, fists round `gripR` / `gripL`.
+
 ## Frame
 
 - Units: 1 glTF unit = 1 block = 1 metre.

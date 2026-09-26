@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { VoxelWorld } from '@engine/voxel_engine.js';
 import type { Bot, BotControls, CameraApi, GameContext, GameEvents, ItemStack, ModelSpec, OrbitOptions, Player, PlayerAccount, PlayerOptions, Prop, StoreApi, Vec3, VehicleDefinition, VehicleWorld } from '../api/types';
+import type { Uniform } from '../character/look';
 import { IDLE_INPUT, type PlayerInput } from '../net/protocol';
 import type { ItemHost, ItemKind, Penetration } from '../api/items';
 import { ItemRunner } from './itemrun';
@@ -99,6 +100,10 @@ export interface PlayerFrame {
   model: ModelSpec | null;
   /** Their name's colour above their figure. */
   color: string | null;
+  /** Their avatar's code (`avatarCode`): who they are in a game that doesn't dress its players itself (none: the platform's plain person). */
+  avatar?: string;
+  /** What the game dresses their avatar in (`player.setUniform`). */
+  uniform?: Uniform;
   /** The cosmetics they wear (ids across the platform); each screen shows those its game shows. */
   wear?: string[];
   /** A clip their figure plays (`player.animate`). */
@@ -200,6 +205,8 @@ export class PlayerSim {
   achieved = new Set<string>();
   /** Their avatar's code (`avatarCode`), or null: the game's own look for them. */
   avatar: string | null = null;
+  /** What the game dresses their avatar in (`player.setUniform`), or null: their own clothes. */
+  uniform: Uniform | null = null;
   /** The cosmetics they wear (ids across the platform). */
   wear: string[] = [];
   /** Cosmetics given to them here (`player.grant`), so each is given once. */
@@ -334,6 +341,7 @@ export class PlayerSim {
     this.followVehicle = false;
     this.skin = null;
     this.model = null;
+    this.uniform = null;
     this.color = null;
     this.clip = null;
     this.orbit = null;
@@ -517,6 +525,8 @@ export class PlayerSim {
       skin: this.skin,
       model: this.model,
       color: this.color,
+      ...(this.avatar ? { avatar: this.avatar } : {}),
+      ...(this.uniform ? { uniform: this.uniform } : {}),
       ...(this.wear.length ? { wear: this.wear } : {}),
       clip: this.clip,
       ride: s.ride ? { prop: s.ride, p: [s.rideX, s.rideY, s.rideZ] } : null,
@@ -622,6 +632,9 @@ export class PlayerSim {
       },
       setModel: (model) => {
         me.model = model;
+      },
+      setUniform: (uniform) => {
+        me.uniform = uniform ? { ...uniform } : null;
       },
       animate: (clip, opts) => {
         me.clip = clip ? clipFrame(++me.clipSeq, clip, opts, me.p.now()) : null;

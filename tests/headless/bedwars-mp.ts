@@ -46,7 +46,7 @@ export default function bedwarsMultiplayer() {
   check(seats() === 'red:Ann blue:Bob green:bot yellow:bot', `seats: ${seats()}`);
   const frame = () => last.get(ann.id)!.frame!;
   const fp = (id: string) => frame().players.find((p) => p.id === id)!;
-  check(fp(ann.id).color === '#ff5b5b' && fp(bob.id).color === '#5d8dff' && fp(ann.id).skin?.uv.join() !== fp(bob.id).skin?.uv.join(), 'team colours and skins');
+  check(fp(ann.id).color === '#ff5b5b' && fp(bob.id).color === '#5d8dff' && fp(ann.id).uniform?.topColor === '#c23a30' && fp(bob.id).uniform?.topColor === '#2f5fb8', `team colours, and each in the team's kit: ${JSON.stringify([fp(ann.id).uniform, fp(bob.id).uniform])}`);
 
   // Wallets are per team.
   host.command(ann.id, { t: 'exec', id: 1, line: 'bw rich' });

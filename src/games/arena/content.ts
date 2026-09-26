@@ -1,4 +1,4 @@
-import { Behaviors, Models, type Behavior, type GameContext, type ModelPart, type ProjectileSpec } from '@platform';
+import { Behaviors, Models, type Behavior, type CharacterLook, type GameContext, type ProjectileSpec } from '@platform';
 import type { ConsumableItem } from '@platform/items';
 import { FLOOR, GATES, GATE_SPAWN_RADIUS } from './structure';
 import { ARENA_ATLAS, Skin, Sprite, paintArenaAtlas } from './art';
@@ -13,8 +13,11 @@ export function defineArt(game: GameContext) {
   game.items.atlas(ARENA_ATLAS, { width: a.width, height: a.height, pixels: a.albedo, emissive: a.emissive });
 }
 
-/** The Warden's crown: an open 10x4x10 ring on the head (UVs relative to the Warden's skin). */
-const CROWN: ModelPart = { name: 'crown', size: [10, 4, 10], uv: [24, 42], pivot: [0, 10, 0], offset: [-5, 0, -5], parent: 'head' };
+/** The monsters are the platform's people gone bad: the risen dead, bones, an ogre, a dark king. */
+const ZOMBIE: CharacterLook = { build: 'broad', skin: '#7a9a5e', hair: 'short', hairColor: '#2e3322', face: 'glow', eyes: '#e4ff8a', top: 'shirt', topColor: '#50708f', bottom: 'trousers', bottomColor: '#3a3f55', shoes: 'shoes', shoeColor: '#3a2a1c', ragged: true };
+const SKELETON: CharacterLook = { build: 'slim', skin: '#e8e2d0', hair: 'bald', face: 'skull', eyes: '#7fd8ff', top: 'ribs', bottom: 'shorts', bottomColor: '#4a4036', shoes: 'flats', shoeColor: '#d8d2c0', ragged: true };
+const BRUTE: CharacterLook = { build: 'heavy', skin: '#8e7f6a', hair: 'mohawk', hairColor: '#2a1c14', facialHair: 'beard', face: 'glow', eyes: '#ff5a2a', top: 'tank', topColor: '#5a3a24', bottom: 'trousers', bottomColor: '#4a3a2a', shoes: 'boots', shoeColor: '#2a1c14', ragged: true };
+const WARDEN: CharacterLook = { build: 'heavy', skin: '#5a4a7a', hair: 'long', hairColor: '#241a33', facialHair: 'goatee', face: 'glow', eyes: '#c79bff', top: 'tunic', topColor: '#3a1f5c', accent: '#e0b83a', bottom: 'trousers', bottomColor: '#1e1a24', shoes: 'boots', shoeColor: '#1a1414', hat: 'crown' };
 const skin = (s: readonly [number, number]): [number, number] => [s[0], s[1]];
 
 /** The weapons and what's picked up: what each does. (How they look is each screen's: `client/looks.ts`.) */
@@ -70,7 +73,7 @@ export function defineMonsters(game: GameContext) {
   const e = game.entities;
   e.define('zombie', {
     name: 'Zombie',
-    model: Models.humanoid({ skin: skin(Skin.zombie), atlas: ARENA_ATLAS }),
+    model: Models.character(ZOMBIE),
     hitbox: { width: 0.6, height: 1.95 },
     health: 20,
     speed: 3.2,
@@ -81,7 +84,7 @@ export function defineMonsters(game: GameContext) {
   });
   e.define('skeleton', {
     name: 'Skeleton',
-    model: Models.humanoid({ skin: skin(Skin.skeleton), atlas: ARENA_ATLAS, build: 'thin' }),
+    model: Models.character(SKELETON),
     hitbox: { width: 0.6, height: 1.95 },
     health: 16,
     speed: 3.4,
@@ -107,7 +110,7 @@ export function defineMonsters(game: GameContext) {
   });
   e.define('brute', {
     name: 'Brute',
-    model: Models.humanoid({ skin: skin(Skin.brute), atlas: ARENA_ATLAS, build: 'large', scale: 1.15 }),
+    model: Models.character(BRUTE, { scale: 1.2 }),
     hitbox: { width: 1.1, height: 2.55 },
     health: 70,
     speed: 2.9,
@@ -122,7 +125,7 @@ export function defineMonsters(game: GameContext) {
   });
   e.define('warden', {
     name: 'The Warden',
-    model: Models.humanoid({ skin: skin(Skin.warden), atlas: ARENA_ATLAS, build: 'large', scale: 1.9, extras: [CROWN] }),
+    model: Models.character(WARDEN, { scale: 1.95 }),
     hitbox: { width: 1.7, height: 4.2 },
     health: 340,
     speed: 2.6,

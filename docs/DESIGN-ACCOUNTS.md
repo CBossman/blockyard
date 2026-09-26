@@ -4,9 +4,13 @@ Status: **approved** (2026-09-26); phases 1 (accounts), 2 (achievements) and 3 (
 
 (Since the evening of 2026-09-26 the site is at blockyard.gg and the server at play.blockyard.gg: the same design under the new domain. The addresses below are the ones it was designed with.)
 
-Decided (2026-09-26): the look travels too: a player's avatar (a body made of choices, painted as a
-skin) is theirs in every game that doesn't dress its players, and players' box bodies moved onto the
-humanoid rig so everything worn follows the same joints on every kind of body. The server's address is `play.blockyard.potrock.xyz`; guests' progress lasts
+Decided (2026-09-26): the look travels too: a player's avatar (a body made of choices) is theirs in
+every game that doesn't dress its players, and everything worn follows the same joints on every kind
+of body (the humanoid rig). Later the same day: **no Minecraft-style people**. Avatars (and the
+default, and every game's own people and monsters) are the platform's characters, micro-voxel figures
+in Call of Blocky's and Blockfront's style built on each screen from a look (`Models.character`), so
+what's worn fits the fighters and everyone alike; a team game dresses players in its kit over their
+own (`player.setUniform`). The server's address is `play.blockyard.potrock.xyz`; guests' progress lasts
 the visit only; cosmetics are on in every game unless it opts out of slots; and **achievements
 belong to their game**: each game's are its own, shown by game on the profile, with no platform-wide
 points or account level made from them (so no level rewards either).

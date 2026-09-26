@@ -4,7 +4,8 @@ import type { CosmeticSlot } from '../api/types';
 import type { VoxelWorld } from '@engine/voxel_engine.js';
 import type { FigureSignals } from '../api/client';
 import { Models, Skins } from '../api/models';
-import type { ItemDefinition, SharedDefinition } from '../api/types';
+import type { ItemDefinition, ModelSpec, SharedDefinition } from '../api/types';
+import { avatarLook } from '../avatar';
 import type { Content } from '../content';
 import type { ClipFrame } from '../sim/entities';
 import { freshMemory } from '../sim/movement';
@@ -58,15 +59,36 @@ export class Avatars {
   }
 
   /**
-   * The figure type for a player: a humanoid in their skin (`player.setSkin`), else the game's
-   * player skin, else the default. Defined the first time it's needed.
+   * A player's model: the game's for them (`player.setModel`), a skin it gave them (null: a box
+   * humanoid in it), the game's for everyone (`player.model`, or its `player.skin`: null), or else
+   * their avatar, in the game's uniform for them, their hair cut close under a hat they wear here.
+   */
+  modelOf(p: PlayerFrame): ModelSpec | null {
+    const d = this.p.def.player;
+    if (p.model) return p.model;
+    if (p.skin) return null;
+    if (d?.model) return d.model;
+    if (d?.skin) return null;
+    const hat = this.slots.has('hat') && (p.wear ?? []).some((w) => this.p.cosmetic(w)?.slot === 'hat');
+    const key = `${p.avatar ?? ''}|${p.uniform ? JSON.stringify(p.uniform) : ''}|${hat ? 1 : 0}`;
+    let model = this.bodies.get(key);
+    if (!model) this.bodies.set(key, (model = Models.character({ ...avatarLook(p.avatar, p.uniform), ...(hat ? { hatHair: true } : {}) })));
+    return model;
+  }
+
+  /** Avatars' models, by what makes them (they're asked for every frame). */
+  private bodies = new Map<string, ModelSpec>();
+
+  /**
+   * The figure type for a player: their model (`modelOf`), else a box humanoid in their skin
+   * (`player.setSkin`), else the game's player skin. Defined the first time it's needed.
    */
   type(p: PlayerFrame): string {
     const d = this.p.def.player;
     const content = this.p.content;
-    // A model (theirs, or the game's for everyone): one figure type per model.
+    // A model (theirs, the game's for everyone, their avatar): one figure type per model.
     // (A box humanoid on the rig: players' bodies are jointed, and wear what they wear.)
-    const given = p.model ?? d?.model;
+    const given = this.modelOf(p);
     const model = given && given.rig === 'humanoid' && !given.gltf ? { ...given, skeleton: true } : given;
     if (model) {
       const type = `$player:model:${JSON.stringify(model)}`;

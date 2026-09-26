@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { Worker } from 'node:worker_threads';
 import { WebSocket } from 'ws';
+import { normalAvatar } from '../../src/platform/avatar';
 import { Accounts } from '../../src/platform/host/accounts';
 import { serve } from '../../src/platform/host/server';
 import { MemoryStore } from '../../src/platform/host/store';
@@ -214,19 +215,21 @@ async function looks() {
     const annId = accounts.session(cookie.split('=')[1])!.id;
     const fresh = (await (await fetch(`${base$}/me/look`, { headers: { Cookie: cookie, Origin: SITE } })).json()) as { avatar: string | null; wear: string[] };
     check(fresh.avatar === null && fresh.wear.length === 0, `nothing chosen yet: ${JSON.stringify(fresh)}`);
+    // (The first avatars' codes are kept as today's.)
+    const code = normalAvatar('a3632182f1')!;
     const set = (await (await post('/me/look', cookie, { avatar: 'a3632182f1', wear: ['blockyard:cap', 'heart-hunt:t_crown', 'blockyard:beanie', 'blockyard:tag_sky'] })).json()) as { avatar: string; wear: string[] };
-    check(set.avatar === 'a3632182f1' && set.wear.join() === 'blockyard:beanie,blockyard:tag_sky', `only what's hers, a hat at a time: ${JSON.stringify(set)}`);
+    check(code.startsWith('b') && set.avatar === code && set.wear.join() === 'blockyard:beanie,blockyard:tag_sky', `only what's hers, a hat at a time: ${JSON.stringify(set)}`);
     check((await post('/me/look', cookie, { avatar: 'not-an-avatar' })).status === 400, 'a made-up avatar is turned down');
 
     // Everyone sees her look.
     const ann = player(srv.port, 'x', SITE, cookie);
-    const gus = player(srv.port, 'Gus', SITE, undefined, false, 'a000000000');
+    const gus = player(srv.port, 'Gus', SITE, undefined, false, 'b1a2030405060708');
     const bad = player(srv.port, 'Bad', SITE, undefined, false, 'zzz');
     await until('all three in', () => !!gus.who('Ann') && !!gus.who('Bad') && !!ann.who('Gus'));
     const a = gus.who('Ann')!;
-    check(a.skin?.atlas === 'avatar:a3632182f1' && a.wear?.join() === 'blockyard:beanie,blockyard:tag_sky', `her avatar and what she wears, on another screen: ${JSON.stringify({ skin: a.skin, wear: a.wear })}`);
-    check(ann.who('Gus')?.skin?.atlas === 'avatar:a000000000' && !ann.who('Gus')?.wear, "a guest's avatar from Play (and nothing worn)");
-    check(ann.who('Bad')?.skin === null, `no avatar for a code that isn't one: ${JSON.stringify(ann.who('Bad')?.skin)}`);
+    check(a.avatar === code && a.skin === null && a.wear?.join() === 'blockyard:beanie,blockyard:tag_sky', `her avatar and what she wears, on another screen: ${JSON.stringify({ avatar: a.avatar, wear: a.wear })}`);
+    check(ann.who('Gus')?.avatar === normalAvatar('b1a2030405060708') && !ann.who('Gus')?.wear, `a guest's avatar from Play (and nothing worn): ${ann.who('Gus')?.avatar}`);
+    check(ann.who('Bad')?.avatar === undefined, `no avatar for a code that isn't one: ${JSON.stringify(ann.who('Bad')?.avatar)}`);
 
     // Given in play: an achievement's reward, then hers to wear.
     const host = srv.host(def.id)!;
@@ -248,7 +251,7 @@ async function looks() {
     });
     await until('Ann in the obby', () => !!(seen as SimFrame | null)?.players.some((p) => p.name === 'Ann'));
     const inO = (seen as SimFrame | null)!.players.find((p) => p.name === 'Ann')!;
-    check(inO.skin === null && inO.wear?.join() === 'heart-hunt:t_crown', `the game's skin, her crown: ${JSON.stringify({ skin: inO.skin, wear: inO.wear })}`);
+    check(inO.skin === null && inO.avatar === code && inO.wear?.join() === 'heart-hunt:t_crown', `who she is and her crown go with her (her screen's the game's to dress): ${JSON.stringify({ avatar: inO.avatar, wear: inO.wear })}`);
     inObby.close();
     console.log('  looks: /me/look keeps what she may wear, everyone sees her avatar and what she wears, a guest\'s avatar from Play, a reward given and then worn, a dressing game keeps its skin');
   } finally {

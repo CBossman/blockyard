@@ -1,6 +1,6 @@
 import { h } from './dom';
-import { drawAvatar } from './avatarview';
-import { AVATAR_COLORS, AVATAR_OPTIONS, avatarCode, randomAvatar, type Avatar } from '../avatar';
+import { characterView } from './characterview';
+import { AVATAR_COLORS, AVATAR_OPTIONS, avatarCode, avatarLook, randomAvatar, type Avatar } from '../avatar';
 import type { Cosmetic } from '../cosmetics';
 import type { CosmeticSlot } from '../api/types';
 
@@ -36,7 +36,11 @@ export class Locker {
   private tabBar = h('div.locker-tabs');
   private note = h('div.locker-note');
   private tab: Tab = 'avatar';
-  private back = false;
+  /** How the figure's turned (radians), and where it's turning to (dragged, or turned round). */
+  private yaw = 0;
+  private toYaw = 0;
+  private drag: { x: number; yaw: number } | null = null;
+  private frame = 0;
   private look: Look = { avatar: randomAvatar(), wear: [] };
   private owned = new Set<string>();
   private signedIn = false;
@@ -46,7 +50,20 @@ export class Locker {
   onSignIn: (() => void) | null = null;
 
   constructor(private catalog: ReadonlyMap<string, Cosmetic>) {
-    const turn = h('button.locker-turn', { onclick: () => ((this.back = !this.back), this.draw()) }, 'Turn around');
+    const turn = h('button.locker-turn', { onclick: () => (this.toYaw = Math.round(this.toYaw / Math.PI + 1) * Math.PI) }, 'Turn around');
+    // Drag the figure round.
+    this.preview.width = 432;
+    this.preview.height = 720;
+    this.preview.addEventListener('pointerdown', (e) => {
+      this.drag = { x: e.clientX, yaw: this.toYaw };
+      this.preview.setPointerCapture(e.pointerId);
+    });
+    this.preview.addEventListener('pointermove', (e) => {
+      if (this.drag) this.toYaw = this.yaw = this.drag.yaw + (e.clientX - this.drag.x) * 0.012;
+    });
+    const letGo = () => (this.drag = null);
+    this.preview.addEventListener('pointerup', letGo);
+    this.preview.addEventListener('pointercancel', letGo);
     const close = h('button.profile-close', { onclick: () => this.close(), 'aria-label': 'Close' }, '×');
     const done = h('button.locker-done', { onclick: () => this.save() }, 'Done');
     this.panel.append(
@@ -75,14 +92,30 @@ export class Locker {
     this.signedIn = opts.signedIn;
     this.owned = new Set(opts.owned);
     this.name = opts.name;
-    this.back = false;
+    this.yaw = this.toYaw = 0.35;
     this.renderTabs();
     this.render();
     this.root.classList.remove('hidden');
+    cancelAnimationFrame(this.frame);
+    this.frame = requestAnimationFrame(this.spin);
   }
 
   close() {
     this.root.classList.add('hidden');
+    cancelAnimationFrame(this.frame);
+    characterView().release();
+  }
+
+  /** The preview, a frame at a time while it's open: the figure easing round to where it's turned. */
+  private spin = () => {
+    if (!this.open) return;
+    this.yaw += (this.toYaw - this.yaw) * 0.18;
+    this.drawFigure();
+    this.frame = requestAnimationFrame(this.spin);
+  };
+
+  private drawFigure() {
+    characterView().draw(this.preview, avatarLook(this.look.avatar), this.look.wear.map((id) => this.catalog.get(id)).filter((c): c is Cosmetic => !!c), { yaw: this.yaw });
   }
 
   private save() {
@@ -106,7 +139,7 @@ export class Locker {
 
   /** The preview: the avatar in what it wears, the name tag under it. */
   private draw() {
-    drawAvatar(this.preview, this.look.avatar, this.look.wear.map((id) => this.catalog.get(id)).filter((c): c is Cosmetic => !!c), { back: this.back, scale: 9 });
+    this.drawFigure();
     const tag = this.panel.querySelector('.locker-tagline') as HTMLElement;
     const title = this.worn('title')?.text;
     tag.replaceChildren(h('span.locker-name', { style: `color: ${this.worn('tag')?.color ?? '#ffffff'}` }, this.name || 'You'), ...(title ? [h('span.locker-sub', {}, title)] : []));
@@ -130,15 +163,18 @@ export class Locker {
     const chips = (k: keyof Avatar) => h('div.locker-chips', {}, ...AVATAR_OPTIONS[k].map((n, i) => h(`button.locker-chip${a[k] === i ? '.on' : ''}`, { onclick: () => set(k, i) }, n)));
     const row = (label: string, ...kids: HTMLElement[]) => h('div.locker-row', {}, h('div.locker-label', {}, label), ...kids);
     this.body.replaceChildren(
+      row('Build', chips('build'), chips('curvy')),
       row('Skin', swatches('tone', AVATAR_COLORS.tone, AVATAR_OPTIONS.tone)),
       row('Hair', chips('hair'), swatches('hairColor', AVATAR_COLORS.hairColor, AVATAR_OPTIONS.hairColor)),
+      row('Face', chips('face'), chips('facialHair')),
       row('Eyes', swatches('eyes', AVATAR_COLORS.eyes, AVATAR_OPTIONS.eyes)),
       row('Top', chips('top'), swatches('topColor', AVATAR_COLORS.cloth, AVATAR_OPTIONS.topColor)),
+      row('Trim', swatches('accent', AVATAR_COLORS.cloth, AVATAR_OPTIONS.accent)),
       row('Bottoms', chips('bottom'), swatches('bottomColor', AVATAR_COLORS.cloth, AVATAR_OPTIONS.bottomColor)),
-      row('Shoes', swatches('shoes', AVATAR_COLORS.shoes, AVATAR_OPTIONS.shoes)),
+      row('Shoes', chips('shoes'), swatches('shoeColor', AVATAR_COLORS.shoes, AVATAR_OPTIONS.shoeColor)),
       h('button.locker-chip.locker-random', { onclick: () => ((this.look.avatar = randomAvatar()), this.render()) }, 'Surprise me'),
     );
-    this.note.textContent = 'Your avatar is you in every game that doesn’t dress its players itself. Games with outfits and teams keep theirs, and show your hat, title and name tag.';
+    this.note.textContent = 'This is you in every game that doesn’t dress its players itself (a team game puts you in its colours). Games with outfits of their own keep them, and show your hat, title and name tag.';
   }
 
   private renderSlot(slot: CosmeticSlot) {
