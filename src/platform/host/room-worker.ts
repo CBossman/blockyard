@@ -13,7 +13,7 @@ export interface RoomWorkerData {
   wasm: WebAssembly.Module | Uint8Array;
   /** The game's database (the worker opens its own connection), or none. */
   storeFile: string | null;
-  /** A room of a player's own: shares the game's data, keeps no world or places. */
+  /** A room of a player's own, or a copy of a public one: shares the game's data, keeps no world or places. */
   own: boolean;
 }
 

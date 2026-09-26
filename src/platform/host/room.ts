@@ -12,8 +12,10 @@ const MAX_STEP = 0.1;
 /** Which room: a game, and its public game or one of its own ones (`instance`). */
 export interface RoomSpec {
   game: string;
-  /** `public`, or a private room's code. */
+  /** `public` (the game everyone joins, in any of its copies), or a private room's code. */
   instance: string;
+  /** A copy of the public game started while the others were full: its number (2, 3…). */
+  shard?: number;
   tickRate: number;
   cheats: boolean;
   /** Development mode: clients' `dev` commands run (see `GameHostOptions.dev`). */
@@ -127,7 +129,7 @@ export class RoomCore {
     const { id, batch } = this.host.connect(undefined, who);
     this.ids.set(client, id);
     const sp = this.host.sim.spawn;
-    const welcome: ServerWelcome = { t: 'welcome', game: this.def.id, room: this.spec.instance, seed: this.host.seed, player: null, spawn: { x: sp.x, y: sp.y, z: sp.z, yaw: sp.yaw }, tickRate: this.spec.tickRate };
+    const welcome: ServerWelcome = { t: 'welcome', game: this.def.id, room: this.spec.instance, ...(this.spec.shard ? { shard: this.spec.shard } : {}), seed: this.host.seed, player: null, spawn: { x: sp.x, y: sp.y, z: sp.z, yaw: sp.yaw }, tickRate: this.spec.tickRate };
     if (this.host.blocks.keys.length) welcome.blocks = this.host.blocks.keys;
     this.out.send(client, encode(welcome));
     const frame = batch.frame ? quantize(batch.frame) : undefined;

@@ -280,12 +280,25 @@ export function newRoomCode(): string {
   return Array.from(crypto.getRandomValues(new Uint8Array(8)), (b) => abc[b % abc.length]).join('');
 }
 
+/**
+ * Why a server turned a connection away (its close code): the room's full or the server's busy
+ * (try again soon), too much from one address, no such game or room (don't).
+ */
+export const CLOSE_FULL = 4001;
+export const CLOSE_LIMIT = 4002;
+export const CLOSE_UNKNOWN = 4004;
+
 /** A server's first message to a client: which game, which world, and who they are in it. */
 export interface ServerWelcome {
   t: 'welcome';
   game: string;
   /** `public`, or the code of a room a player started of their own (`?room=`). */
   room: string;
+  /**
+   * In a copy of the public game (one started while the others were full): its number, 2, 3…, which
+   * an invite link names (`?shard=2`) so a friend lands in it too. Absent in the first.
+   */
+  shard?: number;
   seed: number;
   /** Null: watching until the client sends `start` (then `joined` names the player). */
   player: string | null;
