@@ -82,6 +82,8 @@ export interface PlayerFrame {
   creative: { hotbar: number[]; selected: number } | null;
   /** Physics is off (before play, dead, a game-driven camera). */
   frozen: boolean;
+  /** Watching, not playing (`player.spectate`): other screens don't draw them; their own flies them through anything. */
+  spectating?: boolean;
   /** Their weapons are locked (`freeze(true, { weapons: true })`): their screen fires nothing. */
   locked: boolean;
   /**
@@ -196,6 +198,8 @@ export class PlayerSim {
   held = false;
   /** The game's freeze locks their weapons too (`freeze(true, { weapons: true })`). */
   private lockWeapons = false;
+  /** Watching, not playing (`player.spectate`). */
+  spectating = false;
   /** The last input applied, by the client's count (a predicting client replays what's after). */
   ack = -1;
   /** Seconds their state trails the step (see `PlayerFrame.lead`). */
@@ -473,9 +477,20 @@ export class PlayerSim {
     if (this.itemMode) this.items.update(running ? dt : 0, this.input, this.weaponsLocked);
   }
 
-  /** A weapons-locked freeze holds (it ends with the freeze: `freeze(false)`, a revive). */
+  /** A weapons-locked freeze holds (it ends with the freeze: `freeze(false)`, a revive); a spectator's are always put away. */
   get weaponsLocked(): boolean {
-    return this.lockWeapons && this.p.world.player_state(this.slot)[12] > 0.5;
+    return this.spectating || (this.lockWeapons && this.p.world.player_state(this.slot)[12] > 0.5);
+  }
+
+  /** `spectate`: a ghost in the engine (flying through anything, nobody's target), unhurt; dead or not, free to fly. */
+  spectate(on: boolean) {
+    if (on === this.spectating) return;
+    this.spectating = on;
+    const world = this.p.world;
+    world.set_ghost(this.slot, on);
+    this.health.ghost = on;
+    world.set_frozen(this.slot, this.held || (!on && this.health.dead));
+    this.syncState();
   }
 
   /** `freeze`: their body, and with `weapons` their weapons too. */
@@ -489,6 +504,7 @@ export class PlayerSim {
     this.items.reset(false);
     this.held = false;
     this.lockWeapons = false;
+    this.spectate(false);
   }
 
   frame(): PlayerFrame {
@@ -523,13 +539,14 @@ export class PlayerSim {
       mortal: h.enabled,
       dead: h.dead,
       deathTime: h.deathTime,
-      hotbar: this.itemMode ? { slots: this.inventory.slots.map((st) => (st ? { ...st } : null)), selected: this.inventory.selected } : null,
-      hand: { state: this.itemMode ? this.items.shown() : null },
+      hotbar: this.itemMode && !this.spectating ? { slots: this.inventory.slots.map((st) => (st ? { ...st } : null)), selected: this.inventory.selected } : null,
+      hand: { state: this.itemMode && !this.spectating ? this.items.shown() : null },
       ...(this.itemMode && { items: this.items.own() }),
       camera: { p: [p.x, p.y, p.z], q: [q.x, q.y, q.z, q.w], fov: this.cam.fov, follow: this.followVehicle && !!this.vehicle },
       vehicle: this.vehicle && { name: this.vehicle.name, state: this.vehicle.state, prop: this.vehicle.prop && !this.vehicle.prop.removed ? this.vehicle.prop.id : null, ...(this.vehicle.remote ? { remote: true } : {}) },
       creative: this.creative ? { hotbar: [...this.creative.hotbar], selected: this.creative.selected } : null,
       frozen: s.frozen,
+      ...(this.spectating && { spectating: true }),
       locked: this.weaponsLocked,
       ...(this.tilt && { tilt: this.tilt }),
       canFly: this.allowFlight,
@@ -715,11 +732,18 @@ export class PlayerSim {
       },
       damage: (amount, opts) => this.health.damage(amount, opts),
       heal: (amount) => this.health.heal(amount),
-      revive: () => this.health.revive(),
+      revive: () => {
+        this.spectate(false);
+        this.health.revive();
+      },
       impulse: (x, y, z) => world.player_impulse(this.slot, x, y, z),
       freeze: (f, opts) => this.freeze(!!f, !!opts?.weapons),
       get frozen() {
         return world.player_state(me.slot)[12] > 0.5;
+      },
+      spectate: (on) => this.spectate(!!on),
+      get spectating() {
+        return me.spectating;
       },
       drive: <S extends object>(name: string, state: S, opts: { prop?: Prop; remote?: boolean } = {}) => {
         const def = this.p.vehicles[name];

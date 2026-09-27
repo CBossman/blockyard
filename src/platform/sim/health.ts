@@ -84,8 +84,11 @@ export class PlayerHealth {
   /** Kept for callers that change health directly (shown from the frame, so nothing to do). */
   refresh() {}
 
+  /** Spectating: nothing hurts them. */
+  ghost = false;
+
   damage(amount: number, opts: DamageOptions = {}): boolean {
-    if (!this.enabled || this.dead || this.invuln > 0 || amount <= 0) return false;
+    if (!this.enabled || this.dead || this.ghost || this.invuln > 0 || amount <= 0) return false;
     // The game may change or cancel it first.
     const hit = vetDamage(this.emit, this.player(), amount, opts);
     if (!hit) return false;

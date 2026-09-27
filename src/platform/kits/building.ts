@@ -84,7 +84,7 @@ export function building(game: GameContext, opts: BuildingOptions = {}): Buildin
     h.swingT -= dt;
     h.placeT = Math.max(0, h.placeT - dt);
     let hit: RayHit | null = null;
-    if (player.alive) {
+    if (player.alive && !player.spectating) {
       // A mob in the crosshair (the ray stops at blocks, so it's in front) is for weapons.
       if (!game.entities.raycast(player.eye, player.look, reach)) hit = world.raycast(player.eye, player.look, reach);
     }

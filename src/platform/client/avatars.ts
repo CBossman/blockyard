@@ -112,6 +112,8 @@ export class Avatars {
     const out: FigureFrame[] = [];
     const seen = new Set<string>();
     for (const other of f.players) {
+      // Spectators aren't there to see (nor, from our own eyes, is our own figure while we watch).
+      if (other.spectating) continue;
       // Only people on foot get a figure: a driver is their vehicle's model, but one steering it
       // from afar (`remote`) stands where they are and shows there (our own too, seen from the
       // vehicle, as the host has it). Our own shows in third person, where we're shown

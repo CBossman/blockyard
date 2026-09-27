@@ -317,7 +317,7 @@ export class ItemSim implements ItemApi {
       let dy = 0;
       let dz = 0;
       for (const pl of players) {
-        if (!pl.alive || (owner !== null && pl.id !== owner)) continue;
+        if (!pl.alive || pl.spectating || (owner !== null && pl.id !== owner)) continue;
         const q = pl.position;
         const ex = q.x - p.pos.x;
         const ey = q.y + 0.9 - p.pos.y;

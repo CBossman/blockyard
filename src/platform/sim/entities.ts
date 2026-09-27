@@ -321,7 +321,7 @@ class EntityImpl implements Entity {
     let best: Player | null = null;
     let bd = Infinity;
     for (const p of this.m.s.players()) {
-      if (!p.alive) continue;
+      if (!p.alive || p.spectating) continue;
       const d = this.distanceTo(p);
       if (d < bd) {
         bd = d;

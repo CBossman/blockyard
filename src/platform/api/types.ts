@@ -1253,6 +1253,17 @@ export interface PlayerApi {
   /** Their body is frozen: `freeze`, dead, driving, or not in play yet. */
   readonly frozen: boolean;
   /**
+   * Watching, not playing (`true`), or back in play (`false`; a `revive` ends it too). A
+   * spectator flies anywhere, straight through blocks (sprint for speed, jump and crouch to rise
+   * and sink), whether alive or dead. Nobody sees them, and nothing hits, hurts, chases or
+   * collects near them: shots, blades, explosions, creatures, pickups and building all pass them
+   * by, and their hotbar and hands are put away (what they carry stays theirs). A `freeze`
+   * still holds them. Games decide who spectates (someone out of a match, waiting to respawn,
+   * joining a full one); `alive` stays as it was, so a game's own checks keep working.
+   */
+  spectate(on: boolean): void;
+  readonly spectating: boolean;
+  /**
    * Put them in one of the game's `vehicles`, starting from `state` (plain numbers, booleans and
    * lists: it goes to their screen as data). From now on their controls drive it (the vehicle's
    * `step`, on the host and, ahead of it, on their own screen), `prop` (its model) is kept at its

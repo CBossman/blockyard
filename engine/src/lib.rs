@@ -182,12 +182,12 @@ impl VoxelWorld {
         }
     }
 
-    /// The players the entities react to: everyone not frozen (spectating, dead, in a menu).
+    /// The players the entities react to: everyone not frozen (dead, in a menu) or a ghost (spectating).
     fn targets(&self) -> Vec<entities::Target> {
         self.players
             .iter()
             .enumerate()
-            .filter_map(|(slot, p)| p.as_ref().filter(|p| !p.frozen).map(|p| entities::Target { pos: p.pos, hw: world::HALF_W, h: world::HEIGHT, slot }))
+            .filter_map(|(slot, p)| p.as_ref().filter(|p| !p.frozen && !p.ghost).map(|p| entities::Target { pos: p.pos, hw: world::HALF_W, h: world::HEIGHT, slot }))
             .collect()
     }
 }
@@ -366,10 +366,11 @@ impl VoxelWorld {
 
     pub fn player_reset(&mut self, i: u32, x: f64, y: f64, z: f64) {
         let Some(p) = self.player_mut(i) else { return };
-        let (flying, frozen, tune) = (p.flying, p.frozen, p.tune);
+        let (flying, frozen, ghost, tune) = (p.flying, p.frozen, p.ghost, p.tune);
         *p = world::Player::new(x, y, z);
         p.flying = flying;
         p.frozen = frozen;
+        p.ghost = ghost;
         p.tune = tune;
     }
 
@@ -385,6 +386,17 @@ impl VoxelWorld {
         if let Some(p) = self.player_mut(i) {
             p.frozen = on;
         }
+    }
+
+    /// A spectator (on) or a player again: see `world::Player::ghost`. Flying either way; off, they fall.
+    pub fn set_ghost(&mut self, i: u32, on: bool) {
+        let Some(p) = self.player_mut(i) else { return };
+        if p.ghost == on {
+            return;
+        }
+        p.ghost = on;
+        p.flying = on;
+        p.vel = [0.0; 3];
     }
 
     /// How a player moves: [walk, sprint, sneak, jump, gravity, ground_accel, air_accel,

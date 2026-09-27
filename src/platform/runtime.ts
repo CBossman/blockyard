@@ -201,7 +201,7 @@ export class Runtime {
   private probeFrame = 0;
   private titleSpin = 0;
   /** What's on screen, to redraw only on change. */
-  private shown = { health: '', hotbar: '', creative: '', held: '', arm: '', humanoid: '' };
+  private shown = { health: '', hotbar: '', creative: '', held: '', arm: '', humanoid: '', spectating: false };
   /** Development: treat input as active without pointer lock (headless tests). */
   debugActive = false;
   /** In a room of a player's own: its code. */
@@ -1276,10 +1276,17 @@ export class Runtime {
       }
     }
     const creative = me.creative;
-    const health = `${me.health}|${me.mortal ? me.maxHealth : 0}`;
+    // A spectator's hotbar and hearts are put away.
+    const spectating = !!me.spectating;
+    if (hud && spectating !== this.shown.spectating) {
+      this.shown.spectating = spectating;
+      this.hud.setHotbarVisible(this.walker && !spectating);
+    }
+    const hearts = me.mortal && !spectating ? me.maxHealth : 0;
+    const health = `${me.health}|${hearts}`;
     if (hud && health !== this.shown.health) {
       this.shown.health = health;
-      this.gameHud.setHealth(me.health, me.mortal ? me.maxHealth : 0);
+      this.gameHud.setHealth(me.health, hearts);
     }
     if (creative && hud) {
       const key = `${creative.hotbar.join(',')}|${creative.selected}`;
@@ -1411,10 +1418,12 @@ export class Runtime {
     const playing = this.mode === 'playing';
     const started = this.frameData?.started ?? false;
     const dead = this.mine(this.frameData)?.dead ?? false;
+    const spectating = !!this.mine(this.frameData)?.spectating;
     // The game has the controls (playing, the mouse captured, no screen open): all of them while
-    // they're alive; while they're dead, only what asks for a dead player's keys hears them.
+    // they're alive (or spectating: they fly about, dead or not); while they're dead, only what asks
+    // for a dead player's keys hears them.
     const inGame = playing && (this.input.locked || this.debugActive) && !this.gameHud.screenOpen;
-    const active = inGame && !dead;
+    const active = inGame && (!dead || spectating);
     this.sfx.hold(started && (this.mode === 'paused' || this.mode === 'console'));
 
     // Mouse look is the client's; the controls and the view go to the host.
@@ -1559,7 +1568,7 @@ export class Runtime {
     this.held.setLight(this.probe);
     // The first-person layer: drawn only in first person (nothing in hand while dead, someone out
     // of the game watching sees only the game, or in third person).
-    this.held.frame(this.camera.aspect, !this.taken.active && (rp ? !!eyes && !eyes.dead && !eyes.vehicle : this.walker && this.mode !== 'title' && !me.dead && !me.vehicle && !this.view.thirdPerson));
+    this.held.frame(this.camera.aspect, !this.taken.active && (rp ? !!eyes && !eyes.dead && !eyes.vehicle : this.walker && this.mode !== 'title' && !me.dead && !me.spectating && !me.vehicle && !this.view.thirdPerson));
     // The game's client code: its kits (the first-person view places the hand, the figures are
     // posed, ...), then its own frame. In a replay, `client.me` is the player it follows.
     if (!this.clientStarted) this.startClient(me);
@@ -1584,7 +1593,7 @@ export class Runtime {
     this.camera.position.add(this.fx.shakeOffset);
     // (In a replay, the eyes it follows fall as they did.)
     const fallen = rp ? eyes : me;
-    if (this.walker && fallen?.dead) {
+    if (this.walker && fallen?.dead && !fallen.spectating) {
       const k = Math.min(1, fallen.deathTime / 0.6) * Math.min(1, Math.max(0, (2.8 - fallen.deathTime) / 0.8));
       this.camera.position.y -= k * 1.2;
       this.camera.rotateZ(k * 0.45);
@@ -1641,7 +1650,7 @@ export class Runtime {
     let best = h ? h.t + b : max;
     const at = new THREE.Vector3();
     for (const p of this.frameData?.players ?? []) {
-      if (p.id === this.playerId || p.dead) continue;
+      if (p.id === this.playerId || p.dead || p.spectating) continue;
       // Where their figure is drawn (what the crosshair is on), else where the frame has them.
       const id = this.avatars.idOf(p.id);
       if (id === undefined || !this.entityView.locate(id, undefined, at)) at.set(p.x, p.y, p.z);
@@ -1792,7 +1801,7 @@ export class Runtime {
     let { end, normal, block, walls } = bulletPath(this.chunks.world, this.registry, o, d, range, pen);
     let body: string | null = null;
     for (const p of this.frameData?.players ?? []) {
-      if (p.id === this.playerId || p.dead) continue;
+      if (p.id === this.playerId || p.dead || p.spectating) continue;
       const b = playerBoxes(p, p.sliding ? 2 : p.sneaking ? 1 : 0, this.hitscanRules, p.lean ? leanOffset(p.view.yaw, p.lean) : undefined);
       const t = Math.min(rayBox(o, d, b.body[0], b.body[1]) ?? Infinity, rayBox(o, d, b.head[0], b.head[1]) ?? Infinity);
       if (t < end) {

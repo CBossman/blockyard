@@ -1311,6 +1311,9 @@ pub struct Player {
     pub in_lava: bool,
     pub flying: bool,
     pub frozen: bool,
+    /// Watching, not playing (a spectator): they fly through anything, and nothing takes them
+    /// for a player (see `VoxelWorld::targets`).
+    pub ghost: bool,
     pub bob: f64,
     /// The mover they're riding, if any.
     pub ride: Ride,
@@ -1400,6 +1403,7 @@ impl Player {
             in_lava: false,
             flying: false,
             frozen: false,
+            ghost: false,
             bob: 0.0,
             ride: Ride::default(),
             tune: Tuning::MINECRAFT,
@@ -1443,6 +1447,10 @@ impl Player {
     }
 
     pub fn step(&mut self, world: &World, input: &MoveInput, dt: f64) {
+        if self.ghost && !self.frozen {
+            self.ghost_step(input, dt);
+            return;
+        }
         // Frozen or not, a rider goes where their mover went.
         if self.ride.id != 0 {
             self.carry(world);
@@ -1463,6 +1471,25 @@ impl Player {
         for _ in 0..steps {
             self.substep(world, input, h);
         }
+    }
+
+    /// A spectator's flight: creative flight's speeds (sprint for faster, jump up, sneak down),
+    /// straight through blocks, never landing.
+    fn ghost_step(&mut self, input: &MoveInput, dt: f64) {
+        let dt = dt.min(0.1);
+        let speed = if input.sprint { 21.0 } else { 10.9 };
+        let k = 1.0 - (-10.0 * dt).exp();
+        let target = [input.wish_x * speed, if input.jump { 8.0 } else if input.sneak { -8.0 } else { 0.0 }, input.wish_z * speed];
+        for a in 0..3 {
+            self.vel[a] += (target[a] - self.vel[a]) * k;
+            self.pos[a] += self.vel[a] * dt;
+        }
+        self.flying = true;
+        self.on_ground = false;
+        self.in_water = false;
+        self.eyes_in_water = false;
+        self.in_lava = false;
+        self.ride = Ride::default();
     }
 
     fn substep(&mut self, world: &World, input: &MoveInput, dt: f64) {

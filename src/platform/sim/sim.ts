@@ -416,7 +416,7 @@ export class Sim {
     for (const p of this.players) {
       if (p.vacant) continue;
       const s = p.state;
-      players.set(p.id, { x: s.x, y: s.y, z: s.z, stance: p.sliding ? 2 : p.sneaking ? 1 : 0, alive: !p.health.dead, ...(p.lean && { lean: leanOffset(p.yaw, p.lean) }) });
+      players.set(p.id, { x: s.x, y: s.y, z: s.z, stance: p.sliding ? 2 : p.sneaking ? 1 : 0, alive: !p.health.dead && !p.spectating, ...(p.lean && { lean: leanOffset(p.yaw, p.lean) }) });
     }
     const entities = new Map<number, { x: number; y: number; z: number; stance: 0; alive: boolean }>();
     for (const e of this.entities.all()) {
@@ -430,7 +430,7 @@ export class Sim {
   private hittable(): Hittable[] {
     const out: Hittable[] = [];
     for (const p of this.players) {
-      if (p.vacant || p.health.dead) continue;
+      if (p.vacant || p.health.dead || p.spectating) continue;
       const s = p.state;
       out.push({ target: p.api, key: p.id, now: { x: s.x, y: s.y, z: s.z, stance: p.sliding ? 2 : p.sneaking ? 1 : 0, alive: true, ...(p.lean && { lean: leanOffset(p.yaw, p.lean) }) } });
     }
@@ -559,7 +559,7 @@ export class Sim {
    * the game froze them as they joined), the game starts, and the game hears `playerReady`.
    */
   play(p: PlayerSim) {
-    this.host.world.set_frozen(p.slot, p.health.dead || p.held);
+    this.host.world.set_frozen(p.slot, (p.health.dead && !p.spectating) || p.held);
     // Their client's camera turned on the title screen: face where they were placed.
     p.setView(p.yaw, p.pitch);
     this.start();
@@ -914,7 +914,7 @@ export class Sim {
       target.damage(amount, { source: by, from: c, knockback: knockback * (1 - k), weapon, cause });
     };
     for (const p of this.players) {
-      if (p.vacant || p.health.dead) continue;
+      if (p.vacant || p.health.dead || p.spectating) continue;
       hit(p.api, p.position, p.sneaking ? 1.5 : 1.8);
     }
     for (const e of this.entities.near(c, reach + 3)) hit(e, e.position, this.entities.hitbox(e).height);

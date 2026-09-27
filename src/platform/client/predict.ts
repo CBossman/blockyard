@@ -129,6 +129,8 @@ export class Predictor {
     const p = this.raw();
     const shown = this.ready && p.ride === this.errorRide ? [p.v[0] + this.error[0], p.v[1] + this.error[1], p.v[2] + this.error[2]] : null;
     const ride = me.ride ? [me.ride.prop, ...me.ride.p] : [0, 0, 0, 0];
+    // A spectator flies through anything here as on the host (set first: the restore's speed stands).
+    this.world.set_ghost(this.slot, !!me.spectating);
     this.world.player_restore(this.slot, new Float64Array([me.x, me.y, me.z, me.vx, me.vy, me.vz, +me.onGround, +me.inWater, +me.eyesInWater, +me.inLava, +me.flying, me.bob, +me.frozen, ...ride]));
     this.memory = copyMemory(me.move);
     this.allowFlight = me.canFly;

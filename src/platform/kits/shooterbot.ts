@@ -440,7 +440,7 @@ class Brains implements ShooterBots {
     let bestScore = Infinity;
     let bestSeen: Brain['seen'] = 'body';
     for (const p of game.players) {
-      if (p === bot || !p.alive || (this.opts.hostile && !this.opts.hostile(bot, p))) continue;
+      if (p === bot || !p.alive || p.spectating || (this.opts.hostile && !this.opts.hostile(bot, p))) continue;
       const t = chest(p);
       const dx = t.x - eye.x;
       const dy = t.y - eye.y;

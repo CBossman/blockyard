@@ -21,7 +21,7 @@ export function interactions(
   return {
     update() {
       for (const player of game.players) {
-        if (!player.alive || !player.input.buttonPressed(2)) continue;
+        if (!player.alive || player.spectating || !player.input.buttonPressed(2)) continue;
         const hit = game.entities.raycast(player.eye, player.look, reach);
         const fn = hit && handlers[hit.entity.type];
         if (!hit || !fn) continue;

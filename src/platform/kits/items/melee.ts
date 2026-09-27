@@ -78,7 +78,7 @@ function strike(use: ItemUse<MeleeItem>, r: { cooldown: number; max: number }, d
   if (use.host.pvp) {
     let best = hit ? hit.distance : reach;
     for (const p of game.players) {
-      if (p === me || !p.alive) continue;
+      if (p === me || !p.alive || p.spectating) continue;
       const b = p.position;
       const t = math.rayBox(cam, dir, { x: b.x - 0.55, y: b.y - 0.25, z: b.z - 0.55 }, { x: b.x + 0.55, y: b.y + 2.05, z: b.z + 0.55 });
       if (t === null || t >= best) continue;
