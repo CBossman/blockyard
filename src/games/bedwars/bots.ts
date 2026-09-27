@@ -2,7 +2,7 @@ import type { Entity, Player, Vec3 } from '@platform';
 import type { Building } from '@platform/kits';
 import type { Fireballs } from './fireballs';
 import type { Nav, Step } from './nav';
-import { armorPoints, mineTime, swordDamage, type Match, type Team } from './state';
+import { armorPoints, mineTime, swordDamage, type Match, type Member, type Team } from './state';
 
 /** Someone to fight: a player, or another team's bot. */
 export type Target = { kind: 'player'; team: Team; p: Player } | { kind: 'bot'; team: Team; e: Entity };
@@ -58,7 +58,8 @@ export class Bot {
     private nav: Nav,
     private build: Building,
     private fireballs: Fireballs,
-    readonly team: Team,
+    /** Its place on its team (the wallet and gear it buys). */
+    readonly me: Member,
     readonly e: Entity,
     /** 0.7 (sloppy) .. 1.1 (sharp): reaction, aim, bridging and mining speed. */
     readonly skill: number,
@@ -67,9 +68,15 @@ export class Bot {
     const now = m.now;
     this.raidAt = now + (firstLife ? 38 + (1.1 - skill) * 60 + Math.random() * 25 : 8 + Math.random() * 10);
     this.homeAt = now + 110;
-    if (!firstLife || !team.bed) this.mode = 'gear';
+    // One bot on a team wraps the bed (the first of them); the rest go straight to gearing up.
+    const fortifier = me.team.members.find((x) => x.body) === me;
+    if (!firstLife || !me.team.bed || !fortifier) this.mode = 'gear';
     else this.planFortify();
-    e.armor = armorPoints(team);
+    e.armor = armorPoints(me);
+  }
+
+  get team(): Team {
+    return this.me.team;
   }
 
   private get game() {
@@ -114,8 +121,10 @@ export class Bot {
     const out: Target[] = [];
     for (const t of this.m.teams) {
       if (t === this.team || t.eliminated) continue;
-      if (t.player?.alive) out.push({ kind: 'player', team: t, p: t.player });
-      if (t.body?.alive) out.push({ kind: 'bot', team: t, e: t.body });
+      for (const m of t.members) {
+        if (m.player?.alive) out.push({ kind: 'player', team: t, p: m.player });
+        if (m.body?.alive) out.push({ kind: 'bot', team: t, e: m.body });
+      }
     }
     return out;
   }
@@ -127,7 +136,7 @@ export class Bot {
   private valid(t: Target | null): t is Target {
     if (!t) return false;
     // Still in the game, and still on that team (a player who left is someone else's now).
-    if (t.kind === 'player') return t.p.alive && t.team.player === t.p && !t.team.eliminated;
+    if (t.kind === 'player') return t.p.alive && this.m.memberOf(t.p)?.team === t.team && !t.team.eliminated;
     return t.e.alive;
   }
 
@@ -235,7 +244,7 @@ export class Bot {
     }
     // Neighbours are likelier than the far side; the player a little likelier still.
     const home = this.team.base.spawn;
-    const weights = beds.map((t) => (flat(home, t.base.spawn) < 80 ? 1 : 0.45) * (t.player ? 1.25 : 1));
+    const weights = beds.map((t) => (flat(home, t.base.spawn) < 80 ? 1 : 0.45) * (t.members.some((m) => m.player) ? 1.25 : 1));
     let r = Math.random() * weights.reduce((a, b) => a + b, 0);
     this.victim = beds[beds.length - 1];
     for (let i = 0; i < beds.length; i++) {
@@ -376,7 +385,7 @@ export class Bot {
       e.animate('attack');
       this.game.audio.play('swing', { at: p, volume: 0.45 });
       if (Math.random() < 0.6 + 0.3 * this.skill) {
-        const dmg = swordDamage(this.team);
+        const dmg = swordDamage(this.me);
         if (t.kind === 'player') t.p.damage(dmg, { source: e, knockback: 0.8 });
         else t.e.damage(dmg, { source: e, knockback: 0.9 });
       }
@@ -388,7 +397,7 @@ export class Bot {
    * edge) at mid range, leading them a little.
    */
   private throwFireball() {
-    if (this.team.fireballs <= 0 || this.fireCd > 0) return;
+    if (this.me.fireballs <= 0 || this.fireCd > 0) return;
     const p = this.e.position;
     const eye = { x: p.x, y: p.y + 1.6, z: p.z };
     for (const t of this.enemies()) {
@@ -404,7 +413,7 @@ export class Bot {
       this.e.lookAt(aim);
       this.e.animate('attack');
       this.fireballs.launch({ x: eye.x + (dir.x / l) * 0.9, y: eye.y + (dir.y / l) * 0.9, z: eye.z + (dir.z / l) * 0.9 }, dir, this.team, this.e);
-      this.team.fireballs--;
+      this.me.fireballs--;
       this.fireCd = 7 + Math.random() * 5;
       return;
     }
@@ -449,7 +458,7 @@ export class Bot {
     const key = `${b.x},${b.y},${b.z}`;
     if (this.mining?.key !== key) {
       const name = this.game.world.blockName(this.game.world.getBlock(b.x, b.y, b.z));
-      this.mining = { key, t: 0, need: mineTime(name, this.team.pick, this.team.shears) * (1.15 / this.skill) };
+      this.mining = { key, t: 0, need: mineTime(name, this.me.pick, this.me.shears) * (1.15 / this.skill) };
     }
     this.mining.t += dt;
     this.progressed();
@@ -577,14 +586,15 @@ export class Bot {
   private collect() {
     const p = this.e.position;
     for (const pile of this.m.piles) {
-      if (pile.count > 0 && flat(p, pile.at) < 1.4 && Math.abs(p.y - pile.at.y) < 2) this.team.wallet[pile.item] += pile.take();
+      if (pile.count > 0 && flat(p, pile.at) < 1.4 && Math.abs(p.y - pile.at.y) < 2) this.me.wallet[pile.item] += pile.take();
     }
   }
 
   /** Spend at the shop: better swords and armour first, then tools and team upgrades. */
   private shop() {
+    const me = this.me;
     const t = this.team;
-    const w = t.wallet;
+    const w = me.wallet;
     const buy = (cur: keyof typeof w, n: number, fn: () => void): boolean => {
       if (w[cur] < n) return false;
       w[cur] -= n;
@@ -594,18 +604,18 @@ export class Bot {
     let bought = true;
     while (bought) {
       bought =
-        (t.sword < 1 && buy('iron', 10, () => (t.sword = 1))) ||
-        (t.armor < 1 && buy('gold', 12, () => (t.armor = 1))) ||
-        (t.sword < 2 && buy('gold', 7, () => (t.sword = 2))) ||
-        (t.pick < 1 && buy('iron', 10, () => (t.pick = 1))) ||
-        (t.pick === 1 && buy('gold', 3, () => (t.pick = 2))) ||
-        (!t.shears && buy('iron', 20, () => (t.shears = true))) ||
-        (t.armor < 2 && buy('emerald', 6, () => (t.armor = 2))) ||
-        (t.sword < 3 && buy('emerald', 4, () => (t.sword = 3))) ||
+        (me.sword < 1 && buy('iron', 10, () => (me.sword = 1))) ||
+        (me.armor < 1 && buy('gold', 12, () => (me.armor = 1))) ||
+        (me.sword < 2 && buy('gold', 7, () => (me.sword = 2))) ||
+        (me.pick < 1 && buy('iron', 10, () => (me.pick = 1))) ||
+        (me.pick === 1 && buy('gold', 3, () => (me.pick = 2))) ||
+        (!me.shears && buy('iron', 20, () => (me.shears = true))) ||
+        (me.armor < 2 && buy('emerald', 6, () => (me.armor = 2))) ||
+        (me.sword < 3 && buy('emerald', 4, () => (me.sword = 3))) ||
         (!t.sharp && buy('diamond', 4, () => (t.sharp = true))) ||
         (t.prot < 4 && buy('diamond', 2 ** (t.prot + 1), () => t.prot++)) ||
-        (t.fireballs < 2 && t.sword >= 1 && buy('iron', 40, () => t.fireballs++));
+        (me.fireballs < 2 && me.sword >= 1 && buy('iron', 40, () => me.fireballs++));
     }
-    this.e.armor = armorPoints(t);
+    this.e.armor = armorPoints(me);
   }
 }

@@ -1,12 +1,13 @@
-import { defineServer, Models, type Actor, type GameContext, type Player } from '@platform';
+import { defineServer, Models, type Actor, type Entity, type GameContext, type Player, type Vec3 } from '@platform';
 import { bows, building, consumables, interactions, melee, type Building, type Interactions } from '@platform/kits';
 import { BEDWARS_ATLAS, paintBedwarsAtlas } from './art';
-import { Bot, type Target } from './bots';
+import { Bot } from './bots';
 import { Fireballs } from './fireballs';
 import { defineItems } from './items';
+import { Lobby, type Plan } from './lobby';
 import { Nav } from './nav';
 import { BOT_LOOKS, SHOPKEEPER, UNIFORMS } from './people';
-import { BLOCK_ITEMS, map, shared } from './shared';
+import { BLOCK_ITEMS, shared } from './shared';
 import { Shop } from './shop';
 import {
   armorPoints,
@@ -21,14 +22,20 @@ import {
   SUDDEN_DEATH_AT,
   SWORD_ITEMS,
   swordItem,
+  TEAM_STYLE,
+  type Member,
   type Team,
 } from './state';
+import { MAPS, type PlacedMap } from './world';
 
 // Match state, created in setup.
 let match: Match;
 let nav: Nav;
+/** Each map's route planner (made the first time it's played). */
+const navs = new Map<string, Nav>();
 let shop: Shop;
 let fireballs: Fireballs;
+let lobby: Lobby;
 /** Survival building (mining and placing, under Bed Wars' rules) and the shopkeepers. */
 let build: Building;
 let talk: Interactions;
@@ -38,8 +45,6 @@ const hud = { refresh: 0, diamondIn: 30, emeraldIn: 60 };
 /** Per team: when it may next be warned of an enemy at its bed. */
 const alarms = new Map<Team, number>();
 let nextBotSkill = 0;
-/** The match is on (`start` ran): players who join now take over a bot's team. */
-let playing = false;
 
 /** A player's all-time numbers, kept by name in `game.store` (the server's database). */
 interface AllTime {
@@ -53,15 +58,15 @@ interface AllTime {
 const recorded = new Set<Player>();
 
 /** Count this match into a player's all-time numbers (once; kept for their account), and return them. */
-function record(p: Player, t: Team, won: boolean): AllTime {
+function record(p: Player, me: Member, won: boolean): AllTime {
   const r: AllTime = { games: 0, wins: 0, kills: 0, finals: 0, beds: 0, ...p.store.get<AllTime>('stats') };
   if (!recorded.has(p)) {
     recorded.add(p);
     r.games++;
     if (won) r.wins++;
-    r.kills += t.kills;
-    r.finals += t.finals;
-    r.beds += t.beds;
+    r.kills += me.kills;
+    r.finals += me.finals;
+    r.beds += me.beds;
     p.store.set('stats', r);
   }
   return r;
@@ -71,12 +76,13 @@ function record(p: Player, t: Team, won: boolean): AllTime {
 const VETERAN_WINS = 10;
 /** A bed broken this soon into the match (seconds) is Early Riser. */
 const EARLY_BED = 120;
+/** Seconds of results before everyone's back in the lobby. */
+const RESULTS = 12;
 
 const BOT_SKILL = [0.8, 0.95, 0.88];
-const BOT_NAMES: Record<string, string> = { blue: 'Blue', green: 'Green', yellow: 'Yellow', red: 'Red' };
 
 /** Pathfinding bounds: every structure, plus room to bridge around them. */
-function navBounds() {
+function navBounds(map: PlacedMap) {
   let x0 = Infinity;
   let x1 = -Infinity;
   let z0 = Infinity;
@@ -90,6 +96,12 @@ function navBounds() {
   return { x0: x0 - 16, x1: x1 + 16, z0: z0 - 16, z1: z1 + 16, y0: map.voidY + 4, y1: Math.min(250, map.center.y + 30) };
 }
 
+function navFor(game: GameContext, map: PlacedMap): Nav {
+  let n = navs.get(map.id);
+  if (!n) navs.set(map.id, (n = new Nav(game, navBounds(map), (x, y, z) => match.isPlaced(x, y, z))));
+  return n;
+}
+
 const clock = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 
 // ---------------------------------------------------------------------------------------------
@@ -97,18 +109,21 @@ const clock = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60))
 // ---------------------------------------------------------------------------------------------
 
 /** Who gets the kill: whoever dealt the blow, else whoever hit them last (knocked into the void). */
-function killerOf(victim: Team, source: unknown): Team | null {
-  const direct = match.teamOf(source as Actor | undefined);
-  if (direct && direct !== victim) return direct;
+function killerOf(victim: Member, source: unknown): Member | null {
+  const direct = match.memberOfActor(source as Actor | undefined);
+  if (direct && direct.team !== victim.team) return direct;
   const lh = victim.lastHit;
-  return lh && match.now - lh.at < 10 ? lh.team : null;
+  return lh && match.now - lh.at < 10 ? lh.by : null;
 }
 
-/** A team as the feed names it: its player's name, or the bot's colour. */
-const who = (t: Team) => t.player?.name ?? t.name;
+/** Someone as the feed names them: the player's name, or the bot's team (and place, on bigger teams). */
+const who = (m: Member) => m.player?.name ?? (match.size > 1 ? `${m.team.name} ${m.seat + 1}` : m.team.name);
 
-function announceDeath(game: GameContext, victim: Team, killer: Team | null, fell: boolean) {
-  const final = !victim.bed;
+/** Still in it: alive, or coming back. */
+const standing = (m: Member) => !m.out && (!!m.player?.alive || !!m.body?.alive || m.respawnAt !== null);
+
+function announceDeath(game: GameContext, victim: Member, killer: Member | null, fell: boolean) {
+  const final = !victim.team.bed;
   const v = who(victim);
   let text: string;
   if (killer) text = fell ? `${v} was knocked into the void by ${who(killer)}` : `${v} was slain by ${who(killer)}`;
@@ -139,26 +154,50 @@ function announceDeath(game: GameContext, victim: Team, killer: Team | null, fel
   victim.lastHit = null;
 }
 
+/** Someone died: back in a few seconds while the bed stands, else out for good (and maybe the team with them). */
+function died(game: GameContext, m: Member, killer: Member | null, fell: boolean) {
+  announceDeath(game, m, killer, fell);
+  if (m.team.bed) {
+    m.respawnAt = match.now + RESPAWN_SECONDS;
+  } else {
+    m.out = true;
+    m.respawnAt = null;
+    checkTeam(game, m.team);
+    // Out, but the team fights on without them.
+    if (m.player && !m.team.eliminated && !match.over) m.player.hud.banner('YOU ARE OUT', 'Your team fights on without you', { duration: 3, color: '#ff5b5b' });
+  }
+}
+
+/** A team with no bed and nobody left standing is out. */
+function checkTeam(game: GameContext, t: Team) {
+  if (!t.eliminated && !t.bed && !t.members.some(standing)) eliminate(game, t);
+}
+
 function eliminate(game: GameContext, t: Team) {
   if (t.eliminated) return;
   t.eliminated = true;
-  t.respawnAt = null;
+  for (const m of t.members) {
+    m.respawnAt = null;
+    m.out = true;
+  }
   game.audio.play('final_kill');
-  game.hud.feed(`TEAM ELIMINATED › ${who(t)} (${t.name}) is out of the game`, { color: t.css });
+  const names = t.members.filter((m) => m.player).map((m) => m.player!.name);
+  game.hud.feed(`TEAM ELIMINATED › ${t.name}${names.length ? ` (${names.join(', ')})` : ''} is out of the game`, { color: t.css });
   const alive = match.alive();
   // Over when one team is left, or when nobody's left playing to watch it end.
-  if (alive.length <= 1 || !alive.some((x) => x.player)) {
+  if (alive.length <= 1 || !alive.some((x) => x.members.some((m) => m.player))) {
     finish(game, alive.length === 1 ? alive[0] : null);
     return;
   }
-  const p = t.player;
-  if (p) {
+  for (const m of t.members) {
+    const p = m.player;
+    if (!p) continue;
     shop.close(p);
     p.hud.screen({
       title: 'ELIMINATED',
       subtitle: 'Your team is out. Watch the others fight it out.',
       tone: 'defeat',
-      stats: stats(t, record(p, t, false)),
+      stats: stats(m, record(p, m, false)),
       buttons: [
         { label: 'Watch', primary: true, onClick: () => {} },
         { label: 'Exit', onClick: () => game.exit() },
@@ -167,10 +206,11 @@ function eliminate(game: GameContext, t: Team) {
   }
 }
 
-function destroyBed(game: GameContext, owner: Team, by: Team | null) {
+function destroyBed(game: GameContext, owner: Team, by: Member | null, quiet = false) {
   if (!owner.bed) return;
   owner.bed = false;
   for (const b of owner.base.bed) if (game.world.getBlock(b.x, b.y, b.z) > 0) game.world.setBlock(b.x, b.y, b.z, 'air');
+  if (quiet) return;
   const c = owner.base.bed[0];
   game.fx.burst({ x: c.x + 0.5, y: c.y + 0.6, z: c.z + 0.5 }, { color: owner.css, count: 40, speed: 5, size: 0.14 });
   game.audio.play('bed_break');
@@ -180,41 +220,54 @@ function destroyBed(game: GameContext, owner: Team, by: Team | null) {
     if (match.now < EARLY_BED) by.player.achieve('early_riser');
   }
   const how = by ? ` by ${who(by)}` : match.suddenDeath ? ' by sudden death' : '';
-  // Its owner hears it their way; everyone else sees whose bed went.
+  // Its owners hear it their way; everyone else sees whose bed went.
   for (const p of game.players) {
-    if (match.seatOf(p) === owner) {
+    if (match.memberOf(p)?.team === owner) {
       p.hud.banner('BED DESTROYED!', 'You will no longer respawn', { duration: 3, color: '#ff5b5b' });
       p.audio.play('alarm', { volume: 0.6 });
     } else {
       p.hud.banner('BED DESTRUCTION', `${owner.name} bed was destroyed${how}`, { duration: 2.6, color: owner.css });
     }
   }
-  game.hud.feed(`BED DESTRUCTION › ${owner.name} bed (${who(owner)}) was destroyed${how}`, { color: owner.css });
-  // Someone waiting to respawn is now out.
-  if (owner.respawnAt !== null) eliminate(game, owner);
+  game.hud.feed(`BED DESTRUCTION › ${owner.name} bed was destroyed${how}`, { color: owner.css });
+  // Anyone waiting to respawn is now out.
+  for (const m of owner.members) {
+    if (m.respawnAt !== null) {
+      m.respawnAt = null;
+      m.out = true;
+    }
+  }
+  checkTeam(game, owner);
 }
 
 /** Up above the middle, looking on. */
 function spectate(p: Player) {
-  const c = map.center;
+  const c = match.map.center;
   p.teleport({ x: c.x, y: c.y + 26, z: c.z + 34 }, 0, -0.55);
   p.freeze(true);
 }
 
+/** Dress a player in their team's colours. */
+function wear(p: Player, t: Team) {
+  p.setUniform(UNIFORMS[t.color]);
+  p.color = t.css;
+}
+
 /**
- * Put a team's player on their island with the team's gear. After a death they keep everything
- * they carried; the team's sword, pickaxe and shears are handed back if they're missing (someone
- * who took the team over while it waited to respawn arrives with nothing).
+ * Put a member's player on their island with their gear. After a death they keep everything they
+ * carried; their sword, pickaxe and shears are handed back if they're missing (someone who took
+ * the place over while it waited to respawn arrives with nothing).
  */
-function placePlayer(t: Team, afterDeath: boolean) {
-  const p = t.player!;
-  t.respawnAt = null;
+function placePlayer(m: Member, afterDeath: boolean) {
+  const p = m.player!;
+  const t = m.team;
+  m.respawnAt = null;
   p.revive();
   p.freeze(false);
   p.teleport(t.base.spawn, t.base.spawnYaw, 0);
   const inv = p.inventory;
   if (!afterDeath) inv.clear();
-  const gear = [swordItem(t, t.sword), t.pick ? PICK_ITEMS[t.pick] : '', t.shears ? 'shears' : ''];
+  const gear = [swordItem(t, m.sword), m.pick ? PICK_ITEMS[m.pick] : '', m.shears ? 'shears' : ''];
   for (const item of gear) if (item && !inv.count(item)) inv.give(item);
   if (!afterDeath) inv.select(0);
   applyGear();
@@ -225,110 +278,207 @@ function placePlayer(t: Team, afterDeath: boolean) {
 }
 
 /**
- * A player takes a team: one nobody's playing (its bot steps aside, and they carry on with the
- * team's bed, gear and wallet), in colour order. With every team taken, they watch.
+ * Someone joined mid-match: they take over a place from a bot (or an empty one), on the team with
+ * the fewest people, and carry on with its bed, gear and wallet. With no place left, they watch.
  */
 function seat(game: GameContext, p: Player) {
-  if (match.seatOf(p)) return;
-  const t = match.teams.find((x) => !x.player && !x.eliminated);
-  if (!t) {
+  if (match.memberOf(p)) return;
+  const people = (t: Team) => t.members.filter((m) => m.player).length;
+  const open = match.teams
+    .filter((t) => !t.eliminated)
+    .sort((a, b) => people(a) - people(b))
+    .flatMap((t) => t.members.filter((m) => !m.player && !m.out));
+  const m = open[0];
+  if (!m) {
     spectate(p);
-    p.hud.banner('WATCHING', 'Every team is taken', { duration: 3 });
+    p.hud.banner('WATCHING', 'Every place is taken: you play next match', { duration: 3 });
     return;
   }
-  t.player = p;
-  p.setUniform(UNIFORMS[t.color]);
-  p.color = t.css;
-  if (!playing) return;
-  const bot = t.body;
+  const t = m.team;
+  m.player = p;
+  wear(p, t);
+  const bot = m.body;
   if (bot) {
     bots.delete(bot.id);
     bot.remove();
-    t.body = null;
+    m.body = null;
   }
-  if (t.respawnAt === null) placePlayer(t, false);
+  if (m.respawnAt === null) placePlayer(m, false);
   else spectate(p);
   p.hud.banner(`${t.name.toUpperCase()} TEAM`, t.bed ? 'Protect your bed · Destroy the others' : 'Your bed is gone: this life is your last', { duration: 3, color: t.css });
-  game.hud.feed(`${p.name} takes over ${t.name}`, { color: t.css });
+  game.hud.feed(`${p.name} takes over ${who({ ...m, player: null })}`, { color: t.css });
 }
 
-/** A player left: a bot carries on for their team. */
+/** A player left: a bot carries on in their place. */
 function unseat(game: GameContext, p: Player) {
-  const t = match.seatOf(p);
-  if (!t) return;
-  t.player = null;
+  const m = match.memberOf(p);
+  if (!m) return;
+  m.player = null;
   shop.close(p);
-  if (!playing || match.over || t.eliminated) return;
-  game.hud.feed(`${p.name} left: a bot plays ${t.name}`, { color: t.css });
+  if (match.over || m.team.eliminated || m.out) return;
+  game.hud.feed(`${p.name} left: a bot plays for ${m.team.name}`, { color: m.team.css });
   // Waiting to respawn: the bot comes in then instead.
-  if (t.respawnAt === null) spawnBot(game, t, true);
+  if (m.respawnAt === null) spawnBot(game, m, true);
 }
 
-function spawnBot(game: GameContext, t: Team, firstLife: boolean) {
+function spawnBot(game: GameContext, m: Member, firstLife: boolean) {
+  const t = m.team;
   const s = t.base.spawn;
-  const e = game.entities.spawn(`bot_${t.color}`, s, { yaw: t.base.spawnYaw, data: { team: t.color } });
-  t.body = e;
-  e.held = swordItem(t, t.sword);
-  t.respawnAt = null;
+  const e = game.entities.spawn(`bot_${t.color}`, s, { yaw: t.base.spawnYaw, data: { team: t.color, seat: m.seat } });
+  m.body = e;
+  e.held = swordItem(t, m.sword);
+  m.respawnAt = null;
   const skill = BOT_SKILL[nextBotSkill++ % BOT_SKILL.length];
-  bots.set(e.id, new Bot(match, nav, build, fireballs, t, e, skill, firstLife));
+  bots.set(e.id, new Bot(match, nav, build, fireballs, m, e, skill, firstLife));
 }
 
+/** Armour and swords as the gear and the team's upgrades have them (anyone's purchase, a bot's too). */
 function applyGear() {
-  for (const t of match.teams) {
-    if (t.player) t.player.armor = armorPoints(t);
-    if (t.body?.alive) {
-      t.body.armor = armorPoints(t);
-      t.body.held = swordItem(t, t.sword);
+  for (const m of match.members()) {
+    const t = m.team;
+    const p = m.player;
+    if (p) {
+      p.armor = armorPoints(m);
+      // Sharpened Swords: the swords they carry get their edge.
+      if (t.sharp) {
+        for (const s of SWORD_ITEMS) {
+          const n = p.inventory.count(s);
+          if (n) {
+            p.inventory.take(s, n);
+            p.inventory.give(`${s}_sharp`, n);
+          }
+        }
+      }
+    }
+    if (m.body?.alive) {
+      m.body.armor = armorPoints(m);
+      m.body.held = swordItem(t, m.sword);
     }
   }
+}
+
+// ---------------------------------------------------------------------------------------------
+// The lobby, and the start of a match
+// ---------------------------------------------------------------------------------------------
+
+/** The lobby's done: everyone to their team's island on the chosen map, bots in the places left. */
+function begin(game: GameContext, plan: Plan) {
+  lobby.close();
+  match.map = plan.map;
+  match.begin(plan.size);
+  nav = navFor(game, plan.map);
+  const map = plan.map;
+  // Generators: iron and gold on every island, diamonds on the small ones, emeralds in the middle.
+  match.piles = [
+    ...match.teams.flatMap((t) => [new Pile('iron', t.base.generator, 48), new Pile('gold', t.base.generator, 12)]),
+    ...map.diamonds.map((d) => new Pile('diamond', d, 4, '#6fe8ff')),
+    ...map.emeralds.map((e) => new Pile('emerald', e, 3, '#4dff91')),
+  ];
+  Object.assign(hud, { refresh: 0, diamondIn: match.diamondEvery, emeraldIn: match.emeraldEvery });
+
+  for (const [p, color] of plan.teams) {
+    const t = match.teams.find((x) => x.color === color)!;
+    const m = t.members.find((x) => !x.player)!;
+    m.player = p;
+    wear(p, t);
+  }
+  for (const t of match.teams) {
+    const humans = t.members.some((m) => m.player);
+    t.members.forEach((m, i) => {
+      if (m.player) return;
+      const bot = plan.bots === 'fill' || (plan.bots === 'teams' && !humans && i === 0);
+      if (!bot) m.out = true;
+    });
+    game.entities.spawn('shopkeeper', t.base.shop, { yaw: t.base.shopYaw });
+    // Nobody at all on a team: it's out before it starts.
+    if (t.members.every((m) => m.out)) {
+      destroyBed(game, t, null, true);
+      t.eliminated = true;
+    }
+  }
+  for (const t of match.teams) {
+    for (const m of t.members) {
+      if (m.player) placePlayer(m, false);
+      else if (!m.out) spawnBot(game, m, true);
+    }
+  }
+  // The lobby box goes: the match is under it. The home page looks on from where spectators do.
+  map.lobby.blueprint.forEach((x, y, z) => game.world.setBlock(x, y, z, 'air'));
+  game.world.spawn = { x: map.center.x, y: map.center.y + 26, z: map.center.z + 34, yaw: 0 };
+
+  // Iron and gold at every island.
+  game.clock.every(1.2, () => {
+    for (const p of match.piles) if (p.item === 'iron') p.add(game, 1);
+  });
+  game.clock.every(7, () => {
+    for (const p of match.piles) if (p.item === 'gold') p.add(game, 1);
+  });
+
+  for (const m of match.members()) {
+    const p = m.player;
+    if (!p) continue;
+    const mates = m.team.members.filter((x) => x !== m).map(who);
+    p.hud.banner(`${m.team.name.toUpperCase()} TEAM`, mates.length ? `With ${mates.join(', ')} · Protect your bed` : 'Protect your bed · Destroy the others', { duration: 3.2, color: m.team.css });
+  }
+  game.hud.feed(`${map.name} · ${['', 'Solos', 'Doubles', 'Threes', 'Fours'][plan.size]}`, { color: '#ff5b5b' });
+  game.audio.play('wave');
+  refreshHud(game);
 }
 
 // ---------------------------------------------------------------------------------------------
 // End of the match
 // ---------------------------------------------------------------------------------------------
 
-const stats = (t: Team, all: AllTime): [string, string][] => [
-  ['Kills', String(t.kills)],
-  ['Final kills', String(t.finals)],
-  ['Beds broken', String(t.beds)],
+const stats = (m: Member, all: AllTime): [string, string][] => [
+  ['Kills', String(m.kills)],
+  ['Final kills', String(m.finals)],
+  ['Beds broken', String(m.beds)],
   ['Time', clock(match.now)],
   ['All-time wins', `${all.wins} of ${all.games}`],
   ['All-time kills', String(all.kills)],
 ];
 
+/** A team as the result screen names it: its people, or its colour. */
+const teamName = (t: Team) => {
+  const names = t.members.filter((m) => m.player).map((m) => m.player!.name);
+  return names.length ? `${t.name} (${names.join(', ')})` : t.name;
+};
+
 /**
  * The match is over: `winner` is the last team standing (null: no one's left playing). `cheat`:
- * ended by the `bw` command, which earns no achievements.
+ * ended by the `bw` command, which earns no achievements. After the results, back to the lobby.
  */
 function finish(game: GameContext, winner: Team | null, cheat = false) {
   if (match.over) return;
   match.over = true;
   shop.closeAll();
-  if (winner?.player) game.fx.fireworks(winner.base.spawn, 6);
+  if (winner?.members.some((m) => m.player)) game.fx.fireworks(winner.base.spawn, 6);
   for (const p of game.players) {
-    const t = match.seatOf(p);
-    const won = !!t && t === winner;
-    const all = t ? record(p, t, won) : null;
+    // Everyone stops where they are for the results (the void no longer kills: nobody walks into it).
+    p.freeze(true, { weapons: true });
+    const me = match.memberOf(p);
+    const won = !!me && me.team === winner;
+    const all = me ? record(p, me, won) : null;
     if (won && all && !cheat) {
       p.achieve('first_win');
-      if (t.bed) p.achieve('sweet_dreams');
+      if (me.team.bed) p.achieve('sweet_dreams');
       if (all.wins >= VETERAN_WINS) p.achieve('veteran');
     }
     p.audio.play(won ? 'victory' : 'defeat');
     game.clock.after(won ? 1.8 : 1.4, () =>
       p.hud.screen({
         title: won ? 'VICTORY!' : 'GAME OVER',
-        subtitle: won ? 'Your team is the last one standing' : winner ? `${who(winner)} (${winner.name}) wins` : 'Your team has been eliminated',
+        subtitle: `${won ? 'Your team is the last one standing' : winner ? `${teamName(winner)} wins` : 'Your team has been eliminated'} · Back to the lobby shortly`,
         tone: won ? 'victory' : 'defeat',
-        stats: t && all ? stats(t, all) : [['Time', clock(match.now)]],
+        stats: me && all ? stats(me, all) : [['Time', clock(match.now)]],
         buttons: [
-          { label: 'Play again', primary: true, onClick: () => game.restart() },
+          { label: 'OK', primary: true, onClick: () => {} },
           { label: 'Exit', onClick: () => game.exit() },
         ],
       }),
     );
   }
+  game.clock.after(RESULTS, () => game.restart());
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -348,13 +498,16 @@ function nextEvent(): string {
 }
 
 function refreshHud(game: GameContext) {
+  applyGear();
   // Everyone's scoreboard, with their own team marked, and their own wallet.
   for (const p of game.players) {
-    const mine = match.seatOf(p);
+    const mine = match.memberOf(p);
     if (mine && !p.alive && mine.respawnAt !== null) {
       p.hud.objective(`Respawning in ${Math.ceil(mine.respawnAt - match.now)}…`);
     } else {
-      const status = match.teams.map((t) => `${t.name.toUpperCase()} ${t.eliminated ? '✘' : t.bed ? '✔' : '1'}${t === mine ? ' (you)' : ''}`).join('   ');
+      const status = match.teams
+        .map((t) => `${t.name.toUpperCase()} ${t.eliminated ? '✘' : t.bed ? '✔' : t.members.filter(standing).length}${t === mine?.team ? ' (you)' : ''}`)
+        .join('   ');
       p.hud.objective(`${status}   ·   ${nextEvent()}`);
     }
     const w = mine?.wallet ?? emptyWallet();
@@ -364,10 +517,10 @@ function refreshHud(game: GameContext) {
     p.hud.stat('emerald', 'Emeralds', w.emerald);
   }
   // Generator holograms.
-  map.diamonds.forEach((d, i) => {
+  match.map.diamonds.forEach((d, i) => {
     game.hud.marker(`dia${i}`, { x: d.x, y: d.y + 2.4, z: d.z }, { shape: 'dot', color: '#6fe8ff', size: 5, label: `Diamond ${'I'.repeat(match.diamondTier)} · ${Math.ceil(hud.diamondIn)}s` });
   });
-  map.emeralds.forEach((d, i) => {
+  match.map.emeralds.forEach((d, i) => {
     game.hud.marker(`em${i}`, { x: d.x, y: d.y + 2.4, z: d.z }, { shape: 'dot', color: '#4dff91', size: 5, label: `Emerald ${'I'.repeat(match.emeraldTier)} · ${Math.ceil(hud.emeraldIn)}s` });
   });
 }
@@ -385,8 +538,8 @@ export default defineServer(shared, {
     // played by name here.)
     const art = paintBedwarsAtlas();
     game.items.atlas(BEDWARS_ATLAS, { width: art.width, height: art.height, pixels: art.albedo, emissive: art.emissive });
-    match = new Match(game, map);
-    nav = new Nav(game, navBounds(), (x, y, z) => match.isPlaced(x, y, z));
+    match = new Match(game, MAPS[0]);
+    nav = navFor(game, MAPS[0]);
     build = building(game, {
       canBreak: (at, block, by) => match.canBreak(at, block, by),
       canPlace: (at, block, by) => match.canPlace(at, block, by),
@@ -399,21 +552,15 @@ export default defineServer(shared, {
     talk = interactions(game, { shopkeeper: (_keeper, player) => shop.show(player) });
     fireballs = new Fireballs(match);
     shop = new Shop(match, () => applyGear());
+    lobby = new Lobby(game, match, (plan) => begin(game, plan));
     defineItems(game, match, fireballs);
-    if (import.meta.env.DEV) (globalThis as unknown as { __bw: unknown }).__bw = { match, bots, nav };
+    if (import.meta.env.DEV) (globalThis as unknown as { __bw: unknown }).__bw = { match, bots, lobby, navs };
 
-    // Generators: iron and gold on every island, diamonds on the small ones, emeralds in the middle.
-    for (const t of match.teams) {
-      match.piles.push(new Pile('iron', t.base.generator, 48), new Pile('gold', t.base.generator, 12));
-    }
-    for (const d of map.diamonds) match.piles.push(new Pile('diamond', d, 4, '#6fe8ff'));
-    for (const e of map.emeralds) match.piles.push(new Pile('emerald', e, 3, '#4dff91'));
-
-    // Every team has a bot, playing it whenever no one else is.
-    for (const t of match.teams) {
-      game.entities.define(`bot_${t.color}`, {
-        name: BOT_NAMES[t.color],
-        model: Models.character({ ...BOT_LOOKS[t.color], ...UNIFORMS[t.color] }),
+    // Every team has bots, playing the places nobody else is.
+    for (const color of Object.keys(UNIFORMS) as (keyof typeof UNIFORMS)[]) {
+      game.entities.define(`bot_${color}`, {
+        name: TEAM_STYLE[color].name,
+        model: Models.character({ ...BOT_LOOKS[color], ...UNIFORMS[color] }),
         held: SWORD_ITEMS[0],
         hitbox: { width: 0.6, height: 1.8 },
         health: 20,
@@ -441,53 +588,55 @@ export default defineServer(shared, {
     game.events.on('blockBreak', (e) => {
       match.markPlaced(e.x, e.y, e.z, false);
       const owner = match.bedAt(e);
-      if (owner) destroyBed(game, owner, match.teamOf(e.by));
+      if (owner) destroyBed(game, owner, match.memberOfActor(e.by));
+    });
+
+    // Nobody's hurt in the lobby, and nobody hurts their own team.
+    game.events.on('damage', (e) => {
+      if (match.lobby) return e.cancel();
+      const src = e.source;
+      if (!src || src === 'world' || src === e.target) return;
+      const a = match.teamOf(src);
+      if (a && a === match.teamOf(e.target)) e.cancel();
     });
 
     // Kill credit, and bots turning on whoever hits them.
     game.events.on('entityDamage', (e) => {
-      const victim = match.teamOf(e.entity);
-      const by = match.teamOf(e.source ?? null);
-      if (!victim || !by || by === victim) return;
-      victim.lastHit = { team: by, at: match.now };
+      const victim = match.memberOfActor(e.entity);
+      const by = match.memberOfActor(e.source ?? null);
+      if (!victim || !by || by.team === victim.team) return;
+      victim.lastHit = { by, at: match.now };
       const bot = bots.get(e.entity.id);
       const src = e.source;
-      if (bot) bot.provoke(src && src !== 'world' && src.kind === 'player' ? { kind: 'player', team: by, p: src } : ({ kind: 'bot', team: by, e: by.body! } as Target));
+      if (bot && src && src !== 'world') bot.provoke(src.kind === 'player' ? { kind: 'player', team: by.team, p: src } : { kind: 'bot', team: by.team, e: src as Entity });
     });
     game.events.on('playerDamage', (e) => {
-      const victim = match.seatOf(e.player);
-      const by = match.teamOf(e.source ?? null);
-      if (victim && by && by !== victim) victim.lastHit = { team: by, at: match.now };
+      const victim = match.memberOf(e.player);
+      const by = match.memberOfActor(e.source ?? null);
+      if (victim && by && by.team !== victim.team) victim.lastHit = { by, at: match.now };
     });
     game.events.on('entityDeath', (e) => {
-      const t = match.teamOf(e.entity);
-      if (!t || t.body !== e.entity) return;
+      const m = match.memberOfActor(e.entity);
+      if (!m || m.body !== e.entity) return;
       bots.delete(e.entity.id);
-      t.body = null;
-      const fell = e.entity.position.y < map.voidY + 1;
-      announceDeath(game, t, killerOf(t, e.killer), fell);
-      if (t.bed) t.respawnAt = match.now + RESPAWN_SECONDS;
-      else eliminate(game, t);
+      m.body = null;
+      if (match.over) return;
+      died(game, m, killerOf(m, e.killer), e.entity.position.y < match.map.voidY + 1);
     });
     game.events.on('playerDeath', (e) => {
       const p = e.player;
-      const t = match.seatOf(p);
-      if (!t || match.over) return;
+      const m = match.memberOf(p);
+      if (!m || match.over || match.lobby) return;
       shop.close(p);
-      const fell = p.position.y < map.voidY + 1;
-      announceDeath(game, t, killerOf(t, e.source), fell);
-      if (t.bed) {
-        t.respawnAt = match.now + RESPAWN_SECONDS;
-        p.hud.banner('YOU DIED!', `Respawning in ${RESPAWN_SECONDS} seconds`, { duration: 2, color: '#ff5b5b' });
-      } else {
-        eliminate(game, t);
-      }
+      const bed = m.team.bed;
+      died(game, m, killerOf(m, e.source), p.position.y < match.map.voidY + 1);
+      if (bed) p.hud.banner('YOU DIED!', `Respawning in ${RESPAWN_SECONDS} seconds`, { duration: 2, color: '#ff5b5b' });
       game.clock.after(1.2, () => {
-        if (!p.alive && !match.over && match.seatOf(p) === t) spectate(p);
+        if (!p.alive && !match.over && match.memberOf(p) === m) spectate(p);
       });
     });
 
-    // Players coming and going mid-match take over from bots, and hand back to them.
+    // Players coming and going: into the lobby, or mid-match taking over from bots (and handing back to them).
     game.events.on('playerJoin', (e) => {
       // Signed in for the first time since claiming their name: the numbers kept by it are theirs.
       const was = e.player.adopted;
@@ -496,17 +645,29 @@ export default defineServer(shared, {
         if (old) e.player.store.set('stats', old);
         game.store.delete(`stats:${was}`);
       }
-      if (playing) seat(game, e.player);
+      if (e.player.bot) return;
+      if (match.lobby) lobby.enter(e.player);
+      else if (match.over) spectate(e.player);
+      else seat(game, e.player);
     });
-    game.events.on('playerLeave', (e) => unseat(game, e.player));
+    game.events.on('playerLeave', (e) => {
+      if (match.lobby) lobby.leave(e.player);
+      else unseat(game, e.player);
+    });
 
     game.commands.register('bw', {
       help: 'Bed Wars tools',
       cheat: true,
-      usage: 'rich | bed <team> | win | lose | time <seconds>',
+      usage: 'start | rich | bed <team> | win | lose | time <seconds>',
       run(args, g, player) {
         const [cmd, arg] = args;
-        const mine = match.seatOf(player) ?? match.player;
+        if (cmd === 'start') {
+          if (!match.lobby) throw new Error('The match is already on');
+          lobby.startNow();
+          return 'Starting';
+        }
+        if (match.lobby) throw new Error('No match yet: try /bw start');
+        const mine = match.memberOf(player) ?? match.player;
         if (cmd === 'rich') {
           const w = mine.wallet;
           Object.assign(w, { iron: w.iron + 64, gold: w.gold + 32, diamond: w.diamond + 8, emerald: w.emerald + 8 });
@@ -519,57 +680,41 @@ export default defineServer(shared, {
           return `${t.name} bed destroyed`;
         }
         if (cmd === 'win' || cmd === 'lose') {
-          finish(g, cmd === 'win' ? mine : (match.teams.find((t) => t !== mine) ?? null), true);
+          finish(g, cmd === 'win' ? mine.team : (match.teams.find((t) => t !== mine.team) ?? null), true);
           return '';
         }
         if (cmd === 'time') {
           match.startedAt -= Number(arg) || 60;
           return `Match clock at ${clock(match.now)}`;
         }
-        throw new Error('Try: rich, bed <team>, win, lose, time <seconds>');
+        throw new Error('Try: start, rich, bed <team>, win, lose, time <seconds>');
       },
-      complete: (args) => (args.length <= 1 ? ['rich', 'bed', 'win', 'lose', 'time'] : args[0] === 'bed' ? ['red', 'blue', 'green', 'yellow'] : []),
+      complete: (args) => (args.length <= 1 ? ['start', 'rich', 'bed', 'win', 'lose', 'time'] : args[0] === 'bed' ? ['red', 'blue', 'green', 'yellow'] : []),
     });
   },
 
   start(game) {
-    playing = false;
-    match.reset();
     bots.clear();
     fireballs.clear();
     shop.closeAll();
     alarms.clear();
     recorded.clear();
     nextBotSkill = 0;
-    Object.assign(hud, { refresh: 0, diamondIn: match.diamondEvery, emeraldIn: match.emeraldEvery });
-
-    // Everyone here takes a team, in colour order; bots play the rest.
-    for (const t of match.teams) t.player = null;
-    for (const p of game.players) seat(game, p);
-    for (const t of match.teams) {
-      game.entities.spawn('shopkeeper', t.base.shop, { yaw: t.base.shopYaw });
-      if (t.player) placePlayer(t, false);
-      else spawnBot(game, t, true);
-    }
-    playing = true;
-
-    // Iron and gold at every island.
-    game.clock.every(1.2, () => {
-      for (const p of match.piles) if (p.item === 'iron') p.add(game, 1);
-    });
-    game.clock.every(7, () => {
-      for (const p of match.piles) if (p.item === 'gold') p.add(game, 1);
-    });
-
-    game.hud.banner('BED WARS', 'Protect your bed · Destroy the others', { duration: 3, color: '#ff5b5b' });
-    game.audio.play('wave');
-    refreshHud(game);
+    // To the lobby over the map just played (or the first).
+    match.toLobby(match.map);
+    // The home page looks in on the lobby.
+    game.world.spawn = { ...match.map.lobby.spawn, yaw: match.map.lobby.yaw };
+    lobby.open();
   },
 
   update(game, dt) {
     // Talking to a shopkeeper takes the right-click before building can.
     talk.update();
     build.update(dt);
+    if (match.lobby) {
+      lobby.update();
+      return;
+    }
     if (match.over) return;
     const now = match.now;
     for (const p of match.piles) p.sync();
@@ -604,22 +749,30 @@ export default defineServer(shared, {
       game.hud.banner('SUDDEN DEATH', 'Every bed is gone', { duration: 3, color: '#ff5b5b' });
       for (const t of match.teams) destroyBed(game, t, null);
     }
+    if (match.over) return;
 
     // The void.
-    for (const p of game.players) if (p.alive && p.position.y < map.voidY) p.damage(1000, { source: 'world', knockback: 0 });
-    for (const t of match.teams) if (t.body?.alive && t.body.position.y < map.voidY) t.body.kill();
+    const voidY = match.map.voidY;
+    for (const m of match.members()) {
+      if (m.player?.alive && m.player.position.y < voidY) m.player.damage(1000, { source: 'world', knockback: 0 });
+      if (m.body?.alive && m.body.position.y < voidY) m.body.kill();
+    }
 
     // Respawns.
-    for (const t of match.teams) {
-      if (t.respawnAt === null || now < t.respawnAt || t.eliminated) continue;
-      if (t.player) placePlayer(t, true);
-      else spawnBot(game, t, false);
+    for (const m of match.members()) {
+      if (m.respawnAt === null || now < m.respawnAt || m.out || m.team.eliminated) continue;
+      if (m.player) placePlayer(m, true);
+      else spawnBot(game, m, false);
     }
 
     // Heal pools.
     for (const t of match.teams) {
-      const p = t.player;
-      if (t.heal && p?.alive && Math.hypot(p.position.x - t.base.spawn.x, p.position.z - t.base.spawn.z) < 14) p.heal(0.8 * dt);
+      if (!t.heal) continue;
+      const home = t.base.spawn;
+      for (const m of t.members) {
+        const body = m.player?.alive ? m.player : m.body?.alive ? m.body : null;
+        if (body && Math.hypot(body.position.x - home.x, body.position.z - home.z) < 14) body.heal(0.8 * dt);
+      }
     }
 
     fireballs.update(dt);
@@ -628,24 +781,26 @@ export default defineServer(shared, {
     // Nametags over the bots near each player, with their health.
     for (const p of game.players) {
       const eye = p.position;
-      for (const t of match.teams) {
-        const b = t.body;
+      for (const m of match.members()) {
+        const b = m.body;
         const q = b?.position;
         const show = b?.alive && q && Math.hypot(q.x - eye.x, q.y - eye.y, q.z - eye.z) < 40;
-        p.hud.marker(`tag-${t.color}`, show ? { x: q.x, y: q.y + 2.25, z: q.z } : null, { shape: 'dot', size: 3, color: t.css, label: show ? `${t.name}  ${Math.ceil(b.health)}♥` : '' });
+        p.hud.marker(`tag-${m.team.color}-${m.seat}`, show ? { x: q.x, y: q.y + 2.25, z: q.z } : null, { shape: 'dot', size: 3, color: m.team.css, label: show ? `${who(m)}  ${Math.ceil(b.health)}♥` : '' });
       }
     }
 
-    // Warn a team's player when an enemy is at their bed.
+    // Warn a team's players when an enemy is at their bed.
     for (const t of match.teams) {
-      const p = t.player;
-      if (!p || !t.bed || (alarms.get(t) ?? 0) > now) continue;
+      const people = t.members.flatMap((m) => (m.player ? [m.player] : []));
+      if (!people.length || !t.bed || (alarms.get(t) ?? 0) > now) continue;
       const bed = t.base.bed[0];
-      const near = (q: { x: number; y: number; z: number }) => Math.hypot(q.x - bed.x, q.z - bed.z) < 9 && Math.abs(q.y - bed.y) < 4;
-      const enemy = match.teams.find((o) => o !== t && ((o.body?.alive && near(o.body.position)) || (o.player?.alive && near(o.player.position))));
+      const near = (q: Vec3) => Math.hypot(q.x - bed.x, q.z - bed.z) < 9 && Math.abs(q.y - bed.y) < 4;
+      const enemy = match.members().find((o) => o.team !== t && ((o.body?.alive && near(o.body.position)) || (o.player?.alive && near(o.player.position))));
       if (enemy) {
-        p.hud.toast(`${who(enemy)} is at your bed!`);
-        p.audio.play('alarm', { volume: 0.35 });
+        for (const p of people) {
+          p.hud.toast(`${who(enemy)} is at your bed!`);
+          p.audio.play('alarm', { volume: 0.35 });
+        }
         alarms.set(t, now + 12);
       }
     }
@@ -657,4 +812,3 @@ export default defineServer(shared, {
     }
   },
 });
-

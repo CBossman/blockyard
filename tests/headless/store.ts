@@ -90,7 +90,10 @@ function bedwars(path: string) {
     const ann = host.connect('Ann', { account: { id: 'ann', name: 'Ann', avatar: null } });
     host.command(ann.id, { t: 'start' });
     for (let i = 0; i < 5; i++) host.step(1 / 30);
-    host.command(ann.id, { t: 'exec', id: 1, line: 'bw win' });
+    // Out of the lobby, into a match, and won.
+    host.command(ann.id, { t: 'exec', id: 1, line: 'bw start' });
+    for (let i = 0; i < 5; i++) host.step(1 / 30);
+    host.command(ann.id, { t: 'exec', id: 2, line: 'bw win' });
     for (let i = 0; i < 70; i++) host.step(1 / 30);
     host.persist();
   };

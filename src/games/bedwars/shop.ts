@@ -1,6 +1,6 @@
 import type { IconRef, MenuEntry, MenuHandle, MenuOptions, Player } from '@platform';
 import { Sprite } from './art';
-import { ALL_SWORDS, ARMOR, CURRENCIES, CURRENCY_NAME, PICK_ITEMS, SWORD_ITEMS, swordItem, type Currency, type Match, type Team } from './state';
+import { ALL_SWORDS, ARMOR, CURRENCIES, CURRENCY_NAME, PICK_ITEMS, SWORD_ITEMS, swordItem, type Currency, type Match, type Member, type Team } from './state';
 
 interface Offer {
   icon: IconRef;
@@ -23,7 +23,8 @@ const PICK_PRICES: [Currency, number][] = [
 
 /**
  * The shopkeeper's menu: blocks, weapons, armour, tools and team upgrades, paid for from the
- * wallet of the shopper's team. Each player has their own (several can shop at once). An offer of
+ * shopper's own wallet. Each player has their own (several can shop at once); the team upgrades
+ * are the whole team's, whoever pays. An offer of
  * an item shows it as each screen has it (`{ item }`); armour and the team upgrades, which aren't
  * items, show a sprite of the game's own.
  */
@@ -38,10 +39,10 @@ export class Shop {
 
   /** Open the shop on this player's screen. */
   show(player: Player) {
-    const t = this.m.seatOf(player);
-    if (!t || this.open.has(player)) return;
-    const handle = player.hud.menu({ ...this.contents(player, t), onClose: () => this.open.delete(player) });
-    this.open.set(player, { handle, shown: walletKey(t) });
+    const me = this.m.memberOf(player);
+    if (!me || this.open.has(player)) return;
+    const handle = player.hud.menu({ ...this.contents(player, me), onClose: () => this.open.delete(player) });
+    this.open.set(player, { handle, shown: stateKey(me) });
   }
 
   close(player: Player) {
@@ -53,12 +54,12 @@ export class Shop {
     for (const p of [...this.open.keys()]) this.close(p);
   }
 
-  /** Keep prices greyed out correctly as wallets change. */
+  /** Keep prices greyed out correctly as wallets change (and upgrades a teammate bought). */
   refresh() {
     for (const [p, o] of this.open) {
-      const t = this.m.seatOf(p);
-      if (!t) this.close(p);
-      else if (walletKey(t) !== o.shown) o.handle.update(this.contents(p, t));
+      const me = this.m.memberOf(p);
+      if (!me) this.close(p);
+      else if (stateKey(me) !== o.shown) o.handle.update(this.contents(p, me));
     }
   }
 
@@ -67,17 +68,18 @@ export class Shop {
     return left < count;
   }
 
-  private offers(p: Player, t: Team): { title: string; offers: Offer[] }[] {
+  private offers(p: Player, me: Member): { title: string; offers: Offer[] }[] {
     const inv = p.inventory;
+    const t = me.team;
     const sword = (tier: number, label: string, price: [Currency, number]): Offer => ({
       icon: { item: SWORD_ITEMS[tier] },
       label,
       price,
       note: `${[4, 5, 6, 7][tier] + (t.sharp ? 1 : 0)} damage`,
-      owned: t.sword >= tier,
+      owned: me.sword >= tier,
       buy: () => {
         for (const s of ALL_SWORDS) inv.take(s, inv.count(s));
-        t.sword = tier;
+        me.sword = tier;
         return this.give(p, swordItem(t, tier));
       },
     });
@@ -86,24 +88,24 @@ export class Shop {
       label,
       price,
       note: `Permanent · blocks ${ARMOR[tier] * 4}% of damage`,
-      owned: t.armor >= tier,
+      owned: me.armor >= tier,
       buy: () => {
-        t.armor = tier;
+        me.armor = tier;
         this.upgraded(t);
         return true;
       },
     });
     const pick: Offer =
-      t.pick < 3
+      me.pick < 3
         ? {
-            icon: { item: PICK_ITEMS[t.pick + 1] },
-            label: `${PICK_NAMES[t.pick]} Pickaxe`,
-            price: PICK_PRICES[t.pick],
-            note: t.pick ? 'Upgrade · mines faster' : 'Mines end stone and wood fast',
+            icon: { item: PICK_ITEMS[me.pick + 1] },
+            label: `${PICK_NAMES[me.pick]} Pickaxe`,
+            price: PICK_PRICES[me.pick],
+            note: me.pick ? 'Upgrade · mines faster' : 'Mines end stone and wood fast',
             buy: () => {
-              if (t.pick) inv.take(PICK_ITEMS[t.pick], inv.count(PICK_ITEMS[t.pick]));
-              t.pick++;
-              return this.give(p, PICK_ITEMS[t.pick]);
+              if (me.pick) inv.take(PICK_ITEMS[me.pick], inv.count(PICK_ITEMS[me.pick]));
+              me.pick++;
+              return this.give(p, PICK_ITEMS[me.pick]);
             },
           }
         : { icon: { item: 'diamond_pickaxe' }, label: 'Diamond Pickaxe', price: ['gold', 6], note: 'Fully upgraded', owned: true, buy: () => false };
@@ -138,9 +140,9 @@ export class Shop {
             label: 'Shears',
             price: ['iron', 20],
             note: 'Permanent · cuts through wool',
-            owned: t.shears,
+            owned: me.shears,
             buy: () => {
-              t.shears = true;
+              me.shears = true;
               return this.give(p, 'shears');
             },
           },
@@ -160,16 +162,20 @@ export class Shop {
             icon: 'diamond_sword',
             label: 'Sharpened Swords',
             price: ['diamond', 4],
-            note: '+1 damage on every sword',
+            note: '+1 damage on every sword, the whole team\'s',
             owned: t.sharp,
             buy: () => {
               t.sharp = true;
-              // The swords already carried get their edge too.
-              for (let tier = 0; tier < 4; tier++) {
-                const n = inv.count(SWORD_ITEMS[tier]);
-                if (n) {
-                  inv.take(SWORD_ITEMS[tier], n);
-                  inv.give(swordItem(t, tier), n);
+              // The swords the team already carries get their edge too.
+              for (const mate of t.members) {
+                const bag = mate.player?.inventory;
+                if (!bag) continue;
+                for (let tier = 0; tier < 4; tier++) {
+                  const n = bag.count(SWORD_ITEMS[tier]);
+                  if (n) {
+                    bag.take(SWORD_ITEMS[tier], n);
+                    bag.give(swordItem(t, tier), n);
+                  }
                 }
               }
               this.upgraded(t);
@@ -180,7 +186,7 @@ export class Shop {
             icon: Sprite.diamond_armor,
             label: `Reinforced Armor ${ROMAN[Math.min(3, t.prot)]}`,
             price: ['diamond', 2 ** (Math.min(3, t.prot) + 1)],
-            note: t.prot >= 4 ? 'Fully upgraded' : 'Tougher armour, for good',
+            note: t.prot >= 4 ? 'Fully upgraded' : 'Tougher armour for the whole team, for good',
             owned: t.prot >= 4,
             buy: () => {
               t.prot++;
@@ -192,7 +198,7 @@ export class Shop {
             icon: Sprite.golden_apple,
             label: 'Heal Pool',
             price: ['diamond', 1],
-            note: 'Regenerate while on your island',
+            note: 'The team regenerates on its island',
             owned: t.heal,
             buy: () => {
               t.heal = true;
@@ -204,11 +210,11 @@ export class Shop {
     ];
   }
 
-  private contents(p: Player, t: Team): MenuOptions {
-    const w = t.wallet;
+  private contents(p: Player, me: Member): MenuOptions {
+    const w = me.wallet;
     const o = this.open.get(p);
-    if (o) o.shown = walletKey(t);
-    const sections = this.offers(p, t).map(({ title, offers }) => ({
+    if (o) o.shown = stateKey(me);
+    const sections = this.offers(p, me).map(({ title, offers }) => ({
       title,
       entries: offers.map((o): MenuEntry => {
         const [cur, n] = o.price;
@@ -231,9 +237,9 @@ export class Shop {
   }
 
   private purchase(p: Player, o: Offer) {
-    const t = this.m.seatOf(p);
-    if (!t) return;
-    const w = t.wallet;
+    const me = this.m.memberOf(p);
+    if (!me) return;
+    const w = me.wallet;
     const [cur, n] = o.price;
     if (o.owned || w[cur] < n) return;
     if (!o.buy()) {
@@ -244,8 +250,9 @@ export class Shop {
     p.audio.play('buy');
     p.hud.toast(`Bought ${o.label}`);
     p.achieve('retail_therapy');
-    this.open.get(p)?.handle.update(this.contents(p, t));
+    this.open.get(p)?.handle.update(this.contents(p, me));
   }
 }
 
-const walletKey = (t: Team) => CURRENCIES.map((c) => t.wallet[c]).join(',');
+/** What the shop shows: the wallet, and the team's upgrades. */
+const stateKey = (me: Member) => [...CURRENCIES.map((c) => me.wallet[c]), me.team.sharp, me.team.prot, me.team.heal].join(',');

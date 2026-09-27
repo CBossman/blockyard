@@ -53,7 +53,7 @@ export class Fireballs {
       if (!boom) {
         // It bursts on anyone from another team.
         for (const p of g.players) {
-          if (!p.alive || this.m.seatOf(p) === b.owner) continue;
+          if (!p.alive || this.m.memberOf(p)?.team === b.owner) continue;
           const pe = p.position;
           if (Math.hypot(pe.x - b.pos.x, pe.y + 0.9 - b.pos.y, pe.z - b.pos.z) < 1.3) boom = { x: b.pos.x, y: b.pos.y, z: b.pos.z };
         }
@@ -92,7 +92,7 @@ export class Fireballs {
       const dx = p.x - at.x;
       const dz = p.z - at.z;
       const l = Math.hypot(dx, dz) || 1;
-      if (this.m.seatOf(pl) !== b.owner) pl.damage(1 + 6 * f, { source: b.by, from: at, knockback: 0.6 + 1.2 * f });
+      if (this.m.memberOf(pl)?.team !== b.owner) pl.damage(1 + 6 * f, { source: b.by, from: at, knockback: 0.6 + 1.2 * f });
       else pl.damage(1 * f, { source: 'world', knockback: 0 });
       // Everybody flies: the thrower too (fireball jumping).
       pl.impulse((dx / l) * 9 * f, 6 + 7 * f, (dz / l) * 9 * f);

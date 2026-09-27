@@ -1,10 +1,9 @@
 import { defineShared } from '@platform';
-import { buildMap } from './map';
 import meta from './meta';
+import { MAPS, STRUCTURES } from './world';
 
-/** The islands (every screen builds their blocks too), and where the teams' beds, spawns and generators are. */
-export const map = buildMap();
-const RED = map.teams[0];
+/** Where people come in: the first map's lobby (the game moves them to the one in use). */
+const LOBBY = MAPS[0].lobby;
 
 /**
  * The block items: the block each places (the server's building rules) and shows as (each
@@ -20,14 +19,15 @@ export const BLOCK_ITEMS: Record<string, string> = {
   obsidian: 'obsidian',
 };
 
-/** The islands in the void and the player (a red skin until they take a team). */
+/** The islands in the void and the player (in their own clothes till they take a team). */
 export const shared = defineShared({
   ...meta,
   world: {
     terrain: 'void',
-    structures: map.blueprints,
-    spawn: RED.spawn,
-    spawnYaw: RED.spawnYaw,
+    // Every map and its lobby, far apart (every screen builds their blocks too).
+    structures: STRUCTURES,
+    spawn: LOBBY.spawn,
+    spawnYaw: LOBBY.yaw,
     time: 0.36,
     freezeTime: true,
     viewDistance: 8,

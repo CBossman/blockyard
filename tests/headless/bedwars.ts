@@ -6,8 +6,9 @@ import { check, launch, lastScreen } from './_harness';
  */
 export default function bedwars() {
   const t0 = performance.now();
-  // The whole map loaded (islands reach 50 blocks out; headless loads 4 columns round players).
-  const h = launch('bedwars', { seed: 5, radius: 7 });
+  // The whole map loaded (the public room's first match is on the second map, Sunscar Canyon,
+  // whose far islands are 115 blocks from red's spawn).
+  const h = launch('bedwars', { seed: 5, radius: 9 });
   const simulated = h.run(900, { pilot: () => ({}), until: () => lastScreen(h) !== undefined });
   const beds = h.find('hud', 'banner').filter((c) => c.args[0] === 'BED DESTRUCTION' || c.args[0] === 'BED DESTROYED!').length;
   const kills = h.find('hud', 'feed').filter((c) => / (was|were) slain by /.test(String(c.args[0]))).length;

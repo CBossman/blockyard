@@ -7,7 +7,7 @@ const CURRENCY_PITCH = { iron: 1, gold: 1.15, diamond: 1.3, emerald: 1.45 };
 
 /**
  * Everything players carry: what each does. Currency never takes a slot: it goes straight to their
- * team's wallet. (How they look, their icons and the swords' models, is each screen's:
+ * wallet. (How they look, their icons and the swords' models, is each screen's:
  * `client/looks.ts`.)
  */
 export function defineItems(game: GameContext, m: Match, fireballs: Fireballs) {
@@ -17,10 +17,10 @@ export function defineItems(game: GameContext, m: Match, fireballs: Fireballs) {
       kind: 'misc',
       name: CURRENCY_NAME[c][0],
       onPickup(_g, n, player) {
-        const t = m.seatOf(player);
+        const me = m.memberOf(player);
         // Someone watching can't collect it.
-        if (!t) return false;
-        t.wallet[c] += n;
+        if (!me) return false;
+        me.wallet[c] += n;
         player.audio.play('pickup', { volume: 0.45, pitch: CURRENCY_PITCH[c] });
         return true;
       },
@@ -56,11 +56,11 @@ export function defineItems(game: GameContext, m: Match, fireballs: Fireballs) {
     name: 'Fireball',
     stack: 16,
     use(_g, player) {
-      const t = m.seatOf(player);
-      if (!t) return false;
+      const me = m.memberOf(player);
+      if (!me) return false;
       const e = player.eye;
       const d = player.look;
-      fireballs.launch({ x: e.x + d.x * 0.9, y: e.y + d.y * 0.9, z: e.z + d.z * 0.9 }, d, t, player);
+      fireballs.launch({ x: e.x + d.x * 0.9, y: e.y + d.y * 0.9, z: e.z + d.z * 0.9 }, d, me.team, player);
       player.viewModel.play('swing');
       return true;
     },

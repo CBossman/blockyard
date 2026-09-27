@@ -13,7 +13,10 @@ export default defineMeta({
     ['LMB', 'attack · hold to mine'],
     ['RMB', 'place block · use item'],
     ['RMB', 'talk to the shopkeeper'],
+    ['M', 'lobby menu: team, map, ready'],
   ],
+  // Controllers: the platform's layout, with the lobby's menu on X (nothing reloads here).
+  gamepad: { X: ['KeyM', 'lobby menu'] },
   achievements: {
     first_blood: { title: 'First Blood', description: 'Take down an enemy' },
     retail_therapy: { title: 'Retail Therapy', description: 'Buy something from the Item Shop' },

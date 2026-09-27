@@ -1,5 +1,6 @@
 import type { Actor, Entity, GameContext, Pickup, Player, Vec3 } from '@platform';
-import type { BedwarsMap, TeamBase, TeamColor } from './map';
+import type { TeamBase, TeamColor } from './map';
+import type { PlacedMap } from './world';
 
 export const TEAM_STYLE: Record<TeamColor, { name: string; css: string; wool: string }> = {
   red: { name: 'Red', css: '#ff5b5b', wool: 'red_wool' },
@@ -23,7 +24,7 @@ export const ARMOR = [4, 10, 14];
 /** Sword damage per tier (wood, stone, iron, diamond). */
 export const SWORD = [4, 5, 6, 7];
 export const SWORD_ITEMS = ['wooden_sword', 'stone_sword', 'iron_sword', 'diamond_sword'];
-/** The sword item a team's player gets at this tier: the sharpened kind once the team has the upgrade. */
+/** The sword item a team's member gets at this tier: the sharpened kind once the team has the upgrade. */
 export const swordItem = (t: Team, tier: number) => SWORD_ITEMS[tier] + (t.sharp ? '_sharp' : '');
 export const ALL_SWORDS = SWORD_ITEMS.flatMap((s) => [s, `${s}_sharp`]);
 export const PICK_ITEMS = ['', 'wooden_pickaxe', 'iron_pickaxe', 'diamond_pickaxe'];
@@ -31,46 +32,61 @@ export const PICK_ITEMS = ['', 'wooden_pickaxe', 'iron_pickaxe', 'diamond_pickax
 export const RESPAWN_SECONDS = 5;
 export const SUDDEN_DEATH_AT = 10 * 60;
 
+/**
+ * One place on a team: a person, or a bot while nobody's in it. What's theirs alone goes with the
+ * place (a person taking over from a bot carries on with its wallet and gear): the wallet, the
+ * gear they bought, the score and when they come back.
+ */
+export interface Member {
+  team: Team;
+  /** Which place on the team (0 first): the bot's name. */
+  seat: number;
+  /** The person playing it, or null: a bot plays it (if there's a `body`), or nobody does. */
+  player: Player | null;
+  /** The bot's body while it is alive. */
+  body: Entity | null;
+  /** When they come back after dying (null: alive, or gone for good). */
+  respawnAt: number | null;
+  /** Died with the bed gone: out for good. */
+  out: boolean;
+  wallet: Wallet;
+  /** Permanent gear (kept through deaths). */
+  armor: number;
+  pick: number;
+  shears: boolean;
+  sword: number;
+  /** Fireballs a bot is carrying. */
+  fireballs: number;
+  kills: number;
+  finals: number;
+  beds: number;
+  /** Last enemy to hit them (kill credit for void deaths). */
+  lastHit: { by: Member; at: number } | null;
+}
+
 export interface Team {
   color: TeamColor;
   name: string;
   css: string;
   wool: string;
   base: TeamBase;
-  /** The person playing this team, or null: a bot plays it. */
-  player: Player | null;
+  members: Member[];
   bed: boolean;
   eliminated: boolean;
-  /** The bot's body while it is alive (bot teams). */
-  body: Entity | null;
-  /** When a dead member comes back (null: alive, or gone for good). */
-  respawnAt: number | null;
-  wallet: Wallet;
-  /** Permanent gear (kept through deaths) and team upgrades. */
-  armor: number;
-  pick: number;
-  shears: boolean;
-  sword: number;
+  /** Team upgrades. */
   sharp: boolean;
   prot: number;
   heal: boolean;
-  /** Fireballs a bot is carrying. */
-  fireballs: number;
-  kills: number;
-  finals: number;
-  beds: number;
-  /** Last enemy to hit a member (kill credit for void deaths). */
-  lastHit: { team: Team; at: number } | null;
 }
 
 export const emptyWallet = (): Wallet => ({ iron: 0, gold: 0, diamond: 0, emerald: 0 });
 
-export function armorPoints(t: Team): number {
-  return Math.min(20, ARMOR[t.armor] + t.prot * 1.5);
+export function armorPoints(m: Member): number {
+  return Math.min(20, ARMOR[m.armor] + m.team.prot * 1.5);
 }
 
-export function swordDamage(t: Team, tier = t.sword): number {
-  return SWORD[tier] + (t.sharp ? 1 : 0);
+export function swordDamage(m: Member, tier = m.sword): number {
+  return SWORD[tier] + (m.team.sharp ? 1 : 0);
 }
 
 /**
@@ -130,12 +146,27 @@ export class Pile {
 
 const key = (x: number, y: number, z: number) => `${x},${y},${z}`;
 
+function newMember(team: Team, seat: number): Member {
+  return { team, seat, player: null, body: null, respawnAt: null, out: false, wallet: emptyWallet(), armor: 0, pick: 0, shears: false, sword: 0, fireballs: 0, kills: 0, finals: 0, beds: 0, lastHit: null };
+}
+
+function newTeam(base: TeamBase, size: number): Team {
+  const t: Team = { color: base.color, ...TEAM_STYLE[base.color], base, members: [], bed: true, eliminated: false, sharp: false, prot: 0, heal: false };
+  for (let seat = 0; seat < size; seat++) t.members.push(newMember(t, seat));
+  return t;
+}
+
 /** Everything about the match in progress that the game, the shop and the bots share. */
 export class Match {
-  readonly teams: Team[];
+  map: PlacedMap;
+  teams: Team[];
+  /** Places on each team this match. */
+  size = 1;
+  /** Waiting in the lobby: no match on yet. */
+  lobby = true;
   /** Blocks placed during the match: the only ones (besides beds) that can be broken. */
   readonly placed = new Set<string>();
-  readonly piles: Pile[] = [];
+  piles: Pile[] = [];
   startedAt = 0;
   over = false;
   suddenDeath = false;
@@ -147,66 +178,71 @@ export class Match {
 
   constructor(
     readonly game: GameContext,
-    readonly map: BedwarsMap,
+    map: PlacedMap,
   ) {
-    this.teams = map.teams.map((base) => ({
-      color: base.color,
-      ...TEAM_STYLE[base.color],
-      base,
-      player: null,
-      bed: true,
-      eliminated: false,
-      body: null,
-      respawnAt: null,
-      wallet: emptyWallet(),
-      armor: 0,
-      pick: 0,
-      shears: false,
-      sword: 0,
-      sharp: false,
-      prot: 0,
-      heal: false,
-      fireballs: 0,
-      kills: 0,
-      finals: 0,
-      beds: 0,
-      lastHit: null,
-    }));
+    this.map = map;
+    this.teams = map.teams.map((b) => newTeam(b, 1));
   }
 
   get now(): number {
     return this.game.clock.now - this.startedAt;
   }
 
-  /** The team a player is playing, or null (watching). */
-  seatOf(p: Player): Team | null {
-    return this.teams.find((t) => t.player === p) ?? null;
-  }
-
-  /** The first player's team (single-player shorthand, and handy in tests). */
-  get player(): Team {
-    return this.seatOf(this.game.player) ?? this.teams[0];
-  }
-
-  reset() {
-    this.placed.clear();
+  /** Back to the lobby over `map`: no match, nobody on any team. */
+  toLobby(map: PlacedMap) {
     for (const p of this.piles) p.reset();
+    this.piles = [];
+    this.map = map;
+    this.teams = map.teams.map((b) => newTeam(b, 1));
+    this.lobby = true;
+    this.over = false;
+    this.placed.clear();
+  }
+
+  /** A new match on the lobby's map, `size` places a team, all empty till they're filled. */
+  begin(size: number) {
+    this.size = size;
+    this.teams = this.map.teams.map((b) => newTeam(b, size));
+    this.placed.clear();
     this.startedAt = this.game.clock.now;
+    this.lobby = false;
     this.over = false;
     this.suddenDeath = false;
     this.diamondEvery = 30;
     this.emeraldEvery = 60;
     this.diamondTier = 1;
     this.emeraldTier = 1;
-    for (const t of this.teams) {
-      Object.assign(t, { bed: true, eliminated: false, body: null, respawnAt: null, wallet: emptyWallet(), armor: 0, pick: 0, shears: false, sword: 0, sharp: false, prot: 0, heal: false, fireballs: 0, kills: 0, finals: 0, beds: 0, lastHit: null });
-    }
   }
 
-  /** The team of whoever did something: a player's, or a bot's. */
-  teamOf(by: Actor | undefined | null): Team | null {
+  /** Every place on every team. */
+  members(): Member[] {
+    return this.teams.flatMap((t) => t.members);
+  }
+
+  /** The place a player is playing, or null (in the lobby, or watching). */
+  memberOf(p: Player): Member | null {
+    for (const t of this.teams) for (const m of t.members) if (m.player === p) return m;
+    return null;
+  }
+
+  /** The first player's place (single-player shorthand, and handy in tests). */
+  get player(): Member {
+    return this.memberOf(this.game.player) ?? this.teams[0].members[0];
+  }
+
+  /** The place of whoever did something: a player's, or a bot's. */
+  memberOfActor(by: Actor | undefined | null): Member | null {
     if (!by || by === 'world') return null;
-    if (by.kind === 'player') return this.seatOf(by);
+    if (by.kind === 'player') return this.memberOf(by);
+    for (const t of this.teams) for (const m of t.members) if (m.body === by) return m;
+    return null;
+  }
+
+  /** The team of whoever did something (a bot that's since died still says whose it was). */
+  teamOf(by: Actor | undefined | null): Team | null {
+    const m = this.memberOfActor(by);
+    if (m) return m.team;
+    if (!by || by === 'world' || by.kind === 'player') return null;
     return this.teams.find((t) => t.color === (by as Entity).data.team) ?? null;
   }
 
@@ -225,6 +261,7 @@ export class Match {
   }
 
   canBreak(at: Vec3, block: string, by: Actor): boolean {
+    if (this.lobby || this.over) return false;
     if (block.endsWith('_bed')) {
       const owner = this.bedAt(at);
       if (!owner) return false;
@@ -238,6 +275,7 @@ export class Match {
   }
 
   canPlace(at: Vec3, _block: string, _by: Actor): boolean {
+    if (this.lobby || this.over) return false;
     const m = this.map;
     if (at.y > m.center.y + 24 || at.y < m.voidY + 6) return false;
     // Keep shopkeepers and generators clear.
