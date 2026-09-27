@@ -1,8 +1,9 @@
-<h1 align="center">Blockyard</h1>
+<p align="center">
+  <a href="https://blockyard.gg"><img src="docs/media/banner.webp" alt="Blockyard: block games, played together" width="760"></a>
+</p>
 
 <p align="center">
-  <b>Voxel games in the browser, played together.</b><br>
-  An open-source game platform: a Rust/WebAssembly voxel engine, a three.js renderer and an authoritative multiplayer server.<br>
+  An open-source game platform for the browser: a Rust/WebAssembly voxel engine, a three.js renderer and an authoritative multiplayer server.<br>
   A game on top of it is a few small TypeScript files.
 </p>
 
@@ -19,7 +20,9 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="MIT license"></a>
 </p>
 
-![Arena: the Warden](docs/arena-fight.png)
+<p align="center">
+  <a href="https://blockyard.gg"><img src="docs/media/hero.webp" alt="Call of Blocky, Blockfront II, Starfighter and Bed Wars in motion" width="100%"></a>
+</p>
 
 ## What it is
 
@@ -63,28 +66,28 @@
 
 Each game's controls are on the home page and in its pause menu (Escape), along with the settings and an invite link.
 
-<details>
-<summary><b>More screenshots</b></summary>
+### Call of Blocky
 
-| Call of Blocky | Bed Wars |
-| --- | --- |
-| ![Call of Blocky: firing down Jackrabbit Lane, and the scoreboard](docs/callofblocky.png) | ![Bed Wars: the sky-island map and the red base](docs/bedwars.png) |
+<p>
+  <img src="docs/media/cob-chopper.webp" alt="An Attack Chopper over Big Kahuna Burger" width="49%">
+  <img src="docs/media/cob-blast.webp" alt="A frag goes off outside Slim's diner on Jackrabbit Lane" width="49%">
+</p>
 
-![Starfighter: the opening shot, a dogfight by the Star Demolisher, a strafing run on a shield generator, the break-up](docs/starfighter.png)
+### Blockfront II
 
-![Skyship: the airship moored off Home Isle](docs/skyship.png)
+<p>
+  <img src="docs/media/bf-duel.webp" alt="Luke Skyblocker and Darth Voxel duel at Mos Blockley Spaceport" width="49%">
+  <img src="docs/media/bf-lightning.webp" alt="Force lightning crackles across the spaceport" width="49%">
+  <img src="docs/media/bf-frostline.webp" alt="Luke Skyblocker against snowtroopers at Frostline Base" width="49%">
+  <img src="docs/media/bf-spaceport.webp" alt="Fighters over Mos Blockley Spaceport" width="49%">
+</p>
 
-![First-person view: diamond sword mid-slash, battle axe, two-handed pike, health potion](docs/viewmodel.png)
+### Starfighter and Bed Wars
 
-| The colosseum | Sandbox at sunset |
-| --- | --- |
-| ![Arena overview](docs/arena-overview.png) | ![Sunset](docs/sunset.png) |
-
-| Coast at noon | Night |
-| --- | --- |
-| ![Coast at noon](docs/coast-noon.png) | ![Moonlit coast](docs/night-coast.png) |
-
-</details>
+<p>
+  <img src="docs/media/starfighter.webp" alt="A Vox-wing strafes the Star Demolisher" width="49%">
+  <img src="docs/media/bedwars.webp" alt="A sword fight on a bridge over the void" width="49%">
+</p>
 
 ## Make a game
 
