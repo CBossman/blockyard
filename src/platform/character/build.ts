@@ -989,23 +989,52 @@ export interface CharacterMesh {
   atlas: { width: number; height: number; albedo: Uint8Array; mr: Uint8Array; glow: Uint8Array };
   /** Anything glows. */
   glows: boolean;
+  /** Where what's worn goes (`WearFrame`: metres, the model's space). */
+  wear: WearFrame;
+}
+
+/**
+ * Where a figure wears things (cosmetics are drawn for the box figure: a head 8 texels across, a
+ * back 8 wide and 12 tall), as its builder knows it rather than measured: the top of its head (its
+ * hair, or what's on it) and the width of its head with its hair, not its ears; the middle of its
+ * back between the shoulders, and the width a back item is scaled to (the torso's, or less where
+ * the torso is short for it, so a pack fits it both ways).
+ */
+export interface WearFrame {
+  top: P3;
+  headWidth: number;
+  back: P3;
+  bodyWidth: number;
+}
+
+/** A character's wear frame, from its voxels and build. */
+function wearFrame(vox: Voxels, b: Build): WearFrame {
+  let crown = Y.head + 12;
+  for (const key of vox.parts.get('head')!.keys()) crown = Math.max(crown, cellOf(key)[1] + 1);
+  const torso = { width: (2 * b.sh) * VOXEL, height: (Y.chestTop - Y.spine) * VOXEL };
+  return {
+    top: [0, crown * VOXEL, -0.5 * VOXEL],
+    headWidth: 14 * VOXEL,
+    back: [0, (Y.chestTop - 1) * VOXEL, -4 * VOXEL],
+    bodyWidth: 0.5 * Math.min(torso.width / 0.5, torso.height / 0.75),
+  };
 }
 
 /** A character's voxels (a part per bone) and colours. */
-export function characterVoxels(look: Required<CharacterLook>): { vox: Voxels; palette: Palette; joints: Record<CharacterJoint, P3> } {
+export function characterVoxels(look: Required<CharacterLook>): { vox: Voxels; palette: Palette; joints: Record<CharacterJoint, P3>; wear: WearFrame } {
   const build = BUILDS[`${look.build}${look.curvy ? 'Curvy' : ''}`] ?? BUILDS.broad;
   const s: Spec = { b: build, look, top: TOPS[look.top] ?? TOPS.tee };
   const vox = new Voxels();
   for (const j of BONES) vox.part(j);
   body(vox, s);
   dress(vox, s);
-  return { vox, palette: palette(s), joints: joints(build) };
+  return { vox, palette: palette(s), joints: joints(build), wear: wearFrame(vox, build) };
 }
 
 /** Build a character from its look (the plain look's where it's silent). */
 export function buildCharacter(look: CharacterLook): CharacterMesh {
   const full = { ...PLAIN_LOOK, ...look } as Required<CharacterLook>;
-  const { vox, palette: P, joints: J } = characterVoxels(full);
+  const { vox, palette: P, joints: J, wear } = characterVoxels(full);
   const list = faces(vox);
   const A = atlas(list, P);
   const boneOf = new Map<string, number>(BONES.map((j, i) => [j, i]));
@@ -1034,5 +1063,5 @@ export function buildCharacter(look: CharacterLook): CharacterMesh {
   const joints = Object.fromEntries(Object.entries(J).map(([k, v]) => [k, v.map((x) => x * VOXEL) as P3])) as Record<CharacterJoint, P3>;
   let glows = false;
   for (const c of P.colours.values()) glows ||= c.glow > 0;
-  return { joints, position, normal, uv, bone, index, atlas: A, glows };
+  return { joints, position, normal, uv, bone, index, atlas: A, glows, wear };
 }

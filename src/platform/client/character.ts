@@ -18,6 +18,8 @@ export function characterModel(url: string): GLTF | null {
 export function characterScene(m: CharacterMesh): { gltf: GLTF; root: THREE.Group; mesh: THREE.SkinnedMesh; nodes: Record<CharacterJoint, THREE.Object3D> } {
   const root = new THREE.Group();
   root.name = 'character';
+  // Where it wears things, as built (the rig reads it: `HumanoidRig.wearFrame`).
+  root.userData.wear = m.wear;
   const nodes = {} as Record<CharacterJoint, THREE.Object3D>;
   for (const j of JOINTS) {
     const parent = JOINT_PARENT[j];

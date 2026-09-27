@@ -257,6 +257,17 @@ export class HumanoidRig {
    * the model's rigid parts on those joints; a skinned model's are guessed from its build.
    */
   wearFrame(): { top: THREE.Vector3; headWidth: number; back: THREE.Vector3; bodyWidth: number } {
+    // As its builder declared it (the platform's characters, the voxel fighters: `userData.wear`,
+    // a glTF node's `extras.wear`, on the model's root or its first node), else measured.
+    let declared: { top: number[]; headWidth: number; back: number[]; bodyWidth: number } | null = null;
+    for (const o of [this.body, ...this.body.children]) {
+      const w = o.userData?.wear;
+      if (w && Array.isArray(w.top) && Array.isArray(w.back)) {
+        declared = w;
+        break;
+      }
+    }
+    if (declared) return { top: new THREE.Vector3(...declared.top), headWidth: declared.headWidth, back: new THREE.Vector3(...declared.back), bodyWidth: declared.bodyWidth };
     const f = this.frames;
     const joints = new Set<THREE.Object3D>(Object.values(f.nodes));
     // The rigid meshes on a joint (not those on the joints below it), as they rest, in the model's space.

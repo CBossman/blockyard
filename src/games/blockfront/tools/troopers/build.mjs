@@ -1665,13 +1665,33 @@ function atlasOf(list, P) {
   return { width, height, tiles: A1.tiles + (A2?.tiles ?? 0), albedo, mr, glow, uvs };
 }
 
+/**
+ * Where the fighter wears things (the platform's cosmetics: `HumanoidRig.wearFrame` reads it from
+ * the root's `extras.wear`), in metres: the top of the head (its hair, or its hat) and its width with
+ * its hair, not its ears; the middle of the back between the shoulders (behind whatever's on it:
+ * the lower chest's rearmost voxel), and the width a back item is scaled to (the torso's, or less
+ * where the torso is short for the box figure's back cosmetics are drawn for, 8 wide by 12 tall).
+ */
+function wearOf(vox, b, Y, hz = 0) {
+  let crown = Y.head + 12;
+  for (const key of vox.parts.get('head').keys()) crown = Math.max(crown, cellOf(key)[1] + 1);
+  let back = -4;
+  for (const key of vox.parts.get('chest').keys()) {
+    const [i, j, k] = cellOf(key);
+    if (i === 0 && j === Y.chest + 1) back = Math.min(back, k);
+  }
+  const width = 2 * b.sh * DU, height = (Y.chestTop - Y.spine) * DU;
+  const r = (v) => Math.round(v * 1e4) / 1e4;
+  return { top: [0, r(crown * DU), r((hz - 0.5) * DU)], headWidth: r(14 * DU), back: [0, r((Y.chestTop - 1) * DU), r(back * DU)], bodyWidth: r(0.5 * Math.min(width / 0.5, height / 0.75)) };
+}
+
 function glb(d) {
   const { vox, s, P } = makeFigure(d);
   const { faces: list, hidden, duplicates, before } = faces(vox, P, { vary: argv.includes('--vary'), merge: !argv.includes('--no-merge') });
   const A = atlasOf(list, P);
   // Joints in metres; each node's translation from its parent's, rounded as written.
   const J = Object.fromEntries(Object.entries(s.J).map(([k, v]) => [k, v.map((x) => x * DU)]));
-  const nodes = [{ name: d.id, children: [], extras: { title: d.name } }];
+  const nodes = [{ name: d.id, children: [], extras: { title: d.name, wear: wearOf(vox, s.b, s.Y, headAt(s.b, s.Y)[2]) } }];
   const nodeOf = {}, at = {};
   for (const j of JOINT_ORDER) {
     const parent = JOINT_PARENT[j];
