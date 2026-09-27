@@ -1,41 +1,94 @@
-# Blockyard
+<h1 align="center">Blockyard</h1>
 
-A voxel game platform that runs in the browser. The engine gives you a Minecraft-style world that is already built: an endless procedural world, lighting, a shader pipeline, physics, entities, items, combat, audio and UI. A game on top of it is a few small TypeScript files that only describe rules and content: what the launcher shows, what the server and every screen share (the world, blocks, movement), the rules (which run only on the game server), and what each player's screen does.
+<p align="center">
+  <b>Voxel games in the browser, played together.</b><br>
+  An open-source game platform: a Rust/WebAssembly voxel engine, a three.js renderer and an authoritative multiplayer server.<br>
+  A game on top of it is a few small TypeScript files.
+</p>
 
-The compute-heavy work (terrain generation, lighting, meshing, physics, path-finding, projectiles, raycasting, visibility culling and shadow-camera math) is Rust compiled to WebAssembly. three.js on WebGL2 does the rendering, through a custom shader pipeline.
+<p align="center">
+  <a href="https://blockyard.gg"><b>▶ Play at blockyard.gg</b></a>
+  &nbsp;·&nbsp;
+  <a href="docs/PLATFORM.md">Write a game</a>
+  &nbsp;·&nbsp;
+  <a href="#run-it-locally">Run it locally</a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/Potrock/blockyard/actions/workflows/ci.yml"><img src="https://github.com/Potrock/blockyard/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="MIT license"></a>
+</p>
 
 ![Arena: the Warden](docs/arena-fight.png)
+
+## What it is
+
+- **Nine games, free in the browser, no download.** A Call of Duty-style shooter, a Battlefront II-style third-person war, Bed Wars, a co-op arena, a space dogfighter and more. Play alone with bots or with friends, in public matches or a room of your own.
+- **A platform, not just a game.** The engine already has the world: endless procedural terrain, lighting, physics, entities, items, guns, vehicles, combat, audio, HUD and menus. A game only describes its rules and content, and imports nothing but `@platform`.
+- **Multiplayer built in.** Every game runs on an authoritative game server. Each screen predicts its own movement, and shots are lag-compensated, so what you aim at is what you hit.
+- **Shared across games.** Sign in with Discord and your progress, 73 achievements and cosmetics follow you from game to game. It also has gamepad support and rebindable keys.
+- **No asset files.** Block textures, skins, item sprites and sounds are all generated in code, and so is the games' art.
+
+## Games
+
+<table>
+  <tr>
+    <td width="33%" align="center"><a href="https://blockyard.gg/?game=callofblocky"><img src="src/games/callofblocky/cover.webp" alt="Call of Blocky"></a><br><b>Call of Blocky</b></td>
+    <td width="33%" align="center"><a href="https://blockyard.gg/?game=blockfront"><img src="src/games/blockfront/cover.webp" alt="Blockfront II"></a><br><b>Blockfront II</b></td>
+    <td width="33%" align="center"><a href="https://blockyard.gg/?game=arena"><img src="src/games/arena/cover.webp" alt="Arena"></a><br><b>Arena</b></td>
+  </tr>
+  <tr>
+    <td align="center"><a href="https://blockyard.gg/?game=starfighter"><img src="src/games/starfighter/cover.webp" alt="Starfighter"></a><br><b>Starfighter</b></td>
+    <td align="center"><a href="https://blockyard.gg/?game=skyship"><img src="src/games/skyship/cover.webp" alt="Skyship"></a><br><b>Skyship</b></td>
+    <td align="center"><a href="https://blockyard.gg/?game=bedwars"><img src="src/games/bedwars/cover.webp" alt="Bed Wars"></a><br><b>Bed Wars</b></td>
+  </tr>
+  <tr>
+    <td align="center"><a href="https://blockyard.gg/?game=obby"><img src="src/games/obby/cover.webp" alt="Sky Obby"></a><br><b>Sky Obby</b></td>
+    <td align="center"><a href="https://blockyard.gg/?game=sandbox"><img src="src/games/sandbox/cover.webp" alt="Sandbox"></a><br><b>Sandbox</b></td>
+    <td align="center"><a href="https://blockyard.gg/?game=heart-hunt"><img src="src/games/heart-hunt/cover.webp" alt="Heart Hunt"></a><br><b>Heart Hunt</b></td>
+  </tr>
+</table>
+
+| Game | What it is |
+| --- | --- |
+| **[Call of Blocky](https://blockyard.gg/?game=callofblocky)** | A fast pulp shooter against bots and people. The modes are free-for-all, Team Deathmatch (the Suits against the Shirts) and The Briefcase (plant it or stop it). The maps are Jackrabbit Lane (a Nuketown-style cul-de-sac), Big Kahuna Burger, and Hijacked (a yacht at sea). You get rifles, SMGs, shotguns, snipers, a machine gun, revolvers and a katana, plus frags and Molotovs. Bullets carve through walls. Killstreaks go up to a Hellstorm missile and an Attack Chopper you fly. There are also XP levels with unlocks and a killcam. |
+| **[Blockfront II](https://blockyard.gg/?game=blockfront)** | Third-person battles, the Rebels against the Empire, in Conquest (five command posts, 250 tickets) or Heroes vs Villains. Troopers, Heavies and Specialists carry blasters that overheat. Battle points buy a hero: Luke Skyblocker, Ben Kenoblock, Darth Voxel, Emperor Palpablock, Chewblocca or Boba Fetch. Heroes have sabers that deflect bolts, Force powers and a floaty Force jump. The maps are Mos Blockley Spaceport and Frostline Base. |
+| **[Arena](https://blockyard.gg/?game=arena)** | Six waves of zombies, skeleton archers, spiders and brutes in a colosseum, then the Warden boss. Weapons drop between waves: a bow, swords, a pike, a battle axe and potions. Online it's co-op, and more fighters bring more monsters. |
+| **[Starfighter](https://blockyard.gg/?game=starfighter)** | A Star Fox-style dogfighter. Fly a block-built Vox-wing against waves of Bowties, then knock out a 200-block Star Demolisher's shield generators and bridge. Barrel rolls deflect lasers. Online, it's a squadron. |
+| **[Skyship](https://blockyard.gg/?game=skyship)** | Crew an airship across the sky islands and light five beacons. The ship is a solid, moving prop: everyone walks its decks while one of you takes the helm. |
+| **[Bed Wars](https://blockyard.gg/?game=bedwars)** | Hypixel-style Bed Wars on sky islands, against bots or up to three friends. Collect resources from your generator, shop, bridge across the void and break the other beds. The bots fortify, bridge and dig through defences. |
+| **[Sky Obby](https://blockyard.gg/?game=obby)** | Ten stages of parkour in the sky, with lava, crumbling sand, launch pads, blinking platforms and cannons. Each player runs on their own clock, and best times go on a leaderboard. |
+| **[Sandbox](https://blockyard.gg/?game=sandbox)** | Creative building in an endless world, which the server keeps. |
+| **[Heart Hunt](https://blockyard.gg/?game=heart-hunt)** | A gentle hunt for ten hidden hearts. At about 70 lines, it's the [tutorial game](docs/PLATFORM.md#hello-game). |
+
+Each game's controls are on the home page and in its pause menu (Escape), along with the settings and an invite link.
+
+<details>
+<summary><b>More screenshots</b></summary>
+
+| Call of Blocky | Bed Wars |
+| --- | --- |
+| ![Call of Blocky: firing down Jackrabbit Lane, and the scoreboard](docs/callofblocky.png) | ![Bed Wars: the sky-island map and the red base](docs/bedwars.png) |
+
+![Starfighter: the opening shot, a dogfight by the Star Demolisher, a strafing run on a shield generator, the break-up](docs/starfighter.png)
+
+![Skyship: the airship moored off Home Isle](docs/skyship.png)
+
+![First-person view: diamond sword mid-slash, battle axe, two-handed pike, health potion](docs/viewmodel.png)
 
 | The colosseum | Sandbox at sunset |
 | --- | --- |
 | ![Arena overview](docs/arena-overview.png) | ![Sunset](docs/sunset.png) |
 
-![Starfighter: the opening shot, a dogfight by the Star Demolisher, a strafing run on a shield generator, the break-up](docs/starfighter.png)
+| Coast at noon | Night |
+| --- | --- |
+| ![Coast at noon](docs/coast-noon.png) | ![Moonlit coast](docs/night-coast.png) |
 
-![Bed Wars: the sky-island map, and the view from the red base with a full hotbar](docs/bedwars.png)
+</details>
 
-![Skyship: the airship moored off Home Isle](docs/skyship.png)
+## Make a game
 
-![Call of Blocky: firing down Jackrabbit Lane toward Slim's diner, and the scoreboard mid-match](docs/callofblocky.png)
-
-![First-person view: diamond sword mid-slash, battle axe, two-handed pike, health potion](docs/viewmodel.png)
-
-## Games
-
-| Game | URL | What it is |
-| --- | --- | --- |
-| **Call of Blocky** | `?game=callofblocky` | A fast free-for-all shooter with a pulp pop-art look, against bots and people. Fight on Jackrabbit Lane, a Nuketown-style cul-de-sac with a burger truck in the middle, a 1950s diner at the end and a storm drain under the street. The weapons are hitscan guns (an AK, a Mac-10 and a drum-fed Tommy gun, a pump shotgun and a sawn-off, a belt-fed machine gun, a semi-auto marksman rifle, a bolt sniper, and the Lucky 45 or a magnum revolver at your side) and a katana; whoever goes down drops a bag of ammo. Right-click aims down the sights, Shift sprints, and C crouches (or slides out of a sprint). You can climb onto ledges, and three- and five-kill streaks earn rewards. Shots are lag-compensated, so what you aim at on your screen is what you hit. Bots fill the street to six. |
-| **Arena** | `?game=arena` | Six waves of zombies, skeleton archers, spiders and brutes in a colosseum, then the Warden boss. Weapons drop on the dais between waves: bow, stone/iron/diamond swords, a two-handed pike, battle axe and potions. Online it's co-op: more fighters bring more monsters, each gets their own reward, and anyone who falls sits the wave out. About 640 lines, including the colosseum and the boss AI. |
-| **Starfighter** | `?game=starfighter` | A Star Fox-style dogfighter with block-built Vox-wing, Bowtie fighter and Bowtie interceptor. Fight two waves of Bowties over the sea, then take on a 200-block Star Demolisher built into the world: knock out its two shield generators and blow up the bridge. Mouse to fly, W/S boost and brake, Q/E barrel roll (deflects lasers), right-click proton torpedoes. Online it's a squadron: a Vox-wing each (Red Five, Red Two…), more Bowties for more pilots, and anyone shot down is back in a new ship after 12 seconds. The Vox-wing is a vehicle (`player.drive`), so it flies at once on your own screen however far away the server is. |
-| **Skyship** | `?game=skyship` | Crew an airship across the sky islands and light the five beacons. The airship is a solid prop that sails, turns, banks and bobs, and everyone walks its decks while it does: up to the roof, into the cabin, off onto an island and back aboard. Whoever takes the helm (E at the wheel) steers with W/S, A/D and Space/Shift, and can scroll out to steer from outside. Online, the whole party is the crew. |
-| **Bed Wars** | `?game=bedwars` | Hypixel-style Bed Wars on sky islands, against bots or up to three friends (`npm run server -- bedwars`): each player gets their own team, bots play the rest, and someone joining mid-match takes over a bot's team. Collect iron and gold from your generator (diamonds and emeralds on the outer and middle islands), buy blocks, swords, armour, tools, fireballs and team upgrades from the shopkeeper, bridge across the void and break the other beds. You respawn only while your bed stands. The bots fortify, shop, bridge, dig through defences and fight each other as well as you. |
-| **Sky Obby** | `?game=obby` | A parkour course of ten stages floating in the sky: stepping stones, a climb, balance beams, posts in a lava lake, crumbling sand, launch pads, red/blue blinking platforms, a spiral tower, a cannon-swept walkway and a leap of faith to the finish. Each player runs on their own clock (it starts when you leave the start island); falling puts you back at your last checkpoint (R does too), and best times go on a leaderboard. The course checks every jump against the player physics as it builds, and a headless bot runs it start to finish. |
-| **Sandbox** | `?game=sandbox` | Creative building in an endless world, which the server keeps. |
-| **Heart Hunt** | `?game=heart-hunt` | A gentle hunt for ten hidden hearts, and the tutorial game (about 70 lines; see docs/PLATFORM.md). |
-
-The home page lists every game in `src/games/browser.ts`, each on a card with its cover. The pause menu (Escape) has how to play, the settings, an invite link and the way back to the games (and, in a game of your own, a restart).
-
-**To write your own game, read [docs/PLATFORM.md](docs/PLATFORM.md).** In short, a game is a folder of four parts:
+A game is a folder with four parts: `meta` (what the launcher lists), `shared` (the world, blocks and movement, which the server and every screen read), `server` (the rules, which run only on the game server) and `client` (each player's screen). Here is a complete one: a ring wall, a sword and three rogues to beat.
 
 ```ts
 // meta.ts: what the launcher lists
@@ -96,11 +149,13 @@ import { shared } from './shared';
 export default defineClient(shared);
 ```
 
-Then list it in `src/games/browser.ts` (its meta, and its client loaded on demand) and `src/games/server.ts` (its server part).
+Then list it in `src/games/browser.ts` (its meta, and its client loaded on demand) and in `src/games/server.ts` (its server part), and open `?game=my-game`.
 
-## Run it
+**[docs/PLATFORM.md](docs/PLATFORM.md) is the full guide.** It covers the world and custom blocks, players and multiplayer, items, guns, throwables, bots, vehicles, moving ships, glTF models, a game's own art and sound, saved data, achievements, cosmetics, the HUD, replays and headless testing. Ready-made systems such as survival building and shooter bots come as kits (`src/platform/kits`), which use the same public API as any game.
 
-Prerequisites: Rust (stable) with the `wasm32-unknown-unknown` target, and Node 20 or newer. `wasm-pack` is installed as a dev dependency.
+## Run it locally
+
+You need Rust (stable) with the `wasm32-unknown-unknown` target, and Node 20 or newer (CI runs 24). `wasm-pack` comes in as a dev dependency.
 
 ```sh
 rustup target add wasm32-unknown-unknown
@@ -108,82 +163,70 @@ npm install
 npm run dev        # builds the wasm engine, then runs a local game server and Vite on http://localhost:5173
 ```
 
-Every game is played on a game server, alone or together. `npm run dev` runs one in development mode next to Vite (on port 8787, `--server-port` to change it; `--port` for Vite's), and the page connects to it: cheats are on, the development games open by id (`?game=gallery`), and in the browser's console `await __game.dev('game.players.length')` runs code in the game's room on the server (`game` is its `GameContext`, `me` your own player). See [Running and debugging](docs/PLATFORM.md#running-and-debugging).
+`npm run dev` runs a game server in development mode on port 8787 (`--server-port` changes it, `--port` changes Vite's), and the page connects to it. In development mode:
 
-Other scripts:
+- Cheats are on: press `/` or T for the command bar (`/give pike`, `/spawn zombie 3`, `/tp ~ ~10 ~`, `/time noon`, `/help`).
+- The development-only games and previews open by id (`?game=gallery`).
+- `await __game.dev('game.players.length')` in the browser's console runs code in the game's room on the server. There, `game` is its `GameContext` and `me` is your own player.
+
+See [Running and debugging](docs/PLATFORM.md#running-and-debugging).
+
+### Scripts
 
 | Script | What it does |
 | --- | --- |
-| `npm run build` | Release wasm build, type-check, the boundary check, a production bundle in `dist/`, and the bundle check (no server code in it). Set `VITE_GAME_SERVER=wss://…` for the server the site plays on |
+| `npm run dev` | The wasm engine, a development game server and Vite |
+| `npm run build` | Release wasm build, type-check, the boundary check, a production bundle in `dist/` and the bundle check (no server code in it). Set `VITE_GAME_SERVER=wss://…` for the server the site plays on |
 | `npm run preview` | Serve the production bundle |
 | `npm run wasm` | Rebuild only the Rust engine (`engine/pkg`) |
-| `npm run typecheck` | TypeScript and the boundary check (`npm run check:boundaries`: games, kits and each side of the client / server split keep to their imports) |
+| `npm run typecheck` | TypeScript and the boundary check (games, kits and each side of the client/server split keep to their imports) |
 | `npm run test:engine` | Rust unit tests: generation, blueprints, meshing, lighting, culling, physics, entities, path-finding, textures |
-| `npm run test:headless` | Games in Node, no browser (`tests/headless`): every game runs 30 s, a bot beats the Arena, bots play out a Bed Wars match, several players share a host and a real server. About 8 s in total |
-| `npm run server -- [games…] --port 8787` | Host games (all of them by default, each at `ws://localhost:8787/<game>`); players open `/?server=ws://localhost:8787&game=sandbox`. `--dev` is development mode, as `npm run dev` runs it. Match games (Bed Wars, Arena, Starfighter) also offer a game of your own (`&room=<code>`), each game running in a worker thread of its own (`--rooms 8` at once; `--room-size 16` people in each). Each game's world, players' places and data are kept in `data/<game>.sqlite` (`--data dir`, `--new` for fresh worlds, `--cheats` for developer commands) |
+| `npm run test:headless` | Games in Node with no browser (`tests/headless`). Every game runs 30 s, a bot beats the Arena, bots play out a Bed Wars match, and several players share a real server |
+| `npm run server -- [games…]` | Host games (all by default, each at `ws://localhost:8787/<game>`). Options: `--port`, `--dev` (development mode), `--cheats`, `--seed 1234`, `--rooms 8` (rooms of your own at once, each in its own worker thread), `--room-size 16`, `--data dir` (worlds and players' data, in `data/<game>.sqlite`) and `--new` (fresh worlds) |
 | `npm run build:server` / `npm start` | Bundle the game server (games included) into `dist-server/` / run it with plain Node |
-| `npm run deploy:server` | Deploy the game server to Fly.io (`fly.toml`, `Dockerfile`); `-- --if-changed` skips it when the live server is the same build. CI does this on every push to main |
-| `npm run deploy:site` | Build the site pointed at the game server (`GAME_SERVER`, default the Fly app) and deploy it to Vercel; `-- --if-changed` and `-- --preview` too. CI does this on every push to main |
 
-URL parameters: `?game=<id>` picks a game. `?server=ws://host:port` picks the game server (by default the one the site was built with, or in development the local one), and `&room=<code>` a game of one's own on it. The server picks the world's seed (`npm run server -- --seed 1234`).
-
-## Online
-
-The site is at **https://blockyard.gg** (www.blockyard.gg and the old blockyard.potrock.xyz send you there) and the game server at **https://play.blockyard.gg** (`/games` lists what's on and who's playing). The site is online-only: the home page shows the game live, and **Play** joins it under the name you type, or as your account once you **Sign in with Discord** (which keeps what you earn).
-
-- **Game server:** Fly.io app `voxel-games` in `iad`, one machine (performance-1x: one dedicated CPU, 2 GB; 14 matches at once) that sleeps when nobody's connected and wakes on the next visit, with a 1 GB volume at `/data` for the SQLite worlds (snapshotted daily). `fly logs -a voxel-games` shows joins, leaves and game errors. Public servers run without cheats: developer commands (`cheat: true`) don't exist, and players can't restart the game for everyone or change the time. Each game starts when its first player arrives and is saved and stopped five minutes after its last leaves. Limits: 16 people in a game (playing or watching from the home page; a full public game of one with `instances` overflows into another copy of it, `&shard=2`, and past the room limit the home page waits and tries again), 6 connections per address, 300 messages a second per connection, 16 KB per message; every message is checked before the game sees it.
-- **Website:** Vercel project `blockyard` (Patrick Blais' projects), a static build made in CI (Vercel's builders don't have Rust) with `VITE_GAME_SERVER` baked in, which is what makes the site connect to the server.
-- **Deploys:** GitHub Actions (`.github/workflows/ci.yml`) checks every pull request and push: the engine's tests, `npm run build` (as the site will be deployed), the headless tests and the server bundle. A push to main that passes then deploys the game server to Fly and after it the site to Vercel, each only if its build differs from the live one (a hash in the Fly image's tag and in the site's `x-blockyard-build` header), so a change the server doesn't run doesn't restart it and end its matches. Vercel's own Git builds are off (`vercel.json`). The workflow needs the repository secrets `FLY_API_TOKEN` (a deploy token for `voxel-games`) and `VERCEL_TOKEN`.
+URL parameters: `?game=<id>` picks a game, `?server=ws://host:port` picks the game server, and `&room=<code>` opens a room of your own on it.
 
 ## Controls
 
 | Input | Action |
 | --- | --- |
-| WASD | Move |
-| Space | Jump. In Sandbox, double-tap to toggle flight and hold to rise while flying |
-| Shift | Sneak (won't walk off edges). Descend while flying |
-| Ctrl or double-tap W | Sprint |
-| Left mouse | Attack; hold to draw a bow (Arena, Bed Wars). Break a block (Sandbox); hold to mine one (Bed Wars). Fire (Call of Blocky) |
-| Right mouse | Use: drink a potion (Arena), eat, throw a fireball (Bed Wars). Place a block (Sandbox, Bed Wars). Open the shop by right-clicking the shopkeeper (Bed Wars). Aim down the sights (Call of Blocky) |
-| Shift, C, R, L, Tab | Call of Blocky: sprint; crouch, or slide out of a sprint; reload; choose your primary; the scoreboard |
-| Middle mouse | Pick block (Sandbox) |
-| 1-9, mouse wheel | Select hotbar slot. At Skyship's helm, the wheel zooms out to third person |
-| E | Block picker (Sandbox) |
-| F | Toggle flight (Sandbox) |
-| Mouse, W/S, Q/E, A/D, RMB | Starfighter: steer, boost/brake, barrel roll, bank, torpedo |
-| `/` or T | Command bar: `/give pike`, `/spawn zombie 3`, `/tp ~ ~10 ~`, `/time noon`, `/heal`, `/kill`, `/fly`, `/help` (Tab completes) |
-| Esc | Pause, settings, restart, exit |
-| F1 / F3 | Hide HUD / debug overlay |
-| `[` / `]` | Shift time by one hour (Sandbox) |
+| WASD, Space | Move, jump |
+| Shift / Ctrl | Sneak / sprint (a game can swap them: Call of Blocky sprints on Shift and crouches on C) |
+| Left / right mouse | Attack or fire / use, place or aim |
+| 1–9, mouse wheel | Hotbar |
+| `/` or T | Command bar |
+| Esc | Pause menu: how to play, settings, keys, achievements, invite, exit |
+| F1 / F3 | Hide the HUD / debug overlay |
 
-Moving, jumping, crouching and sprinting can be rebound under **Keyboard** in the pause menu: click a key, then press the new one. Taking a key another control uses swaps the two (Sprint on Shift puts Crouch on Ctrl), and the bindings are kept in the browser with the other settings. They start from each game's own keys (Call of Blocky sprints on Shift and crouches on C) and follow the player from game to game. Every game sees a rebound key as the one it replaced, so nothing in a game changes.
+Each game adds its own controls, which are listed on the home page and in its pause menu. Every game also plays with a **gamepad**. Moving, jumping, crouching and sprinting can be **rebound** under Keyboard in the pause menu, and the bindings follow you from game to game.
 
-## Architecture
+## How it works
 
 ```
-┌──────────── games (TypeScript, import only @platform) ─────┐
-│ src/games/arena · starfighter · bedwars · sandbox · …       │
+┌──────────── games (TypeScript, import only @platform) ──────┐
+│ src/games/callofblocky · blockfront · arena · bedwars · …   │
 │ each: meta · shared · server (rules) · client               │
-├──────────── kits (optional, also only @platform) ──────────┤
-│ src/platform/kits   survival building, interactions         │
+├──────────── kits (optional, also only @platform) ───────────┤
+│ src/platform/kits   building, items, shooter bots, nav grid │
 │ src/platform/art    pixel-art painter for game atlases      │
-└──────────────────────── GameContext ───────────────────────┘
-┌──────────── platform simulation (TypeScript, headless) ────┐
+└──────────────────────── GameContext ────────────────────────┘
+┌──────────── platform simulation (TypeScript, headless) ─────┐
 │ src/platform/api        public API: types, Blueprint,       │
 │                         Models, Behaviors                   │
 │ src/platform/sim        Sim: players, entities, items,      │
 │                         combat, props, commands, rules      │
 │ src/platform/net        protocol: inputs, frames, calls     │
-│ src/platform/host       GameHost, rooms, the game server;   │
-│                         Node only (never in the browser)    │
-├──────────── platform client (TypeScript + three.js) ───────┤
+│ src/platform/host       GameHost, rooms, accounts, the game │
+│                         server; Node only                   │
+├──────────── platform client (TypeScript + three.js) ────────┤
 │ src/platform/runtime.ts the client: game loop, server link  │
 │ client/                   camera, entity/pickup/prop views, │
 │                           presenter (HUD/FX/audio calls)    │
 │ render/                   WebGL2 pipeline, first-person arm │
-│ audio/ fx/ ui/            synth SFX, effects, HUD           │
+│ audio/ fx/ ui/            synth SFX, effects, HUD, menus    │
 │ world/ workers/           chunk streaming, worker pool      │
-└─────────────── flat buffers / wasm-bindgen ────────────────┘
+└─────────────── flat buffers / wasm-bindgen ─────────────────┘
 ┌──────────── engine (Rust → WebAssembly) ────────────────────┐
 │ gen.rs      terrain, biomes, caves, blueprints, terraform   │
 │ mesher.rs   lighting + greedy meshing                       │
@@ -192,10 +235,15 @@ Moving, jumping, crouching and sprinting can be rebound under **Keyboard** in th
 │             projectiles                                     │
 │ cull.rs     frustum + cave culling, shadow camera           │
 │ texgen.rs / entitytex.rs  procedural block + mob textures   │
-└──────────────────────────────────────────────────────────────┘
+└─────────────────────────────────────────────────────────────┘
 ```
 
-**Simulation and client are separate.** The `Sim` (`src/platform/sim`) runs the game: the game's own code, players, entities, items, combat and block edits. It touches no DOM and no WebGL, and talks to the client only in plain data. Each tick it takes a `PlayerInput` snapshot per player and produces a `SimFrame` (positions, poses, health, hotbars, pickups, props). HUD, effects and sound calls become `PresentCall` messages addressed to one player or to everyone. Menu and button callbacks become ids that come back as `ClientMessage`s. A `GameHost` (`src/platform/host`) runs the `Sim` on its own copy of the world, generated around the players, and answers each tick with a batch: content definitions, presentation calls, block edits, then the frame. It runs on the game server (`npm run server`, or `npm run dev` in development), for one player or many over WebSockets, so game logic, physics and path-finding never compete with rendering and a game's rules never reach the browser: the page is only the client (camera, views, presenter, rendering, and prediction of its own player), its world mirrors the host's edits, and it loads each game's client code only when that game is picked. In Node the same `GameHost` runs headless for tests. On the engine side, the simulation core (`gen.rs`, `world.rs`, `entities.rs`, `blocks.rs`) is plain Rust with no wasm-bindgen types, so a native build generates identical worlds from the same seed and blueprints. See [docs/PLATFORM.md](docs/PLATFORM.md#architecture-and-the-road-to-multiplayer).
+**The simulation and the client are separate.** The `Sim` runs the game: the game's own code, players, entities, items, combat and block edits. It touches no DOM and no WebGL. Each tick it takes a `PlayerInput` from every player and produces a `SimFrame`. HUD, effects and sound calls become `PresentCall` messages. A `GameHost` runs the `Sim` on the game server, for one player or many over WebSockets. A game's rules never reach the browser, and game logic never competes with rendering. The page is only the client: camera, views, presentation, rendering and prediction of its own player. It loads each game's client code only when that game is picked. The same `GameHost` runs headless in Node for tests.
+
+**The heavy work is Rust.** Terrain generation, lighting, meshing, physics, path-finding, projectiles, raycasting, visibility culling and shadow-camera math are compiled to WebAssembly. The simulation core is plain Rust with no wasm-bindgen types, so a native build generates identical worlds from the same seed.
+
+<details>
+<summary><b>Engine details: chunks, lighting, meshing, culling, entities, rendering, performance</b></summary>
 
 **Threads.** Terrain generation and meshing run in a pool of Web Workers (hardware threads minus two). They share one `WebAssembly.Module` that is compiled once on the main thread. The main thread keeps its own wasm instance holding the authoritative block data and entity state. Physics, raycasts, edits, entity simulation and per-frame culling all use it synchronously.
 
@@ -207,7 +255,7 @@ Moving, jumping, crouching and sprinting can be rebound under **Keyboard** in th
 
 **Culling.** Meshes are stored section by section, so the visible part of a column is always one contiguous draw range. Each frame, wasm runs frustum culling per section plus a Minecraft-style cave-culling BFS through section connectivity graphs (computed by the mesher). The result drives three.js `drawRange` and `visible` directly. The shadow pass gets its own caster selection.
 
-**Entities.** Up to 160 bodies and 320 projectiles live in flat buffers in wasm memory. Each frame Rust steps all of them at once: substepped AABB physics against the voxel world, auto-step, knockback, separation, line of sight, and ballistic projectiles with hit detection. A 97×28×97 flow field toward the player is rebuilt four times a second. It handles walls, steps and drops, and every chasing mob steers down it. TypeScript runs the behaviours (state machines on the public `Entity` API) and drives box models that use the Minecraft skin UV layout.
+**Entities.** Up to 160 bodies and 320 projectiles live in flat buffers in wasm memory. Each tick Rust steps all of them at once: substepped AABB physics against the voxel world, auto-step, knockback, separation, line of sight, and ballistic projectiles with hit detection. A 97×28×97 flow field toward the player is rebuilt four times a second. It handles walls, steps and drops, and every chasing mob steers down it. TypeScript runs the behaviours (state machines on the public `Entity` API).
 
 **Rendering (WebGL2 via three.js):**
 - Physically based sky: Rayleigh, Mie and ozone single scattering with a multiple-scattering term, rendered into a small LUT that the sky, fog and reflections all sample.
@@ -216,25 +264,26 @@ Moving, jumping, crouching and sprinting can be rebound under **Keyboard** in th
 - Smooth lighting and AO, normal maps and specular from generated material textures, and emissive blocks. Entities sample the voxel light field through a Rust light probe, so a zombie in a tunnel is dark and one next to a torch is lit.
 - Waving leaves and grass. Foliage lets light through, and alpha-to-coverage keeps it sharp.
 - Water: screen-space reflections, refraction with Beer-Lambert absorption, a sun glint, shoreline foam, a Snell's-window view from below, and caustics plus softened shadows on underwater floors.
-- A first-person view built from Minecraft's own transforms: a skinned arm, the bow's draw pose and the post-attack dip. Swords, axes, potions and polearms are real 3D block models gripped in the hand, with a diagonal slash, an overhead hew, a sip and a two-handed jab; other items are extruded sprites. Walk bob, look sway, a landing dip and recoil on top. Games can add their own held models, grips and keyframe animations.
-- Movable block builds ("props", like the Starfighter ships): a Blueprint meshed once with the world's block textures, AO, shadows and glowing blocks, then moved freely every frame. glTF and GLB models (Blockbench, Blender) as props, animated figures (idle, walk in step, run, attack, a head that looks), player models and held items with drawn icons, lit and shadowed like everything else. Glowing laser bolts, explosions (fireball, smoke, sparks, shockwave) and `world.explode` craters.
-- Additive FX (pickup beams, shockwaves, glows), a particle system, floating damage numbers and screen shake.
+- A first-person view with a skinned arm, real 3D held models with their own swings and poses, walk bob, look sway, a landing dip and recoil. Games can add their own held models, grips and keyframe animations.
+- Movable block builds ("props", like the Starfighter ships and the Skyship): a Blueprint meshed once with the world's block textures, AO, shadows and glowing blocks, then moved freely every frame. glTF and GLB models (Blockbench, Blender) as props, animated figures and voxel characters, lit and shadowed like everything else.
+- Destructible micro-voxel blocks that guns carve, explosions and craters, glowing laser bolts, a particle system, floating damage numbers and screen shake.
 - HDR with MSAA, bloom (13-tap down / tent up), screen-space god rays, ACES tone mapping and underwater fog.
 
-**Assets.** None. All the block textures, the player skin, the starter item sprites and the sound effects are generated procedurally: textures in Rust, sounds with WebAudio. Games bring their own art and sounds the same way: the Arena paints its mobs and weapons in TypeScript (`src/games/arena/art/`) and synthesises its creature voices (`sounds.ts`); Starfighter builds its ships from blocks and synthesises its lasers.
+**Assets.** None. All the block textures, the player skin, the starter item sprites and the sound effects are generated procedurally: textures in Rust, sounds with WebAudio. Games bring their own art and sounds the same way. For example, the Arena paints its mobs and weapons in TypeScript (`src/games/arena/art/`) and synthesises its creature voices, and Starfighter builds its ships from blocks.
 
-| Coast at noon | Night |
-| --- | --- |
-| ![Coast at noon](docs/coast-noon.png) | ![Moonlit coast](docs/night-coast.png) |
-
-## Performance notes
-
-Measurements are on an Apple M2 Max at 1600×900 with the default settings (12 chunks, 4× MSAA, 3072² shadows).
-
+**Performance.** These numbers were measured on an Apple M2 Max at 1600×900 with the default settings (12 chunks, 4× MSAA, 3072² shadows).
 - **Sandbox:** the main thread spends about 2 ms per frame, rendering about 600 draw calls and 0.7 M triangles. A worker job takes about 1.4 ms to generate a chunk and about 1.1 ms to light and mesh one. At 20 chunks (about 1,300 columns) the world streams in within about 5 s and stays at 60 fps.
 - **Arena:** a full six-wave run holds 60 fps with 12+ mobs, arrows and fireballs in flight, at about 1–2 ms of CPU per frame.
 
 The settings menu has shadow quality, resolution scale, MSAA and per-effect toggles for slower GPUs.
+
+</details>
+
+More: [the architecture section of the platform guide](docs/PLATFORM.md#architecture-and-the-road-to-multiplayer) and the design notes in [docs/](docs).
+
+## Contributing
+
+Issues and pull requests are welcome. Before opening a PR, run `npm run build` and `npm run test:headless` (and `npm run test:engine` if you touched Rust); CI runs the same checks. New games are best started from [docs/PLATFORM.md](docs/PLATFORM.md). Keep a game to `@platform` imports, and the boundary check will tell you if it strays.
 
 ## License
 
