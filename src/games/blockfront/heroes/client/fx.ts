@@ -189,44 +189,11 @@ function ring(B: Beams, at: Vec3, dir: Vec3, r: number, w: number, now: number, 
 }
 
 /**
- * A blade's streak from where it was last frame to where it is: the swing's arc filled in (the blade
- * turning about its hilt, a step every few degrees however few frames there were), a ghost of its
- * outer part at each step, and the tip's path.
- */
-function trail(B: Beams, beam: FxBeam, a: { base: Vec3; tip: Vec3 }, b: { base: Vec3; tip: Vec3 }, rage: boolean, now: number) {
-  const da = sub(a.tip, a.base);
-  const db = sub(b.tip, b.base);
-  const la = len(da) || 1;
-  const lb = len(db) || 1;
-  const cos = (da.x * db.x + da.y * db.y + da.z * db.z) / (la * lb);
-  const angle = Math.acos(Math.max(-1, Math.min(1, cos)));
-  const moved = dist(a.tip, b.tip);
-  if (moved < 0.08 || moved > 4) return;
-  const steps = Math.max(1, Math.min(18, Math.ceil(angle / (4 * (Math.PI / 180)))));
-  // The turn from one to the other, taken a step at a time (about the hilt).
-  const from = new V3(da.x / la, da.y / la, da.z / la);
-  const turn = new Quat().setFromUnitVectors(from, new V3(db.x / lb, db.y / lb, db.z / lb));
-  const part = new Quat();
-  const d = new V3();
-  let prev = a.tip;
-  for (let i = 1; i <= steps; i++) {
-    const t = i / steps;
-    const base = lerp3(a.base, b.base, t);
-    d.copy(from).applyQuaternion(part.identity().slerp(turn, t));
-    const l = la + (lb - la) * t;
-    const tip = add(base, d, l);
-    B.line(beam, add(base, d, l * 0.4), tip, rage ? 0.032 : 0.024, 0.06 + 0.03 * t, now);
-    B.line(beam, prev, tip, rage ? 0.07 : 0.055, 0.12 + 0.05 * t, now);
-    prev = tip;
-  }
-}
-
-/**
  * The heroes' effects on each screen, from the scene (`state.ts`) and where the figures kit drew
  * each blade and hand this frame:
  *
- * - each blade glowing (a white-hot core in its colour), streaking as it swings (ghost blades and
- *   a trail from its tip), humming nearby;
+ * - each blade humming nearby (its glow and the arc it leaves as it swings are the platform's:
+ *   its look's `hold.blade`);
  * - bolts turned by a blade: sparks, and the bolt flying off (or back at whoever fired it);
  *   blades meeting: a burst; a cut: embers;
  * - Force Push's wave, a pull's stream, a choke's grip on the throat, lightning crackling from the
@@ -266,7 +233,7 @@ export function heroFx(scene: HeroScene): ClientKit {
   /** Force waves rolling out (a push) or in (a pull): a ring of air, travelling. */
   const waves: { from: Vec3; dir: Vec3; born: number; len: number; out: boolean }[] = [];
   /** Thrown sabers' meshes, by hero. */
-  const thrown = new Map<string, { node: Node; center: Vec3; spin: number; lastTip: Vec3 | null }>();
+  const thrown = new Map<string, { node: Node; center: Vec3; spin: number }>();
   let tick = 0;
 
   return {
@@ -300,7 +267,7 @@ export function heroFx(scene: HeroScene): ClientKit {
       };
       const heroOf = (id: string): HeroId | null => blade(id)?.hero ?? null;
 
-      // ---- The blades: glowing, streaking, humming.
+      // ---- The blades: humming.
       for (const [id, b] of scene.blades) {
         if (b.t !== now) {
           if (now - b.t > 0.2) hush(id);
@@ -310,17 +277,9 @@ export function heroFx(scene: HeroScene): ClientKit {
           }
           continue;
         }
-        // (The blade glows on its own: its model's emissive blade. What moves streaks.)
-        const beam = BEAM[b.hero];
+        // (It glows, and its swings leave arcs, on its own: its look's `hold.blade`.)
         const was = last.get(id);
         const rage = scene.on(id, 'rage');
-        // Its own sweep: where it was, carried along as far as its hero went since (a running or
-        // leaping hero's blade doesn't streak for that alone).
-        if (was) {
-          const from = was.at ?? b.at;
-          const went = { x: b.at.x - from.x, y: b.at.y - from.y, z: b.at.z - from.z };
-          trail(B, beam, { base: add(was.base, went), tip: add(was.tip, went) }, b, rage, now);
-        }
         // Its hum, near by: rising and swelling as the blade's swung (a swing's the hum swept past).
         const d = dist(cam, b.tip);
         let h = hums.get(id);
@@ -545,7 +504,7 @@ export function heroFx(scene: HeroScene): ClientKit {
           const made = client.scene.item(f.item || saberOf(heroId));
           if (!made) continue;
           client.scene.add(made.node);
-          thrown.set(id, (t = { node: made.node, center: made.center, spin: Math.random() * 6, lastTip: null }));
+          thrown.set(id, (t = { node: made.node, center: made.center, spin: Math.random() * 6 }));
         }
         // Spinning flat (tipped a little), about its middle, as it flies: the size it is in the hand.
         t.spin += dt * Math.PI * 2 * 3.2;
@@ -555,14 +514,8 @@ export function heroFx(scene: HeroScene): ClientKit {
         t.node.quaternion.copy(q);
         t.node.scale.setScalar(size);
         t.node.position.set(fl.at.x - c.x, fl.at.y - c.y, fl.at.z - c.z);
-        // (Its blade glows on its own.) Its tip streaking round, and ghosts of its blade behind it: a
-        // spinning disc of light that reads from far off.
-        const along = new V3(0, 0, 1).applyQuaternion(q);
-        const reach = t.center.z * size * 1.1;
-        const tip = add(fl.at, along, reach);
-        if (t.lastTip) B.line(BEAM[heroId], t.lastTip, tip, 0.05, 0.14, now);
-        B.line(BEAM[heroId], add(fl.at, along, reach * 0.25), tip, 0.035, 0.09, now);
-        t.lastTip = tip;
+        // (Its blade glows, and its spin leaves a disc of light that reads from far off, on its own:
+        // its look's `hold.blade`.)
         // Its hum whirling: the blade sweeping toward us and away each turn.
         let whirl = whirls.get(id);
         if (!whirl) whirls.set(id, (whirl = client.audio.loop(humOf(heroId, 0).voice, { at: fl.at, volume: 0 })));

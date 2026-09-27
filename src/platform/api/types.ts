@@ -1433,6 +1433,23 @@ export interface HoldSpec {
   use?: string | ViewAnimation;
   /** The `gun` style's poses for this gun: whatever it gives goes over the defaults (see `GunHold`). */
   gun?: GunHold;
+  /** An energy blade on its model (a saber's): light drawn along it wherever it's held or thrown (`BladeSpec`). */
+  blade?: BladeSpec;
+}
+
+/**
+ * An energy blade on a held model (`hold.blade`): a white-hot core in a halo of `color` that
+ * blooms and flickers, from `start` (a fraction of the way from the model's `grip` to its
+ * `muzzle`, the blade's tip; default 0.15) to the tip, leaving a fading arc as it's swung.
+ */
+export interface BladeSpec {
+  color: string;
+  start?: number;
+  /** The halo's radius (metres; default 0.11), and how bright it is (default 5). */
+  width?: number;
+  glow?: number;
+  /** A fading arc behind the swing (default on). */
+  trail?: boolean;
 }
 
 /**

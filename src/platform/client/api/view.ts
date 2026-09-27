@@ -8,6 +8,7 @@ import { flashTexture, ViewScene } from '../../render/viewmodel';
 import { setSurface, type HumanoidArm, type HumanoidArms, type ItemMesh, type ItemPoint } from '../gltf';
 import { heldPoint } from '../held';
 import { HELD_SCALE } from '../humanoid';
+import { bladeOn, type Blade } from '../../render/blade';
 
 /** The points a held model's spec or file can mark. */
 const POINTS: ItemPoint[] = ['grip', 'grip2', 'muzzle', 'sight', 'mag'];
@@ -25,6 +26,8 @@ class LoadedItem implements HeldItem {
   readonly look: object;
   readonly points: Record<string, THREE.Vector3> = {};
   readonly bounds: THREE.Box3;
+  /** Its energy blade (`hold.blade`), if it has one. */
+  blade: Blade | null = null;
   private alt = false;
 
   constructor(
@@ -294,6 +297,7 @@ export class FirstPersonLayer implements ViewLayer {
       const p = heldPoint(look.model, look.points, n);
       if (p) h.points[n] = p;
     }
+    h.blade = bladeOn(h.node, def.hold?.blade, look.points);
     this.take(h);
     return true;
   }
@@ -341,7 +345,7 @@ export class FirstPersonLayer implements ViewLayer {
     this.held = h;
     if (h) {
       this.recent.unshift(h);
-      this.recent.length = Math.min(this.recent.length, 4);
+      for (const gone of this.recent.splice(4)) gone.blade?.dispose();
     }
     this.emit({ t: 'equip', item: h?.item ?? null });
   }

@@ -27,13 +27,15 @@ export interface Paint {
   rough: number;
   metal: number;
   glow: number;
+  /** How much its voxels' shades vary (0: all alike). */
+  vary: number;
 }
 
 /** A model's colours by name. */
 export class Palette {
   readonly colours = new Map<string, Paint>();
-  add(name: string, rgb: number, o: { rough?: number; metal?: number; glow?: number } = {}): string {
-    this.colours.set(name, { name, rgb, rough: o.rough ?? 0.8, metal: o.metal ?? 0, glow: o.glow ?? 0 });
+  add(name: string, rgb: number, o: { rough?: number; metal?: number; glow?: number; vary?: number } = {}): string {
+    this.colours.set(name, { name, rgb, rough: o.rough ?? 0.8, metal: o.metal ?? 0, glow: o.glow ?? 0, vary: o.vary ?? 0.045 });
     return name;
   }
   get(name: string): Paint {
@@ -150,6 +152,8 @@ export interface Face {
   cell: [number, number, number];
   dir: number;
   colour: string;
+  /** Its voxel's shade: 0 darker, 1, 2 lighter (all 1 unless shades vary). */
+  shade: number;
   ao: number;
   du: number;
   dv: number;
@@ -159,7 +163,7 @@ export interface Face {
  * The visible faces of every part (merged where nothing shades them). A face toward another part's
  * voxel is kept, fully occluded; a face two parts both show (their voxels in one cell) is kept once.
  */
-export function faces(vox: Voxels): Face[] {
+export function faces(vox: Voxels, palette: Palette | null = null): Face[] {
   const out: Face[] = [];
   const all = new Set<number>();
   for (const cells of vox.parts.values()) for (const key of cells.keys()) all.add(key);
@@ -168,6 +172,7 @@ export function faces(vox: Voxels): Face[] {
   for (const [part, cells] of vox.parts) {
     for (const [key, colour] of cells) {
       const [i, j, k] = cellOf(key);
+      const shade = palette && palette.get(colour).vary ? shadeOf(i, j, k) : 1;
       for (let d = 0; d < 6; d++) {
         const { n, u, v } = DIRS[d];
         const a = [i + n[0], j + n[1], k + n[2]];
@@ -186,7 +191,7 @@ export function faces(vox: Voxels): Face[] {
             if (!e[e1] && !e[e2] && at(du, dv)) ao |= 1 << (4 + b);
           });
         }
-        out.push({ part, cell: [i, j, k], dir: d, colour, ao, du: 1, dv: 1 });
+        out.push({ part, cell: [i, j, k], dir: d, colour, shade, ao, du: 1, dv: 1 });
       }
     }
   }
@@ -204,7 +209,7 @@ function merge(list: Face[]): Face[] {
     }
     const { n } = DIRS[f.dir];
     const a = n[0] ? 0 : n[1] ? 1 : 2;
-    const key = `${f.part}|${f.dir}|${f.cell[a]}|${f.colour}`;
+    const key = `${f.part}|${f.dir}|${f.cell[a]}|${f.colour}|${f.shade}`;
     let g = groups.get(key);
     if (!g) groups.set(key, (g = []));
     g.push(f);
@@ -233,6 +238,15 @@ function merge(list: Face[]): Face[] {
     }
   }
   return out;
+}
+
+/** A voxel's shade (0 darker, 1, 2 lighter) from its cell. */
+function shadeOf(i: number, j: number, k: number): number {
+  let h = Math.imul(i + 7919, 0x27d4eb2d) ^ Math.imul(j + 104729, 0x165667b1) ^ Math.imul(k + 15485863, 0x9e3779b1);
+  h = Math.imul(h ^ (h >>> 15), 0x2c1b3c6d);
+  h ^= h >>> 13;
+  const r = (h >>> 0) / 4294967296;
+  return r < 0.3 ? 0 : r < 0.72 ? 1 : 2;
 }
 
 /** A tile's texels on a side. */
@@ -288,12 +302,12 @@ export interface Atlas {
  */
 export function atlas(list: Face[], palette: Palette, width = 256): Atlas {
   const order = [...palette.colours.keys()];
-  const tiles = new Map<string, { colour: string; ao: number; x: number; y: number }>();
+  const tiles = new Map<string, { colour: string; shade: number; ao: number; x: number; y: number }>();
   for (const f of list) {
-    const key = `${f.colour}|${CANON[f.ao].canon}`;
-    if (!tiles.has(key)) tiles.set(key, { colour: f.colour, ao: CANON[f.ao].canon, x: 0, y: 0 });
+    const key = `${f.colour}|${f.shade}|${CANON[f.ao].canon}`;
+    if (!tiles.has(key)) tiles.set(key, { colour: f.colour, shade: f.shade, ao: CANON[f.ao].canon, x: 0, y: 0 });
   }
-  const sorted = [...tiles.values()].sort((a, b) => order.indexOf(a.colour) - order.indexOf(b.colour) || a.ao - b.ao);
+  const sorted = [...tiles.values()].sort((a, b) => order.indexOf(a.colour) - order.indexOf(b.colour) || a.shade - b.shade || a.ao - b.ao);
   const perRow = width / TILE;
   const height = 2 ** Math.ceil(Math.log2(Math.max(TILE, Math.ceil(sorted.length / perRow) * TILE)));
   const albedo = new Uint8Array(width * height * 4);
@@ -307,11 +321,12 @@ export function atlas(list: Face[], palette: Palette, width = 256): Atlas {
     const lin = [(c.rgb >> 16) & 255, (c.rgb >> 8) & 255, c.rgb & 255].map(toLinear);
     let f = cache.get(tile.ao);
     if (!f) cache.set(tile.ao, (f = tileFactors(tile.ao)));
+    const shade = 1 + (tile.shade - 1) * c.vary * 2.2;
     for (let t = 0; t < TILE; t++)
       for (let s = 0; s < TILE; s++) {
         const o = ((tile.y + t) * width + tile.x + s) * 4;
         for (let ch = 0; ch < 3; ch++) {
-          albedo[o + ch] = toSrgb8(lin[ch] * f[t * TILE + s]);
+          albedo[o + ch] = toSrgb8(lin[ch] * shade * f[t * TILE + s]);
           glow[o + ch] = Math.round(albedo[o + ch] * c.glow);
         }
         mr[o + 1] = Math.round(c.rough * 255);
@@ -321,7 +336,7 @@ export function atlas(list: Face[], palette: Palette, width = 256): Atlas {
   });
   // Each face's corners: its tile's, turned by the symmetry that takes the canonical state to its own.
   const uvs = list.map((f) => {
-    const tile = tiles.get(`${f.colour}|${CANON[f.ao].canon}`)!;
+    const tile = tiles.get(`${f.colour}|${f.shade}|${CANON[f.ao].canon}`)!;
     const inv = SYM[SYM_INV[CANON[f.ao].g]];
     return [[0, 0], [1, 0], [1, 1], [0, 1]].map(([s, t]) => {
       const [a, b] = inv(s, t);

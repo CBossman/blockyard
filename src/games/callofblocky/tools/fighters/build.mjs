@@ -7,10 +7,11 @@
  * figures to 16 voxels a metre, for comparison). Every file is parsed back and checked after it's
  * written: the rig, the skin, every vertex on one bone, the budgets.
  *
- * - Voxels: 24 a metre (a voxel 1/24 block, about 4 cm), so a figure is about 44 voxels tall, with
- *   chunky, stylized proportions: a big head (a quarter of the height), broad shoulders, big fists
- *   and boots. Each fighter is painted in code as one voxel part per joint of the humanoid rig
- *   (docs/HUMANOID.md), in design units of 1/24 m: boxes, rounded boxes and ellipsoids, coloured
+ * - Voxels: 26 a metre (a voxel 1/26 block, about 4 cm), so a figure is about 48 voxels tall, with
+ *   lean, stylized proportions (the platform's characters', `src/platform/character/build.ts`): a
+ *   big head (a quarter of the height), a neck, long legs, arms of an even width with fists their
+ *   width, trim shoes. Each fighter is painted in code as one voxel part per joint of the humanoid
+ *   rig (docs/HUMANOID.md), in design units of 1/26 m: boxes, rounded boxes and ellipsoids, coloured
  *   by region (collars, lapels, belts, stripes, prints), and details placed voxel by voxel (faces,
  *   ties, buttons, shades, hat bands). Every part is a closed surface; where two meet, one reaches
  *   into the other, a voxel in from its surface, so bends open no gaps.
@@ -31,7 +32,7 @@
  *   nothing shades them; a metallic-roughness atlas (gold, buckles, shades glossy) and an emissive
  *   one. One mesh, one material: one draw call a fighter (one more for its shadow).
  * - Scale: `--scale=16` resamples a figure to the world's destructible micro-voxel (1/16 block),
- *   for comparison; the details (mouths, ties, lapels) are drawn for 1/24 and some get lost.
+ *   for comparison; the details (mouths, ties, lapels) are drawn for 1/26 and some get lost.
  * - Vertices: KHR_mesh_quantization (positions as voxel coordinates in bytes, the voxel size in the
  *   inverse bind matrices; normals as bytes), through EXT_meshopt_compression.
  * - Budgets (checked): <= 25000 triangles and <= 300 KB per file.
@@ -44,9 +45,9 @@ import { Palette, Voxels, faces, atlas, quadCorners, png, writeGlb, readGlb, cel
 const HERE = dirname(fileURLToPath(import.meta.url));
 const argv = process.argv.slice(2);
 /** Voxels a metre: the design's 24, or resampled (`--scale=16`). */
-const SCALE = Number(argv.find((a) => a.startsWith('--scale='))?.slice(8) ?? 24);
+const SCALE = Number(argv.find((a) => a.startsWith('--scale='))?.slice(8) ?? 26);
 const OUT = argv.find((a) => a.startsWith('--out='))?.slice(6) ?? join(HERE, '../../models/fighters');
-const DU = 1 / 24;
+const DU = 1 / 26;
 const MAX_TRIS = 25000;
 const MAX_BYTES = 300 * 1024;
 
@@ -82,8 +83,6 @@ const BONES = JOINT_ORDER.filter((j) => !EMPTY.has(j));
 // Shapes (design units; a cell's centre is (i + 0.5, j + 0.5, k + 0.5))
 
 const C = (i) => i + 0.5;
-/** Below this row (design units), a skirt hangs from the thighs rather than the hips. */
-const SKIRT_SPLIT = 15;
 /** Inside a box (faces lo..hi) rounded by r (a number or one per axis) on its edges. */
 function inRound(p, lo, hi, r) {
   let d2 = 0;
@@ -118,11 +117,11 @@ function fill(vox, part, lo, hi, colour, inside = null) {
 // pelvis a voxel either side of the middle.
 
 const BUILDS = {
-  slim: { sh: 7, waist: 6, hip: 6, arm: 4, leg: 5, belly: 0, bust: 0 },
-  broad: { sh: 8, waist: 7, hip: 7, arm: 6, leg: 6, belly: 0, bust: 0 },
-  heavy: { sh: 8, waist: 8, hip: 7, arm: 6, leg: 6, belly: 2, bust: 0 },
-  female: { sh: 6, waist: 5, hip: 6, arm: 4, leg: 5, belly: 0, bust: 1 },
-  athlete: { sh: 6, waist: 5, hip: 6, arm: 4, leg: 5, belly: 0, bust: 1 },
+  slim: { sh: 6, waist: 5, hip: 5, arm: 4, leg: 4, belly: 0, bust: 0 },
+  broad: { sh: 7, waist: 6, hip: 6, arm: 4, leg: 5, belly: 0, bust: 0 },
+  heavy: { sh: 7, waist: 7, hip: 6, arm: 5, leg: 5, belly: 2, bust: 0 },
+  female: { sh: 6, waist: 4, hip: 5, arm: 4, leg: 4, belly: 0, bust: 1 },
+  athlete: { sh: 6, waist: 5, hip: 5, arm: 4, leg: 4, belly: 0, bust: 1 },
 };
 
 /**
@@ -130,7 +129,9 @@ const BUILDS = {
  * from 14), the pelvis to 19 (its top row the belt), the belly to 23, the chest to 31 (the
  * shoulders' pivots at 29), the head from 32 to 44.
  */
-const Y = { ankle: 4, knee: 10, pelvis: 14, hipJoint: 16.5, hips: 17, belt: 18, spine: 19, chest: 23, shoulder: 29, chestTop: 31, neck: 31, head: 32, crown: 44, elbow: 23, wrist: 17.5 };
+const Y = { ankle: 3, knee: 11, pelvis: 17, split: 18, hipJoint: 19.5, hips: 20, belt: 21, spine: 22, chest: 26, shoulder: 32, chestTop: 34, neck: 34, head: 36, crown: 48, elbow: 25.5, wrist: 19 };
+/** The frame the heads are drawn in (their chins at 32), set on the neck at `Y.head`. */
+const HY = { head: 32, crown: 44 };
 /** The torso's front row of cells (k), and the head's face row. */
 const F = 3;
 const FACE = 4;
@@ -162,8 +163,8 @@ function joints(b) {
   for (const k of Object.keys(J)) if (k.endsWith('L')) J[k.slice(0, -1) + 'R'] = [-J[k][0], J[k][1], J[k][2]];
   // The fists' holds: the right's round a vertical bar ahead of its wrist, the left's round a bar
   // along z below its wrist.
-  J.gripR = [-L.ax, Y.wrist - 3, 1];
-  J.gripL = [L.ax, Y.wrist - 3.5, 0];
+  J.gripR = [-L.ax, Y.wrist - 2.5, 0.5];
+  J.gripL = [L.ax, Y.wrist - 2.5, 0];
   return J;
 }
 
@@ -193,24 +194,21 @@ function body(vox, s) {
   // Neck: into the chest below and the head above.
   fill(vox, 'neck', [-2, Y.chestTop - 1, -3], [2, Y.head + 1, 1], 'skin');
   head(vox, s);
-  // Arms: the upper arm (a rounded cap over the shoulder, proud on a jacket), the forearm (into the
-  // upper arm), the fist (round the wrist).
+  // Arms, of an even width: the upper arm (rounded over the shoulder, a jacket's squared a voxel
+  // higher), the forearm (into the upper arm), the fist (round the wrist, as wide as the arm).
   for (const side of ['L', 'R']) {
     const m = side === 'L' ? 1 : -1;
     const X = (a, c) => (m > 0 ? [a, c] : [-c, -a]);
     const [x0, x1] = X(sh, sh + b.arm);
     const a2 = b.arm / 2;
-    fill(vox, `upperArm${side}`, [x0, Y.elbow, -a2], [x1, Y.chestTop, a2], 'sleeve', (p) => box(p, [x0, Y.elbow - 4, -a2], [x1, Y.chestTop, a2], [1, 1.6, 1]));
-    if (o.jacket) {
-      const [c0, c1] = X(sh, sh + b.arm + 1);
-      fill(vox, `upperArm${side}`, [c0, Y.shoulder - 2, -a2 - 1], [c1, Y.chestTop + 1, a2 + 1], 'sleeve', (p) => box(p, [c0, Y.shoulder - 3, -a2 - 1], [c1, Y.chestTop + 1, a2 + 1], [1.4, 1.7, 1.4]));
-    }
+    fill(vox, `upperArm${side}`, [x0, Y.elbow, -a2], [x1, Y.chestTop, a2], 'sleeve', (p) => box(p, [x0, Y.elbow - 4, -a2], [x1, Y.chestTop, a2], [0.8, 1.2, 0.8]));
+    if (o.jacket) fill(vox, `upperArm${side}`, [x0, Y.shoulder, -a2], [x1, Y.chestTop + 1, a2], 'sleeve', (p) => box(p, [x0, Y.shoulder - 2, -a2], [x1, Y.chestTop + 1, a2], [0.6, 0.9, 0.6]));
     const [f0, f1] = X(L.ax - 2 * m * m, L.ax + 2);
     const fx0 = m > 0 ? L.ax - 2 : -L.ax - 2, fx1 = fx0 + 4;
     fill(vox, `lowerArm${side}`, [fx0 + 1, Y.elbow, -1], [fx1 - 1, Y.elbow + 2, 1], 'sleeve');
     fill(vox, `lowerArm${side}`, [fx0, Y.wrist, -2], [fx1, Y.elbow, 2], 'sleeve', (p) => box(p, [fx0, Y.wrist - 3, -2], [fx1, Y.elbow + 3, 2], [0.9, 0, 0.9]));
     void f0, void f1;
-    fist(vox, s, side, [fx0 - 1, fx1 + 1]);
+    fist(vox, s, side, [fx0, fx1]);
   }
   // Legs: thigh (inset where it's under the pelvis), shin (into the thigh), boot (into the shin).
   for (const side of ['L', 'R']) {
@@ -225,34 +223,34 @@ function body(vox, s) {
   }
 }
 
-/** A fist (6 wide): a rounded block round the grip, the fingers' creases across its knuckles. */
+/** A fist (as wide as the arm): a rounded block round the grip, the fingers' creases across its knuckles. */
 function fist(vox, s, side, [x0, x1]) {
   const part = `hand${side}`;
   const hand = s.o.handWraps ? 'wrap' : 'skin';
   const crease = `${hand}Crease`;
-  const y0 = Y.wrist - 6, y1 = Y.wrist + 0.5;
+  const y0 = Y.wrist - 5, y1 = Y.wrist + 0.5;
   if (side === 'R') {
     // Ahead of the wrist, round a vertical grip: the knuckles to the front (+z).
-    const z0 = -2, z1 = 4;
+    const z0 = -2, z1 = 3;
     fill(vox, part, [x0, y0, z0], [x1, y1, z1], hand, (p) => inRound(p, [x0, y0, z0], [x1, y1 + 1, z1], 1.2));
     vox.recolour(part, (i, j, k) => (k === z1 - 1 && j < Y.wrist - 1 && j > y0 && (j - y0) % 2 === 0 ? crease : undefined));
   } else {
     // Below the wrist, round a bar along z: the knuckles to the outside (+x).
-    const z0 = -3, z1 = 3;
+    const z0 = -2, z1 = 2;
     fill(vox, part, [x0, y0, z0], [x1, y1, z1], hand, (p) => inRound(p, [x0, y0, z0], [x1, y1 + 1, z1], 1.2));
     vox.recolour(part, (i, j, k) => (i === x1 - 1 && j < Y.wrist - 1 && j > y0 && k > z0 && k < z1 - 1 && (k - z0) % 2 === 0 ? crease : undefined));
   }
 }
 
-/** A boot: chunky, its toe reaching forward, the sole a darker row underneath. */
+/** A shoe: trim, its toe reaching forward, the sole a darker row underneath (a boot higher). */
 function boot(vox, s, side, [lx0, lx1], [z0, z1]) {
   const part = `foot${side}`;
   const st = s.o.shoeStyle;
   // A voxel wider than the leg, on the outside.
   const [x0, x1] = side === 'L' ? [lx0, lx1 + 1] : [lx0 - 1, lx1];
   const top = st === 'boot' ? Y.ankle + 2 : Y.ankle;
-  const toe = z1 + (st === 'flat' ? 2 : 3);
-  const toeTop = st === 'flat' ? 2 : 3;
+  const toe = z1 + (st === 'flat' ? 1 : 2);
+  const toeTop = 2;
   fill(vox, part, [x0, 0, z0 - 1], [x1, top, z1], 'shoes', (p) => inRound(p, [x0, -2, z0 - 1], [x1, top, z1 + 1], [0.9, 0, 0.9]));
   fill(vox, part, [x0, 0, z0], [x1, toeTop, toe], 'shoes', (p) => inRound(p, [x0, -2, z0 - 1], [x1, toeTop, toe], [1.2, 1.3, 1.8]));
   fill(vox, part, [lx0 + 1, top, z0 + 1], [lx1 - 1, top + 2, z1 - 1], 'shoes');
@@ -260,18 +258,29 @@ function boot(vox, s, side, [lx0, lx1], [z0, z1]) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// The head: skull, face, hair, hats. The skull is 12 x 12 x 11: x -6..5, y 32..43, z -6..4 (the
-// face the front row, k = 4).
+// The head: skull, face, hair, hats, drawn in their own frame (`HY`: the chin at 32). The skull is
+// 12 x 12 x 11: x -6..5, y 32..43, z -6..4 (the face the front row, k = 4).
 
+/** The head, drawn in its own frame (`HY`) and set on the neck. */
 function head(vox, s) {
+  const hv = new Voxels();
+  hv.part('head');
+  drawHead(hv, s);
+  for (const [key, c] of hv.parts.get('head')) {
+    const [i, j, k] = cellOf(key);
+    vox.set('head', i, j + Y.head - HY.head, k, c);
+  }
+}
+
+function drawHead(vox, s) {
   const { o } = s;
-  const lo = [-6, Y.head, -6], hi = [6, Y.crown, 5];
+  const lo = [-6, HY.head, -6], hi = [6, HY.crown, 5];
   fill(vox, 'head', lo, hi, 'skin', (p) => {
     if (!inRound(p, lo, hi, [2.2, 2.4, 2.2])) return false;
     // The jaw narrows to the chin.
     const x = Math.abs(p[0]);
-    if (p[1] < Y.head + 1 && (x > 4.2 || p[2] < -3)) return false;
-    if (p[1] < Y.head + 2 && x > 5.2) return false;
+    if (p[1] < HY.head + 1 && (x > 4.2 || p[2] < -3)) return false;
+    if (p[1] < HY.head + 2 && x > 5.2) return false;
     return true;
   });
   const set = (i, j, k, c) => vox.set('head', i, j, k, c);
@@ -327,39 +336,39 @@ function hair(vox, s) {
   const skull = (i, j, k) => vox.filled(i, j, k, 'head');
   const shell = (where, grow = 1) => {
     for (let i = -9; i < 9; i++)
-      for (let j = Y.head; j < Y.crown + 3; j++)
+      for (let j = HY.head; j < HY.crown + 3; j++)
         for (let k = -9; k < 8; k++) {
           const p = [C(i), C(j), C(k)];
           if (skull(i, j, k)) continue;
-          if (!inRound(p, [-6 - grow, Y.head, -6 - grow], [6 + grow, Y.crown + grow, 5 + grow], [2.2 + grow * 0.5, 2.4 + grow * 0.5, 2.2 + grow * 0.5])) continue;
+          if (!inRound(p, [-6 - grow, HY.head, -6 - grow], [6 + grow, HY.crown + grow, 5 + grow], [2.2 + grow * 0.5, 2.4 + grow * 0.5, 2.2 + grow * 0.5])) continue;
           if (where(p, i, j, k)) set(i, j, k, typeof where === 'function' && where.colour ? where.colour(p) : 'hair');
         }
   };
-  const top = (p) => p[1] > Y.crown - 1.5;
+  const top = (p) => p[1] > HY.crown - 1.5;
   const back = (p) => p[2] < 1;
   const sides = (p) => p[1] > 39 && p[2] < 3.5;
   if (st === 'buzz') shell((p) => top(p) || (back(p) && p[1] > 35) || sides(p));
   else if (st === 'crew') {
     shell((p) => top(p) || (back(p) && p[1] > 35) || sides(p));
-    for (let i = -5; i < 5; i++) for (let k = -4; k < 4; k++) set(i, Y.crown + 1, k);
-    for (let i = -4; i < 4; i++) set(i, Y.crown, 5);
+    for (let i = -5; i < 5; i++) for (let k = -4; k < 4; k++) set(i, HY.crown + 1, k);
+    for (let i = -4; i < 4; i++) set(i, HY.crown, 5);
   } else if (st === 'short') {
     shell((p) => top(p) || (back(p) && p[1] > 34.5) || sides(p) || p[1] > 41.5);
     for (let i = -5; i < 5; i++) if ((i + 7) % 3 !== 0) set(i, 41, 6);
   } else if (st === 'slick' || st === 'long') {
     shell((p) => top(p) || (back(p) && p[1] > (st === 'long' ? 33 : 35)) || sides(p) || p[1] > 41.5);
     // Swept back from a ridge over the forehead.
-    for (let i = -6; i < 6; i++) set(i, Y.crown, 5);
-    for (let i = -5; i < 5; i++) set(i, Y.crown - 1, 6);
+    for (let i = -6; i < 6; i++) set(i, HY.crown, 5);
+    for (let i = -5; i < 5; i++) set(i, HY.crown - 1, 6);
     if (st === 'long') {
       // Down to the collar behind and over the ears at the sides, parted in the middle.
       for (let i = -7; i < 7; i++) for (let j = 31; j < 38; j++) for (let k = -8; k < 0; k++) if (!skull(i, j, k) && inRound([C(i), C(j), C(k)], [-7, 31, -8], [7, 40, 0], [1.6, 1, 1.6])) set(i, j, k);
       for (const i of [-8, -7, 6, 7]) for (let j = 33; j < 41; j++) for (let k = -2; k < 2; k++) if (!skull(i, j, k) && (Math.abs(C(i)) < 7.5 || (j > 34 && k < 1))) set(i, j, k);
-      for (let k = -2; k < 7; k++) for (const i of [-1, 0]) if (vox.get('head', i, Y.crown, k) === 'hair') set(i, Y.crown, k, 'hairDark');
+      for (let k = -2; k < 7; k++) for (const i of [-1, 0]) if (vox.get('head', i, HY.crown, k) === 'hair') set(i, HY.crown, k, 'hairDark');
     }
   } else if (st === 'pomp') {
     shell((p) => top(p) || (back(p) && p[1] > 35) || sides(p) || p[1] > 41.5);
-    for (let i = -6; i < 6; i++) for (let j = Y.crown - 3; j < Y.crown + 4; j++) for (let k = 0; k < 8; k++) if (inEllipsoid([C(i), C(j), C(k)], [0, Y.crown + 0.2, 3.6], [5.6, 2.8, 3.6])) set(i, j, k);
+    for (let i = -6; i < 6; i++) for (let j = HY.crown - 3; j < HY.crown + 4; j++) for (let k = 0; k < 8; k++) if (inEllipsoid([C(i), C(j), C(k)], [0, HY.crown + 0.2, 3.6], [5.6, 2.8, 3.6])) set(i, j, k);
     for (const i of [6, -7]) for (let j = 34; j < 38; j++) set(i, j, 1, 'hair');
   } else if (st === 'bob') {
     shell((p) => top(p) || back(p) || p[1] > 39.5);
@@ -388,7 +397,7 @@ function hat(vox, s) {
   if (s.o.hat === 'fedora') {
     // A wide brim (turned down a little in front), a pinched crown with a band; it covers the top.
     const y0 = 42;
-    for (let i = -10; i < 10; i++) for (let j = y0; j < Y.crown + 4; j++) for (let k = -10; k < 10; k++) if (vox.get('head', i, j, k) === 'hair') del(i, j, k);
+    for (let i = -10; i < 10; i++) for (let j = y0; j < HY.crown + 4; j++) for (let k = -10; k < 10; k++) if (vox.get('head', i, j, k) === 'hair') del(i, j, k);
     for (let i = -10; i < 10; i++)
       for (let k = -11; k < 10; k++) {
         if (!inEllipsoid([C(i), 0, C(k)], [0, 0, -0.5], [9.6, 1, 9.8])) continue;
@@ -404,7 +413,7 @@ function hat(vox, s) {
           set(i, j, k, j <= y0 + 1 ? 'hatBand' : 'hat');
         }
   } else if (s.o.hat === 'cap') {
-    for (let i = -5; i < 5; i++) for (let j = Y.crown; j < Y.crown + 3; j++) for (let k = -4; k < 3; k++) if (inRound([C(i), C(j), C(k)], [-5, Y.crown, -4], [5, Y.crown + 3, 3], [1.2, 0.8, 1.2])) set(i, j, k, j === Y.crown ? 'capBand' : 'cap');
+    for (let i = -5; i < 5; i++) for (let j = HY.crown; j < HY.crown + 3; j++) for (let k = -4; k < 3; k++) if (inRound([C(i), C(j), C(k)], [-5, HY.crown, -4], [5, HY.crown + 3, 3], [1.2, 0.8, 1.2])) set(i, j, k, j === HY.crown ? 'capBand' : 'cap');
   }
 }
 
@@ -492,6 +501,9 @@ function palette(d, o) {
   return P;
 }
 
+/** A skirt's rows: from above the knee (`bottom`) to the belly, flaring out (`t`: 0 at the top, 1 at the hem). */
+const SKIRT = { bottom: Y.knee + 1, t: (j) => (Y.spine - j) / (Y.spine - Y.knee - 1) };
+
 /** The outfit: recolour the body's parts by region, and add what's worn over it. */
 function dress(vox, s) {
   const { b, o, J } = s;
@@ -499,16 +511,11 @@ function dress(vox, s) {
   const suit = o.jacket;
   const top = suit ? 'jacket' : 'shirt';
   const bz = F + b.belly;
-  // Arms: sleeves (the jacket's, a shirt cuff at the wrist), or short sleeves (a cuff) and bare arms.
+  // Arms: sleeves (the jacket's, a shirt cuff at the wrist), or short sleeves (a hem, flush) and bare arms.
+  const hem = Math.floor(Y.elbow) + 2;
   for (const side of ['L', 'R']) {
-    vox.recolour(`upperArm${side}`, (i, j) => (o.sleeves === 'short' && j < Y.elbow + 2 ? 'skin' : top));
+    vox.recolour(`upperArm${side}`, (i, j) => (o.sleeves === 'short' && j < hem ? 'skin' : o.sleeves === 'short' && j === hem ? (o.panels ? 'accent' : 'shirtShade') : top));
     vox.recolour(`lowerArm${side}`, (i, j) => (o.sleeves === 'short' ? 'skin' : (suit || o.cuffs) && j === Math.floor(Y.wrist) ? 'shirt' : top));
-    if (o.sleeves === 'short') {
-      const m = side === 'L' ? 1 : -1;
-      const [x0, x1] = m > 0 ? [b.sh - 1, b.sh + b.arm + 1] : [-b.sh - b.arm - 1, -b.sh + 1];
-      const a2 = b.arm / 2;
-      fill(vox, `upperArm${side}`, [x0 + (m > 0 ? 1 : 0), Y.elbow + 2, -a2 - 1], [x1 - (m > 0 ? 0 : 1), Y.elbow + 4, a2 + 1], o.panels ? 'accent' : o.apron ? 'shirt' : 'shirt');
-    }
   }
   // Chest and belly: the jacket (or shirt). A suit's open in a V from the collar to its button,
   // the shirt and tie inside, lapels a voxel proud beside it.
@@ -541,10 +548,10 @@ function dress(vox, s) {
     }
     for (const i of [-1, 0]) vox.set('chest', i, Y.chestTop - 1, F + 1, 'tieKnot');
   } else if (o.tie === 'bow') {
-    for (const [i, j] of [[-3, 29], [-2, 29], [-1, 29], [0, 29], [1, 29], [2, 29], [-3, 30], [2, 30], [-3, 28], [2, 28]]) vox.set('chest', i, j, F + 1, i === -1 || i === 0 ? 'tieKnot' : 'tie');
+    for (const [i, d] of [[-3, 2], [-2, 2], [-1, 2], [0, 2], [1, 2], [2, 2], [-3, 1], [2, 1], [-3, 3], [2, 3]]) vox.set('chest', i, Y.chestTop - d, F + 1, i === -1 || i === 0 ? 'tieKnot' : 'tie');
   }
   // Ruffles down the shirt front.
-  if (o.ruffles) for (let j = Y.chest; j < 28; j++) vox.set('chest', j % 2 ? -1 : 0, j, F + 1, 'shirt');
+  if (o.ruffles) for (let j = Y.chest; j < Y.chestTop - 3; j++) vox.set('chest', j % 2 ? -1 : 0, j, F + 1, 'shirt');
   // Buttons.
   if (suit && !o.open) for (const i of [-1, 0]) vox.set('spine', i, Y.spine, bz + 1, 'button');
   if (!suit && (o.collar === 'camp' || o.collar === 'open')) for (let j = Y.spine + 1; j < Y.chestTop - 3; j += 2) vox.set(j < Y.chest ? 'spine' : 'chest', -1, j, (j < Y.chest ? bz : F) + 1, o.panels ? 'button' : 'shirtShade');
@@ -631,21 +638,21 @@ function dress(vox, s) {
   }
   // A skirt's lower part hangs from the thighs, each side's half from its own, so a stride or a
   // crouch swings it with the leg instead of the leg poking through it.
-  const skirtPart = (i, j) => (j < SKIRT_SPLIT ? (C(i) > 0 ? 'upperLegL' : 'upperLegR') : 'hips');
+  const skirtPart = (i, j) => (j < Y.split ? (C(i) > 0 ? 'upperLegL' : 'upperLegR') : 'hips');
   if (o.legs === 'skirt') {
-    // A flared skirt from the waist to above the knee.
+    // A flared skirt from the waist to above the knee, its hem a shade darker.
     for (let i = -11; i < 11; i++)
-      for (let j = 11; j < Y.spine; j++)
+      for (let j = SKIRT.bottom; j < Y.spine; j++)
         for (let k = -8; k < 9; k++) {
-          const t = (Y.spine - j) / 8;
-          if (Math.abs(C(i)) < b.hip + 0.6 + t * 2 && Math.abs(C(k)) < 4.2 + t * 1.8) vox.set(skirtPart(i, j), i, j, k, 'shirt');
+          const t = SKIRT.t(j);
+          if (Math.abs(C(i)) < b.hip + 0.6 + t * 1.6 && Math.abs(C(k)) < 4.2 + t * 1.4) vox.set(skirtPart(i, j), i, j, k, j === SKIRT.bottom ? 'shirtShade' : 'shirt');
         }
   }
   if (o.apron) {
     // A white apron on the skirt, a bib on the chest, a frill along its hem.
-    for (let j = 11; j < Y.spine; j++) {
-      const t = (Y.spine - j) / 8;
-      const k = Math.floor(4.2 + t * 1.8);
+    for (let j = SKIRT.bottom; j < Y.spine; j++) {
+      const t = SKIRT.t(j);
+      const k = Math.floor(4.2 + t * 1.4);
       for (let i = -4; i < 4; i++) vox.set(skirtPart(i, j), i, j, k, 'apron');
     }
     for (let i = -3; i < 3; i++) for (let j = Y.chest; j < Y.chest + 5; j++) vox.set('chest', i, j, F + b.bust + 1, 'apron');
@@ -654,10 +661,10 @@ function dress(vox, s) {
   // Jewellery, pocket squares.
   if (o.chain) for (let i = -3; i < 3; i++) vox.set('chest', i, Y.chestTop - 2 - (Math.abs(C(i)) < 1.5 ? 1 : 0), F + 1, 'gold');
   if (o.pocketSquare) for (const i of [3, 4]) vox.set('chest', i, Y.chest + 5, F + 1, 'square');
-  if (o.ring) vox.set('handR', -Math.floor(L.ax) - 3, Math.floor(Y.wrist) - 3, 2, 'gold');
+  if (o.ring) vox.set('handR', -Math.floor(L.ax) - 2, Math.floor(Y.wrist) - 3, 1, 'gold');
   if (o.watch) vox.recolour('lowerArmL', (i, j) => (j === Math.floor(Y.wrist) + 1 ? 'gold' : undefined));
   // Sneakers: laces up the front.
-  if (o.shoeStyle === 'sneaker') for (const side of ['L', 'R']) vox.recolour(`foot${side}`, (i, j, k) => (j === 2 && k >= L.lz1 && k < L.lz1 + 2 && i === (side === 'L' ? Math.floor(L.lx) : -Math.floor(L.lx) - 1) ? 'lace' : undefined));
+  if (o.shoeStyle === 'sneaker') for (const side of ['L', 'R']) vox.recolour(`foot${side}`, (i, j, k) => (((j === 2 && k === L.lz1 - 1) || (j === 1 && k === L.lz1)) && i === (side === 'L' ? Math.floor(L.lx) : -Math.floor(L.lx) - 1) ? 'lace' : undefined));
   void J;
 }
 
@@ -677,8 +684,8 @@ function makeFighter(d) {
 
 /** A figure's voxels at another scale: each coarse cell takes the design cell under its centre. */
 function resample(vox, scale) {
-  if (scale === 24) return vox;
-  const k = 24 / scale;
+  if (scale === 26) return vox;
+  const k = 26 / scale;
   const out = new Voxels();
   for (const [part, cells] of vox.parts) {
     const p = out.part(part);
@@ -827,7 +834,7 @@ function validate(buf, d, at) {
   if (tris > MAX_TRIS) fail(`${tris} triangles (budget ${MAX_TRIS})`);
   if (buf.length > MAX_BYTES) fail(`${buf.length} bytes (budget ${MAX_BYTES})`);
   const height = (hi - lo) / SCALE;
-  if (lo !== 0 || height < 1.7 || height > 2.05) fail(`height ${lo / SCALE}..${hi / SCALE}`);
+  if (lo !== 0 || height < 1.7 || height > 2.15) fail(`height ${lo / SCALE}..${hi / SCALE}`);
   return { tris, count, height };
 }
 

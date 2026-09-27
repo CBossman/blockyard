@@ -7,11 +7,11 @@ import { DIRS, Palette, Voxels, atlas, cellKey, cellOf, faces, quadCorners, type
  * `troopers/build.mjs`, which this follows), made on each screen from a player's avatar or a
  * game's description instead of a file.
  *
- * - Voxels: 24 a metre, so a figure is about 44 voxels tall, with chunky, stylized proportions: a
- *   big head (a quarter of the height), broad shoulders, big fists and boots. One voxel part per
- *   joint of the rig (docs/HUMANOID.md), painted in code in design units of 1/24 m: boxes, rounded
- *   boxes and ellipsoids, coloured by region (collars, sleeves, belts, stripes, prints), details
- *   placed voxel by voxel (faces, ties, buttons, laces). Every part is a closed surface; where two
+ * - Voxels: 26 a metre, so a figure is about 48 voxels tall, with lean, stylized proportions: a
+ *   big head (a quarter of the height), a neck, long legs, arms of an even width with fists their
+ *   width, trim shoes. One voxel part per joint of the rig (docs/HUMANOID.md), painted in code in
+ *   design units of 1/26 m: boxes, rounded boxes and ellipsoids, coloured by region (collars,
+ *   sleeves, belts, stripes, prints), details placed voxel by voxel (faces, ties, buttons, laces). Every part is a closed surface; where two
  *   meet, one reaches into the other a voxel in from its surface, so bends open no gaps.
  * - Rig: joints hips > spine > chest > neck > head; chest > upperArmL > lowerArmL > handL > gripL
  *   (and the R mirror); hips > upperLegL > lowerLegL > footL (and R), where the proportions put
@@ -52,7 +52,7 @@ export const BONES = JOINTS.filter((j) => j !== 'gripL' && j !== 'gripR');
 const SIDES = [['L', 1], ['R', -1]] as const;
 
 /** Metres a design unit (a voxel). */
-export const VOXEL = 1 / 24;
+export const VOXEL = 1 / 26;
 
 // ---------------------------------------------------------------------------------------------
 // Shapes (design units; a cell's centre is (i + 0.5, j + 0.5, k + 0.5))
@@ -140,20 +140,21 @@ interface Build {
   bust: number;
 }
 const BUILDS: Record<string, Build> = {
-  slim: { sh: 7, waist: 6, hip: 6, arm: 4, leg: 5, belly: 0, bust: 0 },
-  broad: { sh: 8, waist: 7, hip: 7, arm: 6, leg: 6, belly: 0, bust: 0 },
-  heavy: { sh: 8, waist: 8, hip: 7, arm: 6, leg: 6, belly: 2, bust: 0 },
-  slimCurvy: { sh: 7, waist: 5, hip: 6, arm: 4, leg: 5, belly: 0, bust: 1 },
-  broadCurvy: { sh: 8, waist: 6, hip: 7, arm: 6, leg: 6, belly: 0, bust: 1 },
-  heavyCurvy: { sh: 8, waist: 7, hip: 7, arm: 6, leg: 6, belly: 1, bust: 1 },
+  slim: { sh: 6, waist: 5, hip: 5, arm: 4, leg: 4, belly: 0, bust: 0 },
+  broad: { sh: 7, waist: 6, hip: 6, arm: 4, leg: 5, belly: 0, bust: 0 },
+  heavy: { sh: 7, waist: 7, hip: 6, arm: 5, leg: 5, belly: 2, bust: 0 },
+  slimCurvy: { sh: 6, waist: 4, hip: 5, arm: 4, leg: 4, belly: 0, bust: 1 },
+  broadCurvy: { sh: 7, waist: 5, hip: 6, arm: 4, leg: 5, belly: 0, bust: 1 },
+  heavyCurvy: { sh: 7, waist: 6, hip: 6, arm: 5, leg: 5, belly: 1, bust: 1 },
 };
 
 /**
- * Heights (design units, from the soles): boots to 4, shins to 10, thighs to 17 (under the pelvis
- * from 14), the pelvis to 19 (its top row the belt), the belly to 23, the chest to 31 (the
- * shoulders' pivots at 29), the head from 32 to 44. Below `split` a skirt hangs from the thighs.
+ * Heights (design units, from the soles): shoes to 3, shins to 11, thighs to 20 (under the pelvis
+ * from 17), the pelvis to 22 (its top row the belt), the belly to 26, the chest to 34 (the
+ * shoulders' pivots at 32), two rows of neck, the head from 36 to 48; the arms reach mid-thigh.
+ * Below `split` a skirt hangs from the thighs.
  */
-const Y = { ankle: 4, knee: 10, pelvis: 14, split: 15, hipJoint: 16.5, hips: 17, belt: 18, spine: 19, chest: 23, shoulder: 29, chestTop: 31, neck: 31, head: 32, crown: 44, elbow: 23, wrist: 17.5 };
+const Y = { ankle: 3, knee: 11, pelvis: 17, split: 18, hipJoint: 19.5, hips: 20, belt: 21, spine: 22, chest: 26, shoulder: 32, chestTop: 34, neck: 34, head: 36, crown: 48, elbow: 25.5, wrist: 19 };
 /** The torso's front row of cells (k), and the head's face row (in its own space). */
 const F = 3;
 const FACE = 4;
@@ -185,8 +186,8 @@ function joints(b: Build): Record<CharacterJoint, P3> {
     footL: [L.lx, Y.ankle, L.lz],
   };
   for (const k of Object.keys(J) as CharacterJoint[]) if (k.endsWith('L')) J[(k.slice(0, -1) + 'R') as CharacterJoint] = [-J[k]![0], J[k]![1], J[k]![2]];
-  J.gripR = [-L.ax, Y.wrist - 3, 1];
-  J.gripL = [L.ax, Y.wrist - 3.5, 0];
+  J.gripR = [-L.ax, Y.wrist - 2.5, 0.5];
+  J.gripL = [L.ax, Y.wrist - 2.5, 0];
   return J as Record<CharacterJoint, P3>;
 }
 
@@ -198,7 +199,7 @@ interface TopKit {
   collar: 'crew' | 'open' | 'shirt' | 'camp' | 'track' | 'scoop' | 'none';
   /** Tucked in (a belt shows), or hanging over the waistband. */
   tucked?: boolean;
-  /** A suit's or jacket's shoulders and lapels, the shirt inside (`open`: worn open, a tee under it). */
+  /** A suit's or jacket's lapels and skirt, the shirt inside (`open`: worn open, a tee under it). */
   jacket?: boolean;
   open?: boolean;
   tie?: boolean;
@@ -245,7 +246,7 @@ interface Spec {
 // and legs, 'top' the belly, chest and arms, 'skin' the neck and fists, 'shoes' on a 'sole').
 
 function body(vox: Voxels, s: Spec) {
-  const { b, top } = s;
+  const { b } = s;
   const L = limbs(b);
   const sh = b.sh;
   const W = b.waist;
@@ -266,22 +267,18 @@ function body(vox: Voxels, s: Spec) {
   // Neck: into the chest below and the head above.
   fill(vox, 'neck', [-2, Y.chestTop - 1, -3], [2, Y.head + 1, 1], 'skin');
   head(vox, s);
-  // Arms: the upper arm (a rounded cap over the shoulder, proud on a jacket), the forearm (into the
+  // Arms, of an even width: the upper arm (rounded over the shoulder), the forearm (into the
   // upper arm), the fist (round the wrist).
   for (const [side, m] of SIDES) {
     const X = (a: number, c: number) => (m > 0 ? [a, c] : [-c, -a]);
     const [x0, x1] = X(sh, sh + b.arm);
     const a2 = b.arm / 2;
-    fill(vox, `upperArm${side}`, [x0, Y.elbow, -a2], [x1, Y.chestTop, a2], 'top', (p) => inRound(p, [x0, Y.elbow - 4, -a2], [x1, Y.chestTop, a2], [1, 1.6, 1]));
-    if (top.jacket) {
-      const [c0, c1] = X(sh, sh + b.arm + 1);
-      fill(vox, `upperArm${side}`, [c0, Y.shoulder - 2, -a2 - 1], [c1, Y.chestTop + 1, a2 + 1], 'top', (p) => inRound(p, [c0, Y.shoulder - 3, -a2 - 1], [c1, Y.chestTop + 1, a2 + 1], [1.4, 1.7, 1.4]));
-    }
+    fill(vox, `upperArm${side}`, [x0, Y.elbow, -a2], [x1, Y.chestTop, a2], 'top', (p) => inRound(p, [x0, Y.elbow - 4, -a2], [x1, Y.chestTop, a2], [0.8, 1.2, 0.8]));
     const fx0 = m > 0 ? L.ax - 2 : -L.ax - 2;
     const fx1 = fx0 + 4;
     fill(vox, `lowerArm${side}`, [fx0 + 1, Y.elbow, -1], [fx1 - 1, Y.elbow + 2, 1], 'top');
     fill(vox, `lowerArm${side}`, [fx0, Y.wrist, -2], [fx1, Y.elbow, 2], 'top', (p) => inRound(p, [fx0, Y.wrist - 3, -2], [fx1, Y.elbow + 3, 2], [0.9, 0, 0.9]));
-    fist(vox, side, [fx0 - 1, fx1 + 1]);
+    fist(vox, side, [fx0, fx1]);
   }
   // Legs: thigh (inset where it's under the pelvis), shin (into the thigh), boot (into the shin).
   for (const [side, m] of SIDES) {
@@ -298,18 +295,18 @@ function body(vox: Voxels, s: Spec) {
 /** A fist (6 wide): a rounded block round the grip, the fingers' creases across its knuckles. */
 function fist(vox: Voxels, side: 'L' | 'R', [x0, x1]: number[]) {
   const part = `hand${side}`;
-  const y0 = Y.wrist - 6;
+  const y0 = Y.wrist - 5;
   const y1 = Y.wrist + 0.5;
   if (side === 'R') {
     // Ahead of the wrist, round a vertical grip: the knuckles to the front (+z).
     const z0 = -2;
-    const z1 = 4;
+    const z1 = 3;
     fill(vox, part, [x0, y0, z0], [x1, y1, z1], 'skin', (p) => inRound(p, [x0, y0, z0], [x1, y1 + 1, z1], 1.2));
     vox.recolour(part, (_i, j, k) => (k === z1 - 1 && j < Y.wrist - 1 && j > y0 && (j - Math.floor(y0)) % 2 === 1 ? 'skinCrease' : undefined));
   } else {
     // Below the wrist, round a bar along z: the knuckles to the outside (+x).
-    const z0 = -3;
-    const z1 = 3;
+    const z0 = -2;
+    const z1 = 2;
     fill(vox, part, [x0, y0, z0], [x1, y1, z1], 'skin', (p) => inRound(p, [x0, y0, z0], [x1, y1 + 1, z1], 1.2));
     vox.recolour(part, (i, j, k) => (i === x1 - 1 && j < Y.wrist - 1 && j > y0 && k > z0 && k < z1 - 1 && (k - z0) % 2 === 0 ? 'skinCrease' : undefined));
   }
@@ -322,15 +319,15 @@ function shoe(vox: Voxels, s: Spec, side: 'L' | 'R', [lx0, lx1]: number[], [z0, 
   // A voxel wider than the leg, on the outside.
   const [x0, x1] = side === 'L' ? [lx0, lx1 + 1] : [lx0 - 1, lx1];
   const top = st === 'boots' ? Y.ankle + 2 : Y.ankle;
-  const toe = z1 + (st === 'flats' ? 2 : 3);
-  const toeTop = st === 'flats' ? 2 : 3;
+  const toe = z1 + (st === 'flats' ? 1 : 2);
+  const toeTop = 2;
   fill(vox, part, [x0, 0, z0 - 1], [x1, top, z1], 'shoes', (p) => inRound(p, [x0, -2, z0 - 1], [x1, top, z1 + 1], [0.9, 0, 0.9]));
   fill(vox, part, [x0, 0, z0], [x1, toeTop, toe], 'shoes', (p) => inRound(p, [x0, -2, z0 - 1], [x1, toeTop, toe], [1.2, 1.3, 1.8]));
   fill(vox, part, [lx0 + 1, top, z0 + 1], [lx1 - 1, top + 2, z1 - 1], 'shoes');
   vox.recolour(part, (_i, j) => (j === 0 ? 'sole' : st === 'boots' && j === top - 1 ? 'shoesShade' : undefined));
   // Sneakers: laces up the front.
   const mid = side === 'L' ? Math.floor((lx0 + lx1) / 2) : Math.ceil((lx0 + lx1) / 2) - 1;
-  if (st === 'sneakers') vox.recolour(part, (i, j, k) => (j === 2 && k >= z1 && k < z1 + 2 && i === mid ? 'lace' : undefined));
+  if (st === 'sneakers') vox.recolour(part, (i, j, k) => (((j === 2 && k === z1 - 1) || (j === 1 && k === z1)) && i === mid ? 'lace' : undefined));
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -670,20 +667,15 @@ function dress(vox: Voxels, s: Spec) {
   const bz = F + b.belly;
   const frontRow = (part: string) => (part === 'spine' ? bz : F);
   const torso = (j: number) => (j < Y.chest ? 'spine' : 'chest');
-  // Sleeves: long (a cuff at the wrist: the shirt's under a jacket, a rib), short (a cuff above
+  // Sleeves: long (a cuff at the wrist: the shirt's under a jacket, a rib), short (a hem above
   // the elbow, bare forearms), to the elbow, rolled to the elbow, or none (bare arms).
-  for (const [side, m] of SIDES) {
-    vox.recolour(`upperArm${side}`, (_i, j) => (t.sleeves === 'none' || (t.sleeves === 'short' && j < Y.elbow + 2) ? 'skin' : undefined));
+  for (const [side] of SIDES) {
+    vox.recolour(`upperArm${side}`, (_i, j) => (t.sleeves === 'none' || (t.sleeves === 'short' && j < Y.elbow + 2) ? 'skin' : t.sleeves === 'short' && j === Math.floor(Y.elbow) + 2 ? (t.panels ? 'accent' : 'topShade') : undefined));
     vox.recolour(`lowerArm${side}`, (_i, j) => {
       if (t.sleeves === 'long') return j === Math.floor(Y.wrist) ? (t.jacket ? 'under' : t.rib ? 'topShade' : undefined) : undefined;
       if (t.sleeves === 'rolled' && j >= Y.elbow - 1) return 'topShade';
       return 'skin';
     });
-    if (t.sleeves === 'short') {
-      const [x0, x1] = m > 0 ? [b.sh - 1, b.sh + b.arm + 1] : [-b.sh - b.arm - 1, -b.sh + 1];
-      const a2 = b.arm / 2;
-      fill(vox, `upperArm${side}`, [x0 + (m > 0 ? 1 : 0), Y.elbow + 2, -a2 - 1], [x1 - (m > 0 ? 0 : 1), Y.elbow + 4, a2 + 1], t.panels ? 'accent' : 'top');
-    }
   }
   // A suit's or jacket's front: open in a V from the collar to its button (all the way down, worn
   // open), the shirt inside; lapels a voxel proud beside it.
@@ -795,15 +787,15 @@ function dress(vox: Voxels, s: Spec) {
     vox.recolour('spine', (i, _j, k) => (Math.abs(C(i)) < 1.5 ? undefined : k >= bz - 1 || k <= -3 || Math.abs(C(i)) > b.waist - 1.5 ? 'socket' : undefined));
   }
   // A tunic hanging to mid-thigh, belted.
-  if (t.tunic) skirt(vox, s, 'top', { bottom: 12, flare: 1.2 });
+  if (t.tunic) skirt(vox, s, 'top', { bottom: Y.knee + 2, flare: 1.2 });
   // An apron over it all: a bib, straps up to the neck, and a panel to the knee.
   if (t.apron) {
     for (let i = -3; i < 3; i++) for (let j = Y.chest; j < Y.chest + 5; j++) vox.set('chest', i, j, F + b.bust + 1, 'accent');
     for (const i of [-4, 3]) for (let j = Y.chest + 4; j < Y.chestTop; j++) vox.set('chest', i, j, F + 1, 'accent');
-    for (let j = 11; j < Y.spine; j++)
+    for (let j = Y.knee + 1; j < Y.spine; j++)
       for (let i = -5; i < 5; i++) {
         const part = j >= Y.split ? 'hips' : C(i) > 0 ? 'upperLegL' : 'upperLegR';
-        vox.set(part, i, j, 4, j === 13 && i > -4 && i < 3 ? 'accentShade' : 'accent');
+        vox.set(part, i, j, 4, j === Y.knee + 3 && i > -4 && i < 3 ? 'accentShade' : 'accent');
       }
     for (let i = -5; i < 5; i++) vox.set('spine', i, Y.spine, bz + 1, 'accent');
   }
@@ -846,7 +838,7 @@ function dress(vox: Voxels, s: Spec) {
     }
   }
   if (look.bottom === 'jeans') vox.recolour('hips', (i, j, k) => (k === -4 && j >= Y.pelvis + 1 && j <= Y.pelvis + 2 && (Math.abs(C(i)) > 1.5 && Math.abs(C(i)) < 4.5) ? 'pantsShade' : undefined));
-  if (skirted) skirt(vox, s, 'pants', { bottom: 11, flare: 2, zFlare: 1.8 });
+  if (skirted) skirt(vox, s, 'pants', { bottom: Y.knee + 1, flare: 1.4, zFlare: 1.1 });
   // Worn thin: holes (the skin through them) and frayed hems.
   if (look.ragged) {
     const cloth = new Set(['top', 'topShade', 'pants', 'pantsShade', 'under', 'accent']);
@@ -891,7 +883,7 @@ function skirt(vox: Voxels, s: Spec, colour: string, { bottom, flare = 2, zFlare
         const z = C(k);
         if (Math.abs(x) > hw || Math.abs(z) > hd) continue;
         if (Math.abs(x) < hw - 2 && Math.abs(z) < hd - 2 && j < Y.pelvis) continue;
-        vox.set(part(i, j), i, j, k, j === bottom && colour === 'top' ? 'topShade' : colour);
+        vox.set(part(i, j), i, j, k, j === bottom ? `${colour}Shade` : colour);
       }
 }
 
@@ -972,8 +964,14 @@ function palette(s: Spec): Palette {
   P.add('gem', 0xe0283a, { rough: 0.1, glow: 0.7 });
   P.add('belt', 0x2e1d14, { rough: 0.4 });
   P.add('buckle', 0xd0d0d6, { rough: 0.2, metal: 1 });
+  // How much each colour's voxels vary in shade (when they do): hair most, skin a little, the
+  // face's details and the small hard things not at all.
+  for (const c of P.colours.values()) c.vary = /^(hair|beard)/.test(c.name) ? 0.09 : c.name.startsWith('skin') || c.name === 'stubble' ? 0.028 : FLAT.has(c.name) ? 0 : 0.05;
   return P;
 }
+
+/** Colours that never vary: the face's details, metal, glass, buttons and laces. */
+const FLAT = new Set(['eye', 'white', 'lash', 'brow', 'mouth', 'lips', 'blush', 'freckle', 'glass', 'frame', 'button', 'zip', 'lace', 'buckle', 'gold', 'gem', 'socket', 'teeth', 'hairTie', 'flowerMid']);
 
 // ---------------------------------------------------------------------------------------------
 // The figure

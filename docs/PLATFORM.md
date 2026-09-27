@@ -514,6 +514,10 @@ Built-in starter sprites: `wooden_sword`, `stone_sword`, `iron_sword`, `diamond_
 
 Art drawn another way works too: set `hold.grip` (and `hold.rotation`) to match it.
 
+### Energy blades
+
+A held model can carry a blade of light: `hold: { style: 'sword', model: HeldModels.gltf(saber), blade: { color: '#4db8ff' } }`. The platform draws it over the model's own blade wherever the item is (in a figure's hand, in first person, thrown with `client.scene.item`): a white-hot core in a halo of its colour, flickering and bright enough to bloom, from part way up the model (`start`, a fraction of the way from its `grip` to its `muzzle`, the tip) to the tip; and a fading arc behind it while it's swung fast (`trail: false` for none). `width` and `glow` set the halo's size and brightness. Blockfront's sabers are drawn this way.
+
 ## Guns
 
 A `kind: 'gun'` item (the `guns()` kit) is a hitscan gun: every shot is a ray (a few for a shotgun) that hits the first player, creature, block or solid prop along it. Plants, torches and leaves don't stop bullets.
@@ -1236,7 +1240,7 @@ Every player has a **look** that travels with them from game to game, chosen in 
 - **An avatar**: who they are, one of the platform's characters (below): a build, skin tone, hair, a face (lashes, freckles, specs, a beard …), eye colour, a top, bottoms and shoes, each in its colours. It's who they are in every game that doesn't dress its players itself (no `player.model` or `player.skin` of its own, and before any `player.setModel` / `setSkin`): Sandbox, Skyship, Sky Obby, the Arena, Heart Hunt, Bed Wars (in its team's kit). A guest makes one too (kept in the browser; their first is a random person); a signed-in player's is kept for their account. Bots get someone of their own.
 - **Cosmetics** (signed in): a hat, something on the back, a title under their name and a name tag colour. They're shown in every game, on every kind of body: hats and back items sit on the head and between the shoulders of any figure on the humanoid rig (the platform's characters, Call of Blocky's and Blockfront's fighters, a glTF model of your own), scaled to each head; under a hat, a character's hair is cut close. A game can leave slots out: `cosmeticSlots: ['title', 'tag']` in its meta (a team colour the game sets with `player.color` always wins over a tag's).
 
-**Characters.** The platform's people are micro-voxel figures in Call of Blocky's and Blockfront's style (24 voxels a metre, a big head, big fists and boots, on the humanoid rig: docs/HUMANOID.md), built on each screen from a look: players' avatars are ones, and a game can make its own townsfolk and monsters the same way:
+**Characters.** The platform's people are micro-voxel figures in Call of Blocky's and Blockfront's style (26 voxels a metre, lean: a big head on a neck, long legs, arms of an even width with fists their width, on the humanoid rig: docs/HUMANOID.md), built on each screen from a look: players' avatars are ones, and a game can make its own townsfolk and monsters the same way:
 
 ```ts
 game.entities.define('zombie', {

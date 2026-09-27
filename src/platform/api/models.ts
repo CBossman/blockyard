@@ -3,7 +3,7 @@ import type { GltfSpec, HeldModelSpec, HumanoidJoint, ModelPart, ModelSpec } fro
 
 /**
  * How the platform's characters hold things and fit first person (Call of Blocky's and Blockfront's
- * fighters' numbers: big fists, things held bigger).
+ * fighters' numbers: things held bigger, to read against the big heads).
  */
 export const CHARACTER_STYLE: Pick<GltfSpec, 'firstPerson' | 'poses'> = {
   firstPerson: { scale: 1.0, hands: 0.62 },

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { ClientScene, Node } from '../../api/client/core';
 import type { ItemDefinition } from '../../api/types';
 import type { EntityGraphics } from '../../render/entities';
+import { bladeOn } from '../../render/blade';
 
 /** `client.scene`: things this screen puts in the world itself (in the figures' scene, lit and shadowed as they are). */
 export class SceneService implements ClientScene {
@@ -38,6 +39,8 @@ export class SceneService implements ClientScene {
     }
     const mesh = new THREE.Mesh(look.geometry, m);
     mesh.customDepthMaterial = this.graphics.gltf.shadow(look.albedo);
+    // (Its blade goes with it: when the node's taken out of the scene, the blade's drawn no more.)
+    bladeOn(mesh, def.hold?.blade, look.points);
     look.geometry.computeBoundingSphere();
     const c = look.geometry.boundingSphere!.center;
     return { node: mesh, center: { x: c.x, y: c.y, z: c.z }, form: look.model ? 'model' : 'sprite' };

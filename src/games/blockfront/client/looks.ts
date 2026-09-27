@@ -72,7 +72,8 @@ export const LOOKS: Record<string, ItemLook> = {
       {
         icon: { gltf: url(saberOf(id)) },
         // Rolled a quarter turn, as Call of Blocky's katana: the hilt's switches face the holder in first person.
-        hold: { style: 'sword', model: HeldModels.gltf(url(saberOf(id)), { rotation: [0, 0, 90] }), poses: SABER },
+        // The blade's light over the model's own: a white-hot core in a halo of the hero's colour.
+        hold: { style: 'sword', model: HeldModels.gltf(url(saberOf(id)), { rotation: [0, 0, 90] }), poses: SABER, blade: { color: HEROES[id].blade } },
         sounds: { use: 'saber_swing', hit: 'saber_hit' },
         name: `${HEROES[id].name}'s saber`,
       } satisfies ItemLook,

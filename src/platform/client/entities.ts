@@ -8,6 +8,7 @@ import type { AnimState, EntityGraphics, Figure } from '../render/entities';
 import { Shaders } from '../render/shaders';
 import type { EntityFrame, ProjectileFrame } from '../sim/entities';
 import { heldView, partsOf, ShownFigure } from './figures';
+import { bladeOn, type Blade } from '../render/blade';
 
 /**
  * An entity's frame; or another player's figure's, made on this screen from their frame: whose it
@@ -357,6 +358,7 @@ export class EntityView {
   private hold(v: Shown, item: string | null) {
     v.held = item;
     if (v.heldMesh) {
+      (v.heldMesh.userData.blade as Blade | undefined)?.dispose();
       v.heldMesh.removeFromParent();
       (v.heldMesh.material as THREE.Material).dispose();
       v.heldMesh = null;
@@ -378,6 +380,8 @@ export class EntityView {
     // What it hangs from: the hand, until client code moves it (it stays where it's put).
     if (!v.mount) hand.add((v.mount = new THREE.Object3D()));
     v.mount.add(mesh);
+    const blade = bladeOn(mesh, def.hold?.blade, look.points);
+    if (blade) mesh.userData.blade = blade;
     v.heldMesh = mesh;
     v.figure.held = heldView(item, def, mesh, v.mount, look);
   }

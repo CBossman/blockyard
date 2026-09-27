@@ -9,10 +9,10 @@
  * and checked after it's written: the rig, the skin, every vertex on one bone, the budgets.
  *
  * Call of Blocky's fighters' conventions and look (`callofblocky/tools/fighters/build.mjs`, which
- * this started from):
- * - Voxels: 24 a metre (a voxel 1/24 block, about 4 cm), so a figure is about 44 voxels tall, with
- *   chunky, stylized proportions: a big head (a quarter of the height), broad shoulders, big fists
- *   and boots. Each figure is painted in code as one voxel part per joint of the humanoid rig
+ * this started from), in the platform characters' lean proportions (`src/platform/character/`):
+ * - Voxels: 26 a metre, so a figure is about 48 voxels tall (1.85 m to the crown): a big head (12
+ *   across, a quarter of the height), a neck, a slim body on long legs, arms of an even width with
+ *   fists no wider than them, trim boots. Each figure is painted in code as one voxel part per joint of the humanoid rig
  *   (docs/HUMANOID.md), in design units of 1/24 m: boxes, rounded boxes and ellipsoids, coloured
  *   by region, and details placed voxel by voxel. Every part is a closed surface; where two meet,
  *   one reaches into the other, a voxel in from its surface, so bends open no gaps.
@@ -62,9 +62,9 @@ import { Palette, Voxels, faces, atlas, quadCorners, png, writeGlb, readGlb, cel
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const argv = process.argv.slice(2);
-const SCALE = 24;
+const SCALE = 26;
 const OUT = argv.find((a) => a.startsWith('--out='))?.slice(6) ?? join(HERE, '../../models/troopers');
-const DU = 1 / 24;
+const DU = 1 / 26;
 const MAX_TRIS = 25000;
 const MAX_BYTES = 300 * 1024;
 /** Heights allowed (metres, to the top of the head): Chewblocca the tallest. */
@@ -184,17 +184,19 @@ function hash(i, j, k, salt = 0) {
 // and head forward (and the head a row down).
 
 const BUILDS = {
-  slim: { sh: 7, waist: 6, hip: 6, arm: 4, leg: 5, belly: 0 },
-  broad: { sh: 8, waist: 7, hip: 7, arm: 6, leg: 6, belly: 0 },
-  heavy: { sh: 8, waist: 8, hip: 7, arm: 6, leg: 6, belly: 2 },
+  slim: { sh: 6, waist: 5, hip: 5, arm: 4, leg: 4, belly: 0 },
+  broad: { sh: 7, waist: 6, hip: 6, arm: 4, leg: 5, belly: 0 },
+  heavy: { sh: 7, waist: 7, hip: 6, arm: 5, leg: 5, belly: 2 },
   // Women's: a bust, the waist a voxel in; the same limbs as the men's (the same joints, the same
   // silhouette in the same kit).
-  slimF: { sh: 7, waist: 5, hip: 6, arm: 4, leg: 5, belly: 0, bust: 1 },
-  broadF: { sh: 8, waist: 6, hip: 7, arm: 6, leg: 6, belly: 0, bust: 1 },
-  heavyF: { sh: 8, waist: 7, hip: 7, arm: 6, leg: 6, belly: 1, bust: 1 },
-  lord: { sh: 9, waist: 7, hip: 7, arm: 6, leg: 6, belly: 0, shin: 1, thigh: 1 },
-  wookiee: { sh: 9, waist: 8, hip: 8, arm: 6, leg: 6, belly: 0, shin: 1, thigh: 1, torso: 1 },
-  old: { sh: 7, waist: 6, hip: 6, arm: 4, leg: 5, belly: 1, hunch: 2 },
+  slimF: { sh: 6, waist: 4, hip: 5, arm: 4, leg: 4, belly: 0, bust: 1 },
+  broadF: { sh: 7, waist: 5, hip: 6, arm: 4, leg: 5, belly: 0, bust: 1 },
+  heavyF: { sh: 7, waist: 6, hip: 6, arm: 5, leg: 5, belly: 1, bust: 1 },
+  // Darth Voxel and Chewblocca: a voxel broader all round than the heavy, longer in the leg (and
+  // Chewblocca in the body); the Emperor stooped.
+  lord: { sh: 8, waist: 6, hip: 6, arm: 5, leg: 5, belly: 0, shin: 1, thigh: 1 },
+  wookiee: { sh: 8, waist: 7, hip: 7, arm: 5, leg: 5, belly: 0, shin: 1, thigh: 1, torso: 1 },
+  old: { sh: 6, waist: 5, hip: 5, arm: 4, leg: 4, belly: 1, hunch: 2 },
 };
 
 /**
@@ -205,7 +207,7 @@ const BUILDS = {
  */
 function heights(b) {
   const s = b.shin ?? 0, t = s + (b.thigh ?? 0), u = t + (b.torso ?? 0);
-  return { ankle: 4, knee: 10 + s, pelvis: 14 + t, split: 15 + t, hipJoint: 16.5 + t, hips: 17 + t, belt: 18 + t, spine: 19 + t, chest: 23 + t, shoulder: 29 + u, chestTop: 31 + u, neck: 31 + u, head: 32 + u, crown: 44 + u, elbow: 23 + t, wrist: 17.5 + t };
+  return { ankle: 3, knee: 11 + s, pelvis: 17 + t, split: 18 + t, hipJoint: 19.5 + t, hips: 20 + t, belt: 21 + t, spine: 22 + t, chest: 26 + t, shoulder: 32 + u, chestTop: 34 + u, neck: 34 + u, head: 36 + u, crown: 48 + u, elbow: 25.5 + t, wrist: 19 + t };
 }
 /** The torso's front row of cells (k), and the head's face row (in its own space). */
 const F = 3;
@@ -242,8 +244,8 @@ function joints(b, Y) {
   for (const k of Object.keys(J)) if (k.endsWith('L')) J[k.slice(0, -1) + 'R'] = [-J[k][0], J[k][1], J[k][2]];
   // The fists' holds: the right's round a vertical bar ahead of its wrist, the left's round a bar
   // along z below its wrist.
-  J.gripR = [-L.ax, Y.wrist - 3, 1];
-  J.gripL = [L.ax, Y.wrist - 3.5, 0];
+  J.gripR = [-L.ax, Y.wrist - 2.5, 0.5];
+  J.gripL = [L.ax, Y.wrist - 2.5, 0];
   return J;
 }
 
@@ -285,11 +287,11 @@ function body(vox, s) {
     const X = (a, c) => (m > 0 ? [a, c] : [-c, -a]);
     const [x0, x1] = X(sh, sh + b.arm);
     const a2 = b.arm / 2;
-    fill(vox, `upperArm${side}`, [x0, Y.elbow, -a2], [x1, Y.chestTop, a2], 'sleeve', (p) => box(p, [x0, Y.elbow - 4, -a2], [x1, Y.chestTop, a2], [1, 1.6, 1]));
+    fill(vox, `upperArm${side}`, [x0, Y.elbow, -a2], [x1, Y.chestTop, a2], 'sleeve', (p) => box(p, [x0, Y.elbow - 4, -a2], [x1, Y.chestTop, a2], [0.8, 1.2, 0.8]));
     const fx0 = m > 0 ? L.ax - 2 : -L.ax - 2, fx1 = fx0 + 4;
     fill(vox, `lowerArm${side}`, [fx0 + 1, Y.elbow, -1], [fx1 - 1, Y.elbow + 2, 1], 'sleeve');
     fill(vox, `lowerArm${side}`, [fx0, Y.wrist, -2], [fx1, Y.elbow, 2], 'sleeve', (p) => box(p, [fx0, Y.wrist - 3, -2], [fx1, Y.elbow + 3, 2], [0.9, 0, 0.9]));
-    fist(vox, s, side, [fx0 - 1, fx1 + 1]);
+    fist(vox, s, side, [fx0, fx1]);
   }
   // Legs: thigh (inset where it's under the pelvis), shin (into the thigh), boot (into the shin).
   for (const [side, m] of SIDES) {
@@ -303,21 +305,21 @@ function body(vox, s) {
   }
 }
 
-/** A fist (6 wide): a rounded block round the grip, the fingers' creases across its knuckles. */
+/** A fist (the forearm's width, 5 tall): a rounded block round the grip, the fingers' creases across its knuckles. */
 function fist(vox, s, side, [x0, x1]) {
   const { Y, o } = s;
   const part = `hand${side}`;
   const hand = o.gloves === true || o.gloves === side ? 'glove' : 'skin';
   const crease = `${hand}Crease`;
-  const y0 = Y.wrist - 6, y1 = Y.wrist + 0.5;
+  const y0 = Y.wrist - 5, y1 = Y.wrist + 0.5;
   if (side === 'R') {
     // Ahead of the wrist, round a vertical grip: the knuckles to the front (+z).
-    const z0 = -2, z1 = 4;
+    const z0 = -2, z1 = 3;
     fill(vox, part, [x0, y0, z0], [x1, y1, z1], hand, (p) => inRound(p, [x0, y0, z0], [x1, y1 + 1, z1], 1.2));
     vox.recolour(part, (i, j, k) => (k === z1 - 1 && j < Y.wrist - 1 && j > y0 && (j - Math.floor(y0)) % 2 === 1 ? crease : undefined));
   } else {
     // Below the wrist, round a bar along z: the knuckles to the outside (+x).
-    const z0 = -3, z1 = 3;
+    const z0 = -2, z1 = 2;
     fill(vox, part, [x0, y0, z0], [x1, y1, z1], hand, (p) => inRound(p, [x0, y0, z0], [x1, y1 + 1, z1], 1.2));
     vox.recolour(part, (i, j, k) => (i === x1 - 1 && j < Y.wrist - 1 && j > y0 && k > z0 && k < z1 - 1 && (k - z0) % 2 === 0 ? crease : undefined));
   }
@@ -331,8 +333,8 @@ function boot(vox, s, side, [lx0, lx1], [z0, z1]) {
   // A voxel wider than the leg, on the outside.
   const [x0, x1] = side === 'L' ? [lx0, lx1 + 1] : [lx0 - 1, lx1];
   const top = st === 'boot' ? Y.ankle + 2 : Y.ankle;
-  const toe = z1 + (st === 'flat' ? 2 : 3);
-  const toeTop = st === 'flat' ? 2 : 3;
+  const toe = z1 + (st === 'flat' ? 1 : 2);
+  const toeTop = 2;
   fill(vox, part, [x0, 0, z0 - 1], [x1, top, z1], 'shoes', (p) => inRound(p, [x0, -2, z0 - 1], [x1, top, z1 + 1], [0.9, 0, 0.9]));
   fill(vox, part, [x0, 0, z0], [x1, toeTop, toe], 'shoes', (p) => inRound(p, [x0, -2, z0 - 1], [x1, toeTop, toe], [1.2, 1.3, 1.8]));
   fill(vox, part, [lx0 + 1, top, z0 + 1], [lx1 - 1, top + 2, z1 - 1], 'shoes');
@@ -855,7 +857,8 @@ function hoodDown(vox, s, colour, fold = null) {
   const { Y } = s;
   const f = typeof colour === 'function' ? colour : () => colour;
   const back = backOf(vox, 'chest', 0, Y.chestTop - 2);
-  fill(vox, 'chest', [-6, Y.chestTop - 5, back - 3], [6, Y.chestTop + 2, back + 3], (i, j, k) => (fold && j === Y.chestTop - 2 && k < back - 1 ? fold : f(i, j, k)), (p) => inEllipsoid(p, [0, Y.chestTop - 1.5, back + 0.5], [5.8, 3.4, 3]));
+  const w = s.b.sh - 0.6;
+  fill(vox, 'chest', [-6, Y.chestTop - 5, back - 3], [6, Y.chestTop + 2, back + 3], (i, j, k) => (fold && j === Y.chestTop - 2 && k < back - 1 ? fold : f(i, j, k)), (p) => inEllipsoid(p, [0, Y.chestTop - 1.5, back + 0.5], [w, 3.4, 3]));
 }
 
 /** For side m (1 the figure's left, -1 its right), an x range a..c on the left mirrored. */
@@ -967,7 +970,11 @@ function trooperArmour(vox, s, { heavy = false } = {}) {
   // The belt: two rows round, a box buckle in front, a drop box behind.
   coat(vox, 'hips', A, (p) => p[1] > Y.belt - 1.5 && p[1] < Y.spine, { axes: 'xz' });
   block(vox, 'hips', [-2, Y.belt - 2, 5], [1, Y.belt + 1, 5], A, 'armourShade');
-  for (const m of [1, -1]) for (let t = 0; t < 2; t++) vox.set('hips', m > 0 ? 3 + t * 2 : -4 - t * 2, Y.belt, 5, 'grille');
+  for (const m of [1, -1])
+    for (let t = 0; t < 2; t++) {
+      const i = m > 0 ? 3 + t * 2 : -4 - t * 2;
+      vox.set('hips', i, Y.belt, frontOf(vox, 'hips', i, Y.belt) + 1, 'grille');
+    }
   block(vox, 'hips', [-2, Y.belt - 3, -6], [1, Y.belt, -6], A, 'armourShade');
   // The pelvis: a plate in front and one behind below the belt, black at the sides.
   coat(vox, 'hips', A, (p) => p[1] < Y.belt - 1.5 && ((p[2] > 3 && Math.abs(p[0]) < 4) || p[2] < -4));
@@ -996,8 +1003,8 @@ function impHeavy(vox, s) {
   trooperArmour(vox, s, { heavy: true });
   // Pauldrons: rounded grey caps over the bells, a white rim.
   for (const [side, m] of SIDES) {
-    const [x0, x1] = X(m, b.sh - 1, b.sh + b.arm + 3);
-    const lo = [x0, Y.shoulder - 4, -b.arm / 2 - 2], hi = [x1, Y.chestTop + 2, b.arm / 2 + 2];
+    const [x0, x1] = X(m, b.sh - 1, b.sh + b.arm + 2);
+    const lo = [x0, Y.shoulder - 4, -b.arm / 2 - 1.5], hi = [x1, Y.chestTop + 2, b.arm / 2 + 1.5];
     fill(vox, `upperArm${side}`, lo, hi, (i, j) => (j < Y.shoulder - 2 ? 'armour' : 'shock'), (p) => inRound(p, [lo[0], lo[1] - 3, lo[2]], hi, [2.6, 2.6, 2.6]) && (m > 0 ? p[0] > b.sh - 0.5 + (p[1] < Y.chestTop - 0.5 ? 1 : 0) : p[0] < -b.sh + 0.5 - (p[1] < Y.chestTop - 0.5 ? 1 : 0)));
   }
   // Grey shock bands across the chest plate.
@@ -1025,7 +1032,7 @@ function impScout(vox, s) {
   // The belt, black, pouches round it, a white box buckle.
   coat(vox, 'hips', 'belt', (p) => p[1] > Y.belt - 0.5 && p[1] < Y.spine, { axes: 'xz' });
   block(vox, 'hips', [-1, Y.belt - 1, 5], [0, Y.belt, 5], A);
-  for (const [, m] of SIDES) for (const x of [3, 5]) block(vox, 'hips', [m > 0 ? x - 1 : -x, Y.belt - 2, 4], [m > 0 ? x : -x + 1, Y.belt, 5], 'pouch');
+  for (const [, m] of SIDES) for (const x of [2, 4]) block(vox, 'hips', [m > 0 ? x - 1 : -x, Y.belt - 2, 4], [m > 0 ? x : -x + 1, Y.belt, 5], 'pouch');
   // Knee and shin guards, white in front and round the sides.
   for (const [side] of SIDES) {
     coat(vox, `lowerLeg${side}`, A, (p) => p[2] > L.lz - 0.5 && p[1] > Y.ankle + 1.5 && p[1] < Y.knee + 1.5, { axes: 'xz' });
@@ -1050,7 +1057,7 @@ function rebelTrooper(vox, s) {
   coat(vox, 'spine', 'vest', (p) => p[1] > Y.spine - 0.5, { axes: 'xz' });
   // The vest's pouches: two rows either side of the front, a radio on the left chest.
   for (const [, m] of SIDES) {
-    for (const [a, c] of [[1, 3], [4, 5]]) {
+    for (const [a, c] of [[1, 2], [3, 4]]) {
       const [i0, i1] = X(m, a, c);
       pouch(vox, 'spine', i0, i1, Y.spine, Y.spine + 2, 'pouch', 'pouchFlap');
     }
@@ -1072,11 +1079,10 @@ function rebelTrooper(vox, s) {
 /** The rebel heavy: darker fatigues, sleeves rolled to the elbow, a bandolier, gloves, a heavy pack. */
 function rebelHeavy(vox, s) {
   const { b, Y } = s;
-  // Rolled sleeves: bare forearms, a rolled cuff over the elbow.
-  for (const [side, m] of SIDES) {
+  // Rolled sleeves: bare forearms, the rolled cuff over the elbow in a darker shade.
+  for (const [side] of SIDES) {
     vox.recolour(`lowerArm${side}`, () => 'skin');
-    const [x0, x1] = X(m, b.sh - 1, b.sh + b.arm + 1);
-    fill(vox, `upperArm${side}`, [x0 + (m > 0 ? 1 : 0), Y.elbow, -b.arm / 2 - 1], [x1 - (m > 0 ? 0 : 1), Y.elbow + 2, b.arm / 2 + 1], 'shirtShade');
+    vox.recolour(`upperArm${side}`, (i, j) => (j < Y.elbow + 2 ? 'shirtShade' : undefined));
   }
   for (const i of [-1, 0]) for (let j = Y.chestTop - 3; j < Y.chestTop; j++) vox.set('chest', i, j, F, 'skin');
   // The bandolier from the left shoulder to the right hip, its cells along it in front.
@@ -1142,14 +1148,14 @@ function ben(vox, s) {
     });
   for (const i of [-1, 0]) for (let j = Y.chestTop - 3; j < Y.chestTop; j++) vox.set('chest', i, j, F, 'skin');
   // The robe: over the back, sides and shoulders, open in front; its hood down on the back.
-  const robeOn = (p) => !(p[2] > 1 && Math.abs(p[0]) < 4.5);
+  const robeOn = (p) => !(p[2] > 1 && Math.abs(p[0]) < b.sh - 2.5);
   coat(vox, 'chest', 'robe', robeOn);
   coat(vox, 'spine', 'robe', robeOn, { axes: 'xz' });
   // The sash in the opening, wide, a belt over it.
   coat(vox, 'spine', 'obi', (p) => p[1] < Y.spine + 2.5 && !robeOn(p), { axes: 'xz' });
   belt(vox, s, 'belt', { buckle: 'buckle', rows: 1 });
   // The robe's front edges, lighter; folds down its back.
-  vox.recolour('chest', (i, j, k, c) => (c === 'robe' && k > 0 && Math.abs(C(i)) < 5.6 ? 'robeEdge' : undefined));
+  vox.recolour('chest', (i, j, k, c) => (c === 'robe' && k > 0 && Math.abs(C(i)) < b.sh - 1.4 ? 'robeEdge' : undefined));
   for (const part of ['chest', 'spine']) vox.recolour(part, (i, j, k, c) => (c === 'robe' && k < -4 && (i + 40) % 4 === 1 ? 'robeDark' : undefined));
   hoodDown(vox, s, 'robe', 'robeDark');
   // The robe's skirt: behind and at the sides, down past the knees; the tunic's in front to mid-thigh.
@@ -1184,7 +1190,7 @@ function vader(vox, s) {
   coat(vox, 'hips', 'plate', (p) => p[1] > Y.belt - 1.5 && p[1] < Y.spine, { axes: 'xz' });
   const bk = frontOf(vox, 'hips', 0, Y.belt) + 1;
   block(vox, 'hips', [-3, Y.belt - 2, bk], [2, Y.belt + 1, bk], 'silver', 'panelDark');
-  for (const [, m] of SIDES) block(vox, 'hips', [m > 0 ? 4 : -7, Y.belt - 2, bk - 2], [m > 0 ? 6 : -5, Y.belt, bk - 1], 'silver', 'panelDark');
+  for (const [, m] of SIDES) block(vox, 'hips', [m > 0 ? b.hip - 3 : -b.hip, Y.belt - 2, bk - 2], [m > 0 ? b.hip - 1 : -b.hip + 2, Y.belt, bk - 1], 'silver', 'panelDark');
   // Gloves (the fists), the forearms' gauntlet cuffs, tall boots.
   for (const [side] of SIDES) coat(vox, `lowerArm${side}`, 'glove', (p) => p[1] < Y.wrist + 2.5, { axes: 'xz' });
   for (const [side] of SIDES) coat(vox, `lowerLeg${side}`, 'shoes', (p) => p[1] < Y.knee + 0.5 && p[1] > Y.ankle + 1.5, { axes: 'xz' });
@@ -1269,14 +1275,14 @@ function bounty(vox, s) {
   const ck = frontOf(vox, 'chest', -4, Y.chest + 5);
   block(vox, 'chest', [-5, Y.chest + 4, ck + 1], [-4, Y.chest + 5, ck + 1], 'gold');
   // The pauldron: a rounded maroon cap on the left shoulder, a darker rim.
-  const [x0, x1] = [b.sh - 1, b.sh + b.arm + 2];
+  const [x0, x1] = [b.sh - 1, b.sh + b.arm + 1];
   const lo = [x0, Y.shoulder - 3, -b.arm / 2 - 1.5], hi = [x1, Y.chestTop + 1.5, b.arm / 2 + 1.5];
   fill(vox, 'upperArmL', lo, hi, (i, j) => (j < Y.shoulder - 1 ? 'maroonDark' : 'maroon'), (p) => inRound(p, [lo[0], lo[1] - 3, lo[2]], hi, [2.2, 2.2, 2.2]) && p[0] > b.sh - 0.5 + (p[1] < Y.chestTop - 0.5 ? 1 : 0));
   // Gauntlets, two keys lit on the left one; gloves; knee pads.
   for (const [side] of SIDES) coat(vox, `lowerArm${side}`, 'mando', (p) => p[1] > Y.wrist + 0.5 && p[1] < Y.elbow - 0.5, { axes: 'xz' });
   const gx = Math.floor(L.ax) + 3;
-  vox.set('lowerArmL', gx, Y.elbow - 3, 0, 'gold');
-  vox.set('lowerArmL', gx, Y.elbow - 3, -1, 'gauntletRed');
+  vox.set('lowerArmL', gx, Math.floor(Y.elbow) - 3, 0, 'gold');
+  vox.set('lowerArmL', gx, Math.floor(Y.elbow) - 3, -1, 'gauntletRed');
   for (const [side] of SIDES) coat(vox, `lowerLeg${side}`, 'mando', (p) => p[2] > L.lz1 - 0.5 && p[1] > Y.knee - 1.5 && p[1] < Y.knee + 2.5, { axes: 'xz' });
   // The belt, pouches round it; braids hanging at the right hip.
   belt(vox, s, 'belt', { buckle: 'mandoDark', rows: 2, bh: 2 });
@@ -1299,7 +1305,7 @@ function bounty(vox, s) {
   for (let j = Y.chestTop; j < Y.chestTop + 6; j++) for (const i of [-1, 0]) for (const k of [cz - 1, cz]) vox.set('chest', i, j, k, j > Y.chestTop + 3 ? 'missileTip' : 'missile');
   // The cape: a ragged strip over the left shoulder, hanging behind it to the waist.
   for (let j = Y.spine + 1; j <= Y.chestTop; j++)
-    for (let i = 5; i < 10; i++) {
+    for (let i = b.sh - 3; i < b.sh + 2; i++) {
       if (j < Y.spine + 3 && hash(i, j, 0, 41) < 0.5) continue;
       vox.set('chest', i, j, back - 1, 'cape');
       if (j === Y.chestTop) for (let k = back; k < 1; k++) vox.set('chest', i, j, k, 'cape');
