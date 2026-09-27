@@ -1,5 +1,5 @@
 import { defineServer, type Bot, type GameContext, type IconRef, type MenuHandle, type MenuOptions, type Pickup, type Player, type Vec3 } from '@platform';
-import { guns, melee, navGrid, throwables, type NavGrid } from '@platform/kits';
+import { guns, melee, navGrid, skipVote, throwables, type NavGrid, type SkipVote } from '@platform/kits';
 import { AmmoBags } from './ammo';
 import { ATLAS, defineArt, OUTFITS, skinOrigin } from './art';
 import { CaseRounds } from './briefcase';
@@ -10,7 +10,6 @@ import { fighterOf, hostile, match, teamFighters, type Fighter } from './match';
 import { FFA_LIMIT, MODES, ROTATION, ROUNDS, TDM_LIMIT, TEAMS, type MatchPlan, type ModeId, type Team } from './modes';
 import { COLORS, fighterModel, shared } from './shared';
 import { NextVote, SCORES, VOTING } from './nextvote';
-import { SkipVote } from './skipvote';
 import { BLURBS, defineWeapons, feedIcon, LETHAL_BLURBS, LETHAL_COUNT, LETHALS, PRIMARIES, SIDEARMS, WEAPONS, weaponName, type Lethal, type Primary } from './weapons';
 import { outfitId, setupProgression, type Progression } from './progression'; // [progression]
 import { killcam, killcamHolds } from './killcam';
@@ -32,7 +31,7 @@ import { isStreak, STREAK_IDS, STREAKS } from './streaks/kinds';
  * joining take a bot's place. A public room goes round the modes and maps match by match
  * (`ROTATION`); in a room of one's own (`?room=`), M picks the mode and the map. Either way, V
  * votes to skip the match that's on: once more than half the people in it have, the next is on
- * (skipvote.ts).
+ * (the platform's `skipVote` kit).
  *
  * Everyone carries a primary and a sidearm of their choosing (L), a katana and a lethal (G: two
  * Pineapple frags or a Mia firebomb). Whoever goes down drops a bag of ammo: walk over it to top
@@ -92,7 +91,7 @@ const watching = new Map<string, Player>();
 /** The match settings menu in a room of one's own, and whether anyone's opened it yet. */
 let settings: MenuHandle | null = null;
 let offered = false;
-/** The vote to skip the match that's on (skipvote.ts), and whether the match now over was skipped. */
+/** The vote to skip the match that's on (the platform's `skipVote` kit), and whether the match now over was skipped. */
 let vote: SkipVote;
 let skipped = false;
 /** The vote on the next match's mode and map, once a match is played out (nextvote.ts). */
@@ -811,7 +810,7 @@ function nextPlan(game: GameContext, skipping = false): MatchPlan {
 }
 
 /**
- * The vote to skip passed (skipvote.ts): the match is over without being played out. Nobody wins
+ * The vote to skip passed (the platform's `skipVote` kit): the match is over without being played out. Nobody wins
  * or places, and nothing goes on anyone's all-time numbers. Everyone stops where they are, and a
  * few seconds later the next match is on, the one that would have followed this (the
  * intermission's countdown, cut short).
@@ -924,7 +923,14 @@ export default defineServer(shared, {
     streaks.setup();
     // (Development: tests reach the match and the streaks.)
     if (import.meta.env.DEV) (globalThis as unknown as { __cob: unknown }).__cob = { match, streaks };
-    vote = new SkipVote(game, { color: (p) => nameColor(p, COLORS.gold), skip: () => skipMatch(game) });
+    vote = skipVote(game, {
+      people: () => [...match.fighters.values()].map((f) => f.player),
+      // Between The Briefcase's rounds it stays open: that's when people have a moment to vote.
+      playing: () => match.phase === 'playing',
+      match: () => ({ mode: match.mode.name, map: match.map.name }),
+      color: (p) => nameColor(p, COLORS.gold),
+      skip: () => skipMatch(game),
+    });
     next = new NextVote(game, { modeIcon: (id) => MODE_ICONS[id], mapIcon: (id) => MAP_ICONS[id] ?? { block: 'stone' }, name: planName });
     game.events.on('playerJoin', ({ player }) => {
       // Signed in for the first time since claiming their name: the all-time numbers kept by it are theirs.

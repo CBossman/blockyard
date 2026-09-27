@@ -1145,6 +1145,44 @@ body {
   background: var(--game, #7fd46b);
   border-color: transparent;
 }
+.locker-presets {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
+  gap: 6px;
+}
+.locker-preset {
+  appearance: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 4px 7px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text);
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+.locker-preset:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+.locker-preset.on {
+  border-color: var(--game, #7fd46b);
+  background: color-mix(in srgb, var(--game, #7fd46b) 12%, transparent);
+}
+.locker-preset-figure {
+  width: 54px;
+  height: 90px;
+}
+.locker-preset-name {
+  font: 600 11.5px var(--sans);
+}
+.locker-or {
+  margin-top: 4px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
 .locker-random {
   align-self: flex-start;
 }

@@ -1,12 +1,12 @@
 import type { MovementAbility, Vec3, VehicleWorld } from '@platform';
 
 /**
- * Peeking round corners: press Q to lean out to the left, E to the right, and it stays leaned;
- * the same key again stands up straight, and the other key leans the other way. The head and
+ * Peeking round corners: hold Q to lean out to the left, E to the right, and let go to stand up
+ * straight; with both held, the one pressed last wins. The head and
  * shoulders go out sideways (`body.lean`), so the eyes, where shots start, the head's hitbox and
  * the figure everyone sees all go with them, and the view tilts the way it leans. It eases out
- * and back, stops short of a wall on that side, and sprinting or sliding stands you up (and
- * you stay up after). A pure step: it runs on the host and, ahead of it, on the player's own
+ * and back, stops short of a wall on that side, and sprinting or sliding stands you up (a key
+ * still held leans again after). A pure step: it runs on the host and, ahead of it, on the player's own
  * screen, so the lean answers the moment the key goes down, online too.
  */
 /** Its keys, how far out (blocks), how quickly it eases (per second), the view's tilt at full lean (radians), and the gap it keeps from walls. */
@@ -15,16 +15,21 @@ export const PEEK = { left: 'KeyQ', right: 'KeyE', reach: 0.4, rate: 16, roll: 0
 export interface PeekState {
   /** Which way it's leaning: -1 left, 1 right, 0 upright. */
   side: number;
+  /** The key pressed last, of the two (-1 left, 1 right): the one that wins while both are held. */
+  last: number;
   /** How far out it leans now (blocks, positive right). */
   lean: number;
 }
 
 export const peek: MovementAbility<PeekState> = {
-  state: { side: 0, lean: 0 },
+  state: { side: 0, last: 0, lean: 0 },
   step(s, c, body, dt, world) {
-    // A key leans that way and stays; the same key again stands up, the other swaps sides.
-    if (c.pressed(PEEK.left)) s.side = s.side === -1 ? 0 : -1;
-    if (c.pressed(PEEK.right)) s.side = s.side === 1 ? 0 : 1;
+    // Held, a key leans that way; both held, the one pressed last.
+    if (c.pressed(PEEK.left)) s.last = -1;
+    if (c.pressed(PEEK.right)) s.last = 1;
+    const left = c.isDown(PEEK.left);
+    const right = c.isDown(PEEK.right);
+    s.side = left && right ? s.last : left ? -1 : right ? 1 : 0;
     if (body.sprinting || body.sliding || body.flying) s.side = 0;
     const want = s.side * PEEK.reach;
     s.lean += (want - s.lean) * (1 - Math.exp(-dt * PEEK.rate));

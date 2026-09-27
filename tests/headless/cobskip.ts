@@ -15,7 +15,7 @@ const phase = (): string => match.phase;
 const planned = (i: number) => `${ROTATION[i].mode} ${ROTATION[i].map}`;
 
 /**
- * Call of Blocky's vote to skip (`skipvote.ts`), in a public room on a server with people and
+ * Call of Blocky's vote to skip (the platform's `skipVote` kit), in a public room on a server with people and
  * bots, cheats off (`/skip` is everyone's): the vote opens a few seconds into a match; bots can't
  * vote, and neither they nor anyone watching from the home page count toward the majority; one
  * vote of two people doesn't skip, and V again takes it back; two of two skip, and the

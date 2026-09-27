@@ -4,6 +4,7 @@ import { HERO_ABILITY, type HeroMove } from '../abilities';
 import { heroByNumber, usesSaber } from '../defs';
 import { POWERS, SABER, SWING_PITCH, swingLength } from '../tuning';
 import type { Guard, Swing } from '../wire';
+import { FP_GUARD, FP_GUARD_NAME, FP_SWINGS, fpSwing } from './fpsaber';
 import type { HeroScene } from './state';
 
 /** A swing this screen started ahead of the server: which of the combo, and when. */
@@ -43,12 +44,21 @@ export class OwnSaber {
   /** The round trip as we've seen it (seconds): how long to wait for the server's word. */
   private rtt = 0.25;
 
-  constructor(private fp: firstPerson.FirstPersonKit | null) {}
+  constructor(private fp: firstPerson.FirstPersonKit | null) {
+    // The combo's cuts and the guard as our own arm has them (`fpsaber.ts`).
+    FP_SWINGS.forEach((a, n) => fp?.define(fpSwing(n), a));
+    fp?.define(FP_GUARD_NAME, FP_GUARD);
+  }
 
-  /** Our swing, heard and felt: the whoosh, and the first-person arm's slash. */
-  private feel(client: Client, n: number) {
+  /** Our swing, heard and felt: the whoosh, and the first-person arm's cut (that swing of the combo, over `len` seconds). */
+  private feel(client: Client, n: number, len: number) {
     client.audio.play('bfh_saber_swing', { pitch: SWING_PITCH[n] * (0.96 + Math.random() * 0.08), volume: 0.9 });
-    this.fp?.use(n === 2 ? 1.3 : 1);
+    this.fp?.play(fpSwing(n), { speed: swingLength(n, 1) / len });
+  }
+
+  /** The guard up or down, on the first-person arm too. */
+  private guardArm(on: boolean) {
+    this.fp?.pose(on ? FP_GUARD_NAME : null);
   }
 
   /** Nothing of ours under way (not a hero, dead, a replay). */
@@ -56,6 +66,7 @@ export class OwnSaber {
     this.n = -1;
     this.guesses = [];
     if (this.guard && id) scene.guards.set(id, { on: false, at: scene.now });
+    if (this.guard) this.guardArm(false);
     this.guard = false;
   }
 
@@ -90,6 +101,7 @@ export class OwnSaber {
     if (guard !== this.guard) {
       this.guard = guard;
       scene.guards.set(id, { on: guard, at: now });
+      this.guardArm(guard);
     }
     // A swing: pressed a moment ago or held, the last one over, hands free, not guarding.
     const wants = now - this.asked <= SABER.buffer || lmb;
@@ -103,7 +115,7 @@ export class OwnSaber {
       this.asked = -99;
       this.guesses.push({ n, at: now });
       scene.swings.set(id, { n, at: now, d: this.len });
-      this.feel(client, n);
+      this.feel(client, n, this.len);
     }
   }
 
@@ -128,7 +140,7 @@ export class OwnSaber {
     this.t0 = now;
     this.len = m.d;
     this.next = (m.n + 1) % 3;
-    this.feel(client, m.n);
+    this.feel(client, m.n, m.d);
   }
 
   /** The server's word on our guard (`bfh.guard`): only a break or a stagger counts (the rest is ours). */
@@ -136,6 +148,7 @@ export class OwnSaber {
     if (!m.broke && !m.st) return;
     this.n = -1;
     this.guesses = [];
+    if (this.guard) this.guardArm(false);
     this.guard = false;
     scene.guards.set(m.p, { on: false, at: scene.now });
   }

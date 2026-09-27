@@ -1,6 +1,6 @@
 import { h } from './dom';
 import { characterView } from './characterview';
-import { AVATAR_COLORS, AVATAR_OPTIONS, avatarCode, avatarLook, randomAvatar, type Avatar } from '../avatar';
+import { AVATAR_COLORS, AVATAR_OPTIONS, AVATAR_PRESETS, avatarCode, avatarLook, presetAvatar, randomAvatar, type Avatar } from '../avatar';
 import type { Cosmetic } from '../cosmetics';
 import type { CosmeticSlot } from '../api/types';
 
@@ -23,6 +23,24 @@ const TABS: [Tab, string][] = [
 const hex = (n: number) => `#${n.toString(16).padStart(6, '0')}`;
 
 /**
+ * The ready-made people's pictures, drawn once for the page (each a figure built: a few ms apiece)
+ * and kept, the same canvases put back each time the tab's drawn.
+ */
+let presetPictures: HTMLCanvasElement[] | null = null;
+function presetPicture(i: number): HTMLCanvasElement {
+  if (!presetPictures) {
+    presetPictures = AVATAR_PRESETS.map((p) => {
+      const c = h('canvas.locker-preset-figure') as HTMLCanvasElement;
+      c.width = 120;
+      c.height = 200;
+      characterView().draw(c, avatarLook(p.avatar), [], { yaw: 0.35 });
+      return c;
+    });
+  }
+  return presetPictures[i];
+}
+
+/**
  * The locker, over the home page: their avatar (skin, hair, eyes, top, bottoms, shoes) and the
  * cosmetics they wear (a hat, something on the back, a title, a name tag colour), with a picture of
  * the lot. Signed in, it wears what the account owns (and the platform's, free); a guest makes an
@@ -41,7 +59,7 @@ export class Locker {
   private toYaw = 0;
   private drag: { x: number; yaw: number } | null = null;
   private frame = 0;
-  private look: Look = { avatar: randomAvatar(), wear: [] };
+  private look: Look = { avatar: presetAvatar(), wear: [] };
   private owned = new Set<string>();
   private signedIn = false;
   private name = '';
@@ -162,7 +180,23 @@ export class Locker {
       h('div.locker-swatches', {}, ...colors.map((c, i) => h(`button.locker-swatch${a[k] === i ? '.on' : ''}`, { style: `background: ${hex(c)}`, title: names[i], 'aria-label': names[i], onclick: () => set(k, i) })));
     const chips = (k: keyof Avatar) => h('div.locker-chips', {}, ...AVATAR_OPTIONS[k].map((n, i) => h(`button.locker-chip${a[k] === i ? '.on' : ''}`, { onclick: () => set(k, i) }, n)));
     const row = (label: string, ...kids: HTMLElement[]) => h('div.locker-row', {}, h('div.locker-label', {}, label), ...kids);
+    // Ready-made: pick one as is, or start from it.
+    const code = avatarCode(a);
+    const presets = h(
+      'div.locker-presets',
+      {},
+      ...AVATAR_PRESETS.map((p, i) =>
+        h(
+          `button.locker-preset${avatarCode(p.avatar) === code ? '.on' : ''}`,
+          { onclick: () => ((this.look.avatar = { ...p.avatar }), this.render()), title: p.name },
+          presetPicture(i),
+          h('span.locker-preset-name', {}, p.name),
+        ),
+      ),
+    );
     this.body.replaceChildren(
+      row('Pick one', presets),
+      h('div.locker-label.locker-or', {}, 'Or make it yours'),
       row('Build', chips('build'), chips('curvy')),
       row('Skin', swatches('tone', AVATAR_COLORS.tone, AVATAR_OPTIONS.tone)),
       row('Hair', chips('hair'), swatches('hairColor', AVATAR_COLORS.hairColor, AVATAR_OPTIONS.hairColor)),

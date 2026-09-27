@@ -127,6 +127,44 @@ export const STATUS: WidgetDefinition = {
 };
 
 /**
+ * The vote to skip (the platform's `skipVote` kit, server.ts), up on everyone's screen while any
+ * votes are in, at the left: the match on now, a tick for each vote it takes (lit for those in)
+ * and the count. Everyone's copy says whether they've voted themselves (`voted`) and how to change it.
+ */
+export const SKIPVOTE: WidgetDefinition = {
+  at: 'left',
+  html: `
+    <div class="vote">
+      <div class="title">Skip this match?</div>
+      <div class="what">{{what}}</div>
+      <div class="line">
+        <span class="pips"><i data-each="pips" class="pip {{.}}"></i></span>
+        <span class="count">{{votes}} / {{need}}</span>
+      </div>
+      <div class="hint" data-if="!voted"><span class="key">N</span>Vote to skip</div>
+      <div class="hint mine" data-if="voted"><span class="key">N</span>You voted · take it back</div>
+    </div>`,
+  css: `
+    :scope { --fg: #f3f5f7; --fg2: rgba(243, 245, 247, 0.62); --y: var(--hud-accent, #ffe81f); }
+    .vote {
+      display: flex; flex-direction: column; gap: 5px; min-width: 190px; padding: 10px 16px 12px 14px; color: var(--fg);
+      border-left: 2px solid color-mix(in srgb, var(--y) 80%, transparent); filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.6)) drop-shadow(0 1px 4px rgba(0, 0, 0, 0.35));
+      animation: arrive 400ms ease-out;
+    }
+    .title { font: 500 16px/1.1 var(--pixel); letter-spacing: 0.08em; text-transform: uppercase; text-shadow: 0 1px 6px rgba(0, 0, 0, 0.45); }
+    .what { font: 600 9px/1.2 var(--pixel); letter-spacing: 0.24em; text-transform: uppercase; color: var(--fg2); }
+    .line { display: flex; align-items: center; gap: 10px; margin-top: 2px; }
+    .pips { display: flex; gap: 4px; }
+    .pip { width: 14px; height: 3px; background: rgba(255, 255, 255, 0.18); transition: background-color 300ms ease, box-shadow 300ms ease; }
+    .pip.on { background: var(--y); box-shadow: 0 0 6px color-mix(in srgb, var(--y) 70%, transparent); }
+    .count { font: 500 13px/1 var(--pixel); font-variant-numeric: tabular-nums; }
+    .hint { display: flex; align-items: center; gap: 7px; margin-top: 3px; font: 600 9px/1 var(--pixel); letter-spacing: 0.22em; text-transform: uppercase; color: rgba(243, 245, 247, 0.8); }
+    .hint.mine { color: var(--y); }
+    .key { display: inline-grid; place-items: center; min-width: 16px; height: 16px; border: 1px solid currentColor; border-radius: 3px; font: 600 10px var(--pixel); letter-spacing: 0; }
+    @keyframes arrive { from { opacity: 0; transform: translateX(-8px); } }`,
+};
+
+/**
  * The scoreboard as two sides, the Rebels' on the left and the Empire's on the right: the
  * platform's one table (sorted by side, then score) laid out as a grid, each row put on its side
  * by its name's colour (the side's), numbered on its own side, under its own headings.

@@ -28,6 +28,8 @@ import { shared } from './shared';
  */
 /** The first-person view (the platform's kit): a hero's own screen swings its arm with the saber at once (`heroes/client`). */
 const fp = new firstPerson.FirstPersonKit();
+// (Development: tests and screenshots reach it, to freeze a swing with `timeScale`.)
+if (import.meta.env.DEV) (globalThis as { __fp?: unknown }).__fp = fp;
 
 export default defineClient(shared, {
   kits: [items.throwables(), items.guns(), ...sounds.standard(), fp, ...heroKits({ firstPerson: fp }) /* the figures (heroes' sabers and powers too), the heroes' effects and HUD: heroes/client */, blasterHud(), hud.throwables(), hits(), vitals(), bolts(), effects.throwables(), detonatorBlast(), ambience(), weather(), intro()],

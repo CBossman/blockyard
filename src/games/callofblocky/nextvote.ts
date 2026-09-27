@@ -10,7 +10,7 @@ import { MODES, type MatchPlan, type ModeId } from './modes';
  * out; closed, M brings it back). The most votes wins each; a tie, or no votes at all, goes to
  * what was coming next anyway (the rotation's next in a public room, the same again in a room of
  * one's own), else to the first of those tied. Only people vote: never bots. A match skipped
- * (skipvote.ts) moves straight on to the next without one.
+ * (the `skipVote` kit) moves straight on to the next without one.
  */
 
 /** Seconds of final scores before the vote opens, and how long it's open. */

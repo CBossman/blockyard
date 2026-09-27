@@ -389,7 +389,7 @@ export const MATCHBAR: WidgetDefinition = {
 };
 
 /**
- * The vote to skip (skipvote.ts), up on everyone's screen while any votes are in: a panel at the
+ * The vote to skip (the platform's `skipVote` kit, server.ts), up on everyone's screen while any votes are in: a panel at the
  * left with the match on now, a card for each vote it takes (lit for those in) and the count.
  * Everyone's copy says whether they've voted themselves (`voted`, a player's own field), and how
  * to change that.

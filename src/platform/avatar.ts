@@ -61,6 +61,33 @@ export const AVATAR_COLORS = {
 /** The default avatar: the platform's plain person (`PLAIN_LOOK`: a teal tee, jeans, dark hair). */
 export const DEFAULT_AVATAR: Avatar = { build: 1, curvy: 0, tone: 2, hair: 0, hairColor: 1, facialHair: 0, face: 0, eyes: 0, top: 0, topColor: 0, accent: 10, bottom: 1, bottomColor: 14, shoes: 0, shoeColor: 0 };
 
+/**
+ * Ready-made people to pick instead of building one (the locker's first row), each a whole outfit
+ * that goes together; a guest's first look is one of them. Indices are `AVATAR_OPTIONS`'.
+ */
+export const AVATAR_PRESETS: { name: string; avatar: Avatar }[] = [
+  { name: 'Classic', avatar: DEFAULT_AVATAR },
+  // An afro, a red hoodie with white strings, charcoal joggers, white sneakers.
+  { name: 'Hoodie', avatar: { build: 0, curvy: 0, tone: 5, hair: 10, hairColor: 0, facialHair: 0, face: 0, eyes: 0, top: 2, topColor: 1, accent: 10, bottom: 4, bottomColor: 12, shoes: 0, shoeColor: 1 } },
+  // A blond ponytail and freckles, a yellow tee, denim shorts, red sneakers.
+  { name: 'Skater', avatar: { build: 0, curvy: 1, tone: 1, hair: 8, hairColor: 5, facialHair: 0, face: 3, eyes: 3, top: 0, topColor: 3, accent: 13, bottom: 2, bottomColor: 14, shoes: 0, shoeColor: 3 } },
+  // A crew cut and goatee, a navy suit, black shoes.
+  { name: 'Sharp', avatar: { build: 1, curvy: 0, tone: 6, hair: 1, hairColor: 0, facialHair: 3, face: 0, eyes: 0, top: 4, topColor: 7, accent: 10, bottom: 0, bottomColor: 7, shoes: 1, shoeColor: 0 } },
+  // Swept brown hair and stubble, a tan jacket over green, forest trousers, brown boots.
+  { name: 'Explorer', avatar: { build: 1, curvy: 0, tone: 3, hair: 4, hairColor: 2, facialHair: 1, face: 0, eyes: 1, top: 5, topColor: 15, accent: 5, bottom: 0, bottomColor: 5, shoes: 2, shoeColor: 2 } },
+  // A pink mohawk and shades, a black tank top, charcoal jeans, black boots.
+  { name: 'Punk', avatar: { build: 0, curvy: 0, tone: 0, hair: 11, hairColor: 8, facialHair: 0, face: 4, eyes: 2, top: 9, topColor: 13, accent: 1, bottom: 1, bottomColor: 12, shoes: 2, shoeColor: 0 } },
+  // A dark bob and specs, a purple sweater, a charcoal skirt, black flats.
+  { name: 'Scholar', avatar: { build: 0, curvy: 1, tone: 4, hair: 7, hairColor: 1, facialHair: 0, face: 5, eyes: 4, top: 3, topColor: 8, accent: 10, bottom: 3, bottomColor: 12, shoes: 3, shoeColor: 0 } },
+  // Grey hair and a beard, an orange aloha shirt, tan shorts, white sneakers.
+  { name: 'Vacation', avatar: { build: 2, curvy: 0, tone: 2, hair: 0, hairColor: 7, facialHair: 4, face: 0, eyes: 3, top: 8, topColor: 2, accent: 0, bottom: 2, bottomColor: 15, shoes: 0, shoeColor: 1 } },
+];
+
+/** One of the ready-made people, at random (a copy, theirs to change). */
+export function presetAvatar(rnd: () => number = Math.random): Avatar {
+  return { ...AVATAR_PRESETS[Math.floor(rnd() * AVATAR_PRESETS.length)].avatar };
+}
+
 const DIGITS = '0123456789abcdefghijklmnopqrstuvwxyz';
 
 /** An avatar as its code: `b` and a digit per choice. */

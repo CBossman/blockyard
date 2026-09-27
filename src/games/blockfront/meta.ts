@@ -21,16 +21,20 @@ export default defineMeta({
     ['G', 'thermal detonator'],
     ['Q E F', 'hero powers'],
     ['H', 'class · hero · where to spawn'],
+    ['V', 'first person · third'],
+    ['N', 'vote to skip this mode and map'],
     ['Tab', 'scores'],
   ],
   // Controllers: the platform's shooter layout (RT fire, LT aim, X vent, B crouch, L3 sprint), the
-  // detonator on RB, the heroes' powers on the D-pad, and the spawn menu on its down.
+  // detonator on RB, the heroes' powers on the D-pad, the spawn menu on its down, and Y votes to
+  // skip (LB alone switches weapons).
   gamepad: {
     RB: ['KeyG', 'detonator'],
     Left: ['KeyQ', 'power 1'],
     Up: ['KeyE', 'power 2'],
     Right: ['KeyF', 'power 3'],
     Down: ['KeyH', 'spawn menu'],
+    Y: ['KeyN', 'vote to skip'],
   },
   // Awarded by the server (`player.achieve`, server.ts).
   achievements: {

@@ -35,10 +35,10 @@ const range: GameDefinition = defineGame({
 const idle = (viewSeq: number): PlayerInput => ({ active: true, down: [], pressed: [], buttons: 0, clicked: 0, mouseX: 0, mouseY: 0, wheel: 0, yaw: 0, pitch: 0, viewSeq, acts: { gun: [] } });
 
 /**
- * Peeking (Call of Blocky's Q and E, the platform's `body.lean`): a tap leans and it stays, the
- * same key stands up, the other swaps sides. The eyes go out sideways, and so does the head's
+ * Peeking (Call of Blocky's Q and E, the platform's `body.lean`): held, a key leans that way, and
+ * let go he stands up; both held, the one pressed last wins. The eyes go out sideways, and so does the head's
  * hitbox, so a shot at a leaned-out head is a headshot and one where it was upright meets
- * nothing. A wall on that side cuts the lean short; a sprint stands you up.
+ * nothing. A wall on that side cuts the lean short; a sprint stands you up while it lasts.
  */
 export default function peekTest() {
   // Ann holds the rifle 8 blocks down the field; Bob faces her, so his right is -x.
@@ -66,25 +66,27 @@ export default function peekTest() {
       step();
     }
   };
-  /** Bob taps a key, then lets go and waits. */
-  const tap = (key: string) => {
-    send([key], [key]);
-    step();
-    hold([]);
-  };
   const near = (a: number, b: number, eps = 0.02) => Math.abs(a - b) < eps;
+  /** Bob presses a key and holds it down (with any others already held) for a while. */
+  const press = (key: string, held: string[] = []) => {
+    send([...held, key], [key]);
+    step();
+    hold([...held, key]);
+  };
 
-  // A tap leans and it stays leaned, with nothing held.
-  tap('KeyE');
-  check(near(B.lean, PEEK.reach) && near(B.eye.x, 0.5 - PEEK.reach) && near(B.eye.z, 0.5), `E leans right (-x, facing +z) and stays: lean ${B.lean.toFixed(3)}, eye ${B.eye.x.toFixed(3)}, ${B.eye.z.toFixed(3)}`);
-  tap('KeyE');
-  check(B.lean === 0 && near(B.eye.x, 0.5, 1e-6), `E again stands up straight: lean ${B.lean}`);
-  tap('KeyQ');
-  check(near(B.lean, -PEEK.reach) && near(B.eye.x, 0.5 + PEEK.reach), `Q leans left: lean ${B.lean.toFixed(3)}, eye x ${B.eye.x.toFixed(3)}`);
-  tap('KeyE');
-  check(near(B.lean, PEEK.reach), `E while leaning left leans right: ${B.lean.toFixed(3)}`);
-  tap('KeyE');
-  check(B.lean === 0, `and E again stands up (${B.lean})`);
+  // Held, a key leans that way; let go, he stands up.
+  press('KeyE');
+  check(near(B.lean, PEEK.reach) && near(B.eye.x, 0.5 - PEEK.reach) && near(B.eye.z, 0.5), `E held leans right (-x, facing +z): lean ${B.lean.toFixed(3)}, eye ${B.eye.x.toFixed(3)}, ${B.eye.z.toFixed(3)}`);
+  hold([]);
+  check(B.lean === 0 && near(B.eye.x, 0.5, 1e-6), `E let go stands up straight: lean ${B.lean}`);
+  press('KeyQ');
+  check(near(B.lean, -PEEK.reach) && near(B.eye.x, 0.5 + PEEK.reach), `Q held leans left: lean ${B.lean.toFixed(3)}, eye x ${B.eye.x.toFixed(3)}`);
+  press('KeyE', ['KeyQ']);
+  check(near(B.lean, PEEK.reach), `E pressed with Q still held leans right (the last pressed): ${B.lean.toFixed(3)}`);
+  hold(['KeyQ']);
+  check(near(B.lean, -PEEK.reach), `E let go, Q still held: left again (${B.lean.toFixed(3)})`);
+  hold([]);
+  check(B.lean === 0, `both let go: upright (${B.lean})`);
 
   // Ann's shots, at a point `dy` up and `dx` along x from Bob's feet.
   let serial = 1;
@@ -92,39 +94,41 @@ export default function peekTest() {
   sim.ctx.events.on('playerDamage', (e) => {
     if (e.player === B.api) hurt.push({ head: !!e.headshot });
   });
-  const fire = (dx: number, dy: number) => {
+  const fire = (dx: number, dy: number, held: string[] = []) => {
     const e = A.eye;
     const [tx, ty, tz] = [B.position.x + dx, B.position.y + dy, B.position.z];
     const yaw = Math.atan2(-(tx - e.x), -(tz - e.z));
     const pitch = Math.atan2(ty - e.y, Math.hypot(tx - e.x, tz - e.z));
     host.command(ann.id, { t: 'input', input: { ...idle(A.viewSeq), yaw, pitch, acts: { gun: [[serial++, yaw, pitch, 0]] }, seen: sim.time } });
-    send([]);
+    send(held);
     step();
     // Past the hurt cooldown and the fire rate before the next.
-    hold([], 4 / 30);
+    hold(held, 4 / 30);
     const h = hurt.splice(0);
     return h.length ? (h[0].head ? 'head' : 'body') : 'miss';
   };
   // Above the shoulders, 0.4 out to his right: nothing there upright, his head leaning out.
   check(fire(-0.4, 1.75) === 'miss', 'upright, a shot beside his head misses');
-  tap('KeyE');
-  const out = fire(-0.4, 1.75);
+  press('KeyE');
+  const out = fire(-0.4, 1.75, ['KeyE']);
   check(out === 'head', `leaning out, the same shot is a headshot (${out})`);
-  const where = fire(0.45, 1.75);
+  const where = fire(0.45, 1.75, ['KeyE']);
   check(where === 'miss', `leaning out, where his head was upright is empty (${where})`);
 
   // A wall just to his right: the lean stops short of it (the wall's face is 0.5 from his middle).
-  tap('KeyE');
+  hold([]);
   for (let y = 65; y <= 67; y++) sim.ctx.world.setBlock(-1, y, 0, 'stone');
-  tap('KeyE');
+  press('KeyE');
   check(B.lean > 0 && B.lean <= 0.5 - PEEK.gap + 1e-6, `a wall on the right cuts the lean short: ${B.lean.toFixed(3)}`);
-  tap('KeyQ');
+  hold([]);
+  press('KeyQ');
   check(near(B.lean, -PEEK.reach), `the other way is clear: ${B.lean.toFixed(3)}`);
 
-  // Sprinting stands him up, and he stays up after.
-  hold(['KeyW', 'ControlLeft'], 0.4);
+  // Sprinting stands him up, Q still held; the sprint over, he leans again.
+  hold(['KeyQ', 'KeyW', 'ControlLeft'], 0.4);
   check(B.lean === 0, `sprinting doesn't lean (${B.lean})`);
+  hold(['KeyQ']);
+  check(near(B.lean, -PEEK.reach), `after the sprint, Q still held leans again (${B.lean.toFixed(3)})`);
   hold([]);
-  check(B.lean === 0, `after the sprint he's still upright (${B.lean})`);
   console.log(`  lean ${PEEK.reach} blocks · headshot on a leaned-out head · wall-clamped to ${(0.5 - PEEK.gap).toFixed(2)}`);
 }

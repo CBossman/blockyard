@@ -17,7 +17,7 @@ export default defineMeta({
     ['R', 'reload'],
     ['Shift', 'sprint'],
     ['C', 'crouch · slide'],
-    ['Q E', 'lean left · right (again: stand up)'],
+    ['Q E', 'hold: lean left · right'],
     ['1 2 3', 'weapons'],
     ['G', 'lethal (hold to cook)'],
     ['5', 'call in a killstreak'],

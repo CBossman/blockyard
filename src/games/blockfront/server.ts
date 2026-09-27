@@ -1,5 +1,5 @@
 import { defineServer, type Bot, type GameContext, type IconRef, type MenuHandle, type MenuOptions, type Player, type Vec3 } from '@platform';
-import { guns, melee, navGrid, throwables, type NavGrid } from '@platform/kits';
+import { guns, melee, navGrid, skipVote, throwables, type NavGrid, type SkipVote } from '@platform/kits';
 import { makeBots, type Bots } from './bots';
 import { CLASSES, CLASS_IDS, type ClassId } from './classes';
 import { Conquest, type PostNews } from './conquest';
@@ -7,7 +7,7 @@ import { HEROES, HERO_IDS, type HeroId } from './heroes/defs';
 import { HERO_GUNS, isHeroGun } from './heroes/guns';
 import { FORCE } from './heroes/powers';
 import { DEFLECTED, heroItems, setupHeroes, type Heroes } from './heroes/rules';
-import { BOARD_COLUMNS, CONQUEST, STATUS } from './hud';
+import { BOARD_COLUMNS, CONQUEST, SKIPVOTE, STATUS } from './hud';
 import { MAPS, mapById, type SpawnPoint } from './map';
 import { fighterOf, hostile, match, teamFighters, type Fighter, type Post } from './match';
 import { MODES, ROTATION, type MatchPlan, type ModeId } from './modes';
@@ -43,6 +43,11 @@ type AllTime = { games: number; wins: number; kills: number; deaths: number; her
 const MAX_SIDE = 16;
 const RESPAWN = 5;
 const INTERMISSION = 15;
+/** Between a match skipped (a vote) and the next: a moment for the banner. */
+const SKIP_PAUSE = 4;
+/** The vote to skip's key (V is the camera's), and how long into a match it opens: the fly-over, then a moment. */
+const SKIP_KEY = 'KeyN';
+const SKIP_OPENS = 5;
 /** Heroes a side may have in play at once. */
 const HEROES_A_SIDE = 2;
 /** Battle points. */
@@ -67,6 +72,11 @@ let fighters = match.fighters;
 let running = false;
 let startedAt = 0;
 let overAt = 0;
+/** How long this intermission lasts (a skip's is short). */
+let intermission = INTERMISSION;
+/** The vote to skip the match that's on (the platform's `skipVote` kit), and whether the match now over was skipped. */
+let vote: SkipVote;
+let skipped = false;
 let lastSecond = -1;
 let boardDirty = true;
 let boardAt = 0;
@@ -388,6 +398,17 @@ function spawnMenu(game: GameContext, f: Fighter) {
             if (!p.alive && wait() === 0 && match.phase === 'playing') spawn(game, f);
           },
         },
+        // The vote to skip (N out of the menu): here too, since the dead spend their wait in it.
+        {
+          icon: { block: MAP_ICONS[match.map.id] ?? 'sandstone' },
+          label: vote.voted(p) ? 'Take back your vote to skip' : 'Vote to skip this match',
+          note: `${match.mode.name} on ${match.map.name} · N`,
+          onSelect: () => {
+            const no = vote.toggle(p);
+            if (no) p.hud.toast(no);
+            refresh();
+          },
+        },
       ],
     },
   ];
@@ -517,6 +538,8 @@ function endMatch(game: GameContext, winner: Team, cheat = false) {
   if (match.phase === 'over') return;
   match.phase = 'over';
   overAt = game.clock.now;
+  intermission = INTERMISSION;
+  vote.reset();
   const alltime = new Map<string, string>(); // cinema
   for (const f of fighters.values()) {
     const p = f.player;
@@ -545,6 +568,33 @@ function endMatch(game: GameContext, winner: Team, cheat = false) {
   scoreboard(game);
   // cinema: the end screen (the result, the top three, their own match, what's next).
   showEnd(winner, { mode: MODES[plan.mode].name, map: mapById(plan.map)?.name ?? plan.map }, INTERMISSION, alltime);
+}
+
+/**
+ * The vote to skip passed: the match is over without being played out. Nobody wins, nothing goes
+ * on anyone's all-time numbers, and no achievements. Everyone stops where they are, and a few
+ * seconds later the next match is on: the rotation's next in a public room, and in one's own the
+ * rotation's after this one (the same again would be no skip).
+ */
+function skipMatch(game: GameContext) {
+  if (match.phase === 'over') return;
+  const was = planName({ mode: match.mode.id, map: match.map.id });
+  match.phase = 'over';
+  skipped = true;
+  overAt = game.clock.now;
+  intermission = SKIP_PAUSE;
+  for (const f of fighters.values()) {
+    f.player.freeze(true, { weapons: true });
+    f.menu?.close();
+    f.player.hud.progress(null);
+  }
+  if (game.room === 'public') plan = ROTATION[++turn % ROTATION.length];
+  else {
+    const at = ROTATION.findIndex((m) => m.mode === match.mode.id && m.map === match.map.id);
+    plan = ROTATION[(at + 1) % ROTATION.length];
+  }
+  game.hud.banner('SKIPPED', `The vote's in · next up: ${planName(plan)}`, { color: COLORS.yellow, duration: SKIP_PAUSE - 0.3 });
+  game.hud.feed([`The vote passed: ${was} skipped`]);
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -593,7 +643,7 @@ function scoreboard(game: GameContext, show = false) {
     title: `${match.map.name.toUpperCase()} · ${match.mode.name.toUpperCase()}`,
     columns: [...BOARD_COLUMNS],
     rows,
-    footer: match.phase === 'over' ? `${sides} · next: ${planName(plan)} in ${Math.max(0, Math.ceil(INTERMISSION - (game.clock.now - overAt)))}` : `${sides} · ${fmt(left)} left`,
+    footer: match.phase === 'over' ? `${sides} · next: ${planName(plan)} in ${Math.max(0, Math.ceil(intermission - (game.clock.now - overAt)))}` : `${sides} · ${fmt(left)} left`,
     show,
   });
 }
@@ -672,7 +722,7 @@ const MODE_ICONS: Record<ModeId, IconRef> = { conquest: { item: 'imp_rifle', vie
 
 function matchMenu(game: GameContext, p: Player) {
   if (game.room === 'public') {
-    p.hud.toast(`Public games go round the modes · next: ${planName(plan)}`);
+    p.hud.toast(`Public games go round the modes · next: ${planName(plan)} · N votes to skip this one`);
     return;
   }
   if (settings?.open) return;
@@ -741,6 +791,15 @@ export default defineServer(shared, {
     game.hud.define('conquest', CONQUEST);
     setupCinema(game); // cinema: the end screen
     game.hud.define('status', STATUS);
+    game.hud.define('skipvote', SKIPVOTE);
+    vote = skipVote(game, {
+      people: () => [...fighters.values()].map((f) => f.player),
+      playing: () => match.phase === 'playing',
+      match: () => ({ mode: match.mode.name, map: match.map.name }),
+      color: (p) => teamColor(fighterOf(p)?.team ?? null),
+      skip: () => skipMatch(game),
+      opens: INTRO_HOLD + SKIP_OPENS,
+    });
     navs = new Map(MAPS.map((m) => [m.id, navGrid(game, { bounds: m.bounds })]));
     bots = makeBots(game, () => navs.get(match.map.id) ?? null, hotspots, conquest, heroes.botHooks);
 
@@ -757,6 +816,8 @@ export default defineServer(shared, {
       if (!player.bot) {
         balanceBots(game);
         game.hud.feed([{ text: player.name, color: TEAMS[f.team].color }, ` joined the ${TEAMS[f.team].name}`]);
+        // One more to count in a vote to skip.
+        vote.joined(player);
       }
     });
     game.events.on('playerReady', ({ player }) => {
@@ -778,6 +839,8 @@ export default defineServer(shared, {
       bots.forget(player);
       boardDirty = true;
       if (!player.bot) balanceBots(game);
+      // Their vote goes, and the rest are counted again (last: a vote to skip may end the match).
+      vote.left(player);
     });
     game.events.on('playerDeath', ({ player, source, weapon, headshot }) => onDeath(game, player, source, weapon, !!headshot));
     game.events.on('shot', ({ player }) => {
@@ -861,6 +924,11 @@ export default defineServer(shared, {
         return planName(plan);
       },
     });
+    // The vote to skip, typed (N does the same): everyone's, not a cheat.
+    game.commands.register('skip', {
+      help: 'Vote to skip this match (its mode and map); again to take your vote back',
+      run: (_a, _g, p) => vote.toggle(p) ?? undefined,
+    });
     game.commands.register('win', { help: 'End the match now', cheat: true, run: (_a, g, p) => endMatch(g, fighterOf(p)?.team ?? 0, true) });
   },
 
@@ -878,6 +946,10 @@ export default defineServer(shared, {
     for (const p of match.map.posts) game.hud.marker(`post_${p.id}`, null);
     startedAt = game.clock.now;
     lastSecond = -1;
+    skipped = false;
+    intermission = INTERMISSION;
+    // A new match: no votes to skip it yet (they open once the fly-over's done and a moment's gone).
+    vote.reset();
     boardDirty = true;
     // (A restart puts the match's clock back to 0: times kept from the last match mean nothing now.)
     boardAt = 0;
@@ -907,12 +979,19 @@ export default defineServer(shared, {
     updateSkies(game, dt); // skies
     const intro = introOn(game); // cinema
     bots.update(dt, match.phase !== 'playing' || intro);
+    // The vote to skip (N), people's only, the dead's too: a vote that carries it ends the match here.
+    for (const p of game.players) {
+      if (p.bot || !p.input.pressed(SKIP_KEY, { dead: true })) continue;
+      const no = vote.toggle(p);
+      if (no) p.hud.toast(no);
+    }
     if (match.phase === 'over') {
-      if (now - overAt > INTERMISSION) game.restart();
-      else if (Math.floor(now) !== lastSecond) {
+      if (now - overAt > intermission) game.restart();
+      // (A match skipped has no end screen: its banner says what's next.)
+      else if (!skipped && Math.floor(now) !== lastSecond) {
         lastSecond = Math.floor(now);
         scoreboard(game);
-        tickEnd(INTERMISSION - (now - overAt)); // cinema
+        tickEnd(intermission - (now - overAt)); // cinema
       }
       return;
     }

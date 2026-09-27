@@ -117,6 +117,11 @@ export class FirstPersonKit implements ClientKit {
   private motion: Motion = { pivot: new Vec3(), rot: new Quat(), offset: new Vec3(), wrist: new Quat() };
   private fadeFrom = { pos: new Vec3(), rot: new Quat(), wrist: new Quat() };
   private fadeT = 1;
+  /** A pose held (`pose`: a guard up), how far it's eased in (0..1), whether it's wanted, and how fast it eases. */
+  private stance: Anim | null = null;
+  private stanceW = 0;
+  private stanceOn = false;
+  private stanceRate = 8;
 
   /** Minecraft's `mainHandHeight`: 1 = raised, 0 = fully dipped. */
   private height = 0;
@@ -273,6 +278,26 @@ export class FirstPersonKit implements ClientKit {
       return;
     }
     this.start(a, opts.power ?? 1, opts.speed ?? 1);
+  }
+
+  /**
+   * Hold the hand in a pose till told otherwise (null lets it go): a guard up, a brace. The pose is
+   * an animation's last frame (a single key will do); it eases in and out over `ease` seconds,
+   * and anything played meanwhile plays over it, cross-faded.
+   */
+  pose(anim: string | ViewAnimation | null, opts: { ease?: number } = {}) {
+    this.stanceRate = 1 / Math.max(0.01, opts.ease ?? 0.12);
+    if (!anim) {
+      this.stanceOn = false;
+      return;
+    }
+    const a = typeof anim === 'string' ? this.animation(anim) : this.compileOnce(anim);
+    if (!a) {
+      console.warn(`viewModel.pose: unknown animation "${anim as string}"`);
+      return;
+    }
+    this.stance = a;
+    this.stanceOn = true;
   }
 
   /** Jolt the arm (recoil, being hit). */
@@ -799,6 +824,15 @@ export class FirstPersonKit implements ClientKit {
     m.wrist.identity();
     m.offset.set(0, 0, 0);
     m.pivot.copy(r.grip);
+    // A pose held (`pose`), eased in and out; an animation playing takes over from it.
+    this.stanceW = MathUtils.clamp(this.stanceW + (this.stanceOn ? dt : -dt) * this.stanceRate, 0, 1);
+    if (this.stance && this.stanceW > 0) {
+      const w = this.stanceW * this.stanceW * (3 - 2 * this.stanceW);
+      this.stance.sample(1, m, { side: l, power: 1, grip: r.grip, drop: this.drop, axis: r.axis });
+      m.rot.copy(_qa.identity().slerp(m.rot, w));
+      m.wrist.copy(_qb.identity().slerp(m.wrist, w));
+      m.offset.multiplyScalar(w);
+    }
     if (this.playing) {
       const p = this.playing;
       p.t += (dt * p.speed) / p.anim.duration;
@@ -837,7 +871,7 @@ export class FirstPersonKit implements ClientKit {
       }
     }
     // During an animation, forearms turn toward where their elbows were at rest (3D models).
-    if (this.hold.model && (this.playing || this.fadeT < 1) && this.held.kind !== 'empty' && this.styleName !== 'gun') this.reach(r);
+    if (this.hold.model && (this.playing || this.fadeT < 1 || this.stanceW > 0) && this.held.kind !== 'empty' && this.styleName !== 'gun') this.reach(r);
     if (this.styleName === 'gun' && this.gunPts) this.gunAfter(dt, gun);
     // A humanoid's own arms, last: a bent arm reaches from where the hand now is to its shoulder.
     if (this.humanoid) this.placeHumanoid(r, m);

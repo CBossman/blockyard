@@ -3,7 +3,7 @@ import { AccountCorner } from './account';
 import { Profile, tally, type Earned } from './profile';
 import { Locker, setGameNames, type Look } from './locker';
 import { characterView } from './characterview';
-import { avatarCode, avatarLook, parseAvatar, randomAvatar } from '../avatar';
+import { avatarCode, avatarLook, parseAvatar, presetAvatar } from '../avatar';
 import { cosmeticCatalog, type Cosmetic } from '../cosmetics';
 import type { CosmeticDef } from '../api/types';
 import { hintChips, keyHints, type GameControls } from './controls';
@@ -503,7 +503,7 @@ export function copyInvite(said: (text: string) => void) {
   if (!done) said(link.href);
 }
 
-/** A guest's look, as this browser keeps it (their first: a random avatar, kept). */
+/** A guest's look, as this browser keeps it (their first: one of the ready-made people, kept). */
 function localLook(): Look {
   try {
     const kept = JSON.parse(localStorage.getItem('voxel.look') ?? 'null') as { avatar?: string } | null;
@@ -512,7 +512,7 @@ function localLook(): Look {
   } catch {
     // (A fresh one.)
   }
-  const look = { avatar: randomAvatar(), wear: [] };
+  const look = { avatar: presetAvatar(), wear: [] };
   saveLocalLook(look);
   return look;
 }
