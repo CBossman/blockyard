@@ -16,7 +16,8 @@ import { flightAt, restAt, type GolfState } from './state';
  *    (past full is an overswing: a little more distance, and less room for error).
  * 2. Push it up through where you started: the downswing, and the strike as it gets there. A
  *    straight stroke hits it straight; drifting right pushes and slices it, left pulls and hooks
- *    it; a lazy, slow stroke loses distance. Let go before the strike to back off.
+ *    it. Commit to it: a slow downswing loses distance and blocks it right (a putt only minds a
+ *    real dawdle). Let go before the strike to back off.
  *
  * (Space instead runs the classic three-click meter: start, power, then the strike in the notch.)
  *
@@ -73,6 +74,8 @@ export function swingKit(st: GolfState): ClientKit {
   /** The mouse's stroke: where it's got to (backswing down, across right, in fulls), its deepest point, the view held still meanwhile. */
   const sw = { x: 0, y: 0, peak: 0, peakX: 0, peakAt: 0, yaw: 0, pitch: 0, trail: [] as [number, number][] };
   let wasDown = false;
+  /** The last mouse swing came down too slowly (its strike says so). */
+  let tooSlow = false;
   let pathCanvas: HTMLCanvasElement;
   let el: HTMLElement;
   let unstyle: (() => void) | null = null;
@@ -138,9 +141,10 @@ export function swingKit(st: GolfState): ClientKit {
     client.send(MSG.swing, s);
     client.audio.play(club.putter ? 'golf_putt' : club.wood ? 'golf_drive' : 'golf_iron', { volume: 0.9 });
     const a = Math.abs(accuracy) * lieEffect(addr.lie, club).shaky / club.forgive;
-    quality = a < 0.15 ? 'PURE' : a < 0.55 ? 'GOOD' : a < 1 ? (accuracy < 0 ? 'PULLED' : 'PUSHED') : a < 1.6 ? (accuracy < 0 ? 'HOOKED' : 'SLICED') : 'MISHIT';
+    const slow = mode === 'mouse' && tooSlow;
+    quality = slow ? 'TOO SLOW' : a < 0.15 ? 'PURE' : a < 0.55 ? 'GOOD' : a < 1 ? (accuracy < 0 ? 'PULLED' : 'PUSHED') : a < 1.6 ? (accuracy < 0 ? 'HOOKED' : 'SLICED') : 'MISHIT';
     q('.gs-quality').textContent = quality;
-    q('.gs-quality').className = `gs-quality on ${a < 0.15 ? 'pure' : a < 0.55 ? 'good' : 'bad'}`;
+    q('.gs-quality').className = `gs-quality on ${slow ? 'bad' : a < 0.15 ? 'pure' : a < 0.55 ? 'good' : 'bad'}`;
     phase = 'sent';
     sentAt = performance.now();
   };
@@ -155,16 +159,27 @@ export function swingKit(st: GolfState): ClientKit {
   /** The mouse's stroke comes back through the ball: its power from the backswing and the pace down, its line from the path. */
   const impact = (client: Client, club: Club, now: number) => {
     const down = Math.max(0.03, (now - sw.peakAt) / 1000);
-    // A brisk stroke keeps it all; a slow push through loses some (more time allowed for a putt).
-    const allowed = club.putter ? 0.55 + 0.6 * sw.peak : 0.2 + 0.32 * sw.peak;
-    const pace = clamp(allowed / down, 0.55, 1);
-    power = clamp(sw.peak * pace, 0.01, HIGH);
+    let slow = 0;
+    if (club.putter) {
+      // A putt is a smooth stroke: only a real dawdle loses length.
+      const pace = clamp((0.55 + 0.6 * sw.peak) / down, 0.55, 1);
+      power = clamp(sw.peak * pace, 0.01, HIGH);
+    } else {
+      // A committed downswing (a full one in about 0.28 s) keeps it all. Slower, the club arrives
+      // with less speed (less distance, down to a third) and decelerating, the face left open
+      // (blocked right: pushed, then sliced).
+      const brisk = 0.12 + 0.16 * sw.peak;
+      slow = clamp((down - brisk) / 0.6, 0, 1);
+      power = clamp(sw.peak * (1 - 0.65 * slow), 0.01, HIGH);
+    }
     // The path down: straight up is square; off to the right pushes and slices, left pulls and hooks.
     const across = sw.x - sw.peakX;
     let accuracy = Math.atan2(across, Math.max(0.08, sw.peak)) / PATH_WINDOW;
+    accuracy += 1.1 * slow;
     // A snatch (a stroke too quick for its length) pulls it a touch.
     if (down < 0.05 + 0.05 * sw.peak) accuracy -= 0.25;
     if (power > 1) accuracy /= Math.max(0.45, 1 - (power - 1) * 5);
+    tooSlow = slow > 0.2;
     strikeNow(client, clamp(accuracy, -2, 2));
   };
 

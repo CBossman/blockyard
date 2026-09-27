@@ -23,6 +23,9 @@ export const MSG = {
   swing: 'golf.swing',
 } as const;
 
+/** A hole's flagstick, an item each screen draws (and takes out while its golfer is putting there). */
+export const flagItem = (hole: number) => `golf_flag_${hole + 1}`;
+
 export interface BallMsg {
   id: string;
   name: string;

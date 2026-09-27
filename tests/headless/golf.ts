@@ -1,6 +1,7 @@
 import type { Headless } from '../../src/platform/host/headless';
 import { CLUBS } from '../../src/games/golf/clubs';
 import { course } from '../../src/games/golf/course';
+import { simulate } from '../../src/games/golf/physics';
 import { MSG, type AddressMsg, type RoundMsg, type ShotMsg } from '../../src/games/golf/protocol';
 import { S, yards, yawOf } from '../../src/games/golf/scale';
 import { Surf } from '../../src/games/golf/course/types';
@@ -41,7 +42,12 @@ export default function golf() {
   h.step(1 / 30, { pressed: ['KeyE'], down: ['KeyE'] });
   h.run(0.3, { dt: 1 / 30 });
   check(round().mode === 'walk' && !me.vehicle && round().cart, `out of the cart, parked: ${round().mode}`);
-  console.log(`  the cart: ${moved.toFixed(0)} blocks in 3 s, turned, braked, parked`);
+  // On foot again (driving held the body still).
+  const out = { ...me.position };
+  h.run(1, { dt: 1 / 30, pilot: () => ({ down: ['KeyW'] }) });
+  const walked = Math.hypot(me.position.x - out.x, me.position.z - out.z);
+  check(!me.frozen && walked > 2.5, `walks off from the cart: ${walked.toFixed(2)} blocks, frozen ${me.frozen}`);
+  console.log(`  the cart: ${moved.toFixed(0)} blocks in 3 s, turned, braked, parked, walked away`);
 
   // The caddie's lift to the ball (F), from anywhere.
   const press = (code: string) => h.step(1 / 30, { pressed: [code], down: [code] });
@@ -142,6 +148,23 @@ function courseSane() {
     }
   check(near > 50, `the holes keep apart (closest ${near.toFixed(0)} blocks)`);
   console.log(`  the course: 18 pins on their greens, tees and carts clear, holes at least ${near.toFixed(0)} blocks apart`);
+
+  // The flagstick: a firm putt straight at it (on a flat green) rattles off it when it's in, and
+  // never meets it when it's out.
+  const green = {
+    ground: () => ({ y: 0, surf: Surf.Green }),
+    slope: (_x: number, _z: number, o = { x: 0, z: 0 }) => ((o.x = 0), (o.z = 0), o),
+    blockTop: () => 0,
+    treesNear: () => [],
+    inBounds: () => true,
+  };
+  const pin = { x: 0, y: 0, z: 0 };
+  const putt = (flagstick: boolean) => simulate(green, { x: 0, y: 0, z: 2.5, speed: 2.4, yaw: 0, angle: 0, spin: 0, tilt: 0, roll: 1, wind: { x: 0, z: 0 }, pin, flagstick, seed: 1 });
+  const hit = (r: ReturnType<typeof simulate>) => r.events.some((e) => e.kind === 'pin');
+  const inCup = putt(true);
+  const outCup = putt(false);
+  check(hit(inCup) && !hit(outCup), `the pin in, it's hit (${inCup.events.map((e) => e.kind)}); out, it isn't (${outCup.events.map((e) => e.kind)})`);
+  console.log(`  a firm putt at the pin: in, ${inCup.outcome} off the stick; out, ${outCup.outcome}`);
 }
 
 /** Two golfers at once: each their own ball, round and card. */

@@ -20,7 +20,7 @@ const golf = new GolfState();
  * panel, reading the greens, and the sounds of the course.
  */
 export default defineClient(shared, {
-  kits: [...sounds.standard(), ...firstPerson.standard(), figures.humanoid(), golf.kit(), terrainKit(), ballsKit(golf), swingKit(golf), panelKit(golf), greenKit(golf), flyoverKit(golf), ambienceKit()],
+  kits: [...sounds.standard(), ...firstPerson.standard(), figures.humanoid(), golf.kit(), terrainKit(golf), ballsKit(golf), swingKit(golf), panelKit(golf), greenKit(golf), flyoverKit(golf), ambienceKit()],
   setup(client) {
     defineLooks(client);
     defineSounds(client);

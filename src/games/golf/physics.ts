@@ -56,6 +56,8 @@ export interface Launch {
   wind: { x: number; z: number };
   /** The cup it's played to. */
   pin: { x: number; y: number; z: number };
+  /** Whether the flagstick is in the cup (it is unless they've taken it out: putting). */
+  flagstick?: boolean;
   /** Its luck (the trees' deflections, lip-outs). */
   seed: number;
 }
@@ -147,6 +149,7 @@ export function puttSpeed(metres: number, roll0 = 0): number {
 export function simulate(t: Terrain, l: Launch, opts: { maxTime?: number; flightOnly?: boolean } = {}): ShotResult {
   const rnd = mulberry(l.seed);
   const maxTime = opts.maxTime ?? 40;
+  const flagstick = l.flagstick ?? true;
   const path: number[] = [];
   const events: ShotEvent[] = [];
   const ev = (kind: ShotEvent['kind'], x: number, y: number, z: number, v: number) => events.push({ t: time, kind, x: round(x), y: round(y), z: round(z), speed: round(v) });
@@ -333,10 +336,10 @@ export function simulate(t: Terrain, l: Launch, opts: { maxTime?: number; flight
       }
       inLeaves = leaves;
 
-      // The flagstick.
+      // The flagstick (if it's in).
       const pdx = x - l.pin.x;
       const pdz = z - l.pin.z;
-      if (!hitPin && pdx * pdx + pdz * pdz < 0.12 * 0.12 && y < l.pin.y + 3 && y > l.pin.y - 0.2) {
+      if (flagstick && !hitPin && pdx * pdx + pdz * pdz < 0.12 * 0.12 && y < l.pin.y + 3 && y > l.pin.y - 0.2) {
         hitPin = true;
         vx *= -0.2;
         vz *= -0.2;
@@ -501,8 +504,8 @@ export function simulate(t: Terrain, l: Launch, opts: { maxTime?: number; flight
         }
       }
     }
-    // The flagstick, from the bottom of the cup up.
-    if (rho < POLE_R + BR && cc.y < lip + PIN_HEIGHT && cc.y > lip - CUP_DEPTH) {
+    // The flagstick (if it's in), from the bottom of the cup up.
+    if (flagstick && rho < POLE_R + BR && cc.y < lip + PIN_HEIGHT && cc.y > lip - CUP_DEPTH) {
       rho = POLE_R + BR;
       cc.x = pin.x + nx * rho;
       cc.z = pin.z + nz * rho;

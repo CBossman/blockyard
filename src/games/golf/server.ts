@@ -6,7 +6,7 @@ import { CLUBS, clubOf, lieEffect, strike, type Swing } from './clubs';
 import { course, Surf, SURF_NAMES } from './course';
 import { WINDS, mph } from './course/wind';
 import { HZ, puttSpeed, simulate, type ShotResult } from './physics';
-import { MSG, type AddressMsg, type BallMsg, type RoundMsg, type ShotMsg } from './protocol';
+import { flagItem, MSG, type AddressMsg, type BallMsg, type RoundMsg, type ShotMsg } from './protocol';
 import { S, dirOf, feet, yards, yawOf } from './scale';
 import { shared } from './shared';
 
@@ -243,6 +243,8 @@ function leaveCart(g: Golfer) {
   const s = v.state as CartState;
   g.cartYaw = s.yaw;
   g.p.leaveVehicle();
+  // Driving held their body still (it rode along); out of the seat, it's theirs again.
+  g.p.freeze(false);
   const d = dirOf(s.yaw);
   for (const side of [1.7, -1.7, 2.6, -2.6]) {
     const x = s.x + d.z * side;
@@ -362,6 +364,8 @@ function swing(game: GameContext, g: Golfer, data: unknown) {
     roll: st.roll,
     wind,
     pin,
+    // On the green the pin's been taken out; from anywhere else it's in.
+    flagstick: g.lie !== Surf.Green,
     seed: Math.floor(game.rng.next() * 2 ** 31),
   });
   g.from = { surf: g.lie, club: club.id, tee: g.strokes === 0, toPin: Math.hypot(pin.x - b.x, pin.z - b.z), onGreen: g.lie === Surf.Green };
@@ -589,6 +593,7 @@ export default defineServer(shared, {
     game.items.define('golf_ball', { kind: 'misc', name: 'Golf Ball', icon: spriteOf('ball') });
     // The course's squares, as each screen draws them (their models are made there: client/terrain.ts).
     for (const c of course.chunks) game.items.define(c.id, { kind: 'misc', name: 'Course' });
+    course.holes.forEach((_, i) => game.items.define(flagItem(i), { kind: 'misc', name: 'Flagstick' }));
     cartModels = CART_MODELS.map((url) => game.props.gltf(url, { radius: 1.6 }));
     // The caddie's book: every club's full carry off a good lie.
     for (const c of CLUBS) {

@@ -1,8 +1,10 @@
 import { HeldModels } from '@platform';
 import type { Client, ClientKit, Node } from '@platform/client';
-import { course } from '../course';
+import { course, Surf } from '../course';
+import { flagItem } from '../protocol';
 import { BASE, CHUNK } from '../scale';
-import { chunkFile } from './terrain-mesh';
+import type { GolfState } from './state';
+import { chunkFile, flagFile } from './terrain-mesh';
 
 /**
  * The course, drawn smooth. The world's blocks under it are only footing (`course/build.ts`); what
@@ -15,8 +17,14 @@ const RANGE = 250;
 
 type Chunk = (typeof course.chunks)[number] & { cx: number; cz: number; state: 'none' | 'asked' | 'made' | 'shown'; node: Node | null };
 
-export function terrainKit(): ClientKit {
+export function terrainKit(st: GolfState): ClientKit {
   const chunks: Chunk[] = course.chunks.map((c) => ({ ...c, cx: c.x0 + CHUNK / 2, cz: c.z0 + CHUNK / 2, state: 'none', node: null }));
+  // Each hole's flagstick, a model of its own: out of the cup while this golfer's ball is on that green.
+  const flags = course.holes.map((h, i) => ({ id: flagItem(i), pin: h.green.pin, node: null as Node | null }));
+  const pinOut = (hole: number) => {
+    const r = st.round;
+    return !!r && r.hole === hole && r.lie === Surf.Green && r.mode !== 'holed' && r.mode !== 'done';
+  };
   const byId = new Map(chunks.map((c) => [c.id, c]));
   const workers: Worker[] = [];
   let next = 0;
@@ -44,6 +52,10 @@ export function terrainKit(): ClientKit {
     name: 'golf.terrain',
     setup(c) {
       client = c;
+      for (const [i, f] of flags.entries()) {
+        const url = URL.createObjectURL(new Blob([flagFile(i)], { type: 'model/gltf-binary' }));
+        c.items.look(f.id, { hold: { model: HeldModels.gltf(url) } });
+      }
       // Two workers make the squares, round the camera first.
       try {
         for (let i = 0; i < 2; i++) {
@@ -70,6 +82,17 @@ export function terrainKit(): ClientKit {
         chunk.node = made.node;
         chunk.state = 'shown';
       }
+      // The flags, in their cups (or taken out).
+      for (const [i, f] of flags.entries()) {
+        if (!f.node) {
+          const made = c.scene.item(f.id);
+          if (!made) continue;
+          made.node.position.set(f.pin.x, BASE, f.pin.z);
+          c.scene.add(made.node);
+          f.node = made.node;
+        }
+        f.node.visible = !pinOut(i);
+      }
       // Ask for the nearest still to make: a few at a time in the worker (or one a frame without).
       const cam = c.camera.position;
       for (const chunk of nearest(cam.x, cam.z)) {
@@ -81,6 +104,7 @@ export function terrainKit(): ClientKit {
     dispose() {
       for (const w of workers) w.terminate();
       for (const chunk of chunks) if (chunk.node) client?.scene.remove(chunk.node);
+      for (const f of flags) if (f.node) client?.scene.remove(f.node);
     },
   };
 }

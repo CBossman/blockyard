@@ -8,8 +8,9 @@ import { BASE, CHUNK, CUP_DEPTH, CUP_R, PIN_HEIGHT, mulberry, noise2 } from '../
  * block and filtered smooth (fairways mown in stripes, greens cut in diamonds, a darker collar,
  * raked bunkers damp at the lip, the cart path, hollows shaded, grain in everything, soft edges
  * between them), its trees (low-poly oaks, birches and spruces), its cup (a round hole
- * with a liner, the flagstick and a flag flying downwind) and its tee markers. Plain code: it runs
- * in a worker (`terrain-worker.ts`), off the game's thread.
+ * with a liner) and its tee markers. Plain code: it runs in a worker (`terrain-worker.ts`), off
+ * the game's thread. The flagstick and its flag are a model of their own (`flagFile`), so a
+ * screen can take the pin out.
  */
 
 const TEX = 4;
@@ -224,7 +225,7 @@ function buildGround(m: Mesh, x0: number, z0: number, shaped: boolean, cup: { x:
   if (cup && cupCell) buildCup(m, x0, z0, cup, cupCell, at);
 }
 
-/** The cup: the green round it down to a ring, the liner, the bottom; the flagstick and its flag. */
+/** The cup: the green round it down to a ring, the liner, the bottom (the flagstick is `flagFile`). */
 function buildCup(m: Mesh, x0: number, z0: number, cup: { x: number; z: number }, cell: { i: number; j: number }, at: (i: number, j: number) => number) {
   const N = 24;
   const cx = cup.x;
@@ -290,11 +291,33 @@ function buildCup(m: Mesh, x0: number, z0: number, cup: { x: number; z: number }
     const k1 = (k + 1) % N;
     m.tri(bottom, [ring[k1][0], top - CUP_DEPTH, ring[k1][2]], [ring[k][0], top - CUP_DEPTH, ring[k][2]], hole);
   }
-  // The flagstick, standing in the middle.
-  prism(m, cx, top - CUP_DEPTH, cz, 0.03, 0.03, CUP_DEPTH + PIN_HEIGHT, 6, palUV('pole'));
+}
+
+/** The flagstick's colours: its own little texture (a block of each), and where each is in it. */
+const FLAG_COLOURS = ['pole', 'flag', 'flag_dark'];
+const flagUV = (name: string): [number, number] => [(FLAG_COLOURS.indexOf(name) + 0.5) / FLAG_COLOURS.length, 0.5];
+
+/**
+ * A hole's flagstick and its flag, flying downwind: a model of its own (not part of the green's
+ * square), so a screen can take it out while its golfer putts. Its origin is the cup's middle at
+ * the world's base height.
+ */
+export function flagFile(hole: number): Uint8Array<ArrayBuffer> {
+  const pin = course.holes[hole].green.pin;
+  const m = new Mesh(pin.x, BASE, pin.z);
+  buildFlag(m, hole, pin.x, pin.z);
+  const px = new Uint8Array(FLAG_COLOURS.length * 8 * 8 * 3);
+  for (let y = 0; y < 8; y++)
+    for (let x = 0; x < FLAG_COLOURS.length * 8; x++) px.set(PALETTE[FLAG_COLOURS[Math.floor(x / 8)]], (y * FLAG_COLOURS.length * 8 + x) * 3);
+  return glb(m, png(FLAG_COLOURS.length * 8, 8, px));
+}
+
+function buildFlag(m: Mesh, hi: number, cx: number, cz: number) {
+  const top = course.height(cx, cz);
+  // The flagstick, standing in the middle of the cup.
+  prism(m, cx, top - CUP_DEPTH, cz, 0.03, 0.03, CUP_DEPTH + PIN_HEIGHT, 6, flagUV('pole'));
   // The flag, flying downwind from the top (both sides).
-  const hi = course.holes.findIndex((h) => h.green.pin.x === cx && h.green.pin.z === cz);
-  const w = WINDS[Math.max(0, hi)];
+  const w = WINDS[hi];
   const wl = Math.hypot(w.x, w.z);
   const fx = wl > 0.3 ? w.x / wl : 1;
   const fz = wl > 0.3 ? w.z / wl : 0;
@@ -310,7 +333,7 @@ function buildCup(m: Mesh, x0: number, z0: number, cup: { x: number; z: number }
   }
   for (let s = 0; s < 3; s++) {
     const [a, b, c, d] = [pts[s * 2], pts[s * 2 + 1], pts[s * 2 + 2], pts[s * 2 + 3]];
-    const col = palUV(s % 2 ? 'flag_dark' : 'flag');
+    const col = flagUV(s % 2 ? 'flag_dark' : 'flag');
     m.tri(a, b, c, col);
     m.tri(c, b, d, col);
     m.tri(a, c, b, col);
