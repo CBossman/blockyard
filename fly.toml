@@ -15,8 +15,9 @@ kill_timeout = "10s"
   SITE_ORIGINS = "https://blockyard.gg,https://blockyard.potrock.xyz"
   # Matches running at once (16 people each; a full public game overflows into another copy).
   # Measured 2026-09-26 on performance-1x: a match with bots takes about 3% of the CPU with one
-  # viewer, more with a full 16; 14 leaves headroom.
-  ROOMS = "14"
+  # viewer, a match full of people about 15% of a core; 14 was the limit there. Launch
+  # (2026-09-27): performance-4x, four times the cores, one main thread for every socket: 40.
+  ROOMS = "40"
 
 [[mounts]]
   source = "data"
@@ -31,8 +32,8 @@ kill_timeout = "10s"
 
   [http_service.concurrency]
     type = "connections"
-    soft_limit = 250
-    hard_limit = 300
+    soft_limit = 600
+    hard_limit = 700
 
   [[http_service.checks]]
     grace_period = "10s"
@@ -41,6 +42,8 @@ kill_timeout = "10s"
     path = "/health"
     timeout = "5s"
 
+# Scaled up for launch (per-second billing: ~$0.17/hr vs $0.04 for performance-1x, with
+# ROOMS 14 and connections 250/300); back down by putting those back.
 [[vm]]
-  size = "performance-1x"
-  memory = "2048mb"
+  size = "performance-4x"
+  memory = "8192mb"
