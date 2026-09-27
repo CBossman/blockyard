@@ -7,7 +7,7 @@ type Member = { player: { name: string } | null; body: unknown; out: boolean };
 type Team = { color: string; members: Member[]; bed: boolean; eliminated: boolean };
 type Entry = { label: string; detail?: string; active?: boolean; disabled?: boolean; onSelect?: { $cb: number } };
 type Menu = { title?: string; subtitle?: string; sections?: { title?: string; entries: Entry[] }[] };
-type Bw = { match: { teams: Team[]; lobby: boolean; size: number; over: boolean; map: { lobby: { feet: number; pads: { color: string; x: number; z: number }[] } } } };
+type Bw = { match: { teams: Team[]; lobby: boolean; size: number; over: boolean; map: { id: string; center: { x: number; y: number; z: number }; lobby: { feet: number; spawn: { x: number; y: number; z: number }; pads: { color: string; x: number; z: number }[] } } } };
 
 const wasm = readFileSync('engine/pkg/voxel_engine_bg.wasm');
 
@@ -58,7 +58,8 @@ function open(room?: string) {
 }
 
 function publicLobby() {
-  const { bw, step, join, seats } = open();
+  const { bw, step, join, seats, host } = open();
+  const lobbyMap = bw.match.map.id;
   const names = ['Ann', 'Bob', 'Cat', 'Dan', 'Eve'];
   for (const n of names) join(n);
   step(30 * 25);
@@ -68,6 +69,15 @@ function publicLobby() {
   const humans = bw.match.teams.map((t) => t.members.filter((m) => m.player).length);
   const bots = bw.match.teams.reduce((n, t) => n + t.members.filter((m) => !m.player && m.body).length, 0);
   check(bw.match.size === 2 && humans.join() === '2,1,1,1' && bots === 3, `five people: two a team, spread out, bots in the rest: ${seats()}`);
+  // The match is on the next map, far from the lobby's: its own lobby box goes as its chunks load.
+  const map = bw.match.map;
+  check(map.id !== lobbyMap, `on to the next map: ${lobbyMap} -> ${map.id}`);
+  const ann = host.sim.players.find((p) => p.name === 'Ann')!.api;
+  ann.teleport({ x: map.center.x, y: map.center.y + 20, z: map.center.z });
+  step(30 * 2);
+  const floor = map.lobby.spawn;
+  const left = host.sim.ctx.world.getBlock(Math.floor(floor.x), floor.y - 1, Math.floor(floor.z));
+  check(left === 0, `no lobby box over the match: ${left}`);
   console.log(`  public: five people, nobody picking, 30 s: ${seats()}`);
 }
 

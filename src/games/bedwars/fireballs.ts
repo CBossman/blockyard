@@ -53,7 +53,7 @@ export class Fireballs {
       if (!boom) {
         // It bursts on anyone from another team.
         for (const p of g.players) {
-          if (!p.alive || this.m.memberOf(p)?.team === b.owner) continue;
+          if (!p.alive || p.spectating || this.m.memberOf(p)?.team === b.owner) continue;
           const pe = p.position;
           if (Math.hypot(pe.x - b.pos.x, pe.y + 0.9 - b.pos.y, pe.z - b.pos.z) < 1.3) boom = { x: b.pos.x, y: b.pos.y, z: b.pos.z };
         }
@@ -84,7 +84,7 @@ export class Fireballs {
       else push(e, at, f);
     }
     for (const pl of g.players) {
-      if (!pl.alive) continue;
+      if (!pl.alive || pl.spectating) continue;
       const p = pl.position;
       const d = Math.hypot(p.x - at.x, p.y + 0.9 - at.y, p.z - at.z);
       if (d >= BLAST) continue;

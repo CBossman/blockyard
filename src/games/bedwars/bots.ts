@@ -7,7 +7,46 @@ import { armorPoints, mineTime, swordDamage, type Match, type Member, type Team 
 /** Someone to fight: a player, or another team's bot. */
 export type Target = { kind: 'player'; team: Team; p: Player } | { kind: 'bot'; team: Team; e: Entity };
 
-type Mode = 'fortify' | 'gear' | 'guard' | 'raid' | 'hunt';
+type Mode = 'fortify' | 'gear' | 'guard' | 'rally' | 'raid' | 'hunt';
+
+/**
+ * What a bot does for its team: `solo`, everything (the only one on it); `defend`, stay home and
+ * guard the bed (the team's first bot, while there are others to raid); `raid`, go out with the
+ * rest of the raiders and break beds.
+ */
+type Role = 'solo' | 'defend' | 'raid';
+
+/** A team's raiders: who's waiting at home to set off, when they go anyway, and at whom. */
+interface Squad {
+  waiting: Set<Bot>;
+  /** When those waiting set off anyway. */
+  goAt: number;
+  /** When the last lot set off, and for whom. */
+  wentAt: number;
+  victim: Team | null;
+}
+const squads = new WeakMap<Team, Squad>();
+const squadOf = (t: Team): Squad => {
+  let s = squads.get(t);
+  if (!s) squads.set(t, (s = { waiting: new Set(), goAt: Infinity, wentAt: -Infinity, victim: null }));
+  return s;
+};
+
+/** A member's part on its team (see `Role`), as the team stands now. */
+function roleOf(t: Team, me: Member): Role {
+  const others = t.members.filter((m) => m !== me && !m.out && (m.player || m.body || m.respawnAt !== null));
+  if (!others.length) return 'solo';
+  // The first bot still in it guards the bed, while there's a bed to guard.
+  const firstBot = t.members.find((m) => !m.player && !m.out && (m.body || m.respawnAt !== null));
+  return t.bed && firstBot === me ? 'defend' : 'raid';
+}
+
+/** Seconds the first raider home waits for the rest before they set off anyway. */
+const RALLY_WAIT = 12;
+/** A raider on the way turns on enemies this near (or who hit it); a bot at home, nearer `AGGRO`. */
+const RAID_AGGRO = 4.5;
+/** At the bed it's raiding, a bot keeps at the bed unless it's this hurt. */
+const BED_FOCUS_HEALTH = 7;
 
 const REACH = 3.1;
 const AGGRO = 8;
@@ -122,7 +161,8 @@ export class Bot {
     for (const t of this.m.teams) {
       if (t === this.team || t.eliminated) continue;
       for (const m of t.members) {
-        if (m.player?.alive) out.push({ kind: 'player', team: t, p: m.player });
+        // (Someone spectating isn't in play.)
+        if (m.player?.alive && !m.player.spectating) out.push({ kind: 'player', team: t, p: m.player });
         if (m.body?.alive) out.push({ kind: 'bot', team: t, e: m.body });
       }
     }
@@ -168,7 +208,9 @@ export class Bot {
       this.think();
     }
     this.collect();
-    if (this.valid(this.target)) {
+    // At the bed it came for, the bed comes first (while it can take the blows).
+    const focused = this.mode === 'raid' && this.atVictimBed() && e.health > BED_FOCUS_HEALTH;
+    if (this.valid(this.target) && !focused) {
       this.fight(this.target, dt);
       return;
     }
@@ -180,6 +222,8 @@ export class Bot {
         return this.doGear(dt);
       case 'guard':
         return this.doGuard(dt);
+      case 'rally':
+        return this.doRally(dt);
       case 'raid':
         return this.doRaid(dt);
       case 'hunt':
@@ -196,7 +240,7 @@ export class Bot {
       if (dist(p, q) > AGGRO + 5 || q.y < p.y - 6) this.target = null;
     } else {
       this.target = null;
-      let best = AGGRO;
+      let best = this.mode === 'raid' || this.mode === 'rally' ? RAID_AGGRO : AGGRO;
       for (const t of this.enemies()) {
         const q = this.posOf(t);
         const d = dist(p, q);
@@ -220,7 +264,12 @@ export class Bot {
     }
     this.throwFireball();
     // Plans.
-    if (this.mode === 'guard' && now > this.raidAt) this.startRaid();
+    if (this.mode === 'guard' && now > this.raidAt) {
+      // A defender stays; a raider goes to join the rest.
+      const role = this.role();
+      if (role === 'solo') this.startRaid();
+      else if (role === 'raid') this.mode = 'rally';
+    }
     if ((this.mode === 'raid' || this.mode === 'hunt') && now > this.homeAt) {
       this.mode = 'gear';
       this.gearStage = 0;
@@ -235,7 +284,14 @@ export class Bot {
     }
   }
 
-  private startRaid() {
+  /** The team this bot's squad goes for, chosen by whoever sets it off. */
+  private startRaid(victim?: Team) {
+    if (victim && victim.bed && !victim.eliminated) {
+      this.victim = victim;
+      this.mode = 'raid';
+      this.raidStarted = this.m.now;
+      return;
+    }
     const others = this.m.teams.filter((t) => t !== this.team && !t.eliminated);
     const beds = others.filter((t) => t.bed);
     if (!beds.length) {
@@ -299,9 +355,61 @@ export class Bot {
         this.e.lookAt({ x: s.x, y: s.y + 1.6, z: s.z });
         this.shop();
         this.gearStage = 0;
-        this.mode = 'guard';
+        // A raider joins the rest once it's time (till then, it minds the bed).
+        this.mode = this.role() === 'raid' && this.m.now > this.raidAt ? 'rally' : 'guard';
       }
     }
+  }
+
+  /** Its part on the team, as the team stands now (see `Role`). */
+  private role(): Role {
+    return roleOf(this.team, this.me);
+  }
+
+  private atVictimBed(): boolean {
+    const v = this.victim;
+    return !!v && v.bed && flat(this.e.position, bedCenter(v)) < 4 && Math.abs(this.e.position.y - v.base.bed[0].y) < 2.5;
+  }
+
+  /**
+   * Wait at home for the team's other raiders, then all set off at one bed. The first one home
+   * starts a short clock: when it runs out, or everyone's there, they go (anyone coming home just
+   * after goes after them).
+   */
+  private doRally(dt: number) {
+    const sq = squadOf(this.team);
+    const now = this.m.now;
+    const s = this.team.base.spawn;
+    if (this.goTo('rally', s, (x, y, z) => Math.hypot(x + 0.5 - s.x, z + 0.5 - s.z) < 2.5 && Math.abs(y - s.y) <= 1, dt) !== 'arrived') {
+      // Can't get home (cut off): go from here.
+      if (this.blockedSince >= 0 && now - this.blockedSince > 5) this.launch(sq);
+      return;
+    }
+    // Pace about near the spawn meanwhile.
+    const t = now * 0.6 + this.seed;
+    if (Math.sin(t * 0.7) > 0.5) this.walk(Math.cos(t), Math.sin(t), dt, false);
+    else this.e.stop();
+    for (const b of sq.waiting) if (!b.e.alive || b.mode !== 'rally') sq.waiting.delete(b);
+    if (!sq.waiting.size) sq.goAt = now + RALLY_WAIT;
+    sq.waiting.add(this);
+    // Just behind the others: after them.
+    if (sq.victim?.bed && now - sq.wentAt < 8) {
+      sq.waiting.delete(this);
+      return this.startRaid(sq.victim);
+    }
+    const raiders = this.team.members.filter((m) => m.body?.alive && roleOf(this.team, m) === 'raid').length;
+    if (sq.waiting.size >= raiders || now >= sq.goAt) this.launch(sq);
+  }
+
+  /** Set off with everyone waiting: one of them picks the bed, all go for it. */
+  private launch(sq: Squad) {
+    const everyone = [...sq.waiting].filter((b) => b.e.alive && b.mode === 'rally');
+    if (!everyone.includes(this)) everyone.push(this);
+    sq.waiting.clear();
+    this.startRaid();
+    sq.victim = this.mode === 'raid' ? this.victim : null;
+    sq.wentAt = this.m.now;
+    for (const b of everyone) if (b !== this) b.startRaid(sq.victim ?? undefined);
   }
 
   private doGuard(dt: number) {

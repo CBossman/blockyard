@@ -168,9 +168,19 @@ export default function bedwarsMultiplayer() {
   step(2);
   check(feed().some((f) => /Cat was (slain|knocked into the void) by Ann/.test(f)), `kill credit in the feed: ${feed().slice(-3).join(' | ')}`);
   check(calls(cat.id, 'banner').some((a) => a[0] === 'YOU DIED!') && !calls(ann.id, 'banner').some((a) => a[0] === 'YOU DIED!'), 'only Cat is told she died');
-  step(30 * 6);
+  // While she waits she spectates: flying free where she fell, unseen, untouchable.
+  step(30 * 2);
+  const fell = { ...pc.api.position };
+  check(pc.api.spectating && !pc.api.frozen, `Cat spectates while she waits: spectating ${pc.api.spectating}, frozen ${pc.api.frozen}`);
+  const flyUp: PlayerInput = { active: true, down: ['Space'], pressed: [], buttons: 0, clicked: 0, mouseX: 0, mouseY: 0, wheel: 0, yaw: 0, pitch: 0, viewSeq: pc.viewSeq };
+  host.command(cat.id, { t: 'input', input: flyUp });
+  step(20);
+  host.command(cat.id, { t: 'input', input: { ...flyUp, down: [] } });
+  check(pc.api.position.y > fell.y + 2, `she flies up: ${fell.y.toFixed(1)} -> ${pc.api.position.y.toFixed(1)}`);
+  check(last.get(ann.id)!.frame!.players.find((p) => p.id === cat.id)?.spectating === true, "Ann's screen knows she's spectating");
+  step(30 * 4);
   const catInv = pc.api.inventory;
-  check(pc.api.alive && catInv.count('wooden_sword') === 1 && catInv.count('wool_blue') === 16 && catInv.count('bow') === 1, `Cat respawned with what she carried: ${catInv.slots.map((x) => x && `${x.item}x${x.count}`).join(' ')}`);
+  check(pc.api.alive && !pc.api.spectating && catInv.count('wooden_sword') === 1 && catInv.count('wool_blue') === 16 && catInv.count('bow') === 1, `Cat respawned with what she carried: ${catInv.slots.map((x) => x && `${x.item}x${x.count}`).join(' ')}`);
 
   // Bob leaves: a bot plays his place.
   host.disconnect(bob.id);

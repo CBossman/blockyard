@@ -44,6 +44,17 @@ const bots = new Map<number, Bot>();
 const hud = { refresh: 0, diamondIn: 30, emeraldIn: 60 };
 /** Per team: when it may next be warned of an enemy at its bed. */
 const alarms = new Map<Team, number>();
+/** Blocks to take away once their chunks are loaded (a lobby box, a bed on an island nobody's near yet). */
+let clearing: Vec3[] = [];
+
+/** Take these blocks away: now where the world's loaded, the rest as it loads. */
+function clear(game: GameContext, cells: Vec3[]) {
+  for (const c of cells) {
+    const id = game.world.getBlock(c.x, c.y, c.z);
+    if (id < 0) clearing.push(c);
+    else if (id > 0) game.world.setBlock(c.x, c.y, c.z, 'air');
+  }
+}
 let nextBotSkill = 0;
 
 /** A player's all-time numbers, kept by name in `game.store` (the server's database). */
@@ -209,7 +220,7 @@ function eliminate(game: GameContext, t: Team) {
 function destroyBed(game: GameContext, owner: Team, by: Member | null, quiet = false) {
   if (!owner.bed) return;
   owner.bed = false;
-  for (const b of owner.base.bed) if (game.world.getBlock(b.x, b.y, b.z) > 0) game.world.setBlock(b.x, b.y, b.z, 'air');
+  clear(game, owner.base.bed);
   if (quiet) return;
   const c = owner.base.bed[0];
   game.fx.burst({ x: c.x + 0.5, y: c.y + 0.6, z: c.z + 0.5 }, { color: owner.css, count: 40, speed: 5, size: 0.14 });
@@ -240,11 +251,18 @@ function destroyBed(game: GameContext, owner: Team, by: Member | null, quiet = f
   checkTeam(game, owner);
 }
 
-/** Up above the middle, looking on. */
-function spectate(p: Player) {
+/**
+ * Watch, flying free (the platform's spectating: nobody sees them, nothing touches them): from
+ * where they are, or from up over the middle when that's nowhere to watch from (fallen into the
+ * void, just joined). A respawn (`revive`) ends it.
+ */
+function spectate(p: Player, here = false) {
   const c = match.map.center;
-  p.teleport({ x: c.x, y: c.y + 26, z: c.z + 34 }, 0, -0.55);
-  p.freeze(true);
+  if (!here || p.position.y < match.map.voidY + 8) p.teleport({ x: c.x, y: c.y + 26, z: c.z + 34 }, 0, -0.55);
+  else p.teleport({ x: p.position.x, y: p.position.y + 1.5, z: p.position.z });
+  p.freeze(false);
+  p.spectate(true);
+  p.hud.toast('Spectating: fly with WASD, Space and Shift up and down, Ctrl for speed');
 }
 
 /** Dress a player in their team's colours. */
@@ -403,7 +421,9 @@ function begin(game: GameContext, plan: Plan) {
     }
   }
   // The lobby box goes: the match is under it. The home page looks on from where spectators do.
-  map.lobby.blueprint.forEach((x, y, z) => game.world.setBlock(x, y, z, 'air'));
+  const box: Vec3[] = [];
+  map.lobby.blueprint.forEach((x, y, z) => box.push({ x, y, z }));
+  clear(game, box);
   game.world.spawn = { x: map.center.x, y: map.center.y + 26, z: map.center.z + 34, yaw: 0 };
 
   // Iron and gold at every island.
@@ -632,7 +652,7 @@ export default defineServer(shared, {
       died(game, m, killerOf(m, e.source), p.position.y < match.map.voidY + 1);
       if (bed) p.hud.banner('YOU DIED!', `Respawning in ${RESPAWN_SECONDS} seconds`, { duration: 2, color: '#ff5b5b' });
       game.clock.after(1.2, () => {
-        if (!p.alive && !match.over && match.memberOf(p) === m) spectate(p);
+        if (!p.alive && !match.over && match.memberOf(p) === m) spectate(p, true);
       });
     });
 
@@ -699,6 +719,7 @@ export default defineServer(shared, {
     shop.closeAll();
     alarms.clear();
     recorded.clear();
+    clearing = [];
     nextBotSkill = 0;
     // To the lobby over the map just played (or the first).
     match.toLobby(match.map);
@@ -717,6 +738,11 @@ export default defineServer(shared, {
     }
     if (match.over) return;
     const now = match.now;
+    if (clearing.length) {
+      const left = clearing;
+      clearing = [];
+      clear(game, left);
+    }
     for (const p of match.piles) p.sync();
 
     // Diamond and emerald generators, and the match timeline.
