@@ -12,6 +12,8 @@
   &nbsp;·&nbsp;
   <a href="docs/PLATFORM.md">Write a game</a>
   &nbsp;·&nbsp;
+  <a href="CONTRIBUTING.md">Contribute</a>
+  &nbsp;·&nbsp;
   <a href="#run-it-locally">Run it locally</a>
 </p>
 
@@ -288,7 +290,7 @@ More: [the architecture section of the platform guide](docs/PLATFORM.md#architec
 
 ## Contributing
 
-Issues and pull requests are welcome. Before opening a PR, run `npm run build` and `npm run test:headless` (and `npm run test:engine` if you touched Rust); CI runs the same checks. New games are best started from [docs/PLATFORM.md](docs/PLATFORM.md). Keep a game to `@platform` imports, and the boundary check will tell you if it strays.
+Games, fixes and platform features are all welcome: [CONTRIBUTING.md](CONTRIBUTING.md) says how to add a game and what gets merged. Before opening a PR, run `npm run build` and `npm run test:headless` (and `npm run test:engine` if you touched Rust); CI runs the same checks. New games are best started from [docs/PLATFORM.md](docs/PLATFORM.md). Keep a game to `@platform` imports, and the boundary check will tell you if it strays.
 
 ## License
 
