@@ -9,6 +9,7 @@ import bedwars from './bedwars/meta';
 import obby from './obby/meta';
 import sandbox from './sandbox/meta';
 import heartHunt from './heart-hunt/meta';
+import golf from './golf/meta';
 
 /** A game in the catalog: its meta now, its client code (and shared code) when picked, a chunk of its own. */
 const entry = (meta: GameMeta, load: () => Promise<{ default: ClientGame }>): GameEntry => ({ meta, load: () => load().then((m) => m.default) });
@@ -21,6 +22,7 @@ export const games: GameEntry[] = [
   entry(starfighter, () => import('./starfighter/client')),
   entry(skyship, () => import('./skyship/client')),
   entry(bedwars, () => import('./bedwars/client')),
+  entry(golf, () => import('./golf/client')),
   entry(obby, () => import('./obby/client')),
   entry(sandbox, () => import('./sandbox/client')),
   entry(heartHunt, () => import('./heart-hunt/client')),

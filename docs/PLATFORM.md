@@ -78,6 +78,14 @@ src/games/
                         the powers' effects, the hero HUD
     client/             bolts you can watch fly, the third-person crosshair and heat, voices, ambience; skies.ts: fighters overhead
     maps/ tools/        Mos Blockley Spaceport as Blueprints; the voxel troopers, heroes and weapons built in code
+  golf/                 Blockyard Links: eighteen holes, a cart, a mouse swing, sloping greens
+    course/             the holes as a yardage book (holes.ts), the land worked out from them (course.ts), its invisible footing in blocks (build.ts)
+    physics.ts          the ball: flight (drag, Magnus lift, wind), bounces that dig into the turf, skid and roll, the cup
+    clubs.ts            the bag, the lies, and how a swing (power, timing, strike point) becomes a launch
+    cart.ts             the cart, as a vehicle over the course's smooth ground
+    server.ts           rules: each golfer's round, the cart, stepping up to the ball, penalties, the card
+    client/             the course drawn smooth (terrain*.ts: glTF files made in a worker, shown as items' models), the mouse swing
+                        and its camera, the balls in flight, the panel, reading the greens
   obby/                 Sky Obby: a parkour course in the void, each player on their own clock
     server.ts           rules: checkpoints, falls, pads, blinking and crumbling blocks, cannons, times
     course.ts           the ten stages, laid out as Blueprints with every jump checked against the physics

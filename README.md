@@ -48,8 +48,11 @@
     <td align="center"><a href="https://blockyard.gg/?game=bedwars"><img src="src/games/bedwars/cover.webp" alt="Bed Wars"></a><br><b>Bed Wars</b></td>
   </tr>
   <tr>
+    <td align="center"><a href="https://blockyard.gg/?game=golf"><img src="src/games/golf/cover.webp" alt="Blockyard Links"></a><br><b>Blockyard Links</b></td>
     <td align="center"><a href="https://blockyard.gg/?game=obby"><img src="src/games/obby/cover.webp" alt="Sky Obby"></a><br><b>Sky Obby</b></td>
     <td align="center"><a href="https://blockyard.gg/?game=sandbox"><img src="src/games/sandbox/cover.webp" alt="Sandbox"></a><br><b>Sandbox</b></td>
+  </tr>
+  <tr>
     <td align="center"><a href="https://blockyard.gg/?game=heart-hunt"><img src="src/games/heart-hunt/cover.webp" alt="Heart Hunt"></a><br><b>Heart Hunt</b></td>
   </tr>
 </table>
@@ -62,6 +65,7 @@
 | **[Starfighter](https://blockyard.gg/?game=starfighter)** | A Star Fox-style dogfighter. Fly a block-built Vox-wing against waves of Bowties, then knock out a 200-block Star Demolisher's shield generators and bridge. Barrel rolls deflect lasers. Online, it's a squadron. |
 | **[Skyship](https://blockyard.gg/?game=skyship)** | Crew an airship across the sky islands and light five beacons. The ship is a solid, moving prop: everyone walks its decks while one of you takes the helm. |
 | **[Bed Wars](https://blockyard.gg/?game=bedwars)** | Hypixel-style Bed Wars on sky islands, against bots or up to three friends. Collect resources from your generator, shop, bridge across the void and break the other beds. The bots fortify, bridge and dig through defences. |
+| **[Blockyard Links](https://blockyard.gg/?game=golf)** | Eighteen holes of parkland golf, par 72, with a cart to drive round them. Swing with the mouse: pull back for power, then swing up through the ball, and the stroke's line pushes, pulls, hooks or slices it. The ball flies with real drag, lift and wind, digs into soft turf and rolls down sloping greens into a real cup (lip-outs included). Everyone plays their own round on the same course. |
 | **[Sky Obby](https://blockyard.gg/?game=obby)** | Ten stages of parkour in the sky, with lava, crumbling sand, launch pads, blinking platforms and cannons. Each player runs on their own clock, and best times go on a leaderboard. |
 | **[Sandbox](https://blockyard.gg/?game=sandbox)** | Creative building in an endless world, which the server keeps. |
 | **[Heart Hunt](https://blockyard.gg/?game=heart-hunt)** | A gentle hunt for ten hidden hearts. At about 70 lines, it's the [tutorial game](docs/PLATFORM.md#hello-game). |
