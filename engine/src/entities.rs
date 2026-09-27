@@ -425,13 +425,20 @@ impl Entities {
         self.chased.clear();
     }
 
+    /// Whether any body is navigating toward a player (and so wants their field).
+    fn any_chaser(&self) -> bool {
+        self.bodies.chunks_exact(body::STRIDE).any(|b| (b[body::FLAGS] as u32) & FLAG_ACTIVE != 0 && b[body::MODE] as i32 == 1 && b[body::TARGET_KIND] as i32 != 1)
+    }
+
     /// Advance all bodies toward, or away from, these players.
     pub fn step_bodies(&mut self, world: &World, dt: f64, players: &[Target]) {
         let dt = dt.min(0.1);
         self.flow_timer -= dt;
         if self.flow_timer <= 0.0 {
-            // The first time, before anyone has been chased, every player gets a field.
-            if self.flows.is_empty() && self.chased.is_empty() {
+            // The first time, before anyone has been chased, every player gets a field: but only
+            // if some body is heading for a player. (Else, with nobody chasing, this came round
+            // every other rebuild and built fields for every player, bots too, that nothing used.)
+            if self.flows.is_empty() && self.chased.is_empty() && self.any_chaser() {
                 self.chased = players.iter().map(|t| t.slot).collect();
             }
             self.rebuild_chased(world, players);
