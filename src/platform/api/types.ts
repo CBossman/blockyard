@@ -2644,6 +2644,21 @@ export interface ReplayApi {
   stop(player: Player): void;
   /** The replay playing on the player's screen, if any. */
   playing(player: Player): ReplayHandle | null;
+  /**
+   * Keep a stretch of the history for later (`show(player, { clip })`), past what the history
+   * keeps: a play of the game, saved as it happens and shown once the match is over. `from` and
+   * `seconds` as `show`'s. Null: nothing kept in that stretch.
+   */
+  clip(opts?: { from?: number | { at: number }; seconds?: number }): ReplayClip | null;
+}
+
+/** A stretch of a room's past, kept (`game.replay.clip`): shown with `game.replay.show(player, { clip })`, to as many players as like. */
+export interface ReplayClip {
+  /** The stretch it holds, by the game's clock. */
+  readonly from: number;
+  readonly to: number;
+  /** How long it lasts (seconds, as it happened). */
+  readonly seconds: number;
 }
 
 export interface ReplayOptions {
@@ -2663,6 +2678,14 @@ export interface ReplayOptions {
   camera?: { at: Vec3; look: Vec3; fov?: number };
   /** Played this many times as fast as it happened (default 1; 0.25 to 4). */
   speed?: number;
+  /** A clip kept earlier (`game.replay.clip`), shown whole, in place of the recent past (`from` and `seconds` aren't used). */
+  clip?: ReplayClip;
+  /**
+   * Seconds its first frame stands still before it plays (at most 10; default 0), part of its
+   * `duration`: a freeze-frame for a title to go over (`client.replay.hold`). The figures in it
+   * stop where they are, and nothing it shows (shots, sounds) comes till it moves.
+   */
+  hold?: number;
   /** A name for its client code (`client.replay.label`: 'killcam'), and plain data to go with it. */
   label?: string;
   data?: unknown;
@@ -2678,7 +2701,7 @@ export interface ReplayOptions {
 /** A replay playing on a player's screen. */
 export interface ReplayHandle {
   readonly id: number;
-  /** Seconds it plays for (at its speed). */
+  /** Seconds it plays for (at its speed, and its `hold`). */
   readonly duration: number;
   /** The stretch it shows, by the game's clock. */
   readonly from: number;

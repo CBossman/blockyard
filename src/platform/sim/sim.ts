@@ -1,5 +1,5 @@
 import * as engine from '@engine/voxel_engine.js';
-import type { Actor, Anchor, AudioApi, BlockRef, Bot, BotApi, DamageCause, DestructibleOptions, Entity, GameContext, GameDefinition, GameEvents, Player, PlayerAccount, ReplayApi, ReplayHandle, ReplayOptions, Rng, StoreApi, Vec3, VehicleWorld, WorldApi } from '../api/types';
+import type { Actor, Anchor, AudioApi, BlockRef, Bot, BotApi, DamageCause, DestructibleOptions, Entity, GameContext, GameDefinition, GameEvents, Player, PlayerAccount, ReplayApi, ReplayClip, ReplayHandle, ReplayOptions, Rng, StoreApi, Vec3, VehicleWorld, WorldApi } from '../api/types';
 import { Commands } from '../commands';
 import type { Content } from '../content';
 import { IDLE_INPUT, type ClientMessage, type PlayerInput } from '../net/protocol';
@@ -96,6 +96,7 @@ export interface ReplayBackend {
   show(player: Player, opts: ReplayOptions): ReplayHandle | null;
   stop(player: string): void;
   playing(player: string): ReplayHandle | null;
+  clip(opts: { from?: number | { at: number }; seconds?: number }): ReplayClip | null;
 }
 
 export interface SimOptions {
@@ -1168,6 +1169,7 @@ export class Sim {
       show: (player, opts) => r()?.show(player, opts ?? {}) ?? null,
       stop: (player) => r()?.stop(player.id),
       playing: (player) => r()?.playing(player.id) ?? null,
+      clip: (opts) => r()?.clip(opts ?? {}) ?? null,
     };
   }
 

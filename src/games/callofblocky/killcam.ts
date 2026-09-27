@@ -86,6 +86,11 @@ export function killcam(game: GameContext, victim: Player, killer: Player, weapo
   });
 }
 
+/** The match is over, and the Play of the Game is coming: kill cams not started yet never do. */
+export function killcamsOff() {
+  for (const w of watching.values()) w.done = true;
+}
+
 /** Whether this player's respawn waits for their kill cam (it's coming, or playing). */
 export function killcamHolds(game: GameContext, player: Player): boolean {
   const w = watching.get(player.id);

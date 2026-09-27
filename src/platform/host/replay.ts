@@ -1,4 +1,4 @@
-import type { Player, ReplayHandle, ReplayOptions, Vec3 } from '../api/types';
+import type { Player, ReplayClip, ReplayHandle, ReplayOptions, Vec3 } from '../api/types';
 import { decode, encode } from '../net/codec';
 import { applyPatch } from '../net/delta';
 import type { HostEvent, PresentCall, ReplayEvent, ReplayStep, ReplayWire } from '../net/protocol';
@@ -8,6 +8,8 @@ import { plainData } from '../ui/markup';
 /** Seconds a room keeps unless its game says otherwise (`replay.keep`), and the most it may. */
 export const REPLAY_KEEP = 8;
 const MAX_KEEP = 30;
+/** The longest freeze-frame a replay may start with (`hold`). */
+const MAX_HOLD = 10;
 
 /**
  * One step kept: when it was (host time, and the game's clock), its frame as a patch on the step
@@ -185,6 +187,8 @@ export class Replays implements ReplayBackend {
   readonly history = new ReplayHistory();
   private active = new Map<string, Active>();
   private nextId = 1;
+  /** Each clip's steps (`game.replay.clip`), this room's only: the clip is what the game holds, and its steps go when it lets go of it. */
+  private clips = new WeakMap<ReplayClip, ReplayStep[]>();
 
   constructor(
     private host: {
@@ -207,18 +211,33 @@ export class Replays implements ReplayBackend {
     if (this.history.keep <= 0) this.history.clear();
   }
 
-  show(player: Player, o: ReplayOptions): ReplayHandle | null {
-    // Bots have no screen.
-    if (!player || player.kind !== 'player' || player.bot) return null;
+  /** The kept steps over a stretch of the history (`from` and `seconds` as `show` has them); null: fewer than two. */
+  private stretch(o: { from?: number | { at: number }; seconds?: number }): ReplayStep[] | null {
     const h = this.history;
     const newest = h.newest;
     if (!Number.isFinite(newest)) return null;
     const start = typeof o.from === 'number' ? newest - Math.max(0, o.from) : o.from && typeof o.from === 'object' ? h.timeAt(o.from.at) : newest - h.seconds;
     const end = Math.min(newest, o.seconds !== undefined ? start + Math.max(0, o.seconds) : newest);
     const steps = h.window(start, end);
-    if (!steps || steps.length < 2) return null;
+    return steps && steps.length >= 2 ? steps : null;
+  }
+
+  clip(o: { from?: number | { at: number }; seconds?: number }): ReplayClip | null {
+    const steps = this.stretch(o);
+    if (!steps) return null;
+    const clip: ReplayClip = Object.freeze({ from: clockOf(steps, 0), to: clockOf(steps, steps.length - 1), seconds: steps[steps.length - 1].t - steps[0].t });
+    this.clips.set(clip, steps);
+    return clip;
+  }
+
+  show(player: Player, o: ReplayOptions): ReplayHandle | null {
+    // Bots have no screen.
+    if (!player || player.kind !== 'player' || player.bot) return null;
+    const steps = o.clip ? (this.clips.get(o.clip) ?? null) : this.stretch(o);
+    if (!steps) return null;
     const speed = Math.max(0.25, Math.min(4, o.speed ?? 1));
-    const duration = (steps[steps.length - 1].t - steps[0].t) / speed;
+    const hold = Math.max(0, Math.min(MAX_HOLD, Number(o.hold) || 0));
+    const duration = hold + (steps[steps.length - 1].t - steps[0].t) / speed;
     const cam = o.camera;
     const v = (p: Vec3): [number, number, number] => [p.x, p.y, p.z];
     const wire: ReplayWire = {
@@ -227,6 +246,7 @@ export class Replays implements ReplayBackend {
       follow: o.follow?.id ?? null,
       camera: cam ? { at: v(cam.at), look: v(cam.look), fov: cam.fov ?? null } : null,
       speed,
+      hold,
       label: typeof o.label === 'string' ? o.label.slice(0, 64) : '',
       data: o.data === undefined ? null : (plainData(o.data) ?? null),
       skippable: o.skippable ?? true,

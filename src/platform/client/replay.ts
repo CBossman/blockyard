@@ -20,10 +20,10 @@ function lerpAngle(a: number, b: number, k: number): number {
 
 /**
  * A replay on this screen (`game.replay.show`): its frames read back from the patches they came as
- * (`net/delta`), played on this screen's clock at the replay's speed. `advance` moves it on and
- * hands over what was shown in the steps it passed; `sample` is the frame to draw now, blended
- * between the two around it as live frames are (and players' looks too: the eyes it follows turn
- * smoothly).
+ * (`net/delta`), played on this screen's clock at the replay's speed, after its first frame has
+ * stood still for its `hold`. `advance` moves it on and hands over what was shown in the steps it
+ * passed; `sample` is the frame to draw now, blended between the two around it as live frames are
+ * (and players' looks too: the eyes it follows turn smoothly).
  */
 export class ReplayPlayback {
   private steps: Step[] = [];
@@ -31,6 +31,8 @@ export class ReplayPlayback {
   private at: number;
   /** The next step whose events are still to come. */
   private next = 0;
+  /** Seconds of its `hold` gone by (the first frame standing still). */
+  private held = 0;
 
   constructor(readonly wire: ReplayWire) {
     const reader = new FrameReader<SimFrame>();
@@ -46,23 +48,40 @@ export class ReplayPlayback {
     return this.steps[this.steps.length - 1]?.t ?? 0;
   }
 
-  /** Seconds it lasts and seconds played, as played (at its speed). */
+  /** Seconds its first frame stands still. */
+  get hold(): number {
+    return this.wire.hold ?? 0;
+  }
+
+  /** Its first frame is standing still (the `hold` isn't over). */
+  get holding(): boolean {
+    return this.held < this.hold;
+  }
+
+  /** Seconds it lasts and seconds played, as played (at its speed, the hold first). */
   get duration(): number {
-    return (this.end - this.start) / this.wire.speed;
+    return this.hold + (this.end - this.start) / this.wire.speed;
   }
 
   get time(): number {
-    return (this.at - this.start) / this.wire.speed;
+    return this.held + (this.at - this.start) / this.wire.speed;
   }
 
   /** Played to its end. */
   get done(): boolean {
-    return this.steps.length < 2 || this.at >= this.end - 1e-9;
+    return this.steps.length < 2 || (!this.holding && this.at >= this.end - 1e-9);
   }
 
-  /** On by `dt` seconds of this screen's time; the events of the steps it reached (the first step's on the first call). */
+  /** On by `dt` seconds of this screen's time; the events of the steps it reached (the first step's once the hold is over). */
   advance(dt: number): ReplayEvent[] {
-    this.at = Math.min(this.end, this.at + Math.max(0, dt) * this.wire.speed);
+    dt = Math.max(0, dt);
+    if (this.holding) {
+      const h = Math.min(dt, this.hold - this.held);
+      this.held += h;
+      dt -= h;
+      if (this.holding) return [];
+    }
+    this.at = Math.min(this.end, this.at + dt * this.wire.speed);
     const out: ReplayEvent[] = [];
     while (this.next < this.steps.length && this.steps[this.next].t <= this.at + 1e-9) out.push(...this.steps[this.next++].events);
     return out;

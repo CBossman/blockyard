@@ -224,10 +224,16 @@ export interface ClientReplay {
   /** The game's name for it (`label`) and what it sent with it (`data`). */
   readonly label: string;
   readonly data: unknown;
-  /** Seconds into it and how long it lasts, as played (at its speed). */
+  /** Seconds into it and how long it lasts, as played (at its speed, its `hold` first). */
   readonly time: number;
   readonly duration: number;
   readonly speed: number;
+  /**
+   * Seconds its first frame stands still before it plays (`ReplayOptions.hold`): while `time` is
+   * under it, a freeze-frame. Client code may take the camera then (`client.camera.take`): the
+   * player it follows is drawn while it's taken, to be looked at.
+   */
+  readonly hold: number;
   /** Its viewer may end it early. */
   readonly skippable: boolean;
   /**

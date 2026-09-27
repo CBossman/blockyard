@@ -130,7 +130,11 @@ export class EntityView {
   }
 
   /** `t`: the frame's host time (`SimFrame.t`), which clips are timed by. Then client code poses them, then `finish`. */
-  sync(entities: FigureFrame[], projectiles: ProjectileFrame[], dt: number, running: boolean, t = 0) {
+  /**
+   * This frame's figures. `still`: a freeze-frame (a replay's `hold`): each stands exactly as the
+   * frame has it (facing, aim, stance: no easing into it), and nothing moves on.
+   */
+  sync(entities: FigureFrame[], projectiles: ProjectileFrame[], dt: number, running: boolean, t = 0, still = false) {
     this.time += dt;
     this.t = t;
     this.drawn = [];
@@ -146,7 +150,7 @@ export class EntityView {
         if (!def || !model) {
           if (!v) continue;
           v.frame = f;
-          this.draw(v, f, dt, running);
+          this.draw(v, f, dt, running, still);
           this.drawn.push(v);
           continue;
         }
@@ -177,7 +181,7 @@ export class EntityView {
         this.shown.set(f.id, v);
       }
       v.frame = f;
-      this.draw(v, f, dt, running);
+      this.draw(v, f, dt, running, still);
       this.drawn.push(v);
     }
     for (const [id, v] of this.shown) {
@@ -226,7 +230,7 @@ export class EntityView {
     return true;
   }
 
-  private draw(v: Shown, f: FigureFrame, dt: number, running: boolean) {
+  private draw(v: Shown, f: FigureFrame, dt: number, running: boolean, still = false) {
     const root = v.model.root;
     root.position.set(f.x, f.y, f.z);
     const hs = Math.hypot(f.vx, f.vz);
@@ -236,7 +240,7 @@ export class EntityView {
     else if (hs > 0.4) target = Math.atan2(f.vx, f.vz);
     let d = target - v.yaw;
     d = Math.atan2(Math.sin(d), Math.cos(d));
-    v.yaw += d * Math.min(1, dt * 9);
+    v.yaw += still ? d : d * Math.min(1, dt * 9);
     root.rotation.y = v.yaw;
 
     const a = v.anim;
@@ -246,11 +250,11 @@ export class EntityView {
     }
     a.raised = f.raised;
     a.casting = f.casting;
-    const k = Math.min(1, dt * 12);
+    const k = still ? 1 : Math.min(1, dt * 12);
     a.aim += ((f.aim ?? 0) - a.aim) * k;
     a.posture += ((f.posture ?? 0) - a.posture) * k;
     a.lean = (a.lean ?? 0) + ((f.lean ?? 0) - (a.lean ?? 0)) * k;
-    if (running) {
+    if (running && !still) {
       a.time += dt;
       a.attackT += dt;
       a.shotT = (a.shotT ?? 9) + dt;
@@ -268,7 +272,7 @@ export class EntityView {
     a.sprint = f.sprint ?? false;
     a.reloading = f.reloading ?? false;
     a.sights = (a.sights ?? 0) + ((f.sights ?? 0) - (a.sights ?? 0)) * k;
-    a.walkAmount += (Math.min(1, hs / Math.max(1.2, v.speed * 0.7)) - a.walkAmount) * Math.min(1, dt * 8);
+    a.walkAmount += (Math.min(1, hs / Math.max(1.2, v.speed * 0.7)) - a.walkAmount) * (still ? 1 : Math.min(1, dt * 8));
     a.pace = hs / Math.max(0.1, v.speed);
     if (f.look) {
       const eyeY = f.y + v.height * 0.85;

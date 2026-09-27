@@ -104,6 +104,9 @@ export class ReplayView {
       get speed() {
         return rv.current?.wire.speed ?? 1;
       },
+      get hold() {
+        return rv.current?.hold ?? 0;
+      },
       get skippable() {
         return rv.current?.wire.skippable ?? false;
       },
@@ -168,10 +171,10 @@ export class ReplayView {
   /**
    * The replay on by this frame's time: what was shown in the steps it passed (the followed
    * player's own shots kick their hands; everyone else's fly from their figures), and the frame to
-   * draw with whoever's eyes it follows in it. Null: none is playing, or it just ended (the live
-   * game is drawn).
+   * draw with whoever's eyes it follows in it, and whether its first frame is still standing still
+   * (its `hold`). Null: none is playing, or it just ended (the live game is drawn).
    */
-  step(): { frame: SimFrame; eyes: PlayerFrame | null; follow: string | null } | null {
+  step(): { frame: SimFrame; eyes: PlayerFrame | null; follow: string | null; holding: boolean } | null {
     const r = this.current;
     if (!r) return null;
     if (r.done || this.skip) {
@@ -185,7 +188,7 @@ export class ReplayView {
     const follow = r.wire.follow;
     for (const e of due) this.event(e, follow);
     const eyes = follow ? (frame.players.find((p) => p.id === follow) ?? null) : null;
-    return { frame, eyes, follow };
+    return { frame, eyes, follow, holding: r.holding };
   }
 
   /**

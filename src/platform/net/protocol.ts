@@ -207,6 +207,8 @@ export interface ReplayWire {
   camera: { at: [number, number, number]; look: [number, number, number]; fov: number | null } | null;
   /** Played this many times as fast as it happened. */
   speed: number;
+  /** Seconds its first frame stands still before it plays. */
+  hold: number;
   /** The game's name for it and anything it sends with it, for its client code (`client.replay`). */
   label: string;
   data: unknown;

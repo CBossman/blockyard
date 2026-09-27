@@ -116,7 +116,8 @@ export function gunner(): ClientKit {
       const held = me.held;
       const def = isGun(held?.def) ? held!.def : null;
       const st = held?.state as { mag?: number; reserve?: number; reload?: number; aim?: number; spread?: number; sight?: string; color?: string } | undefined;
-      if (!def || !st || typeof st.mag !== 'number' || me.dead || me.inVehicle) return hide(client);
+      // (Nor while client code has the camera: a cutscene, a replay's title.)
+      if (!def || !st || typeof st.mag !== 'number' || me.dead || me.inVehicle || client.camera.taken) return hide(client);
       const aim = st.aim ?? 0;
       // In a replay (someone else's eyes: `client.replay`), what they aimed through shows, not their rounds.
       showRounds(client.replay?.playing ? null : { mag: st.mag, reserve: st.reserve ?? 0, size: def.magazine, name: def.name, reloading: (st.reload ?? -1) >= 0 });

@@ -10,9 +10,10 @@ import { fighterOf, hostile, match, teamFighters, type Fighter } from './match';
 import { FFA_LIMIT, MODES, ROTATION, ROUNDS, TDM_LIMIT, TEAMS, type MatchPlan, type ModeId, type Team } from './modes';
 import { COLORS, fighterModel, shared } from './shared';
 import { NextVote, SCORES, VOTING } from './nextvote';
+import { PlayOfTheGame, POTG_DELAY, POTG_KEEP } from './potg';
 import { BLURBS, defineWeapons, feedIcon, LETHAL_BLURBS, LETHAL_COUNT, LETHALS, PRIMARIES, SIDEARMS, WEAPONS, weaponName, type Lethal, type Primary } from './weapons';
 import { outfitId, setupProgression, type Progression } from './progression'; // [progression]
-import { killcam, killcamHolds } from './killcam';
+import { killcam, killcamHolds, killcamsOff } from './killcam';
 import { selfHarm, Streaks } from './streaks';
 import { isStreak, STREAK_IDS, STREAKS } from './streaks/kinds';
 
@@ -64,6 +65,15 @@ let overAt = 0;
 /** How long this intermission lasts, and whether the vote on what's next is still to open in it. */
 let intermission = INTERMISSION;
 let voteNext = false;
+/**
+ * The intermission's timings (seconds after the match ended): when the Play of the Game starts
+ * (-1: none to come), when it's over (0: it isn't playing), and when the vote opens.
+ */
+let potgAt = -1;
+let potgUntil = 0;
+let votesAt = SCORES;
+/** The match's best play, shown once it's over (potg.ts). */
+let potg: PlayOfTheGame;
 let firstBlood = false;
 let bots: Bots;
 let rounds: CaseRounds;
@@ -426,6 +436,7 @@ function onDeath(game: GameContext, victim: Player, source: unknown, weapon: str
   // Killed flying a streak: it's over.
   streaks.died(victim);
   v.deaths++;
+  const stopped = v.streak;
   v.streak = 0;
   v.diedAt = now;
   v.uavUntil = 0;
@@ -488,6 +499,8 @@ function onDeath(game: GameContext, victim: Player, source: unknown, weapon: str
     victim.hud.banner('KILLED BY', `${killer.name}${weapon ? ` · ${killName(weapon)}` : ''}${headshot ? ' · headshot' : ''}${through > 0 ? ' · through the wall' : ''}`, { color: COLORS.red, duration: RESPAWN - 0.3 });
     // KILLCAM hook (killcam.ts): the victim sees it again through the killer's eyes, then respawns.
     killcam(game, victim, killer, weapon, headshot, through, streaks.killcamView(victim, killer, weapon));
+    // The Play of the Game (potg.ts): a kill counts toward a play, unless a killstreak made it.
+    if (!isStreak(weapon)) potg.kill(killer, victim, { weapon, headshot, through: through > 0, stopped, color: nameColor(killer, killer.bot ? '#ffe7a3' : COLORS.gold), spawned: k.spawnedAt });
     // (Hook: whatever else counts a kill, progression say, hears of it here: `k` got `points`.)
     // Achievements (meta.ts), a person's.
     if (!killer.bot) {
@@ -566,7 +579,12 @@ function endMatch(game: GameContext, winner: Player | null, team?: Team, cheat =
   // with people in it, what they vote for once they've seen the scores.
   plan = nextPlan(game);
   voteNext = next.people().length > 0;
-  intermission = voteNext ? SCORES + VOTING : INTERMISSION;
+  // With people in it, the match's best play first (potg.ts): the kill cams still to come give way to it.
+  potgAt = voteNext && potg.any ? POTG_DELAY : -1;
+  potgUntil = 0;
+  votesAt = potgAt < 0 ? SCORES : POTG_DELAY + potg.estimate() + SCORES;
+  intermission = voteNext ? votesAt + VOTING : INTERMISSION;
+  if (potgAt >= 0) killcamsOff();
   settings?.close();
   game.audio.play('match_end');
   scoreboard(game, true);
@@ -823,6 +841,7 @@ function skipMatch(game: GameContext) {
   overAt = game.clock.now;
   intermission = SKIP_PAUSE;
   voteNext = false;
+  potgAt = -1;
   if (isCase()) rounds.end();
   xp.matchOver([]); // [progression] no placing in a match skipped (what was earned in it is kept)
   for (const f of fighters.values()) {
@@ -931,6 +950,9 @@ export default defineServer(shared, {
       color: (p) => nameColor(p, COLORS.gold),
       skip: () => skipMatch(game),
     });
+    potg = new PlayOfTheGame(game);
+    // Its plays are clipped from the history once they're over (and a kill cam reaches back 4 s).
+    game.replay.keep(POTG_KEEP);
     next = new NextVote(game, { modeIcon: (id) => MODE_ICONS[id], mapIcon: (id) => MAP_ICONS[id] ?? { block: 'stone' }, name: planName });
     game.events.on('playerJoin', ({ player }) => {
       // Signed in for the first time since claiming their name: the all-time numbers kept by it are theirs.
@@ -1065,6 +1087,8 @@ export default defineServer(shared, {
     vote.reset();
     next.close();
     voteNext = false;
+    potg.reset();
+    potgAt = -1;
     // The match planned: its mode, its map (the bots' grid and hotspots with it).
     match.mode = MODES[plan.mode];
     match.map = mapById(plan.map) ?? MAPS[0];
@@ -1130,8 +1154,22 @@ export default defineServer(shared, {
 
     if (match.phase === 'over') {
       const since = now - overAt;
+      // The Play of the Game, on everyone's screen (potg.ts): the scores and the vote wait for it.
+      if (potgAt >= 0 && since >= potgAt) {
+        potgAt = -1;
+        const d = potg.show(next.people(), match.map.name);
+        potgUntil = d > 0 ? since + d : 0;
+        votesAt = potgUntil + SCORES;
+        intermission = votesAt + VOTING;
+        scoreboard(game, !potgUntil);
+      }
+      // It's over: the final scores come back up.
+      if (potgUntil > 0 && since >= potgUntil) {
+        potgUntil = 0;
+        scoreboard(game, true);
+      }
       // The scores seen: what's next is voted on (nextvote.ts), till the intermission's out.
-      if (voteNext && since >= SCORES) {
+      if (voteNext && since >= votesAt) {
         voteNext = false;
         next.begin(plan, intermission - since);
       }
@@ -1144,7 +1182,8 @@ export default defineServer(shared, {
       // (A match skipped has no final scores to show: its banner says what's next.)
       if (!skipped && Math.floor(now) !== lastSecond) {
         lastSecond = Math.floor(now);
-        scoreboard(game, true);
+        // (Not over the Play of the Game.)
+        scoreboard(game, !potgUntil);
         next.tick();
       }
       return;
@@ -1181,6 +1220,7 @@ export default defineServer(shared, {
 
     if (isCase()) rounds.update(dt);
     else updateBriefcase(game);
+    potg.update();
     ammo.update();
     if (match.phase !== 'playing') return;
     // The clock.

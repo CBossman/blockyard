@@ -1557,19 +1557,33 @@ game.events.on('playerDeath', ({ player, source }) => {
 | `follow` | Through this player's eyes (first person) |
 | `camera` | Or from a camera standing still: `{ at, look, fov? }` |
 | `speed` | How fast it plays (default 1; 0.25 to 4) |
+| `clip` | A clip kept earlier (`game.replay.clip`), played whole in place of the recent past |
+| `hold` | Seconds its first frame stands still before it plays (at most 10), part of its `duration`: a freeze-frame for a title |
 | `label`, `data` | A name and plain data for the client code (`client.replay.label`, `.data`): who did it, with what |
 | `skippable` | The player may end it early (default true) |
 | `onEnd({ player, skipped })` | It ended on the server's clock: played out, skipped by the player, stopped, or replaced by another replay. Not called if the player leaves |
 
 `show` returns a handle (`duration`, `from` and `to` by the game's clock, `playing`, `stop()`), or null when there's nothing to show (nothing kept yet, or a bot: bots have no screen). `game.replay.stop(player)` ends one, `game.replay.playing(player)` finds it, `game.replay.seconds` says how far back the history reaches, and `game.replay.keep(seconds)` changes how much is kept (up to 30; `keep(0)` turns recording off).
 
+**Clips: a moment kept for later.** The history only reaches back a few seconds, so a highlight shown at the end of a match is kept as it happens: **`game.replay.clip({ from, seconds })`** copies a stretch of the history (the same `from` and `seconds` as `show`) into a clip that stays as long as the game holds on to it, and `show(player, { clip, ... })` plays it to anyone, as many times as like. Call of Blocky's Play of the Game judges each run of kills once it's over, clips the best so far, and shows it to everyone when the match ends:
+
+```ts
+const clip = game.replay.clip({ from: { at: firstKill - 3 }, seconds: lastKill + 1.5 - (firstKill - 3) });
+// ...the match is over:
+for (const p of people) game.replay.show(p, { clip, follow: star, hold: 3.6, label: 'potg', data: { name: star.name } });
+```
+
+A clip costs what its stretch of history does (about 20 KB a second of a six-fighter match) and goes when the game lets go of it (the last reference). A clip belongs to its room.
+
+**A freeze-frame to start (`hold`).** With `hold`, the replay's first frame stands still for that long before it plays: the figures stop exactly as the frame has them (no easing into it), and nothing it shows (shots, sounds) comes till it moves. `client.replay.hold` says how long, and `client.replay.time` counts it (`time < hold`: still frozen). It's the moment for a title: client code may take the camera meanwhile (`client.camera.take`), and the player the replay follows is drawn while it's taken, to be looked at from outside (a portrait from in front of them, say); released, the view is their eyes again.
+
 **On the player's screen** the replay's frames are drawn in place of the live game's, with the same figures and the same interpolation (players' looks blended too, so the eyes it follows turn smoothly):
 
 - **Through someone's eyes**, `client.me` is that player as the replay shows them: their look, what they hold, their gun's rounds, reload and aim. So the first-person kit draws their hands and their gun, aiming down the sights and working its action as they did, and the gunner kit shows the crosshair, reticle or scope they aimed through. Their shots are `shot` and `bullets` events as if they were ours (the tracers leave their muzzle); the effects and sounds their own screen was given play (damage numbers, the kill sound); their death tilts the view as ours does. Everyone else's shots fly from their figures.
 - **The live game steps aside**: the platform's HUD panels and the game's widgets and banners hide (markers and names over heads stay), and what the live game shows in the world (its effects, sounds out in the world, shots, throws) isn't shown until the replay ends. The HUD's calls keep arriving, for after.
-- **Client code knows**: `client.replay` (`playing`, `follow`, `label`, `data`, `time`, `duration`, `speed`, `skippable`, `skip()`) and the events `replay.start` and `replay.end` (`skipped`). A kit hides what's the live player's own (`hud.gunner()` hides the rounds panel), and the game shows what's playing in a layer of its own (client code's layers stay up). `client.replay.skip()` ends it on this screen as the next frame starts (every kit sees `replay.end` then) and tells the server (`onEnd` with `skipped: true`), if it's `skippable`.
+- **Client code knows**: `client.replay` (`playing`, `follow`, `label`, `data`, `time`, `duration`, `speed`, `hold`, `skippable`, `skip()`) and the events `replay.start` and `replay.end` (`skipped`). A kit hides what's the live player's own (`hud.gunner()` hides the rounds panel), and the game shows what's playing in a layer of its own (client code's layers stay up). `client.replay.skip()` ends it on this screen as the next frame starts (every kit sees `replay.end` then) and tells the server (`onEnd` with `skipped: true`), if it's `skippable`.
 
-**What it costs.** Recording adds nothing measurable to a step (the server rounds each frame and works out its patch once, for the socket and the history alike). Call of Blocky with six fighters keeps about 20 KB a second: 160 KB for its 8 seconds, plus one frame whole (about 7 KB), bounded by `seconds` and by bytes (4 MB). A replay goes to its player in one message, the frames as the socket sends them (the first whole, then each a patch on the one before: `net/delta`), less what only prediction uses: a 5 second stretch of that match is 150 steps, about 90 to 100 KB of JSON and 24 KB once the socket's compression has it (about what 5 seconds of the live game cost); building it takes the server about 7 ms. `tests/headless/replay.ts` measures all of this.
+**What it costs.** Recording adds nothing measurable to a step (the server rounds each frame and works out its patch once, for the socket and the history alike). Call of Blocky with six fighters keeps about 20 KB a second: 160 KB for 8 seconds (it keeps 16, for its Play of the Game: about 320 KB), plus one frame whole (about 7 KB), bounded by `seconds` and by bytes (4 MB). A replay goes to its player in one message, the frames as the socket sends them (the first whole, then each a patch on the one before: `net/delta`), less what only prediction uses: a 5 second stretch of that match is 150 steps, about 90 to 100 KB of JSON and 24 KB once the socket's compression has it (about what 5 seconds of the live game cost); building it takes the server about 7 ms. `tests/headless/replay.ts` measures all of this.
 
 **What it doesn't do (yet).**
 - The world's blocks are as they are now: a wall shot away during the replay is already gone at its start (the chips still fly and the holes are there where the bullets hit).

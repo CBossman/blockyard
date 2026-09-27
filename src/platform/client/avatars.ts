@@ -105,9 +105,9 @@ export class Avatars {
 
   /**
    * Other players as figures, with their names above. `self` is whose eyes we see through (a
-   * replay's player, not `live`: never drawn), or none.
+   * replay's player, not `live`: drawn only if `showSelf`, a camera away from their eyes), or none.
    */
-  frames(f: SimFrame, me: PlayerFrame, self: string | null, live = true): FigureFrame[] {
+  frames(f: SimFrame, me: PlayerFrame, self: string | null, live = true, showSelf = false): FigureFrame[] {
     const { def, view, hud } = this.p;
     const out: FigureFrame[] = [];
     const seen = new Set<string>();
@@ -120,8 +120,8 @@ export class Avatars {
       // (predicted) facing where we look.
       const mine = other.id === self;
       const remote = !!other.vehicle?.remote;
-      if ((mine && !(live && (view.thirdPerson || remote))) || !this.p.walker || (other.vehicle && !remote)) continue;
-      const p = mine && !remote ? { ...me, view: { ...me.view, yaw: view.yaw, pitch: view.pitch } } : other;
+      if ((mine && !(live ? view.thirdPerson || remote : showSelf)) || !this.p.walker || (other.vehicle && !remote)) continue;
+      const p = mine && live && !remote ? { ...me, view: { ...me.view, yaw: view.yaw, pitch: view.pitch } } : other;
       const type = this.type(p);
       let id = this.ids.get(p.id);
       if (id === undefined) this.ids.set(p.id, (id = -1 - this.ids.size));

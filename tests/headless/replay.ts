@@ -18,10 +18,12 @@ const DT = 1 / 30;
  * sends the window asked for to that player alone, and its frames read back exactly as they went
  * out (the client's playback too); what it costs to send; Call of Blocky's kill cam in a bot
  * match (it comes on a death by someone, and ends in a respawn), skipping it, and a player who
- * leaves while theirs plays.
+ * leaves while theirs plays. Clips: a stretch kept past the history, and shown later after a
+ * freeze-frame (`hold`).
  */
 export default function replay() {
   history();
+  clips();
   killcam();
   skipping();
   leaving();
@@ -65,6 +67,9 @@ function history() {
   // (Nobody gets them meanwhile: their kill cams would take these replays' places.)
   r.step(2);
   for (const id of [ann, bob]) r.player(id).protect(1e6);
+  // (Call of Blocky keeps 16 s, for its Play of the Game: 8 here, the platform's default.)
+  check(Math.abs(r.game.replay.seconds - r.host.replays.history.seconds) < 1e-9 && r.host.replays.history.keep === 16, `Call of Blocky keeps 16 s: ${r.host.replays.history.keep}`);
+  r.game.replay.keep(8);
   const t0 = performance.now();
   r.step(30 * 20);
   const ms = (performance.now() - t0) / (30 * 20);
@@ -171,6 +176,62 @@ function history() {
   const on = time(150);
   check(Math.abs(r.game.replay.seconds - 149 / 30) < 1e-6, `recording again: ${r.game.replay.seconds.toFixed(3)} s`);
   console.log(`  a step: ${off.toFixed(3)} ms keeping nothing, ${on.toFixed(3)} ms keeping 8 s`);
+  r.host.dispose();
+}
+
+/**
+ * A clip (`game.replay.clip`): kept as it was when taken, however far the history moves on, and
+ * shown to two players at once; its `hold` stands its first frame still before it plays (on the
+ * server's clock and the screen's), with nothing it shows handed over till it moves.
+ */
+function clips() {
+  const r = room(12);
+  const ann = r.join('Ann');
+  const bob = r.join('Bob');
+  r.step(2);
+  for (const id of [ann, bob]) r.player(id).protect(1e6);
+  r.game.replay.keep(4);
+  r.step(30 * 5);
+  const at = r.game.clock.now;
+  const clip = r.game.replay.clip({ from: { at: at - 3 }, seconds: 2 });
+  check(clip && Math.abs(clip.seconds - 2) < DT * 1.01 && Math.abs(clip.from - (at - 3)) < DT * 1.01, `a clip of 2 s: ${clip?.from.toFixed(2)}..${clip?.to.toFixed(2)}`);
+  check(r.game.replay.clip({ from: { at: at - 3 }, seconds: 0 }) === null, 'nothing in no time');
+  // The history moves on well past it.
+  r.step(30 * 6);
+  check(r.host.replays.history.seconds <= 4 + 1e-6 && r.game.clock.now - clip.from > 8, 'the history has let it go');
+  r.events.clear();
+  const annP = r.player(ann);
+  const bobP = r.player(bob);
+  const a = r.game.replay.show(annP, { clip, follow: bobP, hold: 1.5, label: 'clip' });
+  const b = r.game.replay.show(bobP, { clip, follow: bobP, hold: 1.5, label: 'clip' });
+  check(a && b && Math.abs(a.duration - (1.5 + clip.seconds)) < 1e-6, `held 1.5 s, then 2 s: ${a?.duration.toFixed(3)}`);
+  check(Math.abs(a.from - clip.from) < 1e-6 && Math.abs(a.to - clip.to) < 1e-6, 'the stretch the clip holds');
+  r.step();
+  const wa = r.replays(ann)[0]?.replay;
+  const wb = r.replays(bob)[0]?.replay;
+  check(wa && wb && wa.hold === 1.5 && wa.steps.length === wb.steps.length && wa.steps.length >= 60, `both got it, ${wa?.steps.length} steps`);
+  check(Math.abs(wa.steps[0].t - wa.steps[wa.steps.length - 1].t + clip.seconds) < 1e-6, 'all of it');
+  // On the screen: the first frame stands still for the hold, nothing handed over, then it plays.
+  const play = new ReplayPlayback(wa);
+  const first = JSON.stringify(play.sample());
+  check(Math.abs(play.duration - (1.5 + clip.seconds)) < 1e-6 && play.hold === 1.5, 'the playback knows its hold');
+  let early = 0;
+  for (let i = 0; i < 89; i++) early += play.advance(1 / 60).length;
+  check(play.holding && early === 0 && JSON.stringify(play.sample()) === first && Math.abs(play.time - 89 / 60) < 1e-9, `still at ${play.time.toFixed(3)} s: the first frame, nothing shown`);
+  let events = 0;
+  let frames = 0;
+  while (!play.done) {
+    events += play.advance(1 / 60).length;
+    frames++;
+  }
+  check(!play.holding && events === wa.steps.reduce((n, s) => n + (s.e?.length ?? 0), 0), `then it plays, everything shown once (${events})`);
+  check(Math.abs(frames - (1 + clip.seconds * 60)) <= 1, `for its 2 s: ${frames} frames`);
+  // The server ends it on its clock, hold and all.
+  r.step(Math.round((1.5 + clip.seconds) * 30) - 3);
+  check(a.playing, 'still playing just before its end');
+  r.step(4);
+  check(!a.playing && !b.playing && playing(r.host) === 0, 'over at its end');
+  console.log(`  a clip: ${clip.seconds.toFixed(2)} s kept, shown ${((r.game.clock.now - clip.to) | 0)} s later to two players after a 1.5 s hold`);
   r.host.dispose();
 }
 
