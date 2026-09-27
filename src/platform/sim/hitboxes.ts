@@ -43,21 +43,29 @@ export const DEFAULT_HITSCAN = resolveHitscan();
 /** Stance for hitboxes: standing, crouching or sliding. */
 export type Stance = 0 | 1 | 2;
 
+/** Where a lean (`AbilityBody.lean`, blocks to the right of the view) puts the head, from upright: world x and z. */
+export function leanOffset(yaw: number, lean: number): { x: number; z: number } {
+  return { x: Math.cos(yaw) * lean, z: -Math.sin(yaw) * lean };
+}
+
 /**
  * A player's hitboxes where they stand (feet at `p`): the body and the head, as min / max corners.
  * They match the figure everyone sees: upright, crouched, or leaning back in a slide (the game's
- * `hitscan.hitboxes` can change them).
+ * `hitscan.hitboxes` can change them). Leaning out (`lean`, the head's offset from `leanOffset`)
+ * moves the head that far and reaches the body half as far that way (the shoulder that shows).
  */
-export function playerBoxes(p: Vec3, stance: Stance, rules: HitscanRules = DEFAULT_HITSCAN): { body: [Vec3, Vec3]; head: [Vec3, Vec3] } {
+export function playerBoxes(p: Vec3, stance: Stance, rules: HitscanRules = DEFAULT_HITSCAN, lean?: { x: number; z: number }): { body: [Vec3, Vec3]; head: [Vec3, Vec3] } {
   const [bodyTop, headTop, bw, hw] = rules.boxes[stance];
+  const lx = lean?.x ?? 0;
+  const lz = lean?.z ?? 0;
   return {
     body: [
-      { x: p.x - bw, y: p.y, z: p.z - bw },
-      { x: p.x + bw, y: p.y + bodyTop, z: p.z + bw },
+      { x: p.x - bw + Math.min(0, lx / 2), y: p.y, z: p.z - bw + Math.min(0, lz / 2) },
+      { x: p.x + bw + Math.max(0, lx / 2), y: p.y + bodyTop, z: p.z + bw + Math.max(0, lz / 2) },
     ],
     head: [
-      { x: p.x - hw, y: p.y + bodyTop, z: p.z - hw },
-      { x: p.x + hw, y: p.y + headTop, z: p.z + hw },
+      { x: p.x + lx - hw, y: p.y + bodyTop, z: p.z + lz - hw },
+      { x: p.x + lx + hw, y: p.y + headTop, z: p.z + lz + hw },
     ],
   };
 }

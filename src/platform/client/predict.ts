@@ -54,6 +54,8 @@ export interface Predicted {
   sneaking: boolean;
   sprinting: boolean;
   sliding: boolean;
+  /** How far their head leans out sideways (`PlayerFrame.lean`). */
+  lean: number;
   /** On a solid prop: which, and where their feet are on it (show them where it's drawn). */
   ride: { prop: number; p: [number, number, number] } | null;
 }
@@ -75,6 +77,7 @@ export class Predictor {
   private sneak = false;
   private sprint = false;
   private slide = false;
+  private lean = 0;
   /**
    * Shown minus predicted, fading: corrections ease in instead of snapping. Riding a prop, it's
    * on the prop (`errorRide`), since the prop moves on between the server's frames.
@@ -132,6 +135,7 @@ export class Predictor {
     this.sneak = me.sneaking;
     this.sprint = me.sprinting;
     this.slide = me.sliding;
+    this.lean = me.lean ?? 0;
     while (this.pending.length && this.pending[0].seq <= me.ack) this.pending.shift();
     for (const m of this.pending) this.run(m.input, m.dt);
     this.ready = true;
@@ -180,6 +184,7 @@ export class Predictor {
       sneaking: this.sneak,
       sprinting: this.sprint,
       sliding: this.slide,
+      lean: this.lean,
       ride: ride ? { prop: ride, p: [s[14] + e[0], s[15] + e[1], s[16] + e[2]] } : null,
     };
   }
@@ -200,6 +205,7 @@ export class Predictor {
     const r = stepMovement(this.world, this.slot, new Controls(input), input.yaw, this.allowFlight, this.memory, dt, this.tune, this.mods(input), input.pitch, this.query);
     this.sneak = r.sneak;
     this.slide = r.slide;
+    this.lean = r.lean;
     this.tilt = r.camera;
     const s = this.world.player_state(this.slot);
     this.sprint = r.sprint && Math.hypot(s[3], s[5]) > Math.min(4.5, this.tune.params[0] * 1.02);

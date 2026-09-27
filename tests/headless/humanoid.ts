@@ -101,6 +101,7 @@ export default async function humanoid() {
     ['a rifle, sprinting', { walkAmount: 1, speed: 8, sprint: true }, true],
     ['a rifle, aimed down the sights', { sights: 1, headPitch: 0.3 }, true],
     ['a rifle, reloading', { reloading: true }, true],
+    ['a rifle, leaning out to peek', { lean: 0.4 }, true],
   ];
   const standing = posed(skinned, {}, 0.8, {});
   const turned = posed(mixamo, { joints }, 0.8, {});
@@ -115,6 +116,17 @@ export default async function humanoid() {
     check(apart(a, b) < 1e-4, `${what}: the Mixamo skeleton's joints are where the rig's own are (${apart(a, b).toExponential(1)} m apart)`);
     check(apart(a, c) < 1e-4, `${what}: and the rigid mannequin's (${apart(a, c).toExponential(1)} m)`);
   }
+  // Leaning out to peek (a movement ability's `lean`, blocks to its right): tipped over at the
+  // waist toward its right (-x: it faces +z), the head out about as far as its hitbox goes, the hips put.
+  const upright = posed(skinned, {}, 0.8, {}, { item: rifle });
+  const leaning = posed(skinned, {}, 0.8, { lean: 0.4 }, { item: rifle });
+  const out = upright.at('head').x - leaning.at('head').x;
+  const hips = Math.abs(leaning.at('hips').x - upright.at('hips').x);
+  // The head's joint is the neck, a little below the eyes that go the whole 0.4.
+  check(out > 0.32 && out < 0.42 && hips < 0.02, `leaning right: the head goes ${out.toFixed(2)} to its right (its hitbox 0.4), the hips ${hips.toFixed(3)}`);
+  const left = posed(skinned, {}, 0.8, { lean: -0.4 }, { item: rifle });
+  check(left.at('head').x - upright.at('head').x > 0.32, 'leaning left: the head goes to its left');
+
   // Grips from the model, or a point in the fist: the rigid mannequin's grips are where the default puts them.
   const armed = posed(rigid, {}, 0.3, {}, { item: rifle });
   const armedMixamo = posed(mixamo, { joints }, 0.3, {}, { item: rifle });
@@ -246,5 +258,5 @@ export default async function humanoid() {
   check(Math.abs(turn()) < 1e-3, `and off again (${turn().toFixed(3)})`);
   plain.dispose();
   lib2.dispose();
-  console.log('  the kit\'s poses over its defaults (its options, a model\'s, an item\'s) · clips in every screen\'s frames, restarted, stopped · the kit poses a Mixamo T-pose skeleton as the rig\'s own (9 states) · clips over the kit\'s poses (layers, fades, late joiners, once, a gun in the hand) · skinned materials · no kit, no pose · arms cut from a skin · clips on other figures');
+  console.log('  the kit\'s poses over its defaults (its options, a model\'s, an item\'s) · clips in every screen\'s frames, restarted, stopped · the kit poses a Mixamo T-pose skeleton as the rig\'s own (10 states) · clips over the kit\'s poses (layers, fades, late joiners, once, a gun in the hand) · skinned materials · no kit, no pose · arms cut from a skin · clips on other figures');
 }

@@ -435,6 +435,14 @@ export interface AbilityBody {
    */
   stance: AbilityStance;
   /**
+   * How far their head and shoulders lean out sideways this step (blocks, positive to the right of
+   * where they look, up to 0.6 either way; 0 at the start of each step): a peek round a corner.
+   * Their eyes go with it (their camera, and where their shots start), and so do their head's
+   * hitbox for bullets and their figure (tipped over at the waist), for everyone, predicted like
+   * `stance`. It doesn't move their feet or check for walls: keep it out of blocks with `raycast`.
+   */
+  lean: number;
+  /**
    * Their camera this step, on their own screen only (predicted, so it moves the moment they do):
    * `roll` tilts it (radians, positive leans right, as a head tilts), `pitch` tips it (radians, up
    * is positive; where they aim doesn't move), `dip` lowers it (blocks). All 0 at the start of each

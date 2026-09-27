@@ -16,7 +16,7 @@ export const PLAYER_DATA = '$player:';
 /** Accounts told `player.adopted` in this game already: `$adopted:<account id>` (the name). */
 export const ADOPTED = '$adopted:';
 import { castBullet, History, type Hittable } from './hitscan';
-import { resolveHitscan, type HitscanRules } from './hitboxes';
+import { leanOffset, resolveHitscan, type HitscanRules } from './hitboxes';
 import { flightWorld } from './flight';
 import type { ItemHost, ItemKind } from '../api/items';
 import { Presentation, type Sink } from './present';
@@ -412,11 +412,11 @@ export class Sim {
 
   /** Where everyone is this tick, for shots checked in the past. */
   private record() {
-    const players = new Map<string, { x: number; y: number; z: number; stance: 0 | 1 | 2; alive: boolean }>();
+    const players = new Map<string, { x: number; y: number; z: number; stance: 0 | 1 | 2; alive: boolean; lean?: { x: number; z: number } }>();
     for (const p of this.players) {
       if (p.vacant) continue;
       const s = p.state;
-      players.set(p.id, { x: s.x, y: s.y, z: s.z, stance: p.sliding ? 2 : p.sneaking ? 1 : 0, alive: !p.health.dead });
+      players.set(p.id, { x: s.x, y: s.y, z: s.z, stance: p.sliding ? 2 : p.sneaking ? 1 : 0, alive: !p.health.dead, ...(p.lean && { lean: leanOffset(p.yaw, p.lean) }) });
     }
     const entities = new Map<number, { x: number; y: number; z: number; stance: 0; alive: boolean }>();
     for (const e of this.entities.all()) {
@@ -432,7 +432,7 @@ export class Sim {
     for (const p of this.players) {
       if (p.vacant || p.health.dead) continue;
       const s = p.state;
-      out.push({ target: p.api, key: p.id, now: { x: s.x, y: s.y, z: s.z, stance: p.sliding ? 2 : p.sneaking ? 1 : 0, alive: true } });
+      out.push({ target: p.api, key: p.id, now: { x: s.x, y: s.y, z: s.z, stance: p.sliding ? 2 : p.sneaking ? 1 : 0, alive: true, ...(p.lean && { lean: leanOffset(p.yaw, p.lean) }) } });
     }
     for (const e of this.entities.all()) {
       const q = e.position;
