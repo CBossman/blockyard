@@ -105,9 +105,21 @@ export class PlayerCamera {
 
   constructor(readonly camera: THREE.PerspectiveCamera) {}
 
+  /**
+   * How much slower the view turns aiming down the sights: by as much as it magnifies (the ratio
+   * of the half-angles' tangents), so a mouse movement moves the world across the screen about as
+   * far zoomed in as out. A 4x scope, without it, turns the view as far as ever, across a screen
+   * that shows a quarter as much.
+   */
+  get lookScale(): number {
+    if (this.aimZoom <= 1.01) return 1;
+    const half = (this.baseFov * Math.PI) / 360;
+    return Math.tan(half / this.aimZoom) / Math.tan(half);
+  }
+
   look(input: Input, active: boolean) {
     if (!active) return;
-    const k = 0.0022 * this.sensitivity;
+    const k = 0.0022 * this.sensitivity * this.lookScale;
     this.yaw -= input.mouseDX * k;
     this.pitch = clampPitch(this.pitch - input.mouseDY * k);
   }

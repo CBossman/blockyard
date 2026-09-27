@@ -1214,8 +1214,8 @@ export class Runtime {
     const help = this.client.kindStick();
     const yaw = lx * 3.6 * s * (1 + 0.8 * boost) * help.slow * dt - help.yaw;
     const pitch = ly * (this.settings.invertY ? -1 : 1) * 2.5 * s * help.slow * dt - help.pitch;
-    // As mouse movement (the view turns by it, at the mouse's sensitivity).
-    const k = 0.0022 * this.view.sensitivity;
+    // As mouse movement (the view turns by it, at the mouse's sensitivity, slowed as the zoom slows the mouse: the stick has its own).
+    const k = 0.0022 * this.view.sensitivity * this.view.lookScale;
     this.input.mouseDX += yaw / k;
     this.input.mouseDY += pitch / k;
   }
