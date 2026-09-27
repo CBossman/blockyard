@@ -78,6 +78,8 @@ export class PlayerCamera {
    */
   tilt: readonly [number, number, number] | null = null;
   private tiltNow: [number, number, number] = [0, 0, 0];
+  /** How far the eyes lean out sideways now (`PlayerFrame.lean`, eased between frames). */
+  private leanNow = 0;
   /**
    * Where the player looks (radians; yaw 0 looks toward -z), as the mouse turns it: the camera's
    * turn, and what goes to the simulation (where they walk and face). What they shoot along is
@@ -188,6 +190,11 @@ export class PlayerCamera {
     const targetEye = f.sliding ? SLIDE_EYE : f.sneaking && !f.flying ? SNEAK_EYE : EYE;
     this.eye += (targetEye - this.eye) * (1 - Math.exp(-dt * (f.sliding ? 18 : 14)));
     this.stepUp(dt, f);
+    // Leaning out (a peek): the eyes go sideways with the head, across the view. It's where their
+    // shots start too, on this screen (from the camera) and on the host (from `eye`).
+    this.leanNow += ((f.lean ?? 0) - this.leanNow) * (1 - Math.exp(-dt * 30));
+    const leanX = Math.cos(this.yaw) * this.leanNow;
+    const leanZ = -Math.sin(this.yaw) * this.leanNow;
 
     const speed = Math.hypot(f.vx, f.vz);
     const bobAmt = this.viewBobbing && f.onGround && !f.flying ? Math.min(1, speed / 4.3) : 0;
@@ -201,7 +208,7 @@ export class PlayerCamera {
     const t = this.tiltNow;
     for (let i = 0; i < 3; i++) t[i] += ((want?.[i] ?? 0) - t[i]) * ease;
     const kicked = clampPitch(this.pitch + t[1]);
-    this.camera.position.set(f.x + Math.cos(this.yaw) * bobX, f.y + this.eye + this.stepLag + bobY - t[2], f.z - Math.sin(this.yaw) * bobX);
+    this.camera.position.set(f.x + leanX + Math.cos(this.yaw) * bobX, f.y + this.eye + this.stepLag + bobY - t[2], f.z + leanZ - Math.sin(this.yaw) * bobX);
     this.euler.set(kicked, this.yaw, Math.cos(phase) * 0.004 * bobAmt - t[0]);
     this.camera.quaternion.setFromEuler(this.euler);
 
@@ -212,7 +219,7 @@ export class PlayerCamera {
     if (circle) this.circled.copy(circle);
     this.rig = null;
     if (this.distance > 0) {
-      const eye = new THREE.Vector3(f.x, f.y + this.eye + this.stepLag, f.z);
+      const eye = new THREE.Vector3(f.x + leanX, f.y + this.eye + this.stepLag, f.z + leanZ);
       const pivot = eye.clone().lerp(this.circled, smoothstep(this.distance / 6));
       const q = this.camera.quaternion;
       // The arm: back from the point circled, and over the shoulder (eased in over the first

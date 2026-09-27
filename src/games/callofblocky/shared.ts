@@ -4,6 +4,7 @@ import { BLOCKS } from './blocks';
 import hudCss from './hud.css?raw';
 import { MAPS, WORLD } from './map';
 import meta from './meta';
+import { peek } from './peek';
 import { FIGHTERS as FIGHTER_MODELS } from './models/fighters';
 import { chopperVehicle, missileVehicle } from './streaks/flight';
 import { FIGHTER_STYLE } from './style';
@@ -68,6 +69,8 @@ export const shared = defineShared({
       edgeGuard: false,
       slide: { speed: 11.5, time: 0.8, friction: 1.3, cooldown: 0.6 },
       mantle: 1.1,
+      // Q and E lean out to peek round corners (peek.ts).
+      abilities: { peek },
     },
   },
   hud: {

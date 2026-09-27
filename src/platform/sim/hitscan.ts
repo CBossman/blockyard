@@ -11,6 +11,8 @@ interface Pose {
   z: number;
   stance: Stance;
   alive: boolean;
+  /** A player leaning out: where their head is from upright (world x and z, `leanOffset`). */
+  lean?: { x: number; z: number };
 }
 
 interface Snapshot {
@@ -57,7 +59,12 @@ export class History {
     if (!a) return b ?? null;
     if (!b || s[i].t >= t) return a;
     const k = Math.min(1, (t - s[i].t) / Math.max(1e-6, s[i + 1].t - s[i].t));
-    return { x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k, z: a.z + (b.z - a.z) * k, stance: k < 0.5 ? a.stance : b.stance, alive: a.alive && b.alive };
+    const pose: Pose = { x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k, z: a.z + (b.z - a.z) * k, stance: k < 0.5 ? a.stance : b.stance, alive: a.alive && b.alive };
+    if (a.lean || b.lean) {
+      const [ax, az, bx, bz] = [a.lean?.x ?? 0, a.lean?.z ?? 0, b.lean?.x ?? 0, b.lean?.z ?? 0];
+      pose.lean = { x: ax + (bx - ax) * k, z: az + (bz - az) * k };
+    }
+    return pose;
   }
 }
 
@@ -204,7 +211,7 @@ export function castBullet(w: HitscanWorld, from: Vec3, dir: Vec3, range: number
       tBody = rayBox(from, dir, { x: p.x - hw, y: p.y, z: p.z - hw }, { x: p.x + hw, y: p.y + split, z: p.z + hw });
       tHead = h.box.head ? rayBox(from, dir, { x: p.x - hw * 0.85, y: p.y + split, z: p.z - hw * 0.85 }, { x: p.x + hw * 0.85, y: p.y + top, z: p.z + hw * 0.85 }) : null;
     } else {
-      const b = playerBoxes(p, p.stance, w.rules);
+      const b = playerBoxes(p, p.stance, w.rules, p.lean);
       tBody = rayBox(from, dir, b.body[0], b.body[1]);
       tHead = rayBox(from, dir, b.head[0], b.head[1]);
     }

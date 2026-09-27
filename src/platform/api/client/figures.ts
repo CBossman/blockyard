@@ -109,6 +109,8 @@ export interface FigureState {
   air?: boolean;
   /** How low it is: standing 0, crouching 1, sliding 2 (blended). */
   posture: number;
+  /** How far it leans out sideways to peek (blocks, positive to its right; blended). */
+  lean?: number;
   /** Where its head looks, from its body (radians). */
   headYaw: number;
   headPitch: number;

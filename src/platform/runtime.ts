@@ -12,7 +12,7 @@ import { DevTools } from './client/devtools';
 import { Predictor } from './client/predict';
 import { flightWorld } from './sim/flight';
 import { resolveMovement, type MoveTune } from './sim/movement';
-import { playerBoxes, rayBox, resolveHitscan, type HitscanRules } from './sim/hitboxes';
+import { leanOffset, playerBoxes, rayBox, resolveHitscan, type HitscanRules } from './sim/hitboxes';
 import { bulletPath } from './sim/hitscan';
 import type { Penetration } from './api/items';
 import { ClientMovers, propPose } from './client/movers';
@@ -1793,7 +1793,7 @@ export class Runtime {
     let body: string | null = null;
     for (const p of this.frameData?.players ?? []) {
       if (p.id === this.playerId || p.dead) continue;
-      const b = playerBoxes(p, p.sliding ? 2 : p.sneaking ? 1 : 0, this.hitscanRules);
+      const b = playerBoxes(p, p.sliding ? 2 : p.sneaking ? 1 : 0, this.hitscanRules, p.lean ? leanOffset(p.view.yaw, p.lean) : undefined);
       const t = Math.min(rayBox(o, d, b.body[0], b.body[1]) ?? Infinity, rayBox(o, d, b.head[0], b.head[1]) ?? Infinity);
       if (t < end) {
         end = t;

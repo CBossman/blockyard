@@ -18,6 +18,8 @@ export type FigureFrame = EntityFrame & {
   player?: string;
   /** Crouching (1) or sliding (2). */
   posture?: number;
+  /** Leaning out sideways (blocks, positive to its right). */
+  lean?: number;
   /** Their held item's mechanics aim it where they look (a gun), 0 or 1; how far down its sights they look, 0..1. */
   aim?: number;
   sights?: number;
@@ -247,6 +249,7 @@ export class EntityView {
     const k = Math.min(1, dt * 12);
     a.aim += ((f.aim ?? 0) - a.aim) * k;
     a.posture += ((f.posture ?? 0) - a.posture) * k;
+    a.lean = (a.lean ?? 0) + ((f.lean ?? 0) - (a.lean ?? 0)) * k;
     if (running) {
       a.time += dt;
       a.attackT += dt;

@@ -160,6 +160,7 @@ export class Avatars {
         held,
         aim: mech?.aim ?? 0,
         posture: p.sliding ? 2 : p.sneaking ? 1 : 0,
+        lean: p.lean ?? 0,
         air: !p.onGround && !p.flying && !p.inWater,
         sprint: p.sprinting,
         reloading: mech?.reloading ?? false,

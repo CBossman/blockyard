@@ -14,6 +14,7 @@ import type { Presentation } from './present';
 import type { CreativeBuild } from './creative';
 import { abilityStates, copyMemory, freshMemory, resolveMovement, stepMovement, type MoveMemory, type MoveTune } from './movement';
 import type { AbilityCamera, AbilityEvent } from './abilities';
+import { leanOffset } from './hitboxes';
 import type { PropState } from './props';
 import { VehicleSim } from './vehicle';
 
@@ -43,6 +44,11 @@ export interface PlayerFrame {
   sprinting: boolean;
   /** Sliding (`movement.slide`). */
   sliding: boolean;
+  /**
+   * How far their head leans out sideways (blocks, positive to the right of their view: a movement
+   * ability's `lean`); left out when upright. Their eyes, head hitbox and figure go with it.
+   */
+  lean?: number;
   /** Their movement speed multiplier (`player.speed`): prediction moves them the same. */
   speed: number;
   /** A bot (`game.bots`), not a person. */
@@ -163,6 +169,8 @@ export class PlayerSim {
   sneaking = false;
   sprinting = false;
   sliding = false;
+  /** How far their head leans out sideways (see `PlayerFrame.lean`). */
+  lean = 0;
   /** Movement speed multiplier (`player.speed`). */
   speedMul = 1;
   /** How they move (the game's `player.movement`). */
@@ -297,7 +305,9 @@ export class PlayerSim {
 
   get eye(): Vec3 {
     const s = this.state;
-    return { x: s.x, y: s.y + (this.sneaking && !s.flying ? SNEAK_EYE : EYE), z: s.z };
+    // Leaning out takes the eyes sideways with the head.
+    const side = leanOffset(this.yaw, this.lean);
+    return { x: s.x + side.x, y: s.y + (this.sneaking && !s.flying ? SNEAK_EYE : EYE), z: s.z + side.z };
   }
 
   /** Unit vector along the view (yaw 0 looks toward -z). */
@@ -352,6 +362,7 @@ export class PlayerSim {
     this.items.reset(true);
     this.speedMul = 1;
     this.sliding = false;
+    this.lean = 0;
     this.memory = freshMemory();
     this.abilityEvents = [];
     this.tilt = null;
@@ -385,6 +396,8 @@ export class PlayerSim {
   /** Walk, sprint, sneak, jump, swim and fly from this tick's controls (or drive). */
   move(dt: number) {
     const world = this.p.world;
+    // Upright unless a movement ability leans them out on this step.
+    this.lean = 0;
     if (this.vehicle) {
       this.vehicle.def.step(this.vehicle.state, this.input, dt, this.p.query);
       this.followBody();
@@ -404,7 +417,7 @@ export class PlayerSim {
     }
     const item = this.items.move(inp.buttons);
     const mods = { speed: this.speedMul * (item?.speed ?? 1), noSprint: item?.noSprint ?? false };
-    const { sneak, sprint, slide, events, camera } = stepMovement(world, this.slot, inp, this.yaw, this.allowFlight, this.memory, dt, this.tune, mods, this.pitch, this.p.query);
+    const { sneak, sprint, slide, lean, events, camera } = stepMovement(world, this.slot, inp, this.yaw, this.allowFlight, this.memory, dt, this.tune, mods, this.pitch, this.p.query);
     if (events.length) {
       this.abilityEvents.push(...events);
       // A clip an ability asked for plays on their figure (their own screen played it already).
@@ -414,6 +427,7 @@ export class PlayerSim {
     this.syncState();
     this.sneaking = sneak;
     this.sliding = slide;
+    this.lean = lean;
     this.sprinting = sprint && Math.hypot(this.state.vx, this.state.vz) > Math.min(4.5, this.tune.params[0] * 1.02);
   }
 
@@ -500,6 +514,7 @@ export class PlayerSim {
       sneaking: this.sneaking,
       sprinting: this.sprinting,
       sliding: this.sliding,
+      ...(this.lean && { lean: this.lean }),
       speed: this.speedMul,
       bot: !!this.bot,
       view: { seq: this.viewSeq, yaw: this.yaw, pitch: this.pitch },

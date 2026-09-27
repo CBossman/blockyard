@@ -87,12 +87,15 @@ const any = (keys: string[], f: (k: string) => boolean) => keys.some(f);
 
 /**
  * What a step of movement did: crouching, sprinting, sliding (as the body stands: an ability's
- * `stance` shows here), what abilities triggered, and the camera they asked for.
+ * `stance` shows here), how far the head leans out, what abilities triggered, and the camera they
+ * asked for.
  */
 export interface MoveResult {
   sneak: boolean;
   sprint: boolean;
   slide: boolean;
+  /** Blocks sideways, positive right (`AbilityBody.lean`). */
+  lean: number;
   events: AbilityEvent[];
   camera: AbilityCamera | null;
 }
@@ -207,6 +210,7 @@ export function stepMovement(
   let control = 1;
   let events = NO_EVENTS;
   let camera: AbilityCamera | null = null;
+  let lean = 0;
   // How low the body is: the platform's crouch and slide, unless an ability says otherwise. It's
   // the hitbox, the eye and the figure's pose, not the physics (the engine's step is as it was).
   let sneakOut = crouch || sliding;
@@ -215,10 +219,10 @@ export function stepMovement(
     if (!query) throw new Error('movement abilities need the world to ask');
     const start = { yaw, pitch, wx, wz, jump, crouching: crouch || sliding, sprinting: sprint && !sliding, sliding, speed };
     const r = stepAbilities(world, slot, c, tune.abilities, abilityStates(m, tune), m.time, dt, start, query);
-    ({ wx, wz, jump, gravity, control, speed, events, camera } = r);
+    ({ wx, wz, jump, gravity, control, speed, events, camera, lean } = r);
     sneakOut = r.stance !== 'stand';
     slideOut = r.stance === 'low';
   }
   world.player_step(slot, wx, wz, jump, crouch || sliding, sprint && !sliding, sliding, speed, gravity, control, dt);
-  return { sneak: sneakOut, sprint: sprint && !slideOut, slide: slideOut, events, camera };
+  return { sneak: sneakOut, sprint: sprint && !slideOut, slide: slideOut, lean, events, camera };
 }

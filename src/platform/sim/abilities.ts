@@ -59,6 +59,8 @@ export interface AbilityResult {
   speed: number;
   /** How low the body is this step (the platform's, or what an ability made it). */
   stance: AbilityStance;
+  /** How far the head leans out sideways (blocks, positive right; 0: upright). */
+  lean: number;
   /** Their camera's tilt, pitch and dip this step (null: none). */
   camera: AbilityCamera | null;
   /** What they `trigger`ed. */
@@ -77,6 +79,9 @@ export interface StepStart {
   sliding: boolean;
   speed: number;
 }
+
+/** The furthest a head leans out sideways (`AbilityBody.lean`), in blocks. */
+export const MAX_LEAN = 0.6;
 
 /** A number an ability gave, or `or` if it gave nonsense (NaN would poison the body for good). */
 const finite = (v: number | undefined, or: number) => (typeof v === 'number' && Number.isFinite(v) ? v : or);
@@ -130,6 +135,7 @@ class StepBody implements AbilityBody {
   control = 1;
   speed: number;
   stance: AbilityStance;
+  lean = 0;
   camera = { roll: 0, pitch: 0, dip: 0 };
   readonly yaw: number;
   readonly pitch: number;
@@ -266,6 +272,7 @@ export function stepAbilities(
     control: Math.max(0, finite(body.control, 1)),
     speed: Math.max(0, finite(body.speed, s.speed)),
     stance: STANCES.includes(body.stance) ? body.stance : s.sliding ? 'low' : s.crouching ? 'crouch' : 'stand',
+    lean: Math.max(-MAX_LEAN, Math.min(MAX_LEAN, finite(body.lean, 0))),
     camera: roll || pitch || dip ? [roll, pitch, dip] : null,
     events: body.events.length ? body.events : IDLE,
   };

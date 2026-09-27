@@ -102,6 +102,8 @@ class Poser {
   private reloadT = 0;
   private deathAt = -1;
   private deathDir = 1;
+  /** From the spine up to the eyes (world units, measured once), for leaning the head out as far as `lean`. */
+  private leanLever = 0;
   /** The body's turn in the world, and where it looks (this frame). */
   private bodyQ = new Quat();
   private aimQ = new Quat();
@@ -222,7 +224,10 @@ class Poser {
     const lean = moving * pace(G.lean, run) + crouch * 0.16 * (1 - slide) + 0.3 * slide;
     const breathe = Math.sin(s.time * 1.9) * 0.012;
     const twist = held === 'gun' ? stance.twist * (1 - this.sprint) : 0;
-    rot(q1, lean * 0.45, twist * 0.4, 0);
+    // Leaning out to peek: tipped over sideways at the spine (positive to its right), just far
+    // enough that its eyes go out `lean`, as far as its head's hitbox does.
+    const tip = s.lean ? Math.asin(clamp(s.lean / this.lever(), -0.95, 0.95)) : 0;
+    rot(q1, lean * 0.45, twist * 0.4, tip);
     j.spine.quaternion.multiply(q1);
     // Aiming, the chest takes part of the look (the gun takes the rest, about the shoulders).
     const chestLook = twoHanded ? look * 0.35 * (1 - this.sprint) : look * 0.2;
@@ -241,12 +246,25 @@ class Poser {
 
     this.legs(s, ph, moving, run, crouch, slide, air, bodyQ);
 
-    // The head looks where it looks, whatever the body's doing.
+    // The head looks where it looks, whatever the body's doing (tilted part-way with a lean).
     const head = j.head;
-    rot(q1, -look, s.headYaw, held === 'gun' ? stance.cheek * (s.sights ?? 0) : 0).premultiply(bodyQ);
+    rot(q1, -look, s.headYaw, (held === 'gun' ? stance.cheek * (s.sights ?? 0) : 0) + tip * 0.6).premultiply(bodyQ);
     j.neck.getWorldQuaternion(q2);
     head.quaternion.copy(q2.invert().multiply(q1));
     if (held === 'other') this.inFist();
+  }
+
+  /** From the spine up to the eyes, in the world (the figure's size), measured at rest the first time it's asked. */
+  private lever(): number {
+    if (!this.leanLever) {
+      this.body.updateWorldMatrix(true, false);
+      this.rig.root.updateMatrixWorld(true);
+      const scale = v5.setFromMatrixScale(this.body.matrixWorld).x || 1;
+      const spine = this.j.spine.getWorldPosition(v1).y;
+      // The eyes are a little above the head's joint (the neck).
+      this.leanLever = Math.max(0.2, this.j.head.getWorldPosition(v2).y - spine + 0.1 * scale);
+    }
+    return this.leanLever;
   }
 
   /** Something held in the right fist: the holder on its grip. */
