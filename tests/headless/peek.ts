@@ -36,7 +36,8 @@ const idle = (viewSeq: number): PlayerInput => ({ active: true, down: [], presse
 
 /**
  * Peeking (Call of Blocky's Q and E, the platform's `body.lean`): held, a key leans that way, and
- * let go he stands up; both held, the one pressed last wins. The eyes go out sideways, and so does the head's
+ * let go he stands up; both held, the one pressed last wins. Tapped, it stays leaned till the same
+ * key's tapped again (the other key leans the other way). The eyes go out sideways, and so does the head's
  * hitbox, so a shot at a leaned-out head is a headshot and one where it was upright meets
  * nothing. A wall on that side cuts the lean short; a sprint stands you up while it lasts.
  */
@@ -87,6 +88,29 @@ export default function peekTest() {
   check(near(B.lean, -PEEK.reach), `E let go, Q still held: left again (${B.lean.toFixed(3)})`);
   hold([]);
   check(B.lean === 0, `both let go: upright (${B.lean})`);
+
+  /** Bob taps a key (down a moment, well short of a hold), then lets go and waits. */
+  const tap = (key: string) => {
+    send([key], [key]);
+    step();
+    send([key]);
+    step();
+    hold([]);
+  };
+  // Tapped, a key leans and it stays; the same again stands up; the other swaps sides.
+  tap('KeyE');
+  check(near(B.lean, PEEK.reach), `E tapped leans right and stays: ${B.lean.toFixed(3)}`);
+  tap('KeyE');
+  check(B.lean === 0, `E tapped again stands up (${B.lean})`);
+  tap('KeyQ');
+  check(near(B.lean, -PEEK.reach), `Q tapped leans left and stays: ${B.lean.toFixed(3)}`);
+  tap('KeyE');
+  check(near(B.lean, PEEK.reach), `E tapped while tapped left leans right: ${B.lean.toFixed(3)}`);
+  // A hold from a tap's lean: leans while held, and upright once let go.
+  press('KeyQ');
+  check(near(B.lean, -PEEK.reach), `Q held from a tap's right lean: left (${B.lean.toFixed(3)})`);
+  hold([]);
+  check(B.lean === 0, `Q let go after a hold: upright (${B.lean})`);
 
   // Ann's shots, at a point `dy` up and `dx` along x from Bob's feet.
   let serial = 1;
