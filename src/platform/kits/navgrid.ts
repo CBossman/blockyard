@@ -115,6 +115,16 @@ type Cell = NavCell & {
   index: number;
 };
 
+/** What `path` keeps between searches (see there). */
+interface Scratch {
+  g: Float64Array;
+  came: Int32Array;
+  seen: Uint32Array;
+  closed: Uint32Array;
+  stamp: number;
+  open: Heap;
+}
+
 /** The largest drop a cell's links look down for. */
 const MAX_DROP = 6;
 /** A body's half width, and a hair less, so a body inside a cell never touches the next one. */
@@ -140,6 +150,7 @@ class Grid implements NavGrid {
   private off: (() => void) | null = null;
   private built = false;
   private nextId = 0;
+  private search: Scratch | null = null;
   private readonly drop: number;
   private readonly x0: number;
   private readonly x1: number;
@@ -455,37 +466,64 @@ class Grid implements NavGrid {
   }
 
   path(from: Vec3, to: Vec3, limit = 6000): NavCell[] | null {
-    const a = this.cellAt(from);
-    const b = this.cellAt(to);
+    const a = this.cellAt(from) as Cell | null;
+    const b = this.cellAt(to) as Cell | null;
     if (!a || !b) return null;
     if (a === b) return [b];
-    const g = new Map<number, number>([[a.id, 0]]);
-    const came = new Map<number, NavCell>();
+    // A* over the cells by their place in `list`: what it knows of each (its cost so far, the
+    // cell it came from, whether it's done) in arrays kept between searches, current when their
+    // stamp is this search's (dozens of bots plan a few times a second each: Maps were most of it).
+    const list = this.list;
+    const s = this.scratch(list.length);
+    const stamp = s.stamp;
     const h = (c: NavCell) => Math.hypot(c.x - b.x, c.z - b.z, (c.y - b.y) * 0.7);
-    const open = new Heap();
-    open.push(a, h(a));
-    const closed = new Set<number>();
+    s.seen[a.index] = stamp;
+    s.g[a.index] = 0;
+    const open = s.open;
+    open.clear();
+    open.push(a.index, h(a));
     let n = 0;
     while (open.size && n++ < limit) {
-      const c = open.pop()!;
+      const ci = open.pop();
+      const c = list[ci];
       if (c === b) {
         const out: NavCell[] = [];
-        for (let k: NavCell | undefined = b; k && k !== a; k = came.get(k.id)) out.push(k);
+        for (let k = ci; k !== a.index; k = s.came[k]) out.push(list[k]);
         return out.reverse();
       }
-      if (closed.has(c.id)) continue;
-      closed.add(c.id);
-      const gc = g.get(c.id)!;
+      if (s.closed[ci] === stamp) continue;
+      s.closed[ci] = stamp;
+      const gc = s.g[ci];
       for (const e of c.edges) {
+        const to = e.to as Cell;
+        const ti = to.index;
+        // (A cell gone since: its place in the list is someone else's now.)
+        if (list[ti] !== to) continue;
         const t = gc + e.cost;
-        if (t < (g.get(e.to.id) ?? Infinity)) {
-          g.set(e.to.id, t);
-          came.set(e.to.id, c);
-          open.push(e.to, t + h(e.to));
+        if (s.seen[ti] !== stamp || t < s.g[ti]) {
+          s.seen[ti] = stamp;
+          s.g[ti] = t;
+          s.came[ti] = ci;
+          open.push(ti, t + h(to));
         }
       }
     }
     return null;
+  }
+
+  /** The searches' arrays, for `n` cells, with a new stamp. */
+  private scratch(n: number): Scratch {
+    let s = this.search;
+    if (!s || s.g.length < n) {
+      const size = Math.max(n, 1024, (s?.g.length ?? 0) * 2);
+      s = this.search = { g: new Float64Array(size), came: new Int32Array(size), seen: new Uint32Array(size), closed: new Uint32Array(size), stamp: 0, open: s?.open ?? new Heap() };
+    }
+    if (++s.stamp === 0xffffffff) {
+      s.seen.fill(0);
+      s.closed.fill(0);
+      s.stamp = 1;
+    }
+    return s;
   }
 
   needsJump(a: NavCell, b: NavCell): boolean {
@@ -511,42 +549,62 @@ function kindOf(b: BlockInfo | null): Kind {
   return { solid: b.solid, step: b.solid && step, liquid: b.liquid, tall: b.solid && b.height > 1 };
 }
 
-/** A binary min-heap of cells by priority. */
+/** A binary min-heap of cells (their places in the grid's list) by priority. */
 class Heap {
-  private items: { c: NavCell; p: number }[] = [];
-  get size() {
-    return this.items.length;
+  private at = new Int32Array(1024);
+  private p = new Float64Array(1024);
+  size = 0;
+  clear() {
+    this.size = 0;
   }
-  push(c: NavCell, p: number) {
-    const a = this.items;
-    a.push({ c, p });
-    let i = a.length - 1;
+  push(c: number, pri: number) {
+    if (this.size === this.at.length) {
+      const at = new Int32Array(this.size * 2);
+      const p = new Float64Array(this.size * 2);
+      at.set(this.at);
+      p.set(this.p);
+      this.at = at;
+      this.p = p;
+    }
+    const { at, p } = this;
+    let i = this.size++;
+    at[i] = c;
+    p[i] = pri;
     while (i > 0) {
       const j = (i - 1) >> 1;
-      if (a[j].p <= a[i].p) break;
-      [a[i], a[j]] = [a[j], a[i]];
+      if (p[j] <= p[i]) break;
+      swap(at, p, i, j);
       i = j;
     }
   }
-  pop(): NavCell | undefined {
-    const a = this.items;
-    if (!a.length) return undefined;
-    const top = a[0].c;
-    const last = a.pop()!;
-    if (a.length) {
-      a[0] = last;
+  pop(): number {
+    const { at, p } = this;
+    const top = at[0];
+    const n = --this.size;
+    if (n) {
+      at[0] = at[n];
+      p[0] = p[n];
       let i = 0;
       for (;;) {
         const l = i * 2 + 1;
         const r = l + 1;
         let m = i;
-        if (l < a.length && a[l].p < a[m].p) m = l;
-        if (r < a.length && a[r].p < a[m].p) m = r;
+        if (l < n && p[l] < p[m]) m = l;
+        if (r < n && p[r] < p[m]) m = r;
         if (m === i) break;
-        [a[i], a[m]] = [a[m], a[i]];
+        swap(at, p, i, m);
         i = m;
       }
     }
     return top;
   }
+}
+
+function swap(at: Int32Array, p: Float64Array, i: number, j: number) {
+  const c = at[i];
+  at[i] = at[j];
+  at[j] = c;
+  const q = p[i];
+  p[i] = p[j];
+  p[j] = q;
 }
