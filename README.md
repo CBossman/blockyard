@@ -69,8 +69,10 @@ Each game's controls are on the home page and in its pause menu (Escape), along 
 ### Call of Blocky
 
 <p>
+  <img src="docs/media/cob-fp-street.webp" alt="First person: the Wolf drum-fed Tommy gun firing down Jackrabbit Lane, bullets chipping the burger truck" width="49%">
+  <img src="docs/media/cob-fp-yacht.webp" alt="First person: the Marsellus machine gun firing up at an Attack Chopper from the yacht's sun deck on Hijacked" width="49%">
+  <img src="docs/media/cob-hellstorm.webp" alt="The Hellstorm killstreak's nose camera, guided down onto the cul-de-sac with three targets boxed" width="49%">
   <img src="docs/media/cob-chopper.webp" alt="An Attack Chopper over Big Kahuna Burger" width="49%">
-  <img src="docs/media/cob-blast.webp" alt="A frag goes off outside Slim's diner on Jackrabbit Lane" width="49%">
 </p>
 
 ### Blockfront II
