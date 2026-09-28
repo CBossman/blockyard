@@ -1238,7 +1238,8 @@ export interface PlayerApi {
   teleport(pos: Vec3, yaw?: number, pitch?: number): void;
   /** Apply damage. Returns false if ignored (invulnerable, dead, or damage disabled). */
   damage(amount: number, opts?: DamageOptions): boolean;
-  heal(amount: number): void;
+  /** Give back health: at once, or bit by bit `over` that many seconds (a golden apple's regeneration; death ends it). */
+  heal(amount: number, opts?: { over?: number }): void;
   /** Restore full health after death. */
   revive(): void;
   impulse(x: number, y: number, z: number): void;

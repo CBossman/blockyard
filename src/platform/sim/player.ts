@@ -731,7 +731,7 @@ export class PlayerSim {
         if (yaw !== undefined || pitch !== undefined) this.setView(yaw ?? this.yaw, pitch ?? this.pitch);
       },
       damage: (amount, opts) => this.health.damage(amount, opts),
-      heal: (amount) => this.health.heal(amount),
+      heal: (amount, opts) => this.health.heal(amount, opts),
       revive: () => {
         this.spectate(false);
         this.health.revive();

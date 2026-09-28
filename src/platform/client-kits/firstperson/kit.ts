@@ -1,8 +1,8 @@
 import type { HoldSpec, HoldStyle, ViewAnimation } from '@platform';
 import type { Client, ClientEvent, ClientKit, HeldItem, HumanoidViewArms, Node, ViewArm } from '@platform/client';
 import { Euler, MathUtils, Quat, Vec3 } from '@platform/client/math';
-import type { BowOwn, MeleeOwn } from '@platform/items';
-import { BUILTIN, compile, pyr, type Anim, type Motion } from './anims';
+import type { BowOwn, ConsumableOwn, MeleeOwn } from '@platform/items';
+import { BUILTIN, compile, eatPose, pyr, type Anim, type Motion } from './anims';
 import { ARM_FIT, fitArms, placeBent, placeStraight, upperFor, wristFor, type ArmFit } from './arms';
 import { gunPoints, isCompact, sameSpec, type GunPoints } from './points';
 import {
@@ -122,6 +122,10 @@ export class FirstPersonKit implements ClientKit {
   private stanceW = 0;
   private stanceOn = false;
   private stanceRate = 8;
+  /** Eating (the consumable kit's word): how far the hand's up at the mouth (0..1), whether it's wanted, and for how long. */
+  private eatW = 0;
+  private eatOn = false;
+  private eatT = 0;
 
   /** Minecraft's `mainHandHeight`: 1 = raised, 0 = fully dipped. */
   private height = 0;
@@ -207,6 +211,9 @@ export class FirstPersonKit implements ClientKit {
     if (now?.def?.kind === 'bow') now.alternate(!!bow?.drawing && bow.charge > 0.25);
     const gun = me.held ? (me.held.state as unknown as GunView) : undefined;
     this.draw = bow?.drawing ? bow.charge : 0;
+    // Eating: the hand at the mouth till it's eaten or they stop. (`me.items.consumable`.)
+    const food = me.items.consumable as ConsumableOwn | undefined;
+    this.eatOn = !!food?.eating && this.held.kind !== 'empty' && !me.dead;
     this.update(dt, gun);
     // Aiming down the sights zooms the world's view.
     const zoom = me.held?.state.zoom;
@@ -832,6 +839,16 @@ export class FirstPersonKit implements ClientKit {
       m.rot.copy(_qa.identity().slerp(m.rot, w));
       m.wrist.copy(_qb.identity().slerp(m.wrist, w));
       m.offset.multiplyScalar(w);
+    }
+    this.eatW = MathUtils.clamp(this.eatW + (this.eatOn ? dt / 0.12 : -dt / 0.15), 0, 1);
+    this.eatT = this.eatOn ? this.eatT + dt : 0;
+    if (this.eatW > 0) {
+      const w = this.eatW * this.eatW * (3 - 2 * this.eatW);
+      eatPose(this.eatT, m, { side: l, power: 1, grip: r.grip, drop: this.drop, axis: r.axis });
+      m.rot.copy(_qa.identity().slerp(m.rot, w));
+      m.offset.multiplyScalar(w);
+      m.pivot.lerp(r.grip, 1 - w);
+      // (Anything played meanwhile, a swing, plays over it.)
     }
     if (this.playing) {
       const p = this.playing;

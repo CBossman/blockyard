@@ -43,10 +43,12 @@ export function defineItems(game: GameContext, m: Match, fireballs: Fireballs) {
     kind: 'consumable',
     name: 'Golden Apple',
     stack: 16,
+    // Eaten over Minecraft's 1.6 s (slowed, the hand at the mouth), then it mends 4 hearts over 5 s: no healing mid-fight at a click.
+    useTime: 1.6,
+    canUse: (_g, player) => player.health < player.maxHealth,
     use(g, player) {
-      if (player.health >= player.maxHealth) return false;
-      player.heal(8);
-      g.audio.play('eat', { at: player.position });
+      if (!player.alive) return false;
+      player.heal(8, { over: 5 });
       g.fx.burst(player.eye, { color: '#ffd84a', count: 14, speed: 2, gravity: -3, glow: 1 });
       return true;
     },

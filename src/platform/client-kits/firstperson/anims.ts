@@ -109,6 +109,19 @@ function armDelta(s: number, m: Motion, c: SampleContext) {
 }
 
 /** The built-in animations (a game's `hold.use`, `play` and `define` name them too). */
+/**
+ * Minecraft's eating pose (`applyEatTransform`), held while they eat: the item at the mouth,
+ * bobbing a bite every fifth of a second. `time`: seconds they've been eating.
+ */
+export function eatPose(time: number, m: Motion, c: SampleContext) {
+  const l = c.side;
+  const bob = time > 0.2 ? Math.abs(Math.cos(time * 5 * Math.PI)) * 0.1 : 0;
+  _item.reset().translate(l * 0.6, -0.5 + bob, 0).rotY(l * 90).rotX(10).rotZ(l * 30);
+  m.pivot.set(0, 0, 0);
+  _item.m.decompose(m.offset, m.rot, _s);
+  m.wrist.identity();
+}
+
 export const BUILTIN: Record<string, Anim> = {
   // Minecraft's arm swing (`renderPlayerArm`), with the blade chopping forward in the fist.
   swing: {

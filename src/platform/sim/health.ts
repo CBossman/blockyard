@@ -48,6 +48,8 @@ export class PlayerHealth {
   private invuln = 0;
   private sinceHurt = 99;
   private regen: { delay: number; perSecond: number } | null = null;
+  /** Healing still to come (`heal` with `over`): how much, and how much a second. */
+  private mending = { left: 0, rate: 0 };
   private fallDamage = false;
   /** Seconds of invulnerability after a hit (`player.hurtCooldown`). */
   private hurtCooldown = 0.45;
@@ -126,14 +128,22 @@ export class PlayerHealth {
     this.invuln = Math.max(0, seconds);
   }
 
-  heal(amount: number) {
-    if (this.dead) return;
+  heal(amount: number, opts: { over?: number } = {}) {
+    if (this.dead || !(amount > 0)) return;
+    const over = opts.over ?? 0;
+    if (over > 0) {
+      // Mended bit by bit: on top of what's still to come, at the faster of the two rates.
+      this.mending.left += amount;
+      this.mending.rate = Math.max(this.mending.rate, amount / over);
+      return;
+    }
     this.health = Math.min(this.max, this.health + amount);
     this.refresh();
   }
 
   revive() {
     this.dead = false;
+    this.mending = { left: 0, rate: 0 };
     this.health = this.max;
     this.invuln = 1;
     this.prevGround = true;
@@ -147,7 +157,14 @@ export class PlayerHealth {
     this.sinceHurt += dt;
     if (this.dead) {
       this.deathTime += dt;
+      this.mending = { left: 0, rate: 0 };
       return;
+    }
+    if (this.mending.left > 0) {
+      const n = Math.min(this.mending.left, this.mending.rate * dt);
+      this.mending.left -= n;
+      if (this.enabled) this.health = Math.min(this.max, this.health + n);
+      if (this.mending.left <= 1e-6) this.mending = { left: 0, rate: 0 };
     }
     if (this.regen && this.enabled && this.health < this.max && this.sinceHurt > this.regen.delay) {
       this.health = Math.min(this.max, this.health + this.regen.perSecond * dt);

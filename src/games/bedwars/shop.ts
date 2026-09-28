@@ -151,7 +151,7 @@ export class Shop {
       {
         title: 'Utility',
         offers: [
-          { icon: { item: 'golden_apple' }, label: 'Golden Apple', price: ['gold', 3], note: 'Heals 4 hearts', buy: () => this.give(p, 'golden_apple') },
+          { icon: { item: 'golden_apple' }, label: 'Golden Apple', price: ['gold', 3], note: 'Regenerates 4 hearts over 5 s', buy: () => this.give(p, 'golden_apple') },
           { icon: { item: 'fire_charge' }, label: 'Fireball', price: ['iron', 40], note: 'Right-click to throw · blasts wool and wood', buy: () => this.give(p, 'fire_charge') },
         ],
       },
