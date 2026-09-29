@@ -5,11 +5,12 @@
  */
 import { type Canvas, rnd, remEuclid, SpriteCanvas } from '@platform/art';
 import { pikeIcon } from './pike';
+import { bombIcon } from './bombs';
 
 export const ITEM_Y = 128;
 
 /** Item sprite cells: x at y = `ITEM_Y` (16 * the item's index in the engine's `ITEMS`). */
-export const ITEM_X = { battle_axe: 64, arrow_bundle: 160, golden_trophy: 176, soul_fireball: 192, pike: 208 } as const;
+export const ITEM_X = { battle_axe: 64, arrow_bundle: 160, golden_trophy: 176, soul_fireball: 192, pike: 208, bomb: 224 } as const;
 
 export function items(cv: Canvas, ox: number, oy: number) {
   battleAxe().blit(cv, ox + ITEM_X.battle_axe, oy);
@@ -17,6 +18,7 @@ export function items(cv: Canvas, ox: number, oy: number) {
   trophy().blit(cv, ox + ITEM_X.golden_trophy, oy);
   soulFireball().blit(cv, ox + ITEM_X.soul_fireball, oy);
   pikeIcon().blit(cv, ox + ITEM_X.pike, oy);
+  bombIcon().blit(cv, ox + ITEM_X.bomb, oy);
 }
 
 const HANDLE = [0x80592f, 0x5a3c1c, 0x22160a];

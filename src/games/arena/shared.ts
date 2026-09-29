@@ -1,11 +1,12 @@
 import { defineShared } from '@platform';
 import meta from './meta';
 import { buildArena, FLOOR } from './structure';
+import { roll } from './abilities';
 
 /** The middle of the arena floor, on the dais: where everyone starts, and comes back to. */
 export const CENTER = { x: 0.5, y: FLOOR + 2, z: 0.5 };
 
-/** The colosseum (every screen builds its blocks too) and the player. */
+/** The colosseum (every screen builds its blocks too) and the player, who can dodge-roll (Q). */
 export const shared = defineShared({
   ...meta,
   world: {
@@ -20,5 +21,5 @@ export const shared = defineShared({
     time: 0.66,
     freezeTime: true,
   },
-  player: { health: 20, regen: { delay: 6, perSecond: 0.35 }, fallDamage: true, hotbar: 'items' },
+  player: { health: 20, regen: { delay: 4, perSecond: 0.6 }, fallDamage: true, hotbar: 'items', movement: { abilities: { roll } } },
 });

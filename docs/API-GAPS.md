@@ -63,6 +63,9 @@ hurt. They're saved to do after the destructible micro-voxels.
     - Once a player has their own copy of a widget, `game.hud.widget` silently stops reaching them.
     - `restart()` resets `clock.now` to 0, and that isn't documented.
     - Once, online after a server restart: `f.players.some is not a function` in `client/interp.ts`.
+    - A creature's `held` item drawn from a texel `HeldModelSpec` (not a sword or a potion from
+      `HeldModels`: the Arena's 10×10×12 powder keg) shows as a thin sliver in its fist, though a
+      player holds the same model fine. The Arena's Sapper carries no keg for now (sparks instead).
 14. **Tooling.** The headless `launch()` can't find dev games, and `tools/rig.html` shows only Call
     of Blocky's guns and the `wave`/`cheer` clips. (`rig.html` now takes `item=`, `kind=` and
     `hold=` for another game's items and how they're held, and `clips=`.)

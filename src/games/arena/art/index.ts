@@ -6,7 +6,7 @@
  * - Skins (64x64 regions): (0,0) zombie, (64,0) brute, (128,0) warden (with its crown),
  *   (0,64) skeleton, (64,64) spider.
  * - Items: 16x16 sprites at y = 128, in the cells they have in the built-in atlas.
- * - (0,160): the pike, a held 3D model; (0,208): the battle axe, likewise.
+ * - (0,160): the pike, a held 3D model; (0,208): the battle axe, likewise; (128,64): the bomb.
  */
 import type { HeldModelSpec } from '@platform';
 import { ATLAS, Canvas, type Part } from '@platform/art';
@@ -14,8 +14,10 @@ import { ITEM_X, ITEM_Y, items } from './items';
 import { brute, BRUTE, skeleton, SKELETON, spider, SPIDER, warden, WARDEN, zombie, ZOMBIE } from './mobs';
 import { pike, PIKE, PIKE_BUTT, PIKE_COLLAR, PIKE_HEAD, PIKE_HEAD2, PIKE_SHAFT } from './pike';
 import { axe, AXE } from './axe';
+import { bombs, BOMBS } from './bombs';
 
 export { AXE_MODEL } from './axe';
+export { BOMB_MODEL } from './bombs';
 
 export const ARENA_ATLAS = 'arena';
 
@@ -29,6 +31,7 @@ export function paintArenaAtlas(): { width: number; height: number; albedo: Uint
   spider(cv, SPIDER[0], SPIDER[1]);
   pike(cv, PIKE[0], PIKE[1]);
   axe(cv, AXE[0], AXE[1]);
+  bombs(cv, BOMBS[0], BOMBS[1]);
   items(cv, 0, ITEM_Y);
   const { albedo, emissive } = cv.finish();
   return { width: ATLAS, height: ATLAS, albedo, emissive };
@@ -52,6 +55,7 @@ export const Sprite = {
   golden_trophy: cell(ITEM_X.golden_trophy),
   soul_fireball: cell(ITEM_X.soul_fireball),
   pike: cell(ITEM_X.pike),
+  bomb: cell(ITEM_X.bomb),
 } satisfies Record<string, { atlas: string; x: number; y: number }>;
 
 /** Atlas UV of a pike box (its region is at `PIKE`). */

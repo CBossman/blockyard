@@ -1,11 +1,11 @@
 import { HeldModels, type ItemLook } from '@platform';
 import type { Client } from '@platform/client';
-import { AXE_MODEL, PIKE_MODEL, Sprite } from '../art';
+import { AXE_MODEL, BOMB_MODEL, PIKE_MODEL, Sprite } from '../art';
 
 /**
  * How the Arena's weapons and pickups look on each screen (`client.items.look`): their icons (the
- * platform's sprites, or the game's own from its atlas), the swords', the pike's, the axe's and the
- * potion's models, and the bow's drawn sprite. The server's `content.ts` has only what they do.
+ * platform's sprites, or the game's own from its atlas), the swords', the pike's, the axe's, the
+ * bomb's and the potion's models, and the bow's drawn sprite. The server's `content.ts` has only what they do.
  * (The atlas the sprites and the pike's and axe's textures are in is the server's content: it
  * paints the monsters' skins there too.)
  */
@@ -22,6 +22,8 @@ export const LOOKS: Record<string, ItemLook> = {
   health_potion: { icon: 'health_potion', hold: { model: HeldModels.healthPotion } },
   heart: { icon: 'heart' },
   arrow_bundle: { icon: Sprite.arrow_bundle },
+  bomb: { icon: Sprite.bomb, hold: { style: 'throw', model: BOMB_MODEL, scale: 0.42 }, trail: '#ffb34a' },
+  bomb_bundle: { icon: Sprite.bomb },
 };
 
 /** Each item's look on this screen (in `setup`, before anything's shown). */

@@ -1,19 +1,26 @@
 import { defineMeta } from '@platform';
 import cover from './cover.webp?url';
 
-/** Arena: survive six waves of monsters in a colosseum, collect better weapons between waves, and defeat the Warden. */
+/**
+ * Arena: survive seven waves of monsters in a colosseum, collect better weapons and a blessing
+ * between waves, and defeat the Warden.
+ */
 export default defineMeta({
   id: 'arena',
   title: 'Arena',
-  tagline: 'Survive six waves and slay the Warden',
+  tagline: 'Survive the waves, choose your blessings, slay the Warden',
   accent: '#ff8a4c',
   cover,
   instances: true,
   controls: [
     ['LMB', 'attack · hold to draw bow'],
     ['RMB', 'drink potion'],
+    ['Q', 'dodge roll'],
+    ['G', 'throw a bomb'],
+    ['B', 'choose your blessing'],
     ['1-9', 'weapons'],
   ],
+  gamepad: { LB: ['KeyQ', 'dodge roll'], RB: ['KeyG', 'throw a bomb'], Up: ['KeyB', 'blessing'] },
   achievements: {
     first_blood: { title: 'First Blood', description: 'Slay your first monster in the arena' },
     first_wave: { title: 'Warmed Up', description: 'Clear the first wave' },
@@ -22,6 +29,8 @@ export default defineMeta({
     champion: { title: 'Champion', description: 'Defeat the Warden and win the arena', reward: 'warden_crown' },
     unbroken: { title: 'Unbroken', description: 'Win the arena from the first wave without falling once', reward: 'unbroken' },
     veteran: { title: 'Arena Veteran', description: 'Slay 250 monsters in the arena, all time' },
+    pickpocket: { title: 'Pickpocket', description: 'Catch a Treasure Goblin before it gets away' },
+    kaboom: { title: 'Kaboom', description: 'Slay four monsters with a single blast' },
     slam_dodge: { title: 'Light on Your Feet', description: "Jump over the Warden's ground slam", hidden: true },
     splinters: { title: 'Splinters', description: 'Deal the Warden its final blow with the wooden sword', hidden: true },
   },

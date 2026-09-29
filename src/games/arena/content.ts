@@ -1,5 +1,6 @@
-import { Behaviors, Models, type Behavior, type CharacterLook, type GameContext, type ProjectileSpec } from '@platform';
-import type { ConsumableItem } from '@platform/items';
+import { Behaviors, Models, type Behavior, type CharacterLook, type Entity, type GameContext, type ProjectileSpec } from '@platform';
+import type { ConsumableItem, ThrowableItem } from '@platform/items';
+import { archer, goblinAI, necromancerAI, sapperAI } from './ai';
 import { FLOOR, GATES, GATE_SPAWN_RADIUS } from './structure';
 import { ARENA_ATLAS, Skin, Sprite, paintArenaAtlas } from './art';
 
@@ -13,11 +14,17 @@ export function defineArt(game: GameContext) {
   game.items.atlas(ARENA_ATLAS, { width: a.width, height: a.height, pixels: a.albedo, emissive: a.emissive });
 }
 
-/** The monsters are the platform's people gone bad: the risen dead, bones, an ogre, a dark king. */
+/**
+ * The monsters are the platform's people gone bad: the risen dead, bones, an ogre, a dark king;
+ * a sapper with a powder keg, a hooded necromancer, and a little gold-mad goblin.
+ */
 const ZOMBIE: CharacterLook = { build: 'broad', skin: '#7a9a5e', hair: 'short', hairColor: '#2e3322', face: 'glow', eyes: '#e4ff8a', top: 'shirt', topColor: '#50708f', bottom: 'trousers', bottomColor: '#3a3f55', shoes: 'shoes', shoeColor: '#3a2a1c', ragged: true };
 const SKELETON: CharacterLook = { build: 'slim', skin: '#e8e2d0', hair: 'bald', face: 'skull', eyes: '#7fd8ff', top: 'ribs', bottom: 'shorts', bottomColor: '#4a4036', shoes: 'flats', shoeColor: '#d8d2c0', ragged: true };
 const BRUTE: CharacterLook = { build: 'heavy', skin: '#8e7f6a', hair: 'mohawk', hairColor: '#2a1c14', facialHair: 'beard', face: 'glow', eyes: '#ff5a2a', top: 'tank', topColor: '#5a3a24', bottom: 'trousers', bottomColor: '#4a3a2a', shoes: 'boots', shoeColor: '#2a1c14', ragged: true };
 const WARDEN: CharacterLook = { build: 'heavy', skin: '#5a4a7a', hair: 'long', hairColor: '#241a33', facialHair: 'goatee', face: 'glow', eyes: '#c79bff', top: 'tunic', topColor: '#3a1f5c', accent: '#e0b83a', bottom: 'trousers', bottomColor: '#1e1a24', shoes: 'boots', shoeColor: '#1a1414', hat: 'crown' };
+const SAPPER: CharacterLook = { build: 'broad', skin: '#9a8a5e', hair: 'mohawk', hairColor: '#e0602a', face: 'glow', eyes: '#ffb03a', top: 'apron', topColor: '#6a4424', accent: '#2a1c14', bottom: 'trousers', bottomColor: '#3a3024', shoes: 'boots', shoeColor: '#2a1c14', ragged: true };
+const NECROMANCER: CharacterLook = { build: 'slim', skin: '#a9b0a8', hair: 'long', hairColor: '#101410', face: 'glow', eyes: '#5fe87f', top: 'hoodie', topColor: '#1c2a20', accent: '#5fe87f', bottom: 'trousers', bottomColor: '#141a16', shoes: 'boots', shoeColor: '#0e120f' };
+const GOBLIN: CharacterLook = { build: 'slim', skin: '#78b04a', hair: 'bald', face: 'glow', eyes: '#ffe14a', top: 'apron', topColor: '#7a5230', accent: '#e8b923', bottom: 'shorts', bottomColor: '#4a3a24', shoes: 'flats', shoeColor: '#3a2a1c', hat: 'crown' };
 const skin = (s: readonly [number, number]): [number, number] => [s[0], s[1]];
 
 /** The weapons and what's picked up: what each does. (How they look is each screen's: `client/looks.ts`.) */
@@ -33,6 +40,22 @@ export function defineItems(game: GameContext) {
   // What it shoots is drawn by the server, as an arrow (the bow's own look is each screen's).
   it.define('bow', { kind: 'bow', name: 'Bow', ammo: 'arrow', projectile: 'arrow', damage: [2, 9], drawTime: 0.9, speed: 42, rank: 0 });
   it.define('arrow', { kind: 'misc', name: 'Arrow', stack: 64 });
+  // Thrown with G (or the attack button in hand): it bounces about for a moment, then goes off,
+  // throwing monsters across the pit. It never hurts a fighter (the server's no-friendly-fire).
+  it.define('bomb', {
+    kind: 'throwable',
+    name: 'Bomb',
+    key: 'KeyG',
+    fuse: 1.6,
+    cook: false,
+    speed: 19,
+    lift: 9,
+    physics: { gravity: 24, bounce: 0.35, friction: 0.5, radius: 0.18 },
+    blast: { radius: 4.2, damage: [22, 6], knockback: 2.4, size: 1.6, color: '#ff9a3a' },
+    cooldown: 0.5,
+    stack: 8,
+    rank: -1,
+  } satisfies ThrowableItem);
   it.define('health_potion', {
     kind: 'consumable',
     name: 'Health Potion',
@@ -48,9 +71,19 @@ export function defineItems(game: GameContext) {
   it.define('heart', {
     kind: 'misc',
     name: 'Heart',
-    onPickup(g, _count, player) {
-      player.heal(4);
+    onPickup(g, count, player) {
+      player.heal(4 * count);
       g.audio.play('heal', { at: player.position, volume: 0.8 });
+      return true;
+    },
+  });
+  it.define('bomb_bundle', {
+    kind: 'misc',
+    name: 'Bombs',
+    onPickup(g, count, player) {
+      player.inventory.give('bomb', count);
+      player.hud.toast(`+${count} ${count === 1 ? 'Bomb' : 'Bombs'}`);
+      g.audio.play('pickup', { at: player.position });
       return true;
     },
   });
@@ -66,10 +99,11 @@ export function defineItems(game: GameContext) {
   });
 }
 
-const ARROW: ProjectileSpec = { sprite: 'arrow', speed: 26, gravity: 20, damage: 3, knockback: 0.4, sticky: true };
+const ARROW: ProjectileSpec = { sprite: 'arrow', speed: 23, gravity: 20, damage: 2, knockback: 0.3, sticky: true };
 const FIREBALL: ProjectileSpec = { sprite: Sprite.soul_fireball, speed: 17, gravity: 1.5, damage: 5, knockback: 1.1, glow: '#5fe8ff' };
 
-export function defineMonsters(game: GameContext) {
+/** What the server does when a Treasure Goblin gets away (it's gone, with its loot). */
+export function defineMonsters(game: GameContext, goblinEscaped: (self: Entity) => void) {
   const e = game.entities;
   e.define('zombie', {
     name: 'Zombie',
@@ -87,8 +121,10 @@ export function defineMonsters(game: GameContext) {
     model: Models.character(SKELETON),
     hitbox: { width: 0.6, height: 1.95 },
     health: 16,
-    speed: 3.4,
-    ai: Behaviors.ranged({ projectile: ARROW, range: 22, preferred: 10, cooldown: 1.6 }),
+    speed: 3.2,
+    held: 'bow',
+    // A slow, glowing draw you can see and hear, a wide spread, and they take turns (`archer`).
+    ai: archer({ projectile: ARROW, range: 20, preferred: 9, cooldown: 3, draw: 1, spread: 0.075, lead: 0.15 }),
     drops: [
       { item: 'arrow_bundle', chance: 0.6 },
       { item: 'heart', chance: 0.08 },
@@ -107,6 +143,53 @@ export function defineMonsters(game: GameContext) {
     drops: [{ item: 'heart', chance: 0.12 }],
     sounds: { ambient: 'spider', hurt: 'spider' },
     bloodColor: '#3d6b2a',
+  });
+  e.define('sapper', {
+    name: 'Sapper',
+    model: Models.character(SAPPER),
+    hitbox: { width: 0.6, height: 1.95 },
+    health: 12,
+    speed: 3.9,
+    ai: sapperAI,
+    drops: [
+      { item: 'bomb_bundle', chance: 0.35 },
+      { item: 'heart', chance: 0.1 },
+    ],
+    sounds: { ambient: 'sapper', hurt: 'sapper' },
+    bloodColor: '#8a7a4e',
+  });
+  e.define('necromancer', {
+    name: 'Necromancer',
+    model: Models.character(NECROMANCER),
+    hitbox: { width: 0.6, height: 1.95 },
+    health: 18,
+    speed: 3.3,
+    ai: necromancerAI,
+    drops: [
+      { item: 'health_potion', chance: 0.5 },
+      { item: 'bomb_bundle', chance: 0.4 },
+    ],
+    sounds: { ambient: 'necro', hurt: 'skeleton' },
+    bloodColor: '#3a5a3e',
+  });
+  e.define('goblin', {
+    name: 'Treasure Goblin',
+    model: Models.character(GOBLIN, { scale: 0.72 }),
+    hitbox: { width: 0.5, height: 1.4 },
+    health: 22,
+    speed: 5.1,
+    jump: 9,
+    knockbackResistance: 0.5,
+    ai: goblinAI((self) => goblinEscaped(self)),
+    // Caught: it bursts into loot.
+    drops: [
+      { item: 'heart', chance: 1, count: 3 },
+      { item: 'health_potion', chance: 1 },
+      { item: 'bomb_bundle', chance: 1, count: 3 },
+      { item: 'arrow_bundle', chance: 1, count: 2 },
+    ],
+    sounds: { ambient: 'goblin', hurt: 'goblin' },
+    bloodColor: '#ffd23a',
   });
   e.define('brute', {
     name: 'Brute',
@@ -171,9 +254,11 @@ const wardenAI: Behavior = (self, game, dt) => {
     s.summoned++;
     game.audio.play('boss', { at: self.position, volume: 1.2 });
     game.hud.banner('The Warden calls for aid!', undefined, { duration: 2, color: '#c9a2ff' });
+    // Sappers among them: slay one beside the Warden and its keg goes off in its face.
+    const aid = ['zombie', 'sapper', 'skeleton', 'sapper'];
     for (let i = 0; i < 4; i++) {
       const a = GATES[i];
-      const type = i % 2 === 0 ? 'skeleton' : 'zombie';
+      const type = aid[i];
       game.entities.spawn(type, { x: Math.cos(a) * GATE_SPAWN_RADIUS, y: FLOOR + 1, z: Math.sin(a) * GATE_SPAWN_RADIUS });
     }
   }
