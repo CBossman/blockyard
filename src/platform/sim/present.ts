@@ -166,10 +166,14 @@ export class Presentation {
 
   /**
    * A message for the client code on one player's screen (`to`), or everyone's (null), or
-   * everyone's but `skip`'s: the game's own (`clients.send`), or the platform's (a `$` name).
+   * everyone's but `skip`'s: the game's own (`clients.send`), the platform's (a `$` name), or an
+   * item kind's (`kit`: its host half's `send`, drawn in the world as the platform's are).
    */
-  message(to: string | null, name: string, data: unknown, skip?: string) {
-    this.send(to, 'message', name, [data], skip);
+  message(to: string | null, name: string, data: unknown, skip?: string, kit = false) {
+    const call: PresentCall = { to, target: 'message', method: name, args: [data] };
+    if (skip) call.skip = skip;
+    if (kit) call.kit = true;
+    this.sink(call);
   }
 
   /** `game.clients`: the game's messages to its client code, checked here (a mistake throws in the game's code). */

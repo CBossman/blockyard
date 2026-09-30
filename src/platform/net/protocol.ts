@@ -17,8 +17,9 @@ import type { WidgetWire } from '../ui/markup';
 
 /**
  * Where a presentation call goes on the client. `message` is a message for the client code: the
- * game's own (`game.clients.send(to, name, data)`: `method` is its name, `args` `[data]`), or the
- * platform's (named with a `$`: `$shot`, `$thrown`, `$thrownEnd`, `$fire`, `$debris`, `$reset`).
+ * game's own (`game.clients.send(to, name, data)`: `method` is its name, `args` `[data]`), the
+ * platform's (named with a `$`: `$debris`, `$reset`), or an item kind's (`kit`: `gun.shot`,
+ * `throwable.thrown`, `throwable.end`, `throwable.fire`).
  */
 export type PresentTarget = 'hud' | 'fx' | 'audio' | 'view' | 'message';
 
@@ -30,6 +31,8 @@ export interface PresentCall {
   target: PresentTarget;
   method: string;
   args: unknown[];
+  /** A message from an item kind's host half (`ItemHost.send`): drawn in the world, as the platform's `$` ones are (a replay keeps it). */
+  kit?: true;
 }
 
 /**

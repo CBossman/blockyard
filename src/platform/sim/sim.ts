@@ -327,7 +327,7 @@ export class Sim {
         return r && { dist: r.t, normal: { x: r.nx, y: r.ny, z: r.nz } };
       },
       blast: (c, o) => this.hurtAround(c, o.reach, o.near, o.far, o.knockback ?? 1, o.by ?? 'world', o.weapon, o.cause ?? 'explosion'),
-      send: (name, data, o = {}) => present.message(o.to ? o.to.id : null, name, data, o.except?.id),
+      send: (name, data, o = {}) => present.message(o.to ? o.to.id : null, name, data, o.except?.id, true),
       audio: (o = {}) => audioFor(o.except?.id),
       emit: (k, e) => this.emit(k, e),
       now: () => this.time,

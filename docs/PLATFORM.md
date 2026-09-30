@@ -1534,7 +1534,7 @@ defineClient(shared, {
 - A message's name is a letter, then letters, digits, `_`, `-`, `.` or `:` (up to 64); names starting with `$` are the platform's own. Its data is plain data (strings, numbers, booleans, null, lists and records; functions and `undefined` are left out).
 - From the server: at most 64 KB as JSON; a bad name or too much throws in the game's code. It arrives in order with the HUD, effects and sound calls, at `client.on(name, fn)` and in `client.events` (`{ t: 'message', name, data }`). Bots have no screen.
 - From a client: at most 8 KB as JSON. The server checks the name, the shape and the size and drops anything else, then `clientMessage` hears it as the player whose connection it came on (whatever the message says). Someone only watching sends nothing. What it asks for is the game's to check: anyone can send anything.
-- The platform's own presentation (someone's shot, a throwable in the air and where it went off, a fire, a block's debris, a restart) travels as messages of its own (`$shot`, `$thrown`, `$thrownEnd`, `$fire`, `$debris`, `$reset`), which the engine turns into the events above for the kits.
+- The platform's own presentation travels as messages of its own: a block's debris and a restart as `$debris` and `$reset`, and the item kinds' (someone's shot, a throwable in the air and where it went off, a fire) from their host halves' `send` as `gun.shot`, `throwable.thrown`, `throwable.end` and `throwable.fire`, which their client halves turn into the events above. A replay keeps both kinds, as it keeps effects and sounds (see "Replays"); the game's own messages it doesn't.
 
 ## Replays: the last few seconds again
 

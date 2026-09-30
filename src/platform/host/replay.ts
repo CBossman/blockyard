@@ -139,9 +139,10 @@ function trim(f: unknown): unknown {
 
 /**
  * What of a step's events a replay shows: presentation calls to everyone (effects, sounds, the
- * platform's messages that draw in the world: shots, throws, fires, debris) and effects, sounds
- * and view calls to one player (a replay through their eyes shows what their screen did), and the
- * blocks shot into. Never HUD calls, the game's own messages, sound loops or state.
+ * messages that draw in the world: the platform's, debris, and the item kinds', shots, throws,
+ * fires) and effects, sounds and view calls to one player (a replay through their eyes shows what
+ * their screen did), and the blocks shot into. Never HUD calls, the game's own messages, sound
+ * loops or state.
  */
 export function replayable(events: readonly HostEvent[]): ReplayEvent[] {
   const out: ReplayEvent[] = [];
@@ -155,7 +156,7 @@ export function replayable(events: readonly HostEvent[]): ReplayEvent[] {
 function shown(c: PresentCall): boolean {
   switch (c.target) {
     case 'message':
-      return c.to === null && c.method.startsWith('$') && c.method !== '$reset';
+      return c.to === null && (c.kit === true || c.method.startsWith('$')) && c.method !== '$reset';
     case 'fx':
       return true;
     case 'audio':

@@ -149,8 +149,8 @@ export class ReplayView {
 
   /**
    * While a replay plays, what the live game shows in the world isn't: its effects, sounds out in
-   * the world, shots, throws and fires, and calls to our own view (it's the replay's eyes now).
-   * The HUD's calls, sounds of no place and the game's own messages still come.
+   * the world, shots, throws and fires (the item kinds' messages), and calls to our own view (it's
+   * the replay's eyes now). The HUD's calls, sounds of no place and the game's own messages still come.
    */
   hides(c: PresentCall): boolean {
     if (!this.current) return false;
@@ -160,7 +160,7 @@ export class ReplayView {
       case 'audio':
         return c.method === 'play' && !!(c.args[1] as { at?: unknown } | undefined)?.at;
       case 'message':
-        return c.method.startsWith('$') && c.method !== '$reset';
+        return c.kit === true || (c.method.startsWith('$') && c.method !== '$reset');
       case 'view':
         return c.method !== 'visible' && c.method !== 'setSkin';
       default:

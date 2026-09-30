@@ -120,6 +120,8 @@ function history() {
   const calls = wire.steps.reduce((n, s) => n + (s.e?.filter((e) => e.t === 'call').length ?? 0), 0);
   const shots = wire.steps.reduce((n, s) => n + (s.e?.filter((e) => e.t === 'call' && e.call.method === 'gun.shot').length ?? 0), 0);
   check(calls > 0, 'what was shown came along');
+  // The item kinds' messages come too (the gun kit's shot is how a replay's eyes hear their own gun).
+  check(shots > 0, 'the shots came along (gun.shot)');
   check(wire.steps.every((s) => (s.e ?? []).every((e) => e.t !== 'call' || e.call.target !== 'hud')), 'no HUD calls in a replay');
 
   // The client's playback: its frames at each step's time are the step's, and it ends when it should.
