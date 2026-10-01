@@ -1,24 +1,23 @@
 import { defineShared } from '@platform';
 import meta from './meta';
-import { buildArena, FLOOR } from './structure';
+import { FLOOR, MAPS } from './maps';
 import { roll } from './abilities';
 
-/** The middle of the arena floor, on the dais: where everyone starts, and comes back to. */
-export const CENTER = { x: 0.5, y: FLOOR + 2, z: 0.5 };
+const first = MAPS[0];
 
-/** The colosseum (every screen builds its blocks too) and the player, who can dodge-roll (Q). */
+/** Every map's blocks (every screen builds them too) and the player, who can dodge-roll (Q). */
 export const shared = defineShared({
   ...meta,
   world: {
-    // No landscape to make: the arena stands on a plain ground over the void (below its rim, so
-    // from inside it's all sky), and nothing past the haze is loaded.
+    // No landscape to make: the maps stand on a plain ground over the void (below their rims, so
+    // from inside it's all sky), each far from the others, and nothing past the haze is loaded.
     terrain: 'void',
     ground: { y: FLOOR, top: 'grass_block', fill: 'dirt', depth: 4 },
     maxViewDistance: 8,
-    structures: [buildArena()],
-    spawn: { x: CENTER.x, y: CENTER.y + 0.05, z: CENTER.z },
+    structures: MAPS.map((m) => m.build()),
+    spawn: { x: first.center.x, y: first.center.y + 0.05, z: first.center.z },
     spawnYaw: 0,
-    time: 0.66,
+    time: first.time,
     freezeTime: true,
   },
   player: { health: 20, regen: { delay: 4, perSecond: 0.6 }, fallDamage: true, hotbar: 'items', movement: { abilities: { roll } } },

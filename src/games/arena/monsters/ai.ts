@@ -1,5 +1,6 @@
 import type { Actor, Behavior, Entity, GameContext, ProjectileSpec, Vec3 } from '@platform';
-import { FLOOR, GATES, GATE_SPAWN_RADIUS, PIT } from './structure';
+import { map } from '../run/state';
+import { spawnMonster } from '../run/spawn';
 
 /**
  * The Arena's own monster brains (the Warden's is in `content.ts`). Each is written to be fair:
@@ -232,9 +233,12 @@ export const necromancerAI: Behavior = (self, game, dt) => {
   const away = d < 9 ? 1 : d > 16 ? -1 : 0;
   const st = (s._strafe ?? 1) * 0.6;
   // Not into the wall: turn along it.
-  const r = Math.hypot(e.x, e.z);
-  const inward = r > PIT - 4 ? 0.8 : 0;
-  self.moveDirection(nx * away - nz * st - (e.x / (r || 1)) * inward, nz * away + nx * st - (e.z / (r || 1)) * inward);
+  const m = map();
+  const ox = e.x - m.center.x;
+  const oz = e.z - m.center.z;
+  const r = Math.hypot(ox, oz);
+  const inward = r > m.radius - 4 ? 0.8 : 0;
+  self.moveDirection(nx * away - nz * st - (ox / (r || 1)) * inward, nz * away + nx * st - (oz / (r || 1)) * inward);
   self.lookAt(target);
 
   const risen = game.entities.all('zombie').filter((z) => z.data.master === self.id).length;
@@ -254,7 +258,7 @@ function raise(self: Entity, game: GameContext, toward: number) {
     const t = toward + side * 1.1;
     let at = { x: e.x + Math.cos(t) * 2, y: e.y + 0.05, z: e.z + Math.sin(t) * 2 };
     if (!game.world.fits(at)) at = { x: e.x, y: e.y + 0.05, z: e.z };
-    const z = game.entities.spawn('zombie', at, { data: { master: self.id, risen: true } });
+    const z = spawnMonster(game, 'zombie', at, { data: { master: self.id, risen: true } });
     // The risen are frailer than the arena's own dead.
     z.health = 12;
     game.fx.burst({ x: at.x, y: at.y + 0.2, z: at.z }, { color: '#5fe87f', count: 26, speed: 2.4, gravity: -2, glow: 1 });
@@ -294,8 +298,7 @@ export function goblinAI(escaped: (self: Entity) => void): Behavior {
       // The gate furthest from everyone.
       let best = 0;
       let far = -1;
-      GATES.forEach((a, i) => {
-        const g = { x: Math.cos(a) * PIT, z: Math.sin(a) * PIT };
+      map().gates.forEach(({ at: g }, i) => {
         const near = Math.min(...game.players.filter((p) => p.alive).map((p) => Math.hypot(p.position.x - g.x, p.position.z - g.z)), 99);
         if (near > far) {
           far = near;
@@ -306,8 +309,8 @@ export function goblinAI(escaped: (self: Entity) => void): Behavior {
       self.setSpeed(1.15);
     }
     if (s._escape) {
-      const a = GATES[s._gate ?? 0];
-      const pen = { x: Math.cos(a) * GATE_SPAWN_RADIUS, y: FLOOR + 1, z: Math.sin(a) * GATE_SPAWN_RADIUS };
+      const gates = map().gates;
+      const pen = gates[Math.min(s._gate ?? 0, gates.length - 1)].at;
       self.moveTo(pen);
       if (Math.hypot(e.x - pen.x, e.z - pen.z) < 2 || self.age > GOBLIN_STAYS + 14) escaped(self);
       return;
@@ -330,13 +333,16 @@ export function goblinAI(escaped: (self: Entity) => void): Behavior {
     const j = (s._jinkDir ?? 1) * 0.7;
     [dx, dz] = [dx - dz * j, dz + dx * j];
     // Near the wall: run along it rather than into it (the way round that's further from them).
-    const r = Math.hypot(e.x, e.z) || 1;
-    if (r > PIT - 5) {
-      const ox = -e.z / r;
-      const oz = e.x / r;
+    const m = map();
+    const cx = e.x - m.center.x;
+    const cz = e.z - m.center.z;
+    const r = Math.hypot(cx, cz) || 1;
+    if (r > m.radius - 5) {
+      const ox = -cz / r;
+      const oz = cx / r;
       const dir = ox * dx + oz * dz >= 0 ? 1 : -1;
-      dx = ox * dir - (e.x / r) * 0.5;
-      dz = oz * dir - (e.z / r) * 0.5;
+      dx = ox * dir - (cx / r) * 0.5;
+      dz = oz * dir - (cz / r) * 0.5;
     }
     self.moveDirection(dx, dz);
   };

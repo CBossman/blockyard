@@ -5,7 +5,7 @@ import type { Client } from '@platform/client';
  * recorded or sent). The server plays them by name: the monsters' `sounds`, the Warden's slam and
  * roar, the Sapper's fuse, the Necromancer's spell, Stormcaller's thunder and Volatile's pop.
  */
-export function defineSounds(client: Client) {
+export function defineCreatureSounds(client: Client) {
   const a = client.audio;
   // A wet, wobbling groan.
   a.define('zombie', (s) => {

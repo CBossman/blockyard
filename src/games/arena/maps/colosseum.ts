@@ -1,13 +1,12 @@
 import { Blueprint } from '@platform';
+import { FLOOR, type ArenaMap, type Gate } from './registry';
 
-/** Arena floor surface height (players stand at FLOOR + 1). */
-export const FLOOR = 70;
 /** Inner radius of the fighting pit. */
-export const PIT = 21;
+const PIT = 21;
 /** Angles of the four monster gates (east, south, west, north). */
-export const GATES = [0, Math.PI / 2, Math.PI, (Math.PI * 3) / 2];
+const GATES = [0, Math.PI / 2, Math.PI, (Math.PI * 3) / 2];
 /** Where monsters appear inside each gate tunnel. */
-export const GATE_SPAWN_RADIUS = 27;
+const GATE_SPAWN_RADIUS = 27;
 
 const WALL_IN = PIT;
 const WALL_OUT = PIT + 2;
@@ -31,7 +30,7 @@ function inGate(x: number, z: number): boolean {
  * A colosseum: sand pit with stone-brick spokes and a lantern dais, cover pillars, a
  * crenellated inner wall with four gates, tiered stands, and an outer rim with beacons.
  */
-export function buildArena(): Blueprint {
+function buildArena(): Blueprint {
   const bp = Blueprint.centered(0, 0, RIM_OUT + 1, FLOOR - 10, TOP);
 
   bp.columns(0, 0, RIM_OUT + 0.5, (x, z, d, a) => {
@@ -123,3 +122,27 @@ export function buildArena(): Blueprint {
   }
   return bp;
 }
+
+/** A gate's pen, `r` blocks out at angle `a`, facing in. */
+const gate = (a: number, r: number): Gate => ({ at: { x: Math.cos(a) * r, y: FLOOR + 1.05, z: Math.sin(a) * r }, yaw: Math.atan2(Math.cos(a), Math.sin(a)) });
+
+/** The Colosseum: the original sand pit, four gates, cover pillars and a lantern dais. */
+export const COLOSSEUM: ArenaMap = {
+  id: 'colosseum',
+  name: 'The Colosseum',
+  line: 'Sand, stone and a roaring crowd',
+  build: buildArena,
+  center: { x: 0.5, y: FLOOR + 2, z: 0.5 },
+  radius: PIT,
+  gates: GATES.map((a) => gate(a, GATE_SPAWN_RADIUS)),
+  bossGates: GATES.map((a) => gate(a, GATE_SPAWN_RADIUS - 5)),
+  lookout: { x: 0.5, y: FLOOR + 20, z: 31 },
+  time: 0.66,
+  dusk: 0.07,
+  // (Placeholders until the map's owner places them properly.)
+  shop: { x: 0.5, y: FLOOR + 1, z: -8.5 },
+  chests: [
+    { x: 9.5, y: FLOOR + 1, z: 0.5 },
+    { x: -8.5, y: FLOOR + 1, z: 0.5 },
+  ],
+};
