@@ -17,7 +17,9 @@ kill_timeout = "10s"
   # Measured 2026-09-26 on performance-1x: a match with bots takes about 3% of the CPU with one
   # viewer, a match full of people about 15% of a core; 14 was the limit there. Launch
   # (2026-09-27): performance-4x, four times the cores, one main thread for every socket: 40.
-  ROOMS = "40"
+  # After launch (2026-10-01): shared-cpu-2x, 1 GB, for the traffic there is (a few at once): 4.
+  # Past it the home page waits and tries again; scale the [[vm]] and this back up together.
+  ROOMS = "4"
 
 [[mounts]]
   source = "data"
@@ -32,8 +34,8 @@ kill_timeout = "10s"
 
   [http_service.concurrency]
     type = "connections"
-    soft_limit = 600
-    hard_limit = 700
+    soft_limit = 120
+    hard_limit = 150
 
   [[http_service.checks]]
     grace_period = "10s"
@@ -45,5 +47,5 @@ kill_timeout = "10s"
 # Scaled up for launch (per-second billing: ~$0.17/hr vs $0.04 for performance-1x, with
 # ROOMS 14 and connections 250/300); back down by putting those back.
 [[vm]]
-  size = "performance-4x"
-  memory = "8192mb"
+  size = "shared-cpu-2x"
+  memory = "1024mb"
