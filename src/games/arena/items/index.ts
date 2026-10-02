@@ -3,6 +3,7 @@ import { bows, consumables, throwables } from '@platform/kits';
 import type { ConsumableItem, ThrowableItem } from '@platform/items';
 import { ARENA_ATLAS, paintArenaAtlas } from '../art';
 import { defineArms } from './arms';
+import { RARITIES, shieldOf } from './rarity';
 import { crossbows } from './crossbow';
 import { melee } from './melee';
 import { staffs } from './staff';
@@ -119,6 +120,8 @@ export function defineItems(game: GameContext) {
       return true;
     },
   });
+  // The gladius's shield, never carried: an item so each screen can show it in the off hand.
+  for (const r of RARITIES) it.define(shieldOf(r), { kind: 'misc', name: 'Shield' });
   // Armour, put on when it's walked over (or bought).
   for (const id of Object.keys(ARMOR) as ArmorId[]) {
     it.define(id, { kind: 'misc', name: ARMOR[id].name, onPickup: (g, _count, player) => (wearArmor(g, player, id), true) });

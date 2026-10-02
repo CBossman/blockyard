@@ -488,6 +488,42 @@ function bolt() {
   return g.mark('grip', [0, 0, 0]).mark('muzzle', [0, 0, 4.4]);
 }
 
+/**
+ * Armour, a cuirass on its own (for the shop and the ground): leather stitched and buckled, mail in
+ * rings, plate with a ridge and gilt edges. It stands up along +y, its front toward +z.
+ */
+function armor(id, name, look) {
+  const own = {
+    leather_armor: { a: [0x7a4e2a, 0.7], b: [0x5a3820, 0.75], c: [0x3a2414, 0.8], d: [0xb08850, 0.5, 0.6] },
+    mail_armor: { a: [0x8a9098, 0.42, 0.9], b: [0x5e646c, 0.5, 0.85], c: [0x4a3020, 0.8], d: [0xa8adb4, 0.35, 1] },
+    plate_armor: { a: [0xc4cad2, 0.2, 1], b: [0x8e959e, 0.26, 1], c: [0x4a3020, 0.8], d: [0xd8a22c, 0.22, 1] },
+  }[id];
+  const g = new Model(id, name, { offset: [-0.5, 0, -0.5] }).colours(own);
+  for (let j = 0; j < 19; j++)
+    for (let i = -9; i <= 9; i++)
+      for (let k = -5; k <= 5; k++) {
+        const x = g.c(0, i), y = g.c(1, j), z = g.c(2, k);
+        // The torso: broad at the chest, in at the waist, rounded front and back.
+        const half = y > 7.5 ? 5.4 : 4.4 + (y / 7.5) * 1.0;
+        const depth = 3.0 - 0.9 * (Math.abs(x) / half) ** 2 + (y > 6 && y < 10.5 && z > 0 ? 0.4 : 0);
+        if (Math.abs(x) > half || Math.abs(z) > depth) continue;
+        // The neck, cut out at the top.
+        if (y > 10.2 && Math.abs(x) < 2.2) continue;
+        const shell = Math.abs(z) > depth - V * 1.1 || Math.abs(x) > half - V * 1.1 || y < V || y > 11;
+        if (!shell) continue;
+        let c = 'a';
+        if (look === 'leather') c = Math.abs(x) < V * 0.6 && z > 0 ? 'c' : (Math.abs(y - 5.3) < 0.35 || Math.abs(y - 8.6) < 0.35) ? 'b' : 'a';
+        if (look === 'mail') c = (i + j) % 2 === 0 ? 'a' : 'b';
+        if (look === 'plate') c = Math.abs(x) < V * 0.6 && z > 0 ? 'd' : y > 10.6 || Math.abs(x) > half - V * 0.9 ? 'd' : z < 0 ? 'b' : 'a';
+        if (y < 1.9) c = look === 'plate' ? 'b' : 'c';
+        g.set(i, j, k, c);
+      }
+  // The belt's buckle, the shoulder pieces.
+  g.pbox([-0.95, 0.95], [0.3, 1.6], [2.8, 3.4], 'd');
+  for (const sx of [-1, 1]) g.pbox(sx > 0 ? [3.1, 6.6] : [-6.6, -3.1], [10.0, 11.9], [-2.6, 2.6], look === 'plate' ? 'a' : 'b');
+  return g.mark('grip', [0, 6, 0]).mark('muzzle', [0, 12, 0]);
+}
+
 // ---------------------------------------------------------------------------------------------
 // Writing and checking
 
@@ -588,7 +624,14 @@ const MODELS = { gladius, gladius_shield: shield, warhammer, spear, daggers, gre
 const args = process.argv.slice(2);
 const only = args.filter((a) => !a.startsWith('--'));
 mkdirSync(OUT, { recursive: true });
-const jobs = [...Object.entries(MODELS).flatMap(([id, make]) => RARITIES.map((r) => [id, () => make(r)])), ['bolt', bolt]];
+const jobs = [
+  ...Object.entries(MODELS).flatMap(([id, make]) => RARITIES.map((r) => [id, () => make(r)])),
+  ['bolt', bolt],
+  ['leather_armor', () => armor('leather_armor', 'Leather Armour', 'leather')],
+  ['mail_armor', () => armor('mail_armor', 'Mail Armour', 'mail')],
+  ['plate_armor', () => armor('plate_armor', 'Plate Armour', 'plate')],
+];
+const SINGLE = new Set(['bolt', 'leather_armor', 'mail_armor', 'plate_armor']);
 let total = 0;
 for (const [id, make] of jobs) {
   if (only.length && !only.includes(id)) continue;
@@ -597,7 +640,7 @@ for (const [id, make] of jobs) {
   const file = join(OUT, `${g.id}.glb`);
   writeFileSync(file, bytes);
   total += bytes.length;
-  if (args.includes('--show') && (g.id === id || g.id === 'bolt')) show(g);
+  if (args.includes('--show') && g.id === id) show(g);
   const v = validate(readFileSync(file), g);
   const lo = [0, 1, 2].map((k) => (Math.min(...pos.filter((_, m) => m % 3 === k)) * V) / 2);
   const hi = [0, 1, 2].map((k) => (Math.max(...pos.filter((_, m) => m % 3 === k)) * V) / 2);
@@ -608,7 +651,7 @@ console.log(`${(total / 1024).toFixed(0)} KB in all`);
 
 // The models' addresses, for the screens' looks and the server's props (`models/weapons/index.ts`).
 if (!only.length) {
-  const ids = jobs.map(([id]) => id).filter((id, n, all) => all.indexOf(id) === n).flatMap((id) => (id === 'bolt' ? ['bolt'] : RARITIES.map((r) => (r === 'common' ? id : `${id}_${r}`))));
+  const ids = jobs.map(([id]) => id).filter((id, n, all) => all.indexOf(id) === n).flatMap((id) => (SINGLE.has(id) ? [id] : RARITIES.map((r) => (r === 'common' ? id : `${id}_${r}`))));
   const name = (id) => id.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
   const lines = [
     '// Written by src/games/arena/tools/weapons/build.mjs: the arsenal\'s models, by item id (a rarity\'s own: `gladius_epic`).',

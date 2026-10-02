@@ -1,5 +1,6 @@
 import { math, type Entity, type GameContext, type ItemBody, type ItemHost, type ItemKind, type ItemKit, type ItemUse, type Player } from '@platform';
 import type { MeleeItem, MeleeOwn } from '@platform/items';
+import { meleeMove } from './moves';
 import { afterRoll, frontOf, legendHit, legendSwing, slamAt } from './combat';
 import { throwSpear, spearOut, recallSpear } from './spear';
 import { stagger, stunned } from './status';
@@ -178,14 +179,7 @@ export function melee(): ItemKit<ItemKind<ArmsMelee>> {
         }
         if (c.buttonPressed(0) || (c.button(0) && r.cooldown <= 0)) if (r.cooldown <= 0) strike(use, r, def, item, true);
       },
-      move(def, controls) {
-        const d = def as ArmsMelee;
-        const w = d.weight ?? 1;
-        if (d.guard && controls.buttons & 4) return { speed: w * d.guard.slow, noSprint: true };
-        if (d.slam && controls.buttons & 1) return { speed: w * 0.6, noSprint: true };
-        if (d.throw && controls.buttons & 4) return { speed: w * 0.8, noSprint: true };
-        return w !== 1 ? { speed: w } : null;
-      },
+      move: meleeMove,
       own(v) {
         const r = handOf(v.player);
         return { strength: 1 - r.cooldown / r.max, guard: r.guard, charge: r.charge, aiming: r.aiming } satisfies MeleeOwn & Record<string, unknown>;

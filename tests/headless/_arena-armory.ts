@@ -64,7 +64,7 @@ export default function arenaArmory() {
     const s = scene(1);
     check(variant('gladius', 'epic') === 'gladius_epic' && variant('gladius', 'common') === 'gladius', 'variant ids');
     check(rarityOf('fire_staff_legendary') === 'legendary' && baseOf('fire_staff_legendary') === 'fire_staff' && rarityOf('fire_staff') === 'common' && rarityOf('iron_sword') === 'common', 'rarityOf and baseOf');
-    const dmg = (id: string) => (s.game.items.get(id) as { damage: number }).damage;
+    const dmg = (id: string) => (s.game.items.get(id) as unknown as { damage: number }).damage;
     check(Math.abs(dmg('gladius_legendary') / dmg('gladius') - 1.9) < 1e-6 && dmg('gladius_rare') > dmg('gladius'), 'a legendary hits 1.9 times as hard');
     s.hold('daggers');
     const price = forgePrice('daggers');

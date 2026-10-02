@@ -1,5 +1,6 @@
-import { math, type ItemBase, type ItemKind, type ItemKit, type ItemMove, type ItemMoveControls, type Player, type PropModel } from '@platform';
+import { math, type ItemBase, type ItemKind, type ItemKit, type Player, type PropModel } from '@platform';
 import { launch, type Missile } from './missiles';
+import { crossbowMove, type CrossbowShown } from './moves';
 
 /**
  * The crossbow: a click looses a bolt (an arrow from the quiver) that flies flat and fast and goes
@@ -33,20 +34,8 @@ interface Span {
   reload: number;
 }
 
-/** What the screens see of the held one: spanning (0..1, -1 not), loaded, aimed. */
-export interface CrossbowShown {
-  r: number;
-  l: boolean;
-  a: boolean;
-}
-
 /** Blessings that span it faster (`blessings.ts` sets it). */
 export const crossbowMods = { reload: (_p: Player) => 1, pierce: (_p: Player) => 0 };
-
-/** Aiming slows them, and a sprint stops: the same on both sides (their screen predicts it). */
-export function crossbowMove(_def: unknown, controls: ItemMoveControls): ItemMove | null {
-  return controls.buttons & 4 ? { speed: 0.65, noSprint: true } : null;
-}
 
 let boltModel: PropModel | null = null;
 /** The bolt's model, as a prop (in `setup`). */

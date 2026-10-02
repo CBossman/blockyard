@@ -59,6 +59,9 @@ export function nextRarity(r: Rarity): Rarity | null {
   return i < RARITIES.length - 1 ? RARITIES[i + 1] : null;
 }
 
+/** The gladius's shield in a rarity (an item only so the screens can show it: the first-person view holds it). */
+export const shieldOf = (r: Rarity): string => variant('gladius_shield', r);
+
 /** Every variant of every base: the item ids the arsenal defines. */
 export const ALL_VARIANTS: readonly string[] = RARE_BASES.flatMap((b) => RARITIES.map((r) => variant(b, r)));
 

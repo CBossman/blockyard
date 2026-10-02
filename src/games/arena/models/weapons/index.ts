@@ -40,6 +40,9 @@ import crossbowRare from './crossbow_rare.glb?url';
 import crossbowEpic from './crossbow_epic.glb?url';
 import crossbowLegendary from './crossbow_legendary.glb?url';
 import bolt from './bolt.glb?url';
+import leatherArmor from './leather_armor.glb?url';
+import mailArmor from './mail_armor.glb?url';
+import plateArmor from './plate_armor.glb?url';
 
 export const WEAPON_MODELS: Record<string, string> = {
   gladius: gladius,
@@ -83,4 +86,7 @@ export const WEAPON_MODELS: Record<string, string> = {
   crossbow_epic: crossbowEpic,
   crossbow_legendary: crossbowLegendary,
   bolt: bolt,
+  leather_armor: leatherArmor,
+  mail_armor: mailArmor,
+  plate_armor: plateArmor,
 };
