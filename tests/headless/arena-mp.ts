@@ -160,7 +160,7 @@ function looks(seen: HostEvent[]): string {
   const item = (id: string) => screen.items.get(id);
   const bare = served.filter((d) => item(d.name)?.icon === PLACEHOLDER_ICON);
   check(!bare.length, `items with no look on the screen: ${bare.map((d) => d.name).join(', ')}`);
-  check(item('pike')?.hold?.style === 'polearm' && item('pike')?.hold?.model?.atlas === 'arena' && item('battle_axe')?.hold?.style === 'axe', 'the pike and the axe held two-handed, as their models');
+  check(item('pike')?.hold?.style === 'polearm' && !!item('pike')?.hold?.model?.gltf && item('battle_axe')?.hold?.style === 'axe', 'the pike and the axe held two-handed, as their models');
   check((item('bow') as { drawIcon?: string }).drawIcon === 'bow_pulling', 'the bow draws');
 
   // Every sound asked for, and every monster's, is one the screen has.

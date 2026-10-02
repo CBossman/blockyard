@@ -831,7 +831,7 @@ Built-in animations are `swing` (Minecraft's), `slash` (a diagonal cut for 3D bl
 
 For procedural motion, pass `sample(t)` instead of `keys`.
 
-**3D held items.** An item can be held as a box model (`HeldModelSpec`) instead of its flat sprite: same UV layout as mobs, length along +z, the hand position marked. They look much better in the hand than extruded sprites. The starter kit includes models for the swords and the potion; an item uses one by naming it: `hold: { model: HeldModels.ironSword }`. Without a model, an item is held as its sprite, extruded. Held models get their own grip: swords rise from the fist into the scene with their flat turned to you and attack with a diagonal `slash`; axes are held low on the haft and `hew`; bottles sit on the palm and `sip`. The Arena's battle axe and pike are models of its own (`src/games/arena/art/`):
+**3D held items.** An item can be held as a box model (`HeldModelSpec`) instead of its flat sprite: same UV layout as mobs, length along +z, the hand position marked. They look much better in the hand than extruded sprites. The starter kit includes models for the swords and the potion; an item uses one by naming it: `hold: { model: HeldModels.ironSword }`. Without a model, an item is held as its sprite, extruded. Held models get their own grip: swords rise from the fist into the scene with their flat turned to you and attack with a diagonal `slash`; axes are held low on the haft and `hew`; bottles sit on the palm and `sip`. A game paints its own into an atlas of its own (`items.atlas`), a pike, say:
 
 ```ts
 const PIKE: HeldModelSpec = {
@@ -897,6 +897,7 @@ eye's: x right, y up, z back, in blocks), lit by the light where the player's ey
 | `arms.humanoid` | A humanoid model's arms: each side's `upper`, `forearm` and `fist` nodes, its elbow and wrist, where the fist holds (`grip`, `gripQ`), the model's `firstPerson` fit, the `heldScale` they're sized for (docs/HUMANOID.md). |
 | `arms.version` | Counts up when any of the arms change: make what you made again. |
 | `node()`, `sprite(image, { additive, depthTest, color })`, `free(node)` | A group; a flat square showing an image (`'flash'`, a muzzle flash, or an address); give back what the layer made. |
+| `item(id)` | Another item's look as a node of the layer's, lit and drawn as what's in hand is, for a kit to place itself: an off-hand shield, a second dagger (null while its model's still coming). The Arena's gladius carries its shield this way (`src/games/arena/client/armory.ts`). |
 | `animations` | The game's first-person animations by name (`viewModel.define` on the server). |
 
 **What the kit reads.** `client.me`: `look` (sway), `bob`, `dead` (the hand lowers), `hand`
@@ -1043,6 +1044,7 @@ const z = game.entities.spawn('zombie', { x: 10, y: 71, z: 0 });
 - Physics, collision, knockback, flow-field path-finding to the player (around walls, up steps, down drops), line of sight and projectiles run in Rust/WebAssembly for all entities at once.
 - Built-in behaviours: `Behaviors.melee`, `Behaviors.ranged` (kites and strafes, leads its shots), `Behaviors.leaper` (pounces) and `Behaviors.all(...)`. They are written against the public `Entity` API (`src/platform/api/behaviors.ts`), so copy one and change it.
 - Custom AI is a function `(self, game, dt) => void`. It can call `self.nearestPlayer()`, `moveTo(player | point)`, `moveDirection(x, z)`, `stop`, `jump`, `lookAt(player | entity | point)`, `canSee(…)`, `distanceTo(…)`, `animate('attack' | 'raise' | 'cast')` (or any clip of a glTF model's, below), `glow(color)`, `shoot(projectile, player | entity | point, { lead })`, `impulse`, `setSpeed` and `damage`, and keep state in `self.data`. The Warden in `src/games/arena/content.ts` is a complete boss state machine: telegraphed slams, fireballs, summons and an enrage phase.
+- Flying, blinking and growing: `fly(x, y, z)` (every tick) flies it that way, weightless (a bat, a wisp; `moveTo`, `moveDirection` or `stop` lands it); `teleport(point)` puts it somewhere at once (a wraith's blink); `size` grows or shrinks one (its hitbox and its figure together: `champion.size = 1.4`).
 - `boss: true` shows a boss bar automatically. Hurt flashes, damage numbers, blood particles, death animations, drops and positional sounds are handled for you.
 - Queries: `entities.all(type?)`, `count(type?)`, `near(point, radius)`, `clear()`.
 - `invulnerable: true` ignores all damage (shopkeepers, scenery). `entity.armor` (0..20) reduces damage like the player's. `entities.raycast(origin, dir, reach)` finds the one under a crosshair; the `interactions` kit turns that into right-click-to-talk.
@@ -1166,7 +1168,7 @@ const { albedo, emissive } = cv.finish();
 game.items.atlas('mine', { width: ATLAS, height: ATLAS, pixels: albedo, emissive });
 ```
 
-The Arena paints its whole atlas this way (`src/games/arena/art/`): five mob skins, weapon sprites and the pike's texture, with bevelled pixel-art shading, in about 50 ms at startup. Bed Wars paints four team skins, a shopkeeper and its item sprites the same way.
+The Arena paints its whole atlas this way (`src/games/arena/art/`): its mob skins and item sprites, with bevelled pixel-art shading, in about 50 ms at startup. Bed Wars paints four team skins, a shopkeeper and its item sprites the same way.
 
 **Sound.** A game's client code defines its voices (`client.audio.define(name, voice)`, in `setup`), and anything plays them by name: the server's `audio.play(name, { at })`, client code's `client.audio.play`, and items' `sounds`. Voices are synthesised on each play, on each player's machine, with real Web Audio.
 

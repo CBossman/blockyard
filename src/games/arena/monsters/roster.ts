@@ -1,5 +1,5 @@
 import { Behaviors, Models, type CharacterLook, type Entity, type GameContext, type ProjectileSpec } from '@platform';
-import { ARENA_ATLAS, Skin } from '../art';
+import { MONSTER_MODELS } from './models';
 import { archer, goblinAI, kegBlast, necromancerAI, sapperAI } from './ai';
 import type { MonsterKind } from './registry';
 
@@ -67,7 +67,7 @@ export const spider: MonsterKind = {
   role: 'swarm',
   define: () => ({
     name: 'Spider',
-    model: Models.spider({ skin: [Skin.spider[0], Skin.spider[1]], atlas: ARENA_ATLAS }),
+    model: Models.gltf(MONSTER_MODELS.spider, { clips: { idle: 'idle', walk: 'walk', attack: 'attack' }, head: 'head' }),
     hitbox: { width: 1.3, height: 0.9 },
     health: 14,
     speed: 5.2,
