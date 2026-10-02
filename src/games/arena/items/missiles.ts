@@ -24,8 +24,11 @@ export interface MissileSpec {
   cause?: string;
   /** Seconds it stays stuck in a wall (a bolt), else it's gone where it stops. */
   stick?: number;
-  /** Puffs behind it every so often, drawn by each screen as it flies (`client/fx.ts`): colour, seconds between. */
-  trail?: { color: string; every: number; size?: number };
+  /**
+   * Puffs behind it every so often, drawn by each screen as it flies (`client/fx.ts`): colour,
+   * seconds between; `end`, a puff of that colour where it stops (a shard shattering).
+   */
+  trail?: { color: string; every: number; size?: number; end?: string };
   /** After it hits someone (the damage done): its own effects; how much the next takes (times). */
   hit?(game: GameContext, m: Missile, e: Entity): void;
   /** Where it stopped: a wall (with the face's normal), spent, or out of time. */
@@ -66,7 +69,7 @@ export function launch(game: GameContext, by: Player, spec: MissileSpec, from: V
   if (spec.trail) {
     m.n = ++trails;
     const t = spec.trail;
-    game.clients.send('all', 'armory.trail', { n: m.n, x: from.x, y: from.y, z: from.z, vx: vel.x, vy: vel.y, vz: vel.z, life: spec.life, color: t.color, every: t.every, size: t.size ?? 0.12 });
+    game.clients.send('all', 'armory.trail', { n: m.n, x: from.x, y: from.y, z: from.z, vx: vel.x, vy: vel.y, vz: vel.z, life: spec.life, color: t.color, every: t.every, size: t.size ?? 0.12, end: t.end ?? null });
   }
   return m;
 }
@@ -134,7 +137,7 @@ export function updateMissiles(game: GameContext, dt: number) {
 /** It stops at `at`: stuck in the wall a while, or gone; its own end. */
 function finish(game: GameContext, i: number, m: Missile, at: Vec3, wall: Vec3 | null) {
   flying.splice(i, 1);
-  if (m.n) game.clients.send('all', 'armory.land', { n: m.n });
+  if (m.n) game.clients.send('all', 'armory.land', { n: m.n, x: at.x, y: at.y, z: at.z });
   if (wall && m.spec.stick) {
     // (Setting where it is stops its flight on every screen.)
     m.prop.position.set(at.x, at.y, at.z);

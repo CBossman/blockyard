@@ -113,8 +113,8 @@ function parry(game: GameContext, p: Player, from: Entity, hit: DamageEvent, def
     stagger(game, from, def.guard!.stagger);
     const l = Math.hypot(q.x - p.position.x, q.z - p.position.z) || 1;
     from.impulse(((q.x - p.position.x) / l) * 5, 2.5, ((q.z - p.position.z) / l) * 5);
-    p.hud.pop('Parry!', { color: '#ffd36b' });
   }
+  // (The announcer calls it out, from the feat.)
   bus.emit('feat', { player: p, name: 'parry', text: 'Parry!' });
   guardMods.parried(game, p);
   // Aegis: a parry lets loose a burst that staggers everything about you.
