@@ -266,10 +266,10 @@ export function updateHolds(game: GameContext) {
   }
 }
 
-/** A fresh fight: every chill, root, venom and drag off. */
-export function resetHolds() {
-  for (const c of chills.values()) c.p.speed /= c.factor;
-  for (const r of roots.values()) if (r.p.alive) r.p.freeze(false);
+/** A fresh fight: every chill, root, venom and drag off (on those still here: a test runs games one after another). */
+export function resetHolds(game: GameContext) {
+  for (const c of chills.values()) if (game.players.includes(c.p)) c.p.speed /= c.factor;
+  for (const r of roots.values()) if (r.p.alive && game.players.includes(r.p)) r.p.freeze(false);
   chills.clear();
   roots.clear();
   venoms.clear();
