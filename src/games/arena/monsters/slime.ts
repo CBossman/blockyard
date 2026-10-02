@@ -26,10 +26,13 @@ interface SlimeSize {
 }
 
 const SIZES: Record<string, SlimeSize> = {
-  slime: { name: 'Slime', into: 'slime_small', health: 28, width: 1.1, height: 0.95, damage: 4, hop: [5.5, 7.5], rest: [1, 1.5], pitch: 0.75 },
-  slime_small: { name: 'Small Slime', into: 'slime_tiny', health: 11, width: 0.62, height: 0.55, damage: 2.5, hop: [6, 7], rest: [0.7, 1.1], pitch: 1.05 },
-  slime_tiny: { name: 'Tiny Slime', health: 4, width: 0.38, height: 0.32, damage: 1, hop: [6.5, 6], rest: [0.4, 0.8], pitch: 1.5 },
+  slime: { name: 'Slime', into: 'slime_small', health: 28, width: 1.1, height: 0.95, damage: 6, hop: [5.5, 7.5], rest: [1, 1.5], pitch: 0.75 },
+  slime_small: { name: 'Small Slime', into: 'slime_tiny', health: 11, width: 0.62, height: 0.55, damage: 3.5, hop: [6, 7], rest: [0.7, 1.1], pitch: 1.05 },
+  slime_tiny: { name: 'Tiny Slime', health: 4, width: 0.38, height: 0.32, damage: 1.5, hop: [6.5, 6], rest: [0.4, 0.8], pitch: 1.5 },
 };
+
+/** Seconds of a fighter's running a hop allows for. */
+const LEAD = 0.3;
 
 interface SlimeState {
   _rest?: number;
@@ -97,9 +100,13 @@ function slimeAI(o: SlimeSize): Behavior {
       s._crouch -= dt;
       if (s._crouch > 0) return;
       s._crouch = undefined;
-      const l = Math.hypot(p.x - e.x, p.z - e.z) || 1;
+      // At where they'll be when it comes down (a running fighter is led, a little).
+      const v = target.velocity;
+      const ax = p.x + v.x * LEAD - e.x;
+      const az = p.z + v.z * LEAD - e.z;
+      const l = Math.hypot(ax, az) || 1;
       const far = Math.min(1, l / 6);
-      const [wx, wz] = s._way ?? [(p.x - e.x) / l, (p.z - e.z) / l];
+      const [wx, wz] = s._way ?? [ax / l, az / l];
       const k = s._way ? 0.7 : 0.55 + 0.45 * far;
       s._way = undefined;
       self.impulse(wx * o.hop[0] * k, o.hop[1], wz * o.hop[0] * k);

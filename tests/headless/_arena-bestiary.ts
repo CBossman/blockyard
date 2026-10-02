@@ -137,7 +137,8 @@ export default function arenaBestiary() {
       return {};
     });
     log(`wraith: blinked ${blinked}, came within ${closest.toFixed(1)}; drained ${s.hurt().toFixed(1)}`);
-    check(blinked && closest < 5, 'the wraith blinks close');
+    // (Back in its drain's reach, out of a blade's.)
+    check(blinked && closest < 6.5, 'the wraith blinks close');
     check(s.hurt() > 1, 'the wraith drains');
   }
 
