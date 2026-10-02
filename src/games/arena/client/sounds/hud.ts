@@ -194,16 +194,12 @@ export function defineHudSounds(client: Client) {
     taiko(s, 0.9, 0.6, 0.75);
     s.noise({ duration: 1.6, filter: 'lowpass', from: 500, to: 80, volume: 0.25 });
   }, { reverb: 0.5 });
-  // A boss slain: a gong, the brass in triumph, the choir.
-  a.define('ar_sting_slain', (s) => {
-    bell(s, hz(-24), 0, 0.14);
-    bell(s, hz(-17), 0.02, 0.08);
-    taiko(s, 0, 0.8, 0.8);
-    stab(s, [hz(-7), hz(-3), hz(0)], 0.25, 0.08, 0.25);
-    stab(s, [hz(-2), hz(2), hz(5)], 0.5, 0.08, 1.4);
-    for (const n of [-14, -10, -7]) sing(s, hz(n), 'a', { delay: 0.5, attack: 0.3, hold: 1.1, duration: 1, volume: 0.06 });
-    swell(s, 0.5, 0, 0.12);
-  }, { reverb: 0.6 });
+  // A new foe: a low horn's question and a drum.
+  a.define('ar_sting_foe', (s) => {
+    horn(s, hz(-24), { volume: 0.08, hold: 0.2, duration: 0.5, to: hz(-23) });
+    taiko(s, 0, 0.3, 1.1);
+    s.tone({ wave: 'triangle', from: hz(10), duration: 0.5, delay: 0.12, volume: 0.06 });
+  }, { reverb: 0.4 });
   // A twist: two quick stabs and a shimmer.
   a.define('ar_sting_twist', (s) => {
     stab(s, [hz(-7), hz(-4), hz(0)], 0, 0.06, 0.18);
