@@ -80,6 +80,10 @@ export interface ArenaEvents {
   bought: { player: Player; item: string; price: number };
   /** The mystery chest gave a fighter a weapon (or, `item` null, flew off). */
   chest: { player: Player; item: string | null };
+  /** A fighter chose to keep fighting past a victory, into the endless waves (the end screen's button). */
+  keepFighting: { player: Player };
+  /** A fighter took a blessing (`id`; `name` with its level: Berserker II), chosen or (`chosen` false) given them as the wave began. */
+  blessed: { player: Player; id: string; name: string; text: string; chosen: boolean };
 }
 
 type Listener<K extends keyof ArenaEvents> = (e: ArenaEvents[K]) => void;

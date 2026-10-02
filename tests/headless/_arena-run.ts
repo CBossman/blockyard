@@ -102,7 +102,7 @@ function shop() {
   check(state.phase === 'intermission' && shopOpen(), `the merchant is in between waves (${state.phase})`);
   const merchant = game.entities.all().find((e) => e.type === 'merchant')!;
   const s = map().shop!;
-  check(merchant.data.scenery && Math.hypot(merchant.position.x - s.x, merchant.position.z - s.z) < 0.5, 'at the map\'s shop spot, as scenery');
+  check(merchant.data.scenery && Math.hypot(merchant.position.x - s.x, merchant.position.z - s.z) < 1, 'behind his stall at the map\'s shop spot, as scenery');
   const g = gold(me);
   addGold(game, me, -g);
   check(!purchase(game, me, 'armor:1'), 'nothing without gold');

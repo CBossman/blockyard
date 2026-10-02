@@ -196,17 +196,10 @@ export function startWave(game: GameContext, n: number, force?: Twist) {
   storm.next = game.clock.now + 4;
   for (const r of runs.values()) r.hurt = false;
 
-  const final = n === finalWave();
-  const t = twist && TWISTS[twist];
-  const name = waveName(n);
-  const color = boss?.color ?? (final ? '#c9a2ff' : t?.color);
-  const title = final ? 'Final Wave' : state.endless ? `Endless · Wave ${n}` : `Wave ${n}`;
-  game.hud.banner(title, t ? `${name} · ${t.name}!` : name, { duration: 2.6, color });
-  if (t) game.clock.after(2.8, () => state.wave === n && state.phase === 'fighting' && game.hud.banner(t.name, t.text, { duration: 2.4, color: t.color }));
-  game.audio.play('wave');
+  // (Its banners are the HUD's, from the bus.)
   // Dusk falls as the fight goes on; a Blood Moon brings the night, a storm the dark.
   game.env.time = twist === 'blood_moon' ? 0.82 : twist === 'storm' ? 0.78 : dusk(n);
-  bus.emit('waveStart', { wave: n, name, twist, boss: boss?.id ?? null, final, endless: state.endless });
+  bus.emit('waveStart', { wave: n, name: waveName(n), twist, boss: boss?.id ?? null, final: n === finalWave(), endless: state.endless });
 }
 
 /** The map's time of day as the fight goes on (wave `n`): the endless waves are fought by night. */
@@ -225,10 +218,7 @@ function spawnNext(game: GameContext) {
   const e = spawnMonster(game, type, pos, { yaw: g.yaw, data: boss && state.endless ? { elite: true } : undefined });
   game.fx.burst({ x: pos.x, y: pos.y + 1, z: pos.z }, { color: boss ? boss.color : type === 'goblin' ? '#ffd23a' : '#8fd6ff', count: 24, speed: 2.5, gravity: -1 });
   game.audio.play(boss ? 'boss' : 'spawn', { at: pos, volume: boss ? 1.4 : 0.8 });
-  if (boss) {
-    game.fx.shake(0.2, 1.2);
-    game.hud.banner(boss.name, boss.title, { duration: 3, color: boss.color });
-  }
+  if (boss) game.fx.shake(0.2, 1.2);
   return e;
 }
 

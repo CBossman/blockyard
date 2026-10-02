@@ -106,16 +106,13 @@ export function award(game: GameContext, p: Player, gains: Gain[], opts: { quiet
   bus.emit('xp', { player: p, gains, ...now });
   game.clients.send(p, 'arena.xp', { ...now, gains: opts.quiet ? [] : gains });
   const was = levelOf(before);
-  if (now.level > was) levelUp(game, p, was, now.level);
+  if (now.level > was) levelUp(p, was, now.level);
 }
 
-function levelUp(game: GameContext, p: Player, from: number, to: number) {
+function levelUp(p: Player, from: number, to: number) {
   const unlocks = UNLOCKS.filter((u) => u.level > from && u.level <= to).map(({ kind, id, name }) => ({ kind, id, name }));
   for (const u of unlocks) if (u.kind === 'cosmetic') p.grant(u.id);
-  const line = unlocks.length ? `Unlocked: ${unlocks.map((u) => u.name).join(', ')}` : undefined;
-  p.hud.pop(`LEVEL ${to}`, { big: true, color: '#ffd23a', sub: line });
   p.audio.play('levelup');
-  game.hud.feed([{ text: p.name, color: '#ffd23a' }, ` reached level ${to}`]);
   if (to >= 10) p.achieve('rising_star');
   if (to >= MAX_LEVEL) p.achieve('arena_legend');
   bus.emit('levelUp', { player: p, level: to, unlocks });

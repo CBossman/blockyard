@@ -74,7 +74,6 @@ function boilOver(game: GameContext) {
   hype.favourUntil = game.clock.now + FAVOUR;
   hype.nextGift = game.clock.now + 0.6;
   hype.value = 1;
-  game.hud.banner("THE CROWD'S FAVOUR", 'Double gold · the emperor sends gifts', { duration: 2.8, color: '#ffd23a' });
   game.audio.play('roar', { volume: 1.2 });
   game.fx.shake(0.08, 0.8);
   for (const p of game.players) if (!p.bot) p.achieve('crowd_favourite');

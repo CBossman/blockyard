@@ -6,6 +6,7 @@ import { armoryPart } from './items/part';
 import { runPart } from './run/part';
 import { hudPart } from './hud/part';
 import { usePart } from './run/use';
+import { announcePart } from './run/announce';
 
 /** The Arena's parts, in the order the server calls them (`part.ts`). */
-export const PARTS: readonly ArenaPart[] = [usePart, mapsPart, bestiaryPart, bossesPart, armoryPart, runPart, hudPart];
+export const PARTS: readonly ArenaPart[] = [usePart, mapsPart, bestiaryPart, bossesPart, armoryPart, runPart, announcePart, hudPart];

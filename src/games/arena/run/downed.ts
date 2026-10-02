@@ -67,7 +67,6 @@ function down(game: GameContext, p: Player, by: Actor | null) {
     r.hurt = true;
     r.downs++;
   }
-  game.hud.feed(`${p.name} is down!`, { color: '#ff6b6b' });
   game.audio.play('downed', { at: p.position });
   p.fx.flash('#a00000', 0.5, 0.6);
   const q = p.position;
@@ -97,8 +96,6 @@ export function revive(game: GameContext, p: Player, by: Player | null) {
   game.fx.burst({ x: q.x, y: q.y + 1, z: q.z }, { color: '#9dff8a', count: 30, speed: 3, gravity: -2, glow: 1 });
   game.audio.play('revive', { at: q });
   if (by) {
-    p.hud.banner('REVIVED', `${by.name} pulled you up`, { duration: 1.8, color: '#9dff8a' });
-    game.hud.feed(`${by.name} revived ${p.name}`, { color: '#9dff8a' });
     const r = runs.get(by.id);
     if (r) {
       r.revives++;
@@ -131,7 +128,6 @@ function rise(game: GameContext, p: Player) {
   game.fx.burst({ x: q.x, y: q.y + 1, z: q.z }, { color: '#ff8a2a', count: 60, speed: 6, gravity: -3, glow: 1, life: 0.9 });
   game.fx.shockwave({ x: q.x, y: q.y + 0.2, z: q.z }, 5, '#ffb347');
   game.audio.play('phoenix', { at: q });
-  p.hud.banner('REBORN', 'The Phoenix Feather burns away', { duration: 2.2, color: '#ffb347' });
   p.achieve('phoenix');
   feat(p, 'phoenix', `${p.name} rises from the ashes!`);
   // The flames throw back whatever's close.
