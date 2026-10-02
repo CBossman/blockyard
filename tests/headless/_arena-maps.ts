@@ -1,9 +1,10 @@
 import type { Entity, GameContext, Player, Vec3 } from '@platform';
 import { FLOOR, along, inBox, MAPS, type ArenaMap, type Gate, type TrapSpec } from '../../src/games/arena/maps';
+import { bankFrom, inHazard } from '../../src/games/arena/maps/hazards';
 import { INTRO_MSG, type IntroMessage } from '../../src/games/arena/maps/messages';
 import { bus } from '../../src/games/arena/run/bus';
 import { addGold, gold } from '../../src/games/arena/run/gold';
-import { map } from '../../src/games/arena/run/state';
+import { inFight, map } from '../../src/games/arena/run/state';
 import { check, launch } from './_harness';
 
 /**
@@ -12,7 +13,9 @@ import { check, launch } from './_harness';
  * each chest and at spots round the floor (each placement in turn); the map's own places (the
  * middle, the shop, the chests, the lookout) must have room for a body; nowhere a fighter can get
  * to from the middle may be somewhere they can't get back from (a pit, a ledge: unless it's a
- * hazard that burns them out of it); the shop needs 3 by 3 of clear floor, and neither the shop
+ * hazard that burns them out of it), and a fighter dropped anywhere in a hazard's pool (the Forge's
+ * lava, the Sanctum's frozen pool) must be out on dry ground within 2 seconds just walking toward
+ * the nearest bank (each burn throws them toward it); the shop needs 3 by 3 of clear floor, and neither the shop
  * nor a chest may be in a trap's way; every boss gate must be open floor a
  * boss fits on (its floor, clear air 9 high for 3 blocks round, open floor 12 long in front of it
  * for its entrance's camera). Then each trap: a fighter with gold
@@ -110,6 +113,7 @@ function probe(m: ArenaMap): { row: string; failed: string[] } {
   });
   const caught = stuck(game, me, m);
   for (const c of caught.spots) failed.push(`${m.id}: a fighter can get into ${c} and not back out`);
+  const out = escapes(h, game, me, m, caught.columns, failed);
 
   // Spots round the floor too: out toward the edge, all round.
   const round = [0, 1, 2, 3, 4, 5].map((i) => {
@@ -146,7 +150,7 @@ function probe(m: ArenaMap): { row: string; failed: string[] } {
   }
   const traps = (m.traps ?? []).map((t) => trap(h, game, me, t, failed));
   return {
-    row: `${m.name}: ${trips} trips from ${gates.length} gates to ${spots.length} spots, the slowest ${slowest.toFixed(1)} s; ${caught.places} places to stand, ${caught.spots.length ? `${caught.spots.length} traps` : 'none a trap'}; traps ${traps.join(', ')}; ${failed.length} failed`,
+    row: `${m.name}: ${trips} trips from ${gates.length} gates to ${spots.length} spots, the slowest ${slowest.toFixed(1)} s; ${caught.places} places to stand, ${caught.spots.length ? `${caught.spots.length} traps` : 'none a trap'};${out} traps ${traps.join(', ')}; ${failed.length} failed`,
     failed,
   };
 }
@@ -224,6 +228,78 @@ function trap(h: ReturnType<typeof launch>, game: GameContext, me: Player, t: Tr
   return `${t.id.split('.')[1]} ${hits}/${kills}`;
 }
 
+/** How long a fighter dropped in a hazard's pool may take to be out on dry ground. */
+const ESCAPE = 2;
+
+/**
+ * Every column of each hazard at floor level a body fits in and a fighter can get to from the
+ * middle (the Forge's lava river, pockets, pools; the Sanctum's frozen pool): one dropped onto
+ * its bottom, walking (W, nothing else)
+ * toward the nearest bank, must be out of it and on the ground within `ESCAPE` seconds; and one
+ * afloat at its surface must count as in it (it burns, and throws them out). Its part
+ * of the row: how many drops, and the slowest out.
+ */
+function escapes(h: ReturnType<typeof launch>, game: GameContext, me: Player, m: ArenaMap, reach: Set<string>, failed: string[]): string {
+  if (!m.hazards?.length) return '';
+  // (Its burns don't land: hundreds of drops would add up. It throws them out all the same.)
+  if (!me.alive) me.revive();
+  const off = game.events.on('damage', (d) => d.target === me && d.cancel());
+  let drops = 0;
+  let slowest = 0;
+  for (const hz of m.hazards) {
+    const cells = new Map<string, Vec3>();
+    for (const b of hz.zone)
+      for (let x = b.min.x; x <= b.max.x; x++)
+        for (let z = b.min.z; z <= b.max.z; z++) {
+          // Its bottom, at floor level, with room for a body and something under it.
+          if (!reach.has(`${x},${z}`)) continue;
+          for (let y = Math.max(b.min.y, FLOOR - 3); y <= Math.min(b.max.y, FLOOR); y++) {
+            const at = { x: x + 0.5, y, z: z + 0.5 };
+            if (game.world.fits(at) && !game.world.fits({ ...at, y: y - 1 })) {
+              cells.set(`${x},${z}`, at);
+              break;
+            }
+          }
+        }
+    for (const at of cells.values()) {
+      // Afloat at its surface (feet a little over the top of it) is in it too: it burns there.
+      const run = hz.zone.find((b) => Math.floor(at.x) >= b.min.x && Math.floor(at.x) <= b.max.x && Math.floor(at.z) >= b.min.z && Math.floor(at.z) <= b.max.z && b.min.y <= at.y && b.max.y >= at.y);
+      if (run && !inHazard(hz.zone, { ...at, y: run.max.y + 1.1 })) failed.push(`${m.id}: afloat on the ${hz.kind} at ${fmt(at)} isn't in it`);
+      const bank = bankFrom(game, hz.zone, at);
+      if (!bank) {
+        failed.push(`${m.id}: no bank near the ${hz.kind} at ${fmt(at)}`);
+        continue;
+      }
+      // Mid-fight (the hazards burn only then), whatever the waves have got to with nobody to fight.
+      if (!inFight()) game.commands.run('/wave 1');
+      me.freeze(false);
+      me.teleport({ x: at.x, y: at.y + 0.05, z: at.z }, Math.atan2(-(bank.x - at.x), -(bank.z - at.z)), 0);
+      let t = 0;
+      let outAt = -1;
+      h.run(ESCAPE + 0.5, {
+        pilot: () => {
+          for (const e of game.entities.all()) e.remove();
+          t += 1 / 60;
+          const p = me.position;
+          // Out: on the ground (or held still by the run, over it) and not in it.
+          if (outAt < 0 && (me.onGround || me.frozen) && !inHazard(hz.zone, p)) outAt = t;
+          // While in it, toward the nearest bank from where they are now; out of it, still.
+          if (!inHazard(hz.zone, p)) return {};
+          const to = bankFrom(game, hz.zone, p) ?? bank;
+          const yaw = Math.atan2(-(to.x - p.x), -(to.z - p.z));
+          return { yaw, pitch: 0, down: ['KeyW'] };
+        },
+        until: () => outAt >= 0,
+      });
+      drops++;
+      if (outAt < 0 || outAt > ESCAPE) failed.push(`${m.id}: dropped in the ${hz.kind} at ${fmt(at)}, ${outAt < 0 ? `still in it after ${ESCAPE + 0.5} s (at ${fmt(me.position)})` : `out only after ${outAt.toFixed(1)} s`}`);
+      else slowest = Math.max(slowest, outAt);
+    }
+  }
+  off();
+  return ` ${drops} drops into its hazards, all out within ${slowest.toFixed(1)} s;`;
+}
+
 /** How high a fighter climbs onto something (a jump reaches about 1.27 blocks: a block, not a fence), and how far round the middle they're followed. */
 const CLIMB = 1.2;
 const SWEEP = 46;
@@ -234,10 +310,10 @@ const SWEEP = 46;
  * a jump reaches (room for the body over them to jump), off a ledge any way down (landing on the
  * highest thing under it). From the middle, everywhere they can get to; then whether each of those
  * has a way back to it. A place with no way back is a trap, unless it's in one of the map's
- * hazards (they burn there, and are back next wave). Returns how many places they can get to, and
- * the traps (a patch of them as one line).
+ * hazards (they burn there, and are back next wave). Returns how many places they can get to, the
+ * traps (a patch of them as one line), and the columns they can get to.
  */
-function stuck(game: GameContext, me: Player, m: ArenaMap): { places: number; spots: string[] } {
+function stuck(game: GameContext, me: Player, m: ArenaMap): { places: number; spots: string[]; columns: Set<string> } {
   // The ground round the middle generated first.
   me.teleport({ x: m.center.x, y: m.center.y + 0.05, z: m.center.z }, 0, 0);
   const w = game.world;
@@ -290,7 +366,7 @@ function stuck(game: GameContext, me: Player, m: ArenaMap): { places: number; sp
   const back: number[][] = nodes.map(() => []);
   edges.forEach((list, i) => list.forEach((b) => back[b.i].push(i)));
   const start = [...(cols.get(`${cx},${cz}`) ?? [])].sort((p, q) => Math.abs(p.s - m.center.y) - Math.abs(q.s - m.center.y))[0];
-  if (!start) return { places: 0, spots: ['the middle (no floor there)'] };
+  if (!start) return { places: 0, spots: ['the middle (no floor there)'], columns: new Set() };
   const search = (from: number, next: (i: number) => number[]) => {
     const seen = new Uint8Array(nodes.length);
     const queue = [from];
@@ -311,7 +387,8 @@ function stuck(game: GameContext, me: Player, m: ArenaMap): { places: number; sp
     for (const o of patch) done.add(o.i);
     spots.push(`${patch.length} spot${patch.length === 1 ? '' : 's'} round (${n.x - m.origin.x + 0.5}, ${n.s.toFixed(1)}, ${n.z - m.origin.z + 0.5}) from its origin`);
   }
-  return { places: nodes.filter((n) => there[n.i]).length, spots };
+  const columns = new Set(nodes.filter((n) => there[n.i]).map((n) => `${n.x},${n.z}`));
+  return { places: nodes.filter((n) => there[n.i]).length, spots, columns };
 }
 
 /** Whether a spot's where a trap does its work (its zone, a jet's flames, a blade's swing, the bell's blast, the sluice). */
