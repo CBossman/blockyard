@@ -453,7 +453,11 @@ body:has(.ab-cine.on) :is(.hud, .gamehud) > :not([data-layer="arena.bosses"], .w
 .ab-bar.bottom { bottom: 0; }
 .ab-cine.on .ab-bar { height: 11vh; }
 
-.ab-card { position: absolute; left: 50%; bottom: 15vh; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; text-align: center; white-space: nowrap; }
+.ab-card { position: absolute; left: 50%; bottom: 15vh; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; text-align: center; white-space: nowrap; isolation: isolate; }
+/* A soft shade behind the card, so it reads on a bright floor (the Sanctum's ice) as on a dark one. */
+.ab-card::before { content: ''; position: absolute; left: 50%; top: 50%; z-index: -1; width: min(1200px, 96vw); height: 230%; transform: translate(-50%, -50%); pointer-events: none;
+  background: radial-gradient(closest-side, rgba(5, 4, 4, 0.5), rgba(5, 4, 4, 0.28) 55%, transparent); opacity: 0; transition: opacity 700ms ease; }
+.ab-cine.card .ab-card::before { opacity: 1; }
 .ab-kicker { display: flex; align-items: center; gap: 14px; font: 500 14px/1 ${LABEL}; letter-spacing: 0.42em; margin-right: -0.42em; text-transform: uppercase; color: rgba(255, 244, 222, 0.78);
   opacity: 0; transform: translateY(8px); transition: opacity 500ms ease, transform 700ms cubic-bezier(0.2, 0.8, 0.2, 1); text-shadow: 0 2px 8px rgba(0, 0, 0, 0.8); }
 .ab-kicker i { display: block; width: 7px; height: 7px; background: var(--boss); transform: rotate(45deg); box-shadow: 0 0 10px var(--boss); }
