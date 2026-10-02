@@ -12,8 +12,9 @@ import { ARMOR_ICON } from './models';
 /**
  * The shop: between waves a merchant sets up his stall at the map's `shop` spot, and E at it opens
  * his wares (a menu on that fighter's screen, paid from their own purse, `gold.ts`): the armory's
- * catalog (`items/catalog.ts`, each on sale from its wave), armour by the tier, a Phoenix Feather,
- * and the forge (a weapon carried, to its next rarity). He packs up when the next wave begins.
+ * catalog (`items/catalog.ts`, each on sale from its wave: weapons, armour, supplies), a Phoenix
+ * Feather, and the forge (a weapon carried, to its next rarity), all handed over through
+ * `loot.ts`. He packs up when the next wave begins.
  */
 
 /** The run's own armour, tier by tier, each replacing the last (points: 4% of every blow each), while the catalog sells none. */

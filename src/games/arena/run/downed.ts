@@ -50,7 +50,7 @@ function tell(game: GameContext, p: Player, d: Down | null, reviver: Player | nu
   const id = `arena.downed:${p.id}`;
   for (const o of game.players) {
     if (o === p) continue;
-    o.hud.marker(id, d ? p : null, d ? { label: reviver ? `${reviver.name} reviving` : `REVIVE ${p.name}`, color: '#ff4d4d', shape: 'diamond', edge: true, pulse: !reviver, bar: reviver ? progress : d.bleed / BLEED, offset: { x: 0, y: 1.2, z: 0 } } : undefined);
+    o.hud.marker(id, d ? p : null, d ? { label: reviver ? `${reviver.name} reviving` : `REVIVE ${p.name}`, color: '#ff4d4d', shape: 'diamond', edge: true, pulse: !reviver, bar: reviver ? progress : d.bleed / BLEED, offset: { x: 0, y: 2, z: 0 } } : undefined);
   }
   if (!p.bot) game.clients.send(p, 'arena.downed', d ? { bleed: Math.max(0, d.bleed), max: BLEED, reviver: reviver?.name ?? null, progress } : null);
 }
