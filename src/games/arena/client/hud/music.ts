@@ -25,7 +25,8 @@ type Mood = 'off' | 'calm' | 'fight' | 'boss' | 'final' | 'end';
  *   taiko, then toms and shakers, the lyre running in sixteenths, the bass, claps, brass stabs at
  *   the top; quicker the later the wave.
  * - A boss: heavier and quicker, brass and a choir; the final wave the most of all.
- * - The Crowd's Favour rings bells over it; out of the fight, it's quieter and the drums drop.
+ * - The Crowd's Favour rings bells over it; out of the fight, it's quieter and the drums drop;
+ *   under a boss's entrance or fall (the bosses' cinematic), it ducks under their stings.
  * - Victory and defeat end it (their stings say the rest), the drone left low.
  *
  * It plays at the player's music volume (Settings → Sound: `client.audio.music`), silent at 0.
@@ -52,7 +53,9 @@ export function music(): ClientKit {
         beat = 0;
         if (mood === 'off') stop();
       }
-      const vol = client.audio.music * (hud.me?.state === 'out' ? 0.55 : 1);
+      // Quieter out of the fight, and under a boss's entrance or fall (the bosses' cinematic: its own stings).
+      const cine = !!document.querySelector('.ab-cine.on');
+      const vol = client.audio.music * (hud.me?.state === 'out' ? 0.55 : 1) * (cine ? 0.3 : 1);
       if (mood === 'off' || vol === 0) {
         drone?.set({ volume: 0 });
         nextBeat = client.time;

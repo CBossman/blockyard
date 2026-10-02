@@ -51,7 +51,7 @@ function build(client: Client, layer: HTMLElement): (dt: number) => void {
   const bar = el('div.ar-wave-bar', el('div.ar-wave-track', fill), left);
   const chips = el('div.ar-chips');
   const hint = el('div.ar-wave-hint');
-  const wave = el('div.ar-wave', kicker, el('div.ar-wave-n', el('i.ar-orn'), big, of, el('i.ar-orn.r')), name, bar, chips, hint);
+  const wave = el('div.ar-wave', kicker, el('div.ar-wave-n', el('i.ar-orn'), big, of, el('i.ar-orn.r')), name, bar, el('div.ar-wave-foot', chips, hint));
 
   // Gold and the crowd.
   const goldN = el('span.ar-gold-n', '0');
@@ -122,7 +122,7 @@ function build(client: Client, layer: HTMLElement): (dt: number) => void {
   });
 
   const showRun = (r: RunMsg) => {
-    const key = JSON.stringify([r.phase, r.wave, r.of, r.name, r.left, r.total, r.next, r.twist?.name, r.boss?.name, r.upcoming?.name, r.mapName]);
+    const key = JSON.stringify([r.phase, r.wave, r.of, r.name, r.left, r.total, r.next, r.twist?.name, r.boss?.name, r.upcoming?.name, r.mapName, r.ready, r.endless, r.time, r.kills]);
     if (key === runKey) return;
     runKey = key;
     const on = r.phase === 'countdown' || r.phase === 'fighting' || r.phase === 'intermission';
@@ -130,25 +130,26 @@ function build(client: Client, layer: HTMLElement): (dt: number) => void {
     shade.classList.toggle('on', on);
     wave.dataset.phase = r.phase;
     if (!on) return;
-    const endless = r.wave > r.of;
+    const endless = r.endless || r.wave > r.of;
     if (r.phase === 'countdown') {
       kicker.textContent = 'The games begin';
-      big.textContent = r.next > 0 ? String(r.next) : '';
+      big.textContent = r.next > 9 ? clock(r.next) : r.next > 0 ? String(r.next) : '';
       of.textContent = '';
       name.textContent = r.mapName;
-      hint.textContent = `Survive ${r.of} waves`;
+      hint.textContent = r.next > 3 ? `Choose your class · survive ${r.of} waves` : `Survive ${r.of} waves`;
     } else if (r.phase === 'intermission') {
       kicker.textContent = r.upcoming?.boss ? 'Boss wave in' : 'Next wave in';
       big.textContent = clock(r.next);
       of.textContent = '';
       name.textContent = r.upcoming ? `Wave ${r.upcoming.wave} · ${r.upcoming.name}` : '';
-      hint.textContent = 'Rest · shop · choose a blessing (B)';
+      hint.textContent = `The merchant · B blessing · N ready${r.ready && r.ready.of > 1 ? ` (${r.ready.n}/${r.ready.of})` : ''}`;
     } else {
       kicker.textContent = endless ? 'Endless' : r.wave === r.of ? 'Final wave' : r.boss ? 'Boss wave' : 'Wave';
       big.textContent = String(r.wave);
       of.textContent = endless ? '' : `/ ${r.of}`;
       name.textContent = r.name;
-      hint.textContent = '';
+      // The run so far: its time and its dead.
+      hint.textContent = `${clock(r.time)} · ${r.kills} slain`;
     }
     wave.classList.toggle('boss', r.phase === 'fighting' && !!r.boss);
     wave.classList.toggle('soon', (r.phase === 'intermission' || r.phase === 'countdown') && r.next > 0 && r.next <= 3);
@@ -186,13 +187,13 @@ function build(client: Client, layer: HTMLElement): (dt: number) => void {
 
   const showMe = (m: MeMsg | null) => {
     if (!m) return;
-    const key = m.bless.map((b) => b.name).join('|');
+    const key = m.bless.map((b) => `${b.name}${b.n}`).join('|');
     if (key === blessKey) return;
     const fresh = blessKey !== '' || m.bless.length === 1;
     blessKey = key;
     bless.replaceChildren(
       ...m.bless.map((b, i) => {
-        const tile = el('div.ar-blessing', client.hud.icon(b.icon));
+        const tile = el('div.ar-blessing', client.hud.icon(b.icon), b.n > 1 ? el('span.ar-bless-n', ROMAN[b.n] ?? String(b.n)) : null);
         tile.style.setProperty('--c', b.color);
         tile.title = `${b.name}: ${b.text}`;
         // (The newest arrives with a flash; the announcer names it.)
@@ -276,6 +277,9 @@ function build(client: Client, layer: HTMLElement): (dt: number) => void {
     }
   };
 }
+
+/** A blessing taken more than once: II, III, IV. */
+const ROMAN = ['', 'I', 'II', 'III', 'IV', 'V'];
 
 /** A weapon's rarity, by its id (`items/rarity.ts`: `gladius_epic`; a common one is its plain id). */
 const RARE = /_(rare|epic|legendary)$/;
