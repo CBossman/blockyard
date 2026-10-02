@@ -16,9 +16,9 @@ function scene(seed: number) {
   const game = h.ctx as GameContext;
   const me = game.player as Player;
   const mine = new Set<Entity>();
-  // Everything happens along z = 8.5, off the raised dais in the middle.
+  // Everything happens along z = 0.5, across the open middle.
   const spawn = (type: string, x: number, z: number) => {
-    const e = game.entities.spawn(type, { x, y: FLOOR + 1.05, z: z + 8 });
+    const e = game.entities.spawn(type, { x, y: FLOOR + 1.05, z });
     mine.add(e);
     return e;
   };
@@ -28,7 +28,7 @@ function scene(seed: number) {
   const clear = () => {
     for (const e of game.entities.all()) if (!mine.has(e) && !e.data.master) e.remove();
   };
-  me.teleport({ x: -8.5, y: FLOOR + 1, z: 8.5 }, -Math.PI / 2, 0);
+  me.teleport({ x: -8.5, y: FLOOR + 1, z: 0.5 }, -Math.PI / 2, 0);
   return { h, game, me, spawn, clear, hurt: () => hurt };
 }
 
@@ -71,7 +71,7 @@ export default function arenaFun() {
     const zs = [s.spawn('zombie', 2, 0.5), s.spawn('zombie', 0.5, 2), s.spawn('zombie', -1, -1)];
     for (const z of zs) z.setSpeed(0);
     sap.setSpeed(0);
-    s.me.teleport({ x: -3.5, y: FLOOR + 1, z: 8.5 }, -Math.PI / 2, 0);
+    s.me.teleport({ x: -3.5, y: FLOOR + 1, z: 0.5 }, -Math.PI / 2, 0);
     s.h.run(0.2, { pilot: () => (s.clear(), {}) });
     sap.damage(100, { source: s.me, weapon: 'iron_sword' });
     s.h.run(2, { pilot: () => (s.clear(), {}) });
