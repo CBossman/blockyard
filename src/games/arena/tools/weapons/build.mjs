@@ -20,8 +20,8 @@
  *   and iron, rare polished steel and blue light, epic blackened steel, silver and violet, legendary
  *   gold and amber, its runes and edges alight. What glows is coloured deep (the bloom brings it up).
  * - Look (`tools/voxel.mjs`): flat, clean voxels with soft occlusion in the corners; one material
- *   (base colour, metal-roughness, emission). Positions in half voxels as shorts (the mesh node
- *   scales them), normals as bytes, all through EXT_meshopt_compression. Files: `<id>.glb`
+ *   (base colour, metal-roughness, emission), the mesh through EXT_meshopt_compression (its
+ *   positions stay floats: the platform's held models take them as they are). Files: `<id>.glb`
  *   (common), `<id>_<rarity>.glb`.
  */
 import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';
@@ -150,19 +150,19 @@ const RARITIES = ['common', 'rare', 'epic', 'legendary'];
 const ACCENTS = {
   common: {
     fit: [0x9a6a32, 0.38, 0.85], fitDark: [0x5e3e1c, 0.45, 0.8], trim: [0x8f959b, 0.32, 1], gem: [0x7a2420, 0.25, 0.2], rune: [0x3e4249, 0.5, 0.7],
-    steel: [0xa4aab2, 0.24, 1], steelDark: [0x6a7078, 0.3, 1], edge: [0xd8dde2, 0.16, 1],
+    steel: [0x7e858e, 0.34, 1], steelDark: [0x4a5058, 0.4, 1], edge: [0xb8bec6, 0.22, 1],
   },
   rare: {
     fit: [0xb9c0c8, 0.22, 1], fitDark: [0x6e757e, 0.3, 1], trim: [0x2e64c8, 0.3, 0.7], gem: [0x0a3ad0, 0.25, 0, 1], rune: [0x0c44d8, 0.35, 0, 0.75],
-    steel: [0xb6bdc6, 0.18, 1], steelDark: [0x78808a, 0.26, 1], edge: [0xe4e9ee, 0.12, 1],
+    steel: [0x8e97a2, 0.28, 1], steelDark: [0x525a66, 0.34, 1], edge: [0xc8d0da, 0.18, 1],
   },
   epic: {
     fit: [0x2c2833, 0.3, 0.75], fitDark: [0x1a171e, 0.38, 0.6], trim: [0xc8c2d6, 0.2, 1], gem: [0x6a10c8, 0.25, 0, 1], rune: [0x7414d4, 0.35, 0, 0.85],
-    steel: [0x8a8698, 0.2, 1], steelDark: [0x4a4656, 0.28, 1], edge: [0xd6d2e2, 0.14, 1],
+    steel: [0x6c687c, 0.28, 1], steelDark: [0x3a3646, 0.34, 1], edge: [0xc0bcd0, 0.2, 1],
   },
   legendary: {
     fit: [0xd8a22c, 0.2, 1], fitDark: [0x8e5c12, 0.28, 1], trim: [0xfde39a, 0.16, 1], gem: [0xd06a00, 0.2, 0, 1], rune: [0xe08a10, 0.3, 0, 1],
-    steel: [0xd2d6dc, 0.14, 1], steelDark: [0x9aa0aa, 0.2, 1], edge: [0xf2c25a, 0.15, 1, 0.35],
+    steel: [0xa8adb6, 0.22, 1], steelDark: [0x6e7480, 0.28, 1], edge: [0xe8b84a, 0.18, 1, 0.35],
   },
 };
 const glowing = (rarity) => rarity !== 'common';
@@ -298,7 +298,7 @@ function spear(rarity) {
   });
   // The socket, its ring, the head.
   g.disc(0.95, [0, 0], [34.4, 37.5], (i, j, k, rim) => (rim && k % 2 === 0 ? 'fitDark' : 'fit'));
-  const tip = blade(g, 37.5, 13.2, (t) => (t < 0.08 ? 0.9 + t * 8 : 1.9 * Math.sin(Math.PI * clamp((t - 0.02) / 0.98) ** 0.75)), { rarity, runes: glowing(rarity), fuller: 0.75 });
+  const tip = blade(g, 37.5, 15.6, (t) => (t < 0.08 ? 0.9 + t * 10 : 2.5 * Math.sin(Math.PI * clamp((t - 0.02) / 0.98) ** 0.75)), { rarity, runes: glowing(rarity), fuller: 0.75 });
   for (const j of [-2, 2]) g.set(0, j, g.cell(2, 36), 'gem');
   return g.mark('grip', [0, 0, 0]).mark('grip2', [0, 0, 14]).mark('muzzle', [0, 0, tip]);
 }
@@ -535,9 +535,8 @@ function glb(g) {
     const base = pos.length / 3;
     const n = DIRS[f.dir].n;
     quadCorners(f).forEach((c, ci) => {
-      // In half voxels (the offsets are half a voxel), as shorts: the mesh node scales them to blocks.
-      pos.push(...c.map((v, a) => Math.round((v + g.offset[a]) * 2)));
-      nor.push(n[0] * 127, n[1] * 127, n[2] * 127);
+      pos.push(...c.map((v, a) => ((v + g.offset[a]) * V) / 16));
+      nor.push(...n);
       uv.push(Math.round(A.uvs[fi][ci][0] * 65535), Math.round(A.uvs[fi][ci][1] * 65535));
     });
     idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
@@ -545,7 +544,7 @@ function glb(g) {
   const markerNames = Object.keys(g.markers);
   const nodes = [
     { name: g.id, children: [1, ...markerNames.map((_, k) => k + 2)], extras: { title: g.name } },
-    { name: `${g.id}_body`, scale: [V / 32, V / 32, V / 32] },
+    { name: `${g.id}_body` },
     ...markerNames.map((m) => ({ name: m, translation: g.markers[m].map((v) => Math.round((v / 16) * 1e6) / 1e6) })),
   ];
   const glows = [...g.P.colours.values()].some((c) => c.glow > 0);
@@ -556,14 +555,13 @@ function glb(g) {
     meshName: `${g.id}_body`,
     meshNode: 1,
     attributes: {
-      POSITION: { values: pos, componentType: 5122, type: 'VEC3', minmax: true },
-      NORMAL: { values: nor, componentType: 5120, type: 'VEC3', normalized: true },
+      POSITION: { values: pos, componentType: 5126, type: 'VEC3', minmax: true },
+      NORMAL: { values: nor, componentType: 5126, type: 'VEC3' },
       TEXCOORD_0: { values: uv, componentType: 5123, type: 'VEC2', normalized: true },
     },
     indices: idx,
     material: { name: `${g.id}_atlas`, albedo: png(A.albedo), mr: png(A.mr), glow: glows ? png(A.glow, { grey: true }) : null },
     compress: true,
-    quantized: true,
   });
   return { bytes, stats: { voxels: g.vox.count, faces: before, quads: list.length, tiles: A.tiles, atlas: `${A.width}x${A.height}` }, pos };
 }
@@ -642,8 +640,8 @@ for (const [id, make] of jobs) {
   total += bytes.length;
   if (args.includes('--show') && g.id === id) show(g);
   const v = validate(readFileSync(file), g);
-  const lo = [0, 1, 2].map((k) => (Math.min(...pos.filter((_, m) => m % 3 === k)) * V) / 2);
-  const hi = [0, 1, 2].map((k) => (Math.max(...pos.filter((_, m) => m % 3 === k)) * V) / 2);
+  const lo = [0, 1, 2].map((k) => Math.min(...pos.filter((_, m) => m % 3 === k)) * 16);
+  const hi = [0, 1, 2].map((k) => Math.max(...pos.filter((_, m) => m % 3 === k)) * 16);
   const size = hi.map((x, k) => +(x - lo[k]).toFixed(2));
   console.log(`${g.id}.glb  ${g.name}: ${stats.voxels} voxels as ${stats.quads} quads, ${v.tris} tris, ${stats.tiles} tiles, ${(bytes.length / 1024).toFixed(1)} KB; ${size.join(' x ')} px`);
 }

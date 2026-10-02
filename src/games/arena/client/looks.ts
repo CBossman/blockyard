@@ -16,7 +16,7 @@ import { WEAPON_MODELS } from '../models/weapons';
 /** A rarer blade's edge of light (none for a common one). */
 function edge(rarity: Rarity, start = 0.2): BladeSpec | undefined {
   if (rarity === 'common') return undefined;
-  return { color: RARITY[rarity].color, start, width: rarity === 'legendary' ? 0.05 : 0.035, glow: rarity === 'legendary' ? 3 : 1.8 };
+  return { color: RARITY[rarity].color, start, width: rarity === 'legendary' ? 0.07 : 0.05, glow: rarity === 'legendary' ? 3 : 2.2 };
 }
 
 /** One of the arsenal's voxel weapons: its model as its icon and in the hand. */
@@ -36,7 +36,7 @@ const ARSENAL: Record<string, (r: Rarity, id: string) => ItemLook> = {
   daggers: (r, id) => voxel(id, { style: 'sword', use: 'arena_stab', scale: 1.15, blade: edge(r, 0.3) }, LIGHT),
   greatsword: (r, id) => voxel(id, { style: 'sword', use: 'arena_sweep', scale: 0.8, blade: edge(r, 0.28) }, HEAVY),
   warhammer: (_r, id) => voxel(id, { style: 'axe', use: 'arena_hammer', scale: 0.95 }, { ...HEAVY, hit: 'arena_hit_blunt', draw: 'arena_charge' }),
-  spear: (r, id) => voxel(id, { style: 'polearm', scale: 0.75, blade: edge(r, 0.8) }, THRUST),
+  spear: (r, id) => voxel(id, { style: 'polearm', scale: 0.9, blade: edge(r, 0.8) }, THRUST),
   crossbow: (_r, id) =>
     voxel(id, { style: 'gun', gun: { fist: [0.2, -0.27, -0.5], barrel: [-0.18, 0.04, -1], roll: -0.08, ads: 0.36, kick: 0.12, rise: 9 } }, { use: 'arena_xbow_shot', reload: 'arena_xbow_crank', cycle: 'arena_xbow_ready' }),
   fire_staff: (_r, id) => voxel(id, { style: 'sword', use: 'arena_cast', scale: 0.62 }, { use: 'arena_cast_fire' }),

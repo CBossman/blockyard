@@ -897,6 +897,7 @@ eye's: x right, y up, z back, in blocks), lit by the light where the player's ey
 | `arms.humanoid` | A humanoid model's arms: each side's `upper`, `forearm` and `fist` nodes, its elbow and wrist, where the fist holds (`grip`, `gripQ`), the model's `firstPerson` fit, the `heldScale` they're sized for (docs/HUMANOID.md). |
 | `arms.version` | Counts up when any of the arms change: make what you made again. |
 | `node()`, `sprite(image, { additive, depthTest, color })`, `free(node)` | A group; a flat square showing an image (`'flash'`, a muzzle flash, or an address); give back what the layer made. |
+| `item(id)` | Another item's look as a node of the layer's, lit and drawn as what's in hand is, for a kit to place itself: an off-hand shield, a second dagger (null while its model's still coming). The Arena's gladius carries its shield this way (`src/games/arena/client/armory.ts`). |
 | `animations` | The game's first-person animations by name (`viewModel.define` on the server). |
 
 **What the kit reads.** `client.me`: `look` (sway), `bob`, `dead` (the hand lowers), `hand`

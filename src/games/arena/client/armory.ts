@@ -28,8 +28,8 @@ const ANIMS: Record<string, ViewAnimation> = {
     keys: [
       { t: 0 },
       { t: 0.18, hand: [0.3, -0.15, -0.55], move: [0.08, 0.1, 0.04], ease: 'out' },
-      { t: 0.42, hand: [-0.35, 0.3, 1.0], move: [-0.22, -0.02, -0.16], ease: 'in' },
-      { t: 0.58, hand: [-0.45, 0.35, 1.25], move: [-0.28, -0.08, -0.1], ease: 'out' },
+      { t: 0.42, hand: [-0.25, 0.3, 1.0], move: [-0.22, 0.06, -0.16], ease: 'in' },
+      { t: 0.58, hand: [-0.35, 0.35, 1.25], move: [-0.28, 0.0, -0.1], ease: 'out' },
       { t: 1, ease: 'inOut' },
     ],
   },
@@ -38,14 +38,14 @@ const ANIMS: Record<string, ViewAnimation> = {
     duration: 0.2,
     keys: [{ t: 0 }, { t: 0.35, wrist: [-1.25, 0, 0], move: [-0.14, 0.06, -0.34], ease: 'out' }, { t: 1, ease: 'inOut' }],
   },
-  // The greatsword: heaved back to the right, swept wide and level across to the left.
+  // The greatsword: laid back over to the right, swept wide and flat across to the left (mostly a roll, the blade level).
   arena_sweep: {
     duration: 0.55,
     keys: [
       { t: 0 },
-      { t: 0.28, hand: [0.2, -0.75, -0.9], move: [0.16, 0.06, 0.12], ease: 'out' },
-      { t: 0.5, hand: [-0.15, 0.85, 1.35], move: [-0.42, -0.06, -0.2], ease: 'in' },
-      { t: 0.66, hand: [-0.2, 1.0, 1.5], move: [-0.5, -0.1, -0.1], ease: 'out' },
+      { t: 0.28, hand: [0.1, -0.35, -1.25], move: [0.18, 0.02, 0.06], ease: 'out' },
+      { t: 0.5, hand: [-0.1, 0.3, 1.25], move: [-0.3, -0.04, -0.12], ease: 'in' },
+      { t: 0.64, hand: [-0.12, 0.35, 1.45], move: [-0.36, -0.06, -0.08], ease: 'out' },
       { t: 1, ease: 'inOut' },
     ],
   },
@@ -63,7 +63,7 @@ const ANIMS: Record<string, ViewAnimation> = {
   arena_slam: {
     duration: 0.6,
     keys: [
-      { t: 0, hand: [0.9, -0.1, -0.25], move: [0.04, 0.3, 0.16] },
+      { t: 0, hand: [0.42, -0.2, -0.45], move: [0.02, 0.08, 0.1] },
       { t: 0.22, hand: [-1.25, 0.15, 0.25], move: [-0.08, -0.22, -0.3], ease: 'in' },
       { t: 0.45, hand: [-1.2, 0.15, 0.25], move: [-0.08, -0.24, -0.28] },
       { t: 1, ease: 'inOut' },
@@ -87,7 +87,7 @@ const ANIMS: Record<string, ViewAnimation> = {
   arena_spear_throw: {
     duration: 0.35,
     keys: [
-      { t: 0, hand: [0.35, 0, 0], move: [0.05, 0.22, 0.2] },
+      { t: 0, hand: [0.22, 0, 0], move: [0.08, 0.1, 0.2] },
       { t: 0.35, hand: [-0.6, 0.1, 0], move: [-0.1, 0.0, -0.45], ease: 'in' },
       { t: 1, hand: [-0.2, 0, 0], move: [0, -0.5, -0.1], ease: 'out' },
     ],
@@ -97,14 +97,18 @@ const ANIMS: Record<string, ViewAnimation> = {
 /** Poses held while a button is: the guard (the sword in close, the shield up), the hammer raised, the spear drawn back. */
 const POSES: Record<string, ViewAnimation> = {
   arena_guard: { duration: 1, keys: [{ t: 0, hand: [0.15, 0.25, 0.35], move: [-0.04, -0.04, 0.1] }] },
-  arena_raise: { duration: 1, keys: [{ t: 0, hand: [0.9, -0.1, -0.25], move: [0.04, 0.3, 0.16] }] },
-  arena_aim: { duration: 1, keys: [{ t: 0, hand: [0.35, 0, 0], move: [0.05, 0.22, 0.2] }] },
+  arena_raise: { duration: 1, keys: [{ t: 0, hand: [0.42, -0.2, -0.45], move: [0.02, 0.08, 0.1] }] },
+  arena_aim: { duration: 1, keys: [{ t: 0, hand: [0.22, 0, 0], move: [0.08, 0.1, 0.2] }] },
 };
 
 /** Where the shield sits on the off hand (the view's space): at rest low at the left, and raised to guard. */
 const SHIELD_REST = new Vec3(-0.52, -0.5, -0.78);
-const SHIELD_UP = new Vec3(-0.2, -0.24, -0.6);
-const SHIELD_SCALE = 0.42;
+const SHIELD_UP = new Vec3(-0.22, -0.27, -0.62);
+const SHIELD_SCALE = 0.38;
+
+/** Development: a pose held as if its button were down (screenshots have no mouse): `__armoryPose('arena_guard')`. */
+let forced: string | null = null;
+if (import.meta.env.DEV) (globalThis as { __armoryPose?: unknown }).__armoryPose = (p: string | null) => void (forced = p);
 
 function armory(): ClientKit {
   let lmb = false;
@@ -120,13 +124,13 @@ function armory(): ClientKit {
 
   const setShield = (client: Client, id: string | null) => {
     if (shield?.id === id) return;
-    if (shield) shield.node.parent?.remove(shield.node);
+    if (shield) client.view.free(shield.node);
     shield = null;
     if (!id) return;
-    const made = client.scene.item(id);
-    if (!made) return;
-    client.view.root.add(made.node);
-    shield = { id, node: made.node };
+    const node = client.view.item(id);
+    if (!node) return;
+    client.view.root.add(node);
+    shield = { id, node };
   };
 
   return {
@@ -148,6 +152,7 @@ function armory(): ClientKit {
       if (melee && def.guard && rmb) want = 'arena_guard';
       else if (melee && def.slam && lmb) want = 'arena_raise';
       else if (melee && def.throw && rmb) want = 'arena_aim';
+      if (forced) want = forced;
       if (want !== pose) {
         pose = want;
         fp.pose(want, { ease: want ? 0.08 : 0.14 });
@@ -165,7 +170,7 @@ function armory(): ClientKit {
       shield.node.visible = fp.visible;
     },
     dispose() {
-      if (shield) shield.node.parent?.remove(shield.node);
+      shield?.node.parent?.remove(shield.node);
       shield = null;
     },
   };
