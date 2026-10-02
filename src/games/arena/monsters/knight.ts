@@ -7,7 +7,7 @@ import { ahead, heading, show, turnToward, wrap } from './util';
 /**
  * The Knight: a revenant in plate behind a kite shield. The shield turns aside whatever comes at it
  * from in front (blades, arrows, bolts), so it's beaten from the side or behind, from above (a
- * jumping blow), or blown open with a bomb. It turns slowly, so a fighter who circles it gets round
+ * jumping blow), with magic, or blown open with a bomb. It turns slowly, so a fighter who circles it gets round
  * its guard; and it lowers the shield to swing, which is the moment to hit it from the front.
  */
 
@@ -22,6 +22,8 @@ interface KnightState {
   _told?: number;
 }
 
+/** Weapons whose blows no shield turns: magic (the armory's staffs and wand). */
+const MAGIC = new Set(['fire_staff', 'frost_staff', 'storm_wand']);
 /** How far either side of straight ahead the shield covers (radians). */
 const COVER = 1.25;
 /** How fast it turns (radians a second): slow enough to be circled. */
@@ -98,7 +100,7 @@ const knightAI: Behavior = (self, game, dt) => {
 
 /**
  * A blow at a Knight (the `damage` event): turned aside by its shield when it comes from in front,
- * with its guard up, and isn't a blast or fire; a bomb knocks its guard open for a moment.
+ * with its guard up, and isn't a blast, fire or magic; a bomb knocks its guard open for a moment.
  */
 export function knightGuard(game: GameContext, hit: DamageEvent) {
   const self = hit.target;
@@ -109,7 +111,7 @@ export function knightGuard(game: GameContext, hit: DamageEvent) {
     s._open = Math.max(s._open ?? 0, now + 1.6);
     return;
   }
-  if (hit.cause !== 'melee' && hit.cause !== 'projectile' && hit.cause !== 'gun') return;
+  if ((hit.cause !== 'melee' && hit.cause !== 'projectile' && hit.cause !== 'gun') || (hit.weapon && MAGIC.has(hit.weapon))) return;
   if ((s._open ?? 0) > now) return;
   const src = hit.source && hit.source !== 'world' ? hit.source : null;
   const from = hit.from ?? src?.position;
