@@ -1,6 +1,6 @@
 import { math, type DamageEvent, type Entity, type GameContext, type IconRef, type MenuHandle, type Player, type Vec3 } from '@platform';
 import { combatDamage, frontOf, guardMods } from './items/combat';
-import { addArmor } from './items/index';
+import { addArmor } from './items/armor';
 import { bus } from './run/bus';
 import { crossbowMods } from './items/crossbow';
 import { meleeMods } from './items/melee';

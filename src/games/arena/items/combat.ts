@@ -1,6 +1,6 @@
 import { math, type DamageEvent, type Entity, type GameContext, type Player, type Vec3 } from '@platform';
 import { bus } from '../run/bus';
-import { ARMOR_CAP } from './index';
+import { ARMOR_CAP } from './armor';
 import { guarding, type ArmsMelee } from './melee';
 import { wave } from './missiles';
 import { bleed, burn, frozen, isBoss, stagger, thaw } from './status';
