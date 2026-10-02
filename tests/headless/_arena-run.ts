@@ -251,8 +251,13 @@ function hype() {
 
 function classes() {
   const { h, game, me } = scene(7);
-  h.run(0.5);
-  check(h.find('hud', 'menu').some((m) => (m.args[1] as { title: string }).title === 'Choose your class'), 'the classes are offered in the countdown');
+  const offered = () => h.find('hud', 'menu').some((m) => (m.args[1] as { title: string }).title === 'Choose your class');
+  h.run(3);
+  check(!offered() && state.phase === 'countdown', 'the fly-over over the map first');
+  // (Its screen says when it's over, played out or skipped.)
+  h.send({ t: 'game', player: me.id, name: 'arena.introDone', data: {} });
+  h.run(0.2);
+  check(offered(), 'then the classes, offered in the countdown');
   choose(game, me, 'hunter');
   check(classOf(me) === 'hunter' && me.inventory.count('bow') === 1 && me.inventory.count('arrow') >= 32 && me.speed > 1, `a Hunter: ${me.inventory.slots.filter(Boolean).map((s) => `${s!.item}x${s!.count}`).join(' ')}`);
   choose(game, me, 'berserker');
@@ -266,7 +271,7 @@ function classes() {
   choose(game, me, 'berserker');
   check(classOf(me) === 'berserker' && me.inventory.count('battle_axe') === 1 && me.inventory.count('bow') === 0 && me.maxHealth === hearts + 6, `a Berserker now: max health ${me.maxHealth}, ${me.inventory.slots.filter(Boolean).map((s) => s!.item).join(' ')}`);
   h.run(15);
-  check(state.phase === 'fighting', 'the first wave begins');
+  check((state.phase as string) === 'fighting', 'the first wave begins');
   choose(game, me, 'gladiator');
   check(classOf(me) === 'berserker', 'and the class is set for the run');
   log('classes: offered in the countdown, the Berserker locked until level 4, kits swapped, set once the fight is on');

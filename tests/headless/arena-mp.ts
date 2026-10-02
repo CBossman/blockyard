@@ -52,7 +52,10 @@ export default function arenaMultiplayer() {
   step(15);
   const armed = (n: string) => ['stone_sword', 'gladius'].some((w) => player(n).inventory.count(w) === 1);
   check(armed('Ann') && armed('Bob'), 'both start with a Gladiator\'s blade');
-  check(menus(ann).includes('Choose your class'), 'and are asked their class');
+  // The map's fly-over first, then the class pick (no screen here says it's done: its length).
+  check(!menus(ann).includes('Choose your class'), 'not asked their class over the fly-over');
+  step(30 * 7);
+  check(menus(ann).includes('Choose your class'), 'then asked their class');
   // Cat arrives during the countdown.
   const cat = join('Cat');
   step(5);
@@ -103,7 +106,10 @@ export default function arenaMultiplayer() {
   step(5);
   const d = player('Dan').inventory;
   check(armed('Dan') && gold(player('Dan')) > 0, `late arrival caught up: ${d.slots.filter(Boolean).map((s) => `${s!.item}x${s!.count}`).join(' ')}, ${gold(player('Dan'))} gold`);
-  check(menus(dan).includes('Choose your class'), 'and may choose a class');
+  // (After his own, shorter fly-over.)
+  check(!menus(dan).includes('Choose your class'), 'not over his fly-over');
+  step(30 * 4);
+  check(menus(dan).includes('Choose your class'), 'then he may choose a class');
   check(calls(ann, 'feed').some((a) => a[0] === 'Dan joins the fight'), 'the others hear Dan joined');
 
   const looked = looks(events.get(ann) ?? []);
