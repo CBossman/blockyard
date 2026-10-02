@@ -1,7 +1,7 @@
 import type { Client, ClientKit } from '@platform/client';
 import { MSG, type CallMsg } from '../../hud/messages';
 import css from './announcer.css?raw';
-import { el, hidden, hud } from './store';
+import { el, hidden, hud, replay } from './store';
 
 /** How long each kind of callout holds the screen (seconds), and its sting. */
 const KINDS: Record<CallMsg['k'], { time: number; sting: string; big: boolean }> = {
@@ -9,7 +9,6 @@ const KINDS: Record<CallMsg['k'], { time: number; sting: string; big: boolean }>
   final: { time: 3.2, sting: 'ar_sting_final', big: true },
   boss: { time: 2.6, sting: 'ar_sting_boss', big: true },
   endless: { time: 3, sting: 'ar_sting_final', big: true },
-  slain: { time: 3.2, sting: 'ar_sting_slain', big: true },
   // (A blessing's own chime is the armory's, played by the server.)
   blessing: { time: 2.4, sting: '', big: true },
   twist: { time: 2.6, sting: 'ar_sting_twist', big: true },
@@ -18,7 +17,7 @@ const KINDS: Record<CallMsg['k'], { time: number; sting: string; big: boolean }>
   back: { time: 1.8, sting: 'ar_sting_back', big: true },
   victory: { time: 3.2, sting: 'ar_sting_victory', big: true },
   defeat: { time: 2.2, sting: 'ar_sting_defeat', big: true },
-  feat: { time: 1.7, sting: 'ar_sting_feat', big: false },
+  feat: { time: 2, sting: 'ar_sting_feat', big: false },
   ally: { time: 2.2, sting: 'ar_sting_ally', big: false },
 };
 
@@ -34,6 +33,7 @@ const TIER: Record<string, number> = {
   kaboom: 2,
   goblin: 2,
   boss_stagger: 2,
+  boss_crash: 2,
   last_stand: 2,
   forge: 0,
   boss_egg: 0,
@@ -41,15 +41,24 @@ const TIER: Record<string, number> = {
 };
 /** Feats with words past this many letters come smaller. */
 const LONG = 16;
+/** The multikills: one climbing callout (a double kill becomes a triple in place). */
+const MULTI = new Set(['double_kill', 'triple_kill', 'multi_kill', 'rampage']);
+/** At most this many small callouts at once; in a burst (all of them younger than `BUSY` seconds) the lesser feats are let go. */
+const MAX_SMALL = 2;
+const BUSY = 0.8;
+/** Feats' stings come at most this often (seconds), but for the big ones. */
+const STING_EVERY = 0.25;
 
 /**
  * The announcer, on each screen: big callouts in the middle of the screen for the run's moments (a
- * wave begins, a boss's, the final one, the endless ones, its twist, the Crowd's Favour, a boss
- * slain, a blessing taken, their own fall and return, victory and defeat), each with its sting
+ * wave begins, a boss's, the final one, the endless ones, its twist, the Crowd's Favour, a
+ * blessing taken, their own fall and return, victory and defeat), each with its sting
  * (`client/sounds/hud.ts`); smaller ones under the crosshair for their feats (a double kill, a
  * parry: bigger and higher the bigger the feat) and their friends' fortunes; and the last seconds
  * before a wave counted down, a drum a second. Big callouts wait their turn (victory and defeat
- * don't), and wait while something else has the screen.
+ * don't), and wait while something else has the screen. In a busy fight the small ones don't pile
+ * up: a feat of a kind already showing takes its place (a double kill climbing to a triple), no
+ * more than two are up, the lesser ones are let go in a burst, and their stings are spaced out.
  */
 export function announcer(): ClientKit {
   let unstyle: (() => void) | null = null;
@@ -61,6 +70,9 @@ export function announcer(): ClientKit {
   let queue: { c: CallMsg; at: number }[] = [];
   let showing: { el: HTMLElement; until: number } | null = null;
   let lastCount = '';
+  /** The small callouts up: each one's element, its family (its feat's kind; the multikills are one), its size, when it came and when it goes. */
+  let small: { el: HTMLElement; family: string; tier: number; born: number; until: number }[] = [];
+  let lastSting = -1;
 
   const show = (client: Client, c: CallMsg) => {
     const k = KINDS[c.k];
@@ -75,12 +87,32 @@ export function announcer(): ClientKit {
   const feat = (client: Client, c: CallMsg) => {
     const k = KINDS[c.k];
     const tier = c.name ? (TIER[c.name] ?? 1) : 0;
-    const e = el(`div.ar-feat.t${tier}.k-${c.k}${c.t.length > LONG ? '.long' : ''}`, el('div.ar-feat-t', c.t), c.s ? el('div.ar-feat-s', c.s) : null);
+    const family = c.k === 'feat' ? (MULTI.has(c.name ?? '') ? 'multi' : (c.name ?? c.t)) : `${c.k}:${c.t}`;
+    const now = client.time;
+    const same = small.find((s) => s.family === family);
+    // A burst: the lesser feats are let go rather than piling up.
+    if (!same && tier < 2 && small.length >= MAX_SMALL && small.every((s) => now - s.born < BUSY)) return;
+    const e = same?.el ?? el('div.ar-feat');
+    e.className = `ar-feat t${tier} k-${c.k}${c.t.length > LONG ? ' long' : ''}`;
+    e.replaceChildren(el('div.ar-feat-t', c.t), ...(c.s ? [el('div.ar-feat-s', c.s)] : []));
     if (c.c) e.style.setProperty('--c', c.c);
-    e.style.setProperty('--life', `${k.time}s`);
-    feats.prepend(e);
-    while (feats.children.length > 3) feats.lastChild!.remove();
-    window.setTimeout(() => e.remove(), k.time * 1000 + 100);
+    else e.style.removeProperty('--c');
+    if (same) {
+      // The one of its kind takes the news, bumped and timed again.
+      replay(e, 'bump');
+      Object.assign(same, { tier, born: now, until: now + k.time });
+    } else {
+      feats.prepend(e);
+      small.unshift({ el: e, family, tier, born: now, until: now + k.time });
+      // Too many: the least of them goes (the oldest of the least).
+      while (small.length > MAX_SMALL) {
+        const least = small.reduce((a, b) => (b.tier < a.tier || (b.tier === a.tier && b.born <= a.born) ? b : a));
+        least.el.remove();
+        small = small.filter((s) => s !== least);
+      }
+    }
+    if (tier < 2 && now - lastSting < STING_EVERY) return;
+    lastSting = now;
     client.audio.play(k.sting, { volume: 0.8 + tier * 0.1, pitch: c.k === 'feat' ? 1 + tier * 0.12 : 1 });
   };
 
@@ -112,7 +144,14 @@ export function announcer(): ClientKit {
         showing?.el.remove();
         showing = null;
         feats.replaceChildren();
+        small = [];
       }
+      // The small ones whose time is up go.
+      for (const s of small.filter((x) => client.time >= x.until)) {
+        s.el.classList.add('out');
+        window.setTimeout(() => s.el.remove(), 420);
+      }
+      small = small.filter((x) => client.time < x.until);
       // Someone else has the screen (a boss's entrance, its fall: they fade the HUD out): the callouts wait.
       if (!off && (showing || queue.length) && !layer.checkVisibility({ opacityProperty: true })) {
         if (showing) showing.until += dt;

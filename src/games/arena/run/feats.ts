@@ -43,7 +43,9 @@ const SLAYER_KILLS = 2500;
 /** A kill on this much health or less: a clutch kill. */
 const CLUTCH = 2;
 /** The bosses' achievements, for everyone in the fight when one falls. */
-const BOSS_ACHIEVEMENTS: Record<string, string> = { colossus: 'colossus_slain', warden: 'warden_slain', broodmother: 'broodmother_slain' };
+const BOSS_ACHIEVEMENTS: Record<string, string> = { colossus: 'colossus_slain', warden: 'warden_slain', broodmother: 'broodmother_slain', lich: 'lich_slain' };
+/** The bosses' own feats that are achievements: whoever did it (everyone in the fight, if nobody's named). */
+const BOSS_FEATS: Record<string, string> = { boss_crash: 'matador', boss_stagger: 'shell_shock' };
 
 const MULTI = ['', '', 'double_kill', 'triple_kill', 'multi_kill'];
 const MULTI_TEXT = ['', '', 'Double kill!', 'Triple kill!', 'Multi kill!'];
@@ -102,6 +104,10 @@ const DEEP: [number, string][] = [
 ];
 
 export function featsListen(game: GameContext) {
+  bus.on('feat', ({ player, name }) => {
+    const a = BOSS_FEATS[name];
+    if (a) for (const p of player ? [player] : game.players) p.achieve(a);
+  });
   bus.on('waveStart', ({ wave }) => {
     for (const [n, id] of DEEP) if (wave >= n) for (const p of game.players) p.achieve(id);
   });

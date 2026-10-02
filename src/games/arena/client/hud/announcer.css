@@ -5,10 +5,15 @@
   position: absolute;
   left: 0;
   right: 0;
-  top: 23%;
+  /* Under the wave's block, however short the screen. */
+  top: max(23%, 178px);
   display: grid;
   justify-items: center;
   transition: top 300ms ease;
+}
+/* A boss's bar is up (and its phase lines under it, the bosses' .ab-phase): callouts go under them. */
+body:has(.bossbar:not([style*='none'])) .ar-stage {
+  top: max(23%, 236px);
 }
 /* A wave's card is up (client/hud/cards.ts): callouts go under it. */
 body:has(.ar-card:not(.out)) .ar-stage {
@@ -105,10 +110,7 @@ body:has(.ar-card:not(.out)) .ar-stage {
 .ar-call.k-back {
   --c: var(--ar-good, #9fd870);
 }
-/* A boss slain: gold, with the rays; the endless waves: in the night's violet. */
-.ar-call.k-slain {
-  --c: #ffcf3f;
-}
+/* The endless waves: in the night's violet. */
 .ar-call.k-endless {
   --c: #c9a2ff;
 }
@@ -119,15 +121,11 @@ body:has(.ar-card:not(.out)) .ar-stage {
 .ar-call.k-defeat .ar-call-t {
   font-size: 100px;
 }
-.ar-call.k-slain .ar-call-t {
-  font-size: 72px;
-}
 /* The Crowd's Favour: gold rays turning behind it. */
 .ar-call.k-favour {
   --c: #ffcf3f;
 }
-.ar-call.k-favour::before,
-.ar-call.k-slain::before {
+.ar-call.k-favour::before {
   content: '';
   position: absolute;
   left: 50%;
@@ -187,7 +185,15 @@ body:has(.ar-card:not(.out)) .ar-stage {
   align-items: center;
   white-space: nowrap;
   filter: var(--ar-halo);
-  animation: ar-feat-in 380ms cubic-bezier(0.3, 1.7, 0.5, 1) both, ar-feat-out 400ms ease forwards calc(var(--life) - 0.4s);
+  animation: ar-feat-in 380ms cubic-bezier(0.3, 1.7, 0.5, 1) both;
+  transition: opacity 400ms ease, transform 400ms ease;
+}
+.ar-feat.bump {
+  animation: ar-feat-bump 300ms cubic-bezier(0.3, 1.8, 0.5, 1);
+}
+.ar-feat.out {
+  opacity: 0;
+  transform: translateY(-10px);
 }
 .ar-feat-t {
   font: 800 28px/1 var(--ar-title);
@@ -231,10 +237,9 @@ body:has(.ar-card:not(.out)) .ar-stage {
     transform: scale(1.7);
   }
 }
-@keyframes ar-feat-out {
-  to {
-    opacity: 0;
-    transform: translateY(-10px);
+@keyframes ar-feat-bump {
+  from {
+    transform: scale(1.35);
   }
 }
 
@@ -273,17 +278,26 @@ body:has(.ar-card:not(.out)) .ar-stage {
 
 @media (max-width: 1100px), (max-height: 760px) {
   .ar-call-t {
-    font-size: 64px;
+    font-size: 58px;
+    letter-spacing: 0.1em;
+  }
+  .ar-call-q {
+    font-size: 12px;
+  }
+  .ar-call-s {
+    font-size: 14px;
   }
   .ar-call.k-final .ar-call-t,
+  .ar-call.k-endless .ar-call-t,
   .ar-call.k-victory .ar-call-t,
   .ar-call.k-defeat .ar-call-t {
-    font-size: 76px;
+    font-size: 70px;
   }
   .ar-call.k-twist .ar-call-t,
   .ar-call.k-back .ar-call-t,
+  .ar-call.k-blessing .ar-call-t,
   .ar-call.k-out .ar-call-t {
-    font-size: 46px;
+    font-size: 44px;
   }
   .ar-call-rule {
     width: 340px;

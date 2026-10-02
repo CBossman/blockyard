@@ -1,6 +1,6 @@
 import type { GameContext, Player } from '@platform';
 import type { ArenaPart } from '../part';
-import { BLESSINGS, blessingsOf } from '../blessings';
+import { BLESSING_COLOR, BLESSINGS, blessingsOf, level, type BlessingId } from '../blessings';
 import { bossKind } from '../bosses';
 import { monsterKind } from '../monsters';
 import { bus, type RunResult, type Unlock } from '../run/bus';
@@ -8,7 +8,7 @@ import { finalWave, monstersAlive, TWISTS, waveName, waveSpec, type Twist } from
 import { addGold, gold } from '../run/gold';
 import { map, state } from '../run/state';
 import { className, END, endActions, endScreen, LEVEL_UP_AT, type EndExtras, type EndRun } from './end';
-import { MSG, type CallMsg, type CrowdMsg, type FighterState, type GoreMsg, type HitMsg, type MeMsg, type PartyMsg, type RunMsg, type WaveCard } from './messages';
+import { MSG, type CallMsg, type CrowdMsg, type FighterState, type FoeMsg, type GoreMsg, type HitMsg, type MeMsg, type PartyMsg, type RunMsg, type WaveCard } from './messages';
 import { Tallies } from './tally';
 
 /**
@@ -25,9 +25,14 @@ import { Tallies } from './tally';
 const tallies = new Tallies();
 /** What each screen was last sent, by message and screen (`all` or a player's id): only changes go. */
 const sent = new Map<string, string>();
-/** The fight's moments: when this wave began, the most monsters it's had at once. */
+/** The fight's moments: when this wave began, the most monsters it's had at once, who's ready for the next. */
 let waveAt = 0;
 let waveTotal = 0;
+let ready: RunMsg['ready'] = null;
+/** The kinds of monster seen this run, and the first sightings waiting to be told (one at a time). */
+const seen = new Set<string>();
+let foes: FoeMsg[] = [];
+let nextFoe = 0;
 /** The crowd's hype as the run's part last told it (during the Favour: how much of it is left). */
 let hype = { value: 0, favour: false };
 /** Who's down, and when they bleed out (game clock). */
@@ -43,8 +48,8 @@ let bossCheer = 0;
 let goreBudget = { at: 0, n: 0 };
 /** The run's over: how it went and what the run's part said of it, for the end screen (and anyone who arrives to see it). */
 let ended: { run: EndRun; extras: EndExtras } | null = null;
-/** Each kind of monster's blood and height (`MonsterKind`/`BossKind` definitions), looked up once. */
-const kinds = new Map<string, { blood: string; height: number }>();
+/** Each kind of monster's name, blood and height (`MonsterKind`/`BossKind` definitions), looked up once. */
+const kinds = new Map<string, { name: string; blood: string; height: number }>();
 
 /** How long the Crowd's Favour lasts (the run's `hype.ts`): its meter counts it down. */
 const FAVOUR = 10;
@@ -54,6 +59,12 @@ const GORE_PER_SECOND = 10;
 const ROARS = new Set(['rampage', 'multi_kill', 'kaboom', 'goblin', 'last_stand', 'boss_stagger']);
 /** Feats drawn elsewhere: a boss's new phase (the bosses' own card), a revive (the HUD's revive callouts). */
 const UNSAID = new Set(['boss_phase', 'revive']);
+/** A first sighting's tip stays up this long before the next (seconds). */
+const FOE_EVERY = 5;
+/** A fighter's light hits (a burn, a spell's chain) are told at most this often (seconds); kills and heavy hits always. */
+const LIGHT_EVERY = 0.1;
+/** When each fighter's screen was last told of a hit. */
+const lastHit = new Map<string, number>();
 
 function send(game: GameContext, to: Player | 'all', name: string, data: unknown, force = false) {
   const key = `${name}@${to === 'all' ? 'all' : to.id}`;
@@ -76,7 +87,7 @@ function kindOf(game: GameContext, type: string) {
   let k = kinds.get(type);
   if (!k) {
     const def = (monsterKind(type) ?? bossKind(type))?.define(game);
-    k = { blood: def?.bloodColor ?? '#b3261e', height: def?.hitbox.height ?? 1.9 };
+    k = { name: def?.name ?? type, blood: def?.bloodColor ?? '#b3261e', height: def?.hitbox.height ?? 1.9 };
     kinds.set(type, k);
   }
   return k;
@@ -94,6 +105,7 @@ function runMsg(game: GameContext): RunMsg {
   const now = game.clock.now;
   // The countdown to the first wave (the class pick's), or the break between waves.
   const next = state.phase === 'intermission' || state.phase === 'countdown' ? Math.max(0, Math.ceil(state.nextWaveAt - now)) : 0;
+  const running = state.phase !== 'intro' && state.phase !== 'waiting';
   return {
     phase: state.phase,
     wave: n,
@@ -105,6 +117,10 @@ function runMsg(game: GameContext): RunMsg {
     twist: twist ? { name: twist.name, text: twist.text, color: twist.color } : null,
     boss: boss ? { name: boss.name, title: boss.title, color: boss.color } : null,
     upcoming: upcoming(),
+    ready: state.phase === 'intermission' ? ready : null,
+    endless: state.endless,
+    time: running ? Math.max(0, Math.floor(now - state.startedAt)) : 0,
+    kills: state.kills,
     map: map().id,
     mapName: map().name,
   };
@@ -117,9 +133,8 @@ function upcoming(): RunMsg['upcoming'] {
   return { wave: n, name: waveName(n), boss: !!waveSpec(n).boss };
 }
 
-/** Each rarity of blessing's colour (as the armory's `BLESSING_COLOR`): its icon's frame, its callout. */
-const RARITY_COLOR: Record<string, string> = { common: '#ffd36b', rare: '#7cc4ff', epic: '#c98bff' };
-const blessingColor = (id: string) => RARITY_COLOR[(BLESSINGS as unknown as Record<string, { rarity?: string } | undefined>)[id]?.rarity ?? 'common'] ?? RARITY_COLOR.common;
+/** A blessing's colour, by its rarity: its icon's frame, its callout. */
+const blessingColor = (id: string) => (id in BLESSINGS ? BLESSING_COLOR[BLESSINGS[id as BlessingId].rarity] : BLESSING_COLOR.common);
 
 const fighterState = (p: Player): FighterState => (downs.has(p.id) ? 'down' : p.alive ? 'up' : 'out');
 const bleedOf = (game: GameContext, p: Player) => Math.max(0, Math.ceil((downs.get(p.id) ?? 0) - game.clock.now));
@@ -129,7 +144,7 @@ function meMsg(game: GameContext, p: Player): MeMsg {
     gold: gold(p),
     bless: blessingsOf(p).map((id) => {
       const b = BLESSINGS[id];
-      return { name: b.name, text: b.text, icon: b.icon, color: blessingColor(id) };
+      return { name: b.name, text: b.text, icon: b.icon, color: blessingColor(id), n: level(p, id) };
     }),
     state: fighterState(p),
     bleed: bleedOf(game, p),
@@ -202,6 +217,19 @@ function announceWave(game: GameContext, e: { wave: number; name: string; twist:
   }
 }
 
+/** A fight begins afresh: nothing ended, nobody down, no waves named, no monster seen. */
+function fresh() {
+  ended = null;
+  lastHit.clear();
+  waveTotal = 0;
+  ready = null;
+  downs.clear();
+  unlocks.clear();
+  seen.clear();
+  foes = [];
+  nextFoe = 0;
+}
+
 /** The run's over: each fighter's end screen, after the moment's had its due. */
 function endRun(game: GameContext, run: EndRun, results: RunResult[]) {
   const done = { run, extras: { results, unlocks, classes } };
@@ -243,17 +271,28 @@ export const hudPart: ArenaPart = {
     bus.on('runStart', () => {
       tallies.reset();
       for (const p of game.players) tallies.join(p);
-      ended = null;
-      waveTotal = 0;
-      downs.clear();
-      unlocks.clear();
+      fresh();
     });
 
     bus.on('waveStart', (e) => {
       tallies.newWave();
       waveAt = game.clock.now;
       waveTotal = 0;
+      ready = null;
       announceWave(game, e);
+    });
+
+    // (The run's feed says who's ready, who's down, revived, fallen or joining: the HUD shows the rest.)
+    bus.on('ready', ({ ready: n, of }) => {
+      ready = { n, of };
+    });
+
+    // The first of each kind of monster this run: what it is and how to beat it, one at a time.
+    bus.on('spawned', ({ type }) => {
+      const kind = monsterKind(type);
+      if (!kind?.tip || seen.has(type)) return;
+      seen.add(type);
+      foes.push({ name: kindOf(game, type).name, tip: kind.tip, color: kind.color ?? '#e8dcc0', role: kind.role });
     });
 
     bus.on('waveCleared', ({ wave, bonus }) => {
@@ -285,11 +324,13 @@ export const hudPart: ArenaPart = {
     });
 
     bus.on('feat', ({ player, name, text }) => {
+      if (name === 'phoenix' && player) return call(game, player, { k: 'back', q: 'The Phoenix Feather burns away', t: 'Reborn' });
       if (name === 'favour') {
         call(game, 'all', { k: 'favour', q: 'The crowd roars', t: "Crowd's Favour", s: 'Double gold · gifts from the emperor' });
         return crowd(game, { v: 1, r: 'roar' });
       }
-      if (name === 'boss_slain') return call(game, 'all', { k: 'slain', q: player ? `${player.name} strikes the last blow` : 'The crowd rises', t: text.replace(/!$/, '') });
+      // (A boss's fall has its own card, the bosses' death cam: the crowd roars at it.)
+      if (name === 'boss_slain') return crowd(game, { v: 1, r: 'roar' });
       crowd(game, ROARS.has(name) ? { v: 0.9, r: 'roar' } : { v: 0.5, r: 'cheer' });
       if (UNSAID.has(name)) return;
       // Their own feat, to them: "Ann caught the Treasure Goblin" is "You caught…".
@@ -308,8 +349,8 @@ export const hudPart: ArenaPart = {
       downs.delete(player.id);
       // (Up by a feather or the wave's end: the feat or the wave's card says so.)
       if (!by) return;
-      call(game, player, { k: 'back', t: 'Revived', s: `${by.name} pulled you up` });
       tallies.revived(by);
+      call(game, player, { k: 'back', t: 'Revived', s: `${by.name} pulled you up` });
       call(game, by, { k: 'ally', t: `You revived ${player.name}` });
       crowd(game, { v: 0.6, r: 'cheer' });
     });
@@ -333,6 +374,7 @@ export const hudPart: ArenaPart = {
 
     bus.on('levelUp', ({ player, level, unlocks: got }) => {
       unlocks.set(player.id, [...(unlocks.get(player.id) ?? []), ...got]);
+      game.hud.feed([{ text: player.name, color: '#f0c060' }, ` reached level ${level}`]);
       // (At a run's end its level-ups go on the end screen.)
       if (state.phase !== 'victory' && state.phase !== 'defeat') tell(game, player, MSG.level, { level, unlocks: got.map((u) => ({ kind: u.kind, name: u.name })) });
     });
@@ -353,7 +395,11 @@ export const hudPart: ArenaPart = {
         const hit: HitMsg = { e: entity.id, n: Math.round(amount * 10) / 10, h: Math.round(Math.min(1, amount / Math.max(6, entity.maxHealth * 0.4)) * 100) / 100 };
         if (!entity.alive || entity.health <= 0) hit.k = 1;
         if (boss) hit.b = 1;
-        tell(game, source, MSG.hit, hit);
+        const now = game.clock.now;
+        if (hit.k || hit.h >= 0.3 || now - (lastHit.get(source.id) ?? -1) >= LIGHT_EVERY) {
+          lastHit.set(source.id, now);
+          tell(game, source, MSG.hit, hit);
+        }
       }
       // The crowd cheers the blows on a boss, now and then.
       if (boss && game.clock.now - bossCheer > 2.5) {
@@ -369,15 +415,20 @@ export const hudPart: ArenaPart = {
     });
 
     game.events.on('playerJoin', ({ player }) => tallies.join(player));
-    game.events.on('playerReady', ({ player }) => catchUp(game, player));
+    game.events.on('playerReady', ({ player }) => {
+      catchUp(game, player);
+      // Arriving in the middle of it: where they've come in.
+      if (state.phase === 'fighting') call(game, player, { k: 'wave', q: 'Joining the fight', t: `Wave ${state.wave}`, s: waveName(state.wave) });
+      else if (state.phase === 'intermission') call(game, player, { k: 'wave', q: 'Joining the fight', t: `Wave ${state.wave + 1}`, s: 'Next: rest, shop, choose a blessing' });
+    });
     game.events.on('playerLeave', ({ player }) => void downs.delete(player.id));
 
     // For looking at the HUD's pieces (development, or a server with cheats).
     game.commands.register('hud', {
-      usage: '<callout|card|end [lose]|gold [n]|favour|feat [name]|level>',
+      usage: '<callout|card|end [lose]|gold [n]|favour|feat [name]|level|foe>',
       help: 'Show a piece of the HUD (testing its look)',
       cheat: true,
-      complete: () => ['callout', 'card', 'end', 'gold', 'favour', 'feat', 'level'],
+      complete: () => ['callout', 'card', 'end', 'gold', 'favour', 'feat', 'level', 'foe'],
       run: ([what, arg], g, p) => {
         if (what === 'card') return void waveCards(g, Math.max(1, state.wave), 60);
         if (what === 'end') return void endRun(g, sampleRun(g, arg !== 'lose'), [sampleResult(p, arg !== 'lose')]);
@@ -388,6 +439,7 @@ export const hudPart: ArenaPart = {
         }
         if (what === 'feat') return void bus.emit('feat', { player: p, name: arg ?? 'triple_kill', text: `${(arg ?? 'triple_kill').replace(/_/g, ' ')}!` });
         if (what === 'level') return void tell(g, p, MSG.level, { level: 8, unlocks: [{ kind: 'class', name: 'Pyromancer' }] });
+        if (what === 'foe') return void tell(g, p, MSG.foe, { name: 'Knight', tip: 'Its shield turns blows from in front: hit it from the side, behind or above, parry it, or bomb it', color: '#d8dee6', role: 'heavy' } satisfies FoeMsg);
         return void call(g, p, { k: 'wave', q: 'Wave 7 of 20', t: 'Wave 7', s: 'The Swarm' });
       },
     });
@@ -395,14 +447,11 @@ export const hudPart: ArenaPart = {
 
   start(game) {
     sent.clear();
-    ended = null;
     hype = { value: 0, favour: false };
-    waveTotal = 0;
     // (The clock may have started again with the fight: the periodic sends go from now.)
     meAt = partyAt = bossCheer = 0;
     goreBudget = { at: 0, n: 0 };
-    downs.clear();
-    unlocks.clear();
+    fresh();
     tallies.reset();
     for (const p of game.players) {
       tallies.join(p);
@@ -413,6 +462,10 @@ export const hudPart: ArenaPart = {
   update(game) {
     const now = game.clock.now;
     send(game, 'all', MSG.run, runMsg(game));
+    if (foes.length && now >= nextFoe) {
+      tell(game, 'all', MSG.foe, foes.shift()!);
+      nextFoe = now + FOE_EVERY;
+    }
     if (now >= meAt) {
       meAt = now + 0.2;
       send(game, 'all', MSG.hype, hypeMsg());

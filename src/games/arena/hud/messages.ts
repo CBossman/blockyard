@@ -30,6 +30,8 @@ export const MSG = {
   end: 'ar.end',
   /** One fighter: they reached a level (`LevelMsg`). */
   level: 'ar.level',
+  /** Everyone: a kind of monster in for the first time this run, and how to beat it (`FoeMsg`). */
+  foe: 'ar.foe',
 } as const;
 
 export type Phase = 'intro' | 'waiting' | 'countdown' | 'fighting' | 'intermission' | 'victory' | 'defeat';
@@ -50,6 +52,13 @@ export interface RunMsg {
   boss: { name: string; title: string; color: string } | null;
   /** Between waves (and before the first): the one coming, and whether it's a boss's. */
   upcoming: { wave: number; name: string; boss: boolean } | null;
+  /** Between waves: how many of those fighting are ready for the next (N), of how many. */
+  ready: { n: number; of: number } | null;
+  /** Past the run's last wave. */
+  endless: boolean;
+  /** Whole seconds since the run began, and the monsters slain in it. */
+  time: number;
+  kills: number;
   /** The map (its id, for the crowd and the music), and its name. */
   map: string;
   mapName: string;
@@ -71,7 +80,8 @@ export interface PartyMsg {
 
 export interface MeMsg {
   gold: number;
-  bless: { name: string; text: string; icon: IconRef; color: string }[];
+  /** Their blessings: each one's name, what it does, its icon, its rarity's colour, how many of it (Berserker II). */
+  bless: { name: string; text: string; icon: IconRef; color: string; n: number }[];
   state: FighterState;
   /** Down: seconds left before they bleed out. */
   bleed: number;
@@ -87,12 +97,12 @@ export interface GoldMsg {
 /**
  * A callout. `k` is what it is, which picks its size, its place and its sting on the screen:
  * `wave`, `final`, `boss`, `endless` and `twist` (a wave begins, the endless waves begin),
- * `favour` (the Crowd's Favour), `slain` (a boss falls), `blessing` (one of theirs taken, in its
+ * `favour` (the Crowd's Favour), `blessing` (one of theirs taken, in its
  * rarity's colour), `feat` (a multikill, a parry: `name` says which), `out` and `back` (their own
  * fall and return), `ally` (a friend's fortunes), `victory`, `defeat`.
  */
 export interface CallMsg {
-  k: 'wave' | 'final' | 'boss' | 'endless' | 'twist' | 'favour' | 'slain' | 'blessing' | 'feat' | 'out' | 'back' | 'ally' | 'victory' | 'defeat';
+  k: 'wave' | 'final' | 'boss' | 'endless' | 'twist' | 'favour' | 'blessing' | 'feat' | 'out' | 'back' | 'ally' | 'victory' | 'defeat';
   /** The kicker over it, the title, the line under it, its colour. */
   q?: string;
   t: string;
@@ -145,6 +155,14 @@ export interface WaveCard {
 export interface EndMsg {
   won: boolean;
   wave: number;
+}
+
+export interface FoeMsg {
+  name: string;
+  tip: string;
+  /** Its colour, and what it is in a fight (`MonsterKind.role`: melee, ranged, swarm…). */
+  color: string;
+  role: string;
 }
 
 export interface LevelMsg {

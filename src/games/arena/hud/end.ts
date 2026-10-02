@@ -98,7 +98,7 @@ export const END: { name: string; def: WidgetDefinition } = {
           <div class="ph"><span>The party</span></div>
           <div class="rows">
             <div class="row head"><span class="nm"></span><span>Kills</span><span>Damage</span><span>Gold</span></div>
-            <div data-each="crew" class="row you-{{you}} mvp-{{mvp}}"><span class="nm"><i class="crown" data-if="mvp"></i>{{name}}<small data-if="cls">{{cls}}</small></span><span>{{kills}}</span><span>{{damage}}</span><span>{{gold}}</span></div>
+            <div data-each="crew" class="row you-{{you}} mvp-{{mvp}}"><span class="nm"><i class="crown" data-if="mvp"></i><span class="who"><b>{{name}}</b><small data-if="cls">{{cls}}</small></span></span><span>{{kills}}</span><span>{{damage}}</span><span>{{gold}}</span></div>
           </div>
         </div>
       </div>
@@ -175,9 +175,10 @@ export const END: { name: string; def: WidgetDefinition } = {
     .row { display: grid; grid-template-columns: minmax(0, 1.6fr) repeat(3, minmax(0, 1fr)); align-items: center; padding: 6px 2px; border-top: 1px solid rgba(255, 255, 255, 0.05); font: 500 15px/1.1 var(--label); font-variant-numeric: tabular-nums; color: var(--fg2); }
     .row > span:not(.nm) { text-align: right; }
     .row.head { border-top: 0; padding-top: 0; font-size: 10px; letter-spacing: 0.24em; text-transform: uppercase; color: var(--fg3); }
-    .nm { display: flex; align-items: baseline; gap: 8px; min-width: 0; font: 600 14px/1.1 var(--sans); color: var(--fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .nm small, .cls { font: 500 10px/1 var(--label); letter-spacing: 0.22em; text-transform: uppercase; color: var(--fg3); }
-    .crown { align-self: center; }
+    .nm { display: flex; align-items: center; gap: 8px; min-width: 0; }
+    .who { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+    .who b { font: 600 14px/1.1 var(--sans); color: var(--fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .who small, .cls { font: 500 9px/1 var(--label); letter-spacing: 0.22em; text-transform: uppercase; color: var(--fg3); }
     .row.you-true { color: var(--fg); box-shadow: inset 2px 0 0 var(--gold); padding-left: 8px; background: rgba(240, 192, 96, 0.06); }
     .crown { flex: none; width: 14px; height: 10px; background: var(--gold); clip-path: polygon(0 100%, 0 20%, 25% 55%, 50% 0, 75% 55%, 100% 20%, 100% 100%); filter: drop-shadow(0 0 4px rgba(240, 192, 96, 0.8)); }
     .buttons { margin-top: 24px; display: flex; gap: 10px; animation: fade 600ms ease both 1100ms; }
