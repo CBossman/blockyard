@@ -126,10 +126,15 @@
   color: var(--ar-fg, #f5efe4);
   font-variant-numeric: tabular-nums;
 }
+.ar-wave-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
 .ar-chips {
   display: flex;
   gap: 6px;
-  margin-top: 8px;
 }
 .ar-chips:empty {
   display: none;
@@ -146,7 +151,6 @@
   animation: ar-chip-in 500ms cubic-bezier(0.3, 1.6, 0.5, 1) both;
 }
 .ar-wave-hint {
-  margin-top: 6px;
   font: 500 11px/1 var(--ar-label);
   letter-spacing: 0.24em;
   text-transform: uppercase;

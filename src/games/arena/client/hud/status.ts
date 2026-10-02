@@ -51,7 +51,7 @@ function build(client: Client, layer: HTMLElement): (dt: number) => void {
   const bar = el('div.ar-wave-bar', el('div.ar-wave-track', fill), left);
   const chips = el('div.ar-chips');
   const hint = el('div.ar-wave-hint');
-  const wave = el('div.ar-wave', kicker, el('div.ar-wave-n', el('i.ar-orn'), big, of, el('i.ar-orn.r')), name, bar, chips, hint);
+  const wave = el('div.ar-wave', kicker, el('div.ar-wave-n', el('i.ar-orn'), big, of, el('i.ar-orn.r')), name, bar, el('div.ar-wave-foot', chips, hint));
 
   // Gold and the crowd.
   const goldN = el('span.ar-gold-n', '0');

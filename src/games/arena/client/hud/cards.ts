@@ -161,7 +161,7 @@ const CSS = `
 @keyframes ar-card-fade { from { opacity: 0; transform: translateY(4px); } }
 /* A new foe: at the left, under the feed. */
 .ar-foe {
-  --c: #e8dcc0; position: absolute; left: 26px; top: 34%; width: 330px; padding: 12px 18px 14px 16px; color: var(--ar-fg, #f5efe4);
+  --c: #e8dcc0; position: absolute; left: 26px; top: max(46%, 300px); width: 330px; padding: 12px 18px 14px 16px; color: var(--ar-fg, #f5efe4);
   background: linear-gradient(90deg, rgba(14, 10, 8, 0.82), rgba(14, 10, 8, 0.55) 75%, transparent);
   box-shadow: inset 2px 0 0 var(--c);
   animation: ar-foe-in 520ms cubic-bezier(0.2, 0.8, 0.2, 1) both; transition: opacity 420ms ease, transform 420ms ease;

@@ -3,8 +3,10 @@ import { mapById } from '../../maps';
 import { MSG, type CrowdMsg } from '../../hud/messages';
 import { hud } from './store';
 
-/** How fast the crowd's excitement dies down (a second), and the most it holds. */
+/** How fast the crowd's excitement dies down (a second). */
 const COOL = 0.22;
+/** Cheers come at most this often (seconds): a burst of kills is one swell, not a babble. */
+const CHEER_EVERY = 0.35;
 
 /**
  * The crowd in the stands, on each screen, while a fight's on: a murmur of thousands (`ar_crowd`)
@@ -21,6 +23,13 @@ export function crowd(): ClientKit {
   let clapAt = 0;
   let clapStep = 0;
   let chatter = 0;
+  let lastCheer = -1;
+  /** A cheer, unless one's just gone up (roars always). */
+  const cheer = (client: Client, o: { at?: { x: number; y: number; z: number }; volume: number; pitch: number }, roar = false) => {
+    if (!roar && client.time - lastCheer < CHEER_EVERY) return;
+    lastCheer = client.time;
+    client.audio.play('ar_cheer', o);
+  };
 
   const quiet = () => {
     murmur?.stop();
@@ -40,7 +49,7 @@ export function crowd(): ClientKit {
   const react = (client: Client, c: CrowdMsg) => {
     hype = Math.min(1, hype + c.v * (c.r === 'roar' ? 1 : 0.55));
     if (c.r === 'cheer' || c.r === 'roar') {
-      client.audio.play('ar_cheer', { volume: 0.5 + c.v * 0.7, pitch: 0.95 + Math.random() * 0.1 });
+      cheer(client, { volume: 0.5 + c.v * 0.7, pitch: 0.95 + Math.random() * 0.1 }, c.r === 'roar');
       if (c.r === 'roar') window.setTimeout(() => client.audio.play('ar_cheer', { at: stands(), volume: 1.6, pitch: 1.05 }), 180);
     } else client.audio.play(c.r === 'gasp' ? 'ar_gasp' : 'ar_groan', { volume: 0.5 + c.v * 0.6 });
   };
@@ -56,7 +65,7 @@ export function crowd(): ClientKit {
       client.on(MSG.gore, () => {
         if (!murmur) return;
         hype = Math.min(1, hype + 0.07);
-        if (Math.random() < 0.3) client.audio.play('ar_cheer', { at: stands(), volume: 0.9, pitch: 1.1 + Math.random() * 0.15 });
+        if (Math.random() < 0.3) cheer(client, { at: stands(), volume: 0.9, pitch: 1.1 + Math.random() * 0.15 });
       });
     },
     frame(client, dt) {

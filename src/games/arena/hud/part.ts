@@ -207,7 +207,8 @@ function waveCards(game: GameContext, wave: number, bonus: number) {
       damage: Math.round(t.damage),
       mvp: best ? { name: tallies.names.get(best.id) ?? '', kills: best.kills, you: best.id === p.id } : null,
       bonus,
-      next: { wave: after, name: w?.name ?? `Endless wave ${after}`, boss: !!w?.boss },
+      // (After the run's last wave, nothing's next unless they fight on.)
+      next: wave < finalWave() || endless ? { wave: after, name: w?.name ?? 'Endless', boss: !!w?.boss } : null,
     };
     tell(game, p, MSG.wave, card);
   }
