@@ -211,7 +211,7 @@ function show(game: GameContext, p: Player, o: Offer) {
         entries: o.choices.map((id) => {
           const b: Blessing = BLESSINGS[id];
           const n = level(p, id) + 1;
-          return { icon: b.icon, label: titled(id, n), detail: RARITY_NAME[b.rarity], note: b.text, active: b.rarity !== 'common', onSelect: () => grant(game, p, id, true) };
+          return { icon: b.icon, label: titled(id, n), detail: RARITY_NAME[b.rarity], note: b.text, onSelect: () => grant(game, p, id, true) };
         }),
       },
     ],
