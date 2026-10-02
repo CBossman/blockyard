@@ -1,6 +1,6 @@
 import type { Client, ClientKit } from '@platform/client';
 import { mapById, type ArenaMap } from '../../maps';
-import { INTRO_DONE_MSG, INTRO_MSG, INTRO_TIME, type IntroMessage } from '../../maps/messages';
+import { INTRO_DONE_MSG, INTRO_MSG, INTRO_TIME as TIME, type IntroMessage } from '../../maps/messages';
 
 type V3 = [number, number, number];
 
@@ -14,8 +14,7 @@ const SKIP_KEYS = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space', 'ArrowUp', 'ArrowDow
  * joiner): the camera taken (`client.camera.take`) and flown along the map's keyframes, its name
  * on a card over it (and a sting), then down over the fighter and in behind them, where it's
  * given back and eases into their own view. At a fight's start it's letterboxed and the HUD steps
- * aside; either way, moving or clicking ends it. Ended, it tells the server (`INTRO_DONE_MSG`): the
- * run waits for it to put up the class menu.
+ * aside; either way, moving or clicking ends it.
  */
 export function intro(): ClientKit {
   let unstyle: (() => void) | null = null;
@@ -28,6 +27,7 @@ export function intro(): ClientKit {
     on = null;
     client.camera.release(ease);
     el.classList.remove('on', 'full', 'card');
+    // (The run puts the class pick up once it's over.)
     client.send(INTRO_DONE_MSG, {});
   };
 
@@ -46,7 +46,7 @@ export function intro(): ClientKit {
         const m = data as IntroMessage;
         const map = mapById(m?.map);
         if (!map?.intro.length) return;
-        on = { map, full: !!m.full, time: m.full ? INTRO_TIME.full : INTRO_TIME.short };
+        on = { map, full: !!m.full, time: m.full ? TIME.full : TIME.short };
         t = 0;
         stung = false;
         (el.querySelector('.title') as HTMLElement).textContent = map.name;
@@ -70,7 +70,7 @@ export function intro(): ClientKit {
       }
       const pose = poseAt(on.map, on.full, Math.min(1, t / T), client);
       client.camera.take({ position: pose.at, target: pose.look, fov: FOV });
-      if (t >= T) stop(client, INTRO_TIME.ease);
+      if (t >= T) stop(client, TIME.ease);
     },
     dispose() {
       unstyle?.();

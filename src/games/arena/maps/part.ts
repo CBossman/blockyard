@@ -5,7 +5,7 @@ import { chooseMap, runEnded, setupChoice, updateChoice } from './choice';
 import { opened, startGates, updateGates } from './gates';
 import { startHazards, updateHazards } from './hazards';
 import { MAPS } from './index';
-import { introduce, setupIntro, startIntro, updateIntro } from './intro';
+import { introduce, setupIntro, startIntro } from './intro';
 import { CHEER_MSG, type CheerMessage } from './messages';
 import { place, resetModels } from './props';
 import { setupTraps, startTraps, updateTraps } from './traps';
@@ -17,13 +17,13 @@ let cheered = -99;
  * The maps' own business in a fight: which map it's on (`choice.ts`: the rotation, the vote, the
  * pick), its set pieces, portcullises (`gates.ts`), traps (`traps.ts`) and hazards
  * (`hazards.ts`), and the fly-over each screen's shown as a fight begins or as someone joins one
- * (`intro.ts`: the bus hears `introOver` as each fighter's ends).
+ * (`intro.ts`).
  */
 export const mapsPart: ArenaPart = {
   name: 'maps',
   setup(game) {
     resetModels();
-    setupIntro(game);
+    setupIntro();
     setupTraps(game, MAPS);
     setupChoice(game);
     bus.on('spawned', ({ entity }) => opened(game, entity.position));
@@ -58,6 +58,5 @@ export const mapsPart: ArenaPart = {
     updateGates(game, dt);
     updateTraps(game, dt);
     updateHazards(game, dt);
-    updateIntro(game);
   },
 };
