@@ -17,7 +17,7 @@ export interface BossKind {
   /** Its colour: the entrance card, the banners. */
   color: string;
   define(game: GameContext): EntityDefinition;
-  /** What comes in with it (types and counts, before party size). */
+  /** What comes in with it besides its wave's roster (types and counts, before party size). */
   escort?: Record<string, number>;
   /** How tall it stands (blocks): the cameras frame it by this. */
   height: number;

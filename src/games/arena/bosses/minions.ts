@@ -51,7 +51,7 @@ export const spiderling: Minion = {
 };
 
 /** Seconds an egg sac takes to hatch, and the spiderlings in it. */
-export const HATCH = 7;
+export const HATCH = 8;
 const BROOD = 3;
 
 interface EggState {
