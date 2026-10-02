@@ -38,6 +38,8 @@ const BOSS_HIT = 0.0009;
 const COOL = 0.025;
 const COOL_CALM = 0.05;
 const COOL_AFTER = 2.5;
+/** How far it cools before the bus is told again. */
+const COOL_STEP = 0.04;
 export const FAVOUR = 10;
 /** Seconds between the emperor's gifts while the Favour lasts. */
 const GIFT_EVERY = 0.7;
@@ -127,7 +129,9 @@ export function hypeUpdate(game: GameContext, dt: number) {
   } else if (now - hype.lastGain > COOL_AFTER) {
     hype.value = Math.max(0, hype.value - (state.phase === 'fighting' ? COOL : COOL_CALM) * dt);
   }
-  if (Math.abs(hype.value - hype.sent) >= 0.01 || on !== hype.sentFavour || (hype.value === 0 && hype.sent !== 0)) {
+  // (Told when it rises, but cooling only every few hundredths: the meter needn't hear every tick of it.)
+  const d = hype.value - hype.sent;
+  if (d >= 0.01 || d <= -COOL_STEP || on !== hype.sentFavour || (hype.value === 0 && hype.sent !== 0)) {
     hype.sent = hype.value;
     hype.sentFavour = on;
     bus.emit('hype', { value: hype.value, favour: on });

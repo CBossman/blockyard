@@ -25,8 +25,8 @@ export default function arenaHud() {
   let killsAtClear = -1;
   bus.on('slain', ({ by }) => void (by === me && kills++));
   bus.on('waveCleared', () => void (killsAtClear < 0 && (killsAtClear = kills)));
-  // The countdown, then the first wave.
-  h.run(8, { until: () => state.phase === 'fighting' });
+  // The countdown (the class pick's), then the first wave.
+  h.run(16, { until: () => state.phase === 'fighting' });
   const runs = msgs<RunMsg>('ar.run');
   check(runs.some((r) => r.phase === 'countdown' && r.next > 0 && r.upcoming?.wave === 1), 'the countdown, and the wave it counts down to');
   h.run(3);
@@ -76,7 +76,7 @@ export default function arenaHud() {
   const quiet0 = h.calls.length;
   h.run(5);
   const quiet = h.calls.slice(quiet0).filter((c) => c.target === 'message').length / 5;
-  check(quiet <= 3, `messages a second between waves: ${quiet}`);
+  check(quiet <= 3, `messages a second between waves: ${quiet} (${h.calls.slice(quiet0).filter((c) => c.target === 'message').map((c) => c.method).join(' ')})`);
   log(`messages a second: ${busy.toFixed(1)} killing a wave down, ${quiet.toFixed(1)} between waves`);
 
   // Everyone's down: the end screen, its numbers mine, and Play again starts afresh.
