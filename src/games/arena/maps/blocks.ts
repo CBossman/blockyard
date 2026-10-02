@@ -3,7 +3,7 @@ import type { BlockDefinition } from '@platform';
 /**
  * The maps' own blocks (`shared.ts` lists them): the Colosseum's travertine and its painted crowd,
  * the Necropolis's crypts and graves, the Forge's basalt and magma, the Sanctum's ice. All painted
- * here in code. (31 of the game's 68 block variants.)
+ * here in code. (40 of the game's 68 block variants.)
  */
 
 /** A steady pseudo-random number in [0, 1) for a pixel (and a seed). */
@@ -191,6 +191,46 @@ const soulLantern = {
   },
 };
 
+/** Coals burning with soul fire: black, cracked through to green light (the Necropolis's braziers). */
+const soulCoals = {
+  paint: (x: number, y: number) => {
+    const crack = Math.abs(Math.sin(x * 1.1 + rnd(x >> 2, y >> 2, 82) * 4) + Math.cos(y * 0.9 + rnd(y >> 2, x >> 2, 83) * 4)) < 0.22;
+    if (crack) return rnd(x, y, 84) < 0.25 ? '#9dffc4' : rnd(x, y, 90) < 0.5 ? '#3fd47e' : '#2a9a5a';
+    return pick(['#141815', '#1b201c', '#101311', '#222823'], rnd(x, y, 85));
+  },
+};
+
+/** Wrought iron, for railings: near black, rusting at the joins. */
+const ironRail = {
+  paint: (x: number, y: number) => (rnd(x, y, 86) < 0.12 ? '#5a3a28' : (x + y) % 5 === 0 ? '#4c5056' : pick(['#2a2c30', '#25272a', '#303338'], rnd(x, y, 87))),
+};
+
+/** Three candles of wax, each its own height, their flames lit (crossed planes). */
+const candles = {
+  paint: (x: number, y: number) => {
+    for (const [cx, top] of [[3, 8], [8, 4], [12, 10]] as const) {
+      if (x === cx - 1 || x === cx) {
+        if (y > top + 2) return y > 13 && rnd(x, y, 88) < 0.3 ? '#d8cdb0' : '#efe6cf';
+        if (y === top + 2) return '#2a2420';
+        if (y === top + 1) return '#ff9a2a';
+        if (y === top) return '#ffe39a';
+      }
+    }
+    return null;
+  },
+};
+
+/** Cobwebs in the corners: threads out from a corner and round it (crossed planes). */
+const cobweb = {
+  paint: (x: number, y: number) => {
+    const r = Math.hypot(x, y);
+    const a = Math.atan2(y, x);
+    const spoke = Math.abs(Math.sin(a * 4)) < 0.12;
+    const ring = Math.abs((r % 4.5) - 2.2) < 0.4;
+    return spoke || (ring && rnd(x, y, 89) < 0.85) ? '#dcdcd6' : null;
+  },
+};
+
 // -------------------------------------------------------------------------------------------------
 // The Forge
 // -------------------------------------------------------------------------------------------------
@@ -228,6 +268,14 @@ const cinder = {
   paint: (x: number, y: number) => {
     if (rnd(x, y, 111) < 0.025) return '#e8742a';
     return pick(['#4a4541', '#3f3a37', '#56504a', '#38332f'], rnd(x >> 1, y >> 1, 112) * 0.5 + rnd(x, y, 113) * 0.5);
+  },
+};
+
+/** Scoria: rusty red volcanic rock, pitted: the caldera's strata. */
+const scoria = {
+  paint: (x: number, y: number) => {
+    if (rnd(x, y, 114) < 0.1) return '#2a1712';
+    return pick(['#6b3526', '#5c2d20', '#7a412d', '#4f271c'], rnd(x >> 1, y >> 1, 115) * 0.6 + rnd(x, y, 116) * 0.4);
   },
 };
 
@@ -280,6 +328,29 @@ const icicle = {
   },
 };
 
+/** Packed ice: pale and milky, fine cracks running through it (the glaciers' faces, the statues). */
+const packedIce = {
+  paint: (x: number, y: number) => {
+    const crack = Math.abs(((x * 0.7 - y * 0.45 + rnd(x >> 2, y >> 2, 171) * 4) % 6) - 3) < 0.3;
+    if (crack) return '#a9d3ec';
+    return pick(['#d3ecf8', '#c6e5f5', '#ddf1fa', '#bfe0f2'], rnd(x >> 1, y >> 1, 172) * 0.6 + rnd(x, y, 173) * 0.4);
+  },
+};
+
+/** Temple stone carved with runes that glow the blue of the ice (the Sanctum's floor rings, its friezes). */
+const runeStone = {
+  paint: (x: number, y: number) => {
+    const g = (x >> 2) + (y >> 2) * 4;
+    const k = rnd(g, 0, 181);
+    const lx = x & 3;
+    const ly = y & 3;
+    // A glyph in each 4 by 4 cell: a stroke, a bar, a hook.
+    const rune = k < 0.3 ? lx === 1 && ly < 3 : k < 0.6 ? ly === 1 && lx < 3 : k < 0.85 ? (lx === 1 && ly < 3) || (ly === 2 && lx >= 1) : false;
+    if (rune && x % 4 !== 3 && y % 4 !== 3) return rnd(x, y, 182) < 0.3 ? '#e2fdff' : '#8fe6ff';
+    return pick(['#3f4c5c', '#46546a', '#3a4656'], rnd(x >> 1, y >> 1, 183));
+  },
+};
+
 export const MAP_BLOCKS: Record<string, BlockDefinition> = {
   travertine: { texture: travertine, hardness: 2 },
   travertine_bricks: { label: 'Travertine Bricks', texture: travertineBricks, hardness: 2 },
@@ -307,15 +378,23 @@ export const MAP_BLOCKS: Record<string, BlockDefinition> = {
   },
   bone_block: { label: 'Bones', texture: bone, hardness: 1.5 },
   soul_lantern: { label: 'Soul Lantern', texture: soulLantern, boxes: [[4, 0, 4, 12, 10, 12]], light: 12, glow: 0.9 },
+  soul_coals: { label: 'Soul Coals', texture: soulCoals, light: 13, glow: 0.9, hardness: 1 },
+  iron_railing: { label: 'Iron Railing', texture: ironRail, shape: 'fence', hardness: 2 },
+  candles: { texture: candles, shape: 'cross', transparency: 'cutout', light: 9, glow: 0.6, hardness: 0.2 },
+  cobweb: { texture: cobweb, shape: 'cross', transparency: 'cutout', hardness: 0.2 },
 
   basalt: { texture: basalt, hardness: 2.5 },
   basalt_bricks: { label: 'Basalt Bricks', texture: basaltBricks, hardness: 2.5 },
   magma: { texture: magma, light: 9, glow: 0.85, hardness: 2 },
   cinder: { texture: cinder, hardness: 0.8 },
+  basalt_slab: { label: 'Basalt Slab', texture: basaltBricks, shape: 'slab', full: 'basalt_bricks', hardness: 2.5 },
+  scoria: { texture: scoria, hardness: 2 },
 
   ice_bricks: { label: 'Ice Bricks', texture: iceBricks, hardness: 1.5 },
   glacier: { texture: glacier, glow: 0.2, hardness: 2 },
   sanctum_stone: { label: 'Sanctum Stone', texture: sanctumStone, hardness: 2 },
   frost_crystal: { label: 'Frost Crystal', texture: crystal, shape: 'cross', light: 10, glow: 1, hardness: 0.5 },
   icicle: { texture: icicle, shape: 'cross', transparency: 'cutout', glow: 0.25, hardness: 0.3 },
+  packed_ice: { label: 'Packed Ice', texture: packedIce, glow: 0.08, hardness: 1.5 },
+  rune_stone: { label: 'Rune Stone', texture: runeStone, light: 7, glow: 0.7, hardness: 2 },
 };

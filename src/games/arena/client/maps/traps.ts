@@ -84,7 +84,7 @@ export function trapFx(): ClientKit {
             const spread = 0.18;
             const v = { x: (j.dir.x + rand(-spread, spread)) * speed, y: (j.dir.y + rand(-spread, spread) * 0.6) * speed, z: (j.dir.z + rand(-spread, spread)) * speed };
             client.fx.particles(at, pick(colours), { count: 1, speed: 0.3, size: rand(0.16, 0.34), gravity: spec.element === 'frost' ? 1 : -2.5, glow: spec.element === 'frost' ? 0.6 : 1, life: rand(0.38, 0.55), spread: 0.05, up: 0, drag: 1.1, velocity: v, collide: true });
-            if (spec.element === 'fire' && Math.random() < 0.12) client.fx.particles({ x: at.x + v.x * 0.4, y: at.y + 0.6, z: at.z + v.z * 0.4 }, SMOKE, { count: 1, speed: 0.2, size: rand(0.3, 0.5), gravity: -0.6, glow: 0, life: rand(1, 1.5), spread: 0.2, up: 0.8, drag: 0.9, collide: false });
+            if (spec.element === 'fire' && Math.random() < 0.08) client.fx.particles({ x: at.x + v.x * 0.4, y: at.y + 0.6, z: at.z + v.z * 0.4 }, SMOKE, { count: 1, speed: 0.2, size: rand(0.1, 0.18), gravity: -0.6, glow: 0, life: rand(1, 1.5), spread: 0.2, up: 0.8, drag: 0.9, collide: false });
           }
         } else if (spec.kind === 'sluice') {
           g.owed += dt * 30 * k;

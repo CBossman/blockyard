@@ -37,7 +37,7 @@ const SMOKE = linear('#3d3833');
 const EMBER = palette(['#ffb347', '#ff8a1e', '#ffd27a']);
 const MOTE = palette(['#fff0c8', '#ffe2a0', '#f6d9a8']);
 const SAND = palette(['#efe0b6', '#e6d29f', '#f5e9c8']);
-const MIST = palette(['#a9b4ad', '#9aa7a0', '#b5beb8']);
+const MIST = palette(['#8f9c97', '#a3aea9', '#7f8c88', '#b0b9b4']);
 const WISP = palette(['#9dffc4', '#c6ffe0', '#6cf0a6']);
 const ASH = palette(['#6f6862', '#5a5450', '#827a73']);
 const SNOW = linear('#f4f8ff');
@@ -151,15 +151,16 @@ export function air(): ClientKit {
           break;
         }
         case 'mist': {
-          // Mist low on the ground, drifting; soul-lights rising slowly, wandering.
-          owed.a += dt * 34 * thin;
+          // Mist creeping low over the ground: a haze of fine motes drifting on the wind, thickest
+          // at the foot; soul-lights rising slowly, wandering.
+          owed.a += dt * 130 * thin;
           while (owed.a >= 1) {
             owed.a -= 1;
             const p = around(cam, fwd, 0, 0, 22);
             if (!p) continue;
-            p.y = ground + rand(0, 0.9);
+            p.y = ground + Math.pow(Math.random(), 2) * 1.1;
             if (!open(client, p)) continue;
-            client.fx.particles(p, pick(MIST), { count: 1, speed: 0.12, size: rand(0.18, 0.32), gravity: 0, glow: 0.02, life: rand(3, 5), spread: 0.3, up: 0.02, drag: 0.4, velocity: { x: w.x * 0.35, y: 0, z: w.z * 0.35 }, collide: false });
+            client.fx.particles(p, pick(MIST), { count: 1, speed: 0.06, size: rand(0.045, 0.085), gravity: 0, glow: 0.12, life: rand(4, 6.5), spread: 0, up: 0, drag: 0.2, velocity: { x: w.x * 0.3, y: rand(-0.02, 0.05), z: w.z * 0.3 }, collide: false });
           }
           owed.b += dt * 5 * thin;
           while (owed.b >= 1) {
@@ -207,24 +208,26 @@ export function air(): ClientKit {
   };
 
   /**
-   * The aurora: curtains of light high over the map, each a ribbon of rising streaks along a
-   * wandering line, green at the foot going to violet at the top.
+   * The aurora: three curtains of light high over the map, each a ribbon folding along a
+   * wandering line across the sky, its streaks rising from a bright green foot to violet at the top.
    */
   function aurora(client: Client, map: ArenaMap, dt: number) {
     const t = client.time;
-    owed.aurora += dt * 90;
+    owed.aurora += dt * 320;
     while (owed.aurora >= 1) {
       owed.aurora -= 1;
       const band = Math.floor(Math.random() * 3);
       const u = Math.random();
-      // Each band an arc across the sky on its own side, waving slowly.
-      const ang = -2.4 + band * 1.1 + u * 1.6 + 0.12 * Math.sin(t * 0.21 + band * 2 + u * 5);
-      const r = 62 + band * 8 + 6 * Math.sin(t * 0.13 + u * 7 + band);
-      const base = FLOOR + 42 + band * 5 + 3 * Math.sin(u * 9 + t * 0.3);
-      const k = Math.random();
-      const p = { x: map.origin.x + Math.cos(ang) * r, y: base + k * 16, z: map.origin.z + Math.sin(ang) * r };
+      // Each band an arc across its own side of the sky, folding and waving slowly.
+      const fold = Math.sin(u * 11 + t * 0.35 + band * 2.1) * 0.09 + Math.sin(u * 3.7 - t * 0.17 + band) * 0.06;
+      const ang = -2.6 + band * 1.05 + u * 1.9 + fold;
+      const r = 58 + band * 7 + 5 * Math.sin(t * 0.11 + u * 6 + band);
+      const base = FLOOR + 40 + band * 4 + 3 * Math.sin(u * 7 + t * 0.25 + band);
+      // Most of the light at the curtain's foot, thinning upward.
+      const k = Math.pow(Math.random(), 1.6);
+      const p = { x: map.origin.x + Math.cos(ang) * r, y: base + k * 15, z: map.origin.z + Math.sin(ang) * r };
       const shade = Math.min(AURORA.length - 1, Math.floor(k * AURORA.length));
-      client.fx.particles(p, AURORA[shade], { count: 1, speed: 0.1, size: rand(0.9, 1.5), gravity: -0.05, glow: 1, life: rand(2.5, 3.8), spread: 0.6, up: 0.4, drag: 0.2, velocity: { x: 0, y: 0.5, z: 0 }, collide: false });
+      client.fx.particles(p, AURORA[shade], { count: 1, speed: 0.05, size: rand(1.8, 2.8) * (1 - k * 0.4), gravity: -0.04, glow: 1, life: rand(2.4, 3.4), spread: 0.25, up: 0.2, drag: 0.3, velocity: { x: 0, y: 0.55, z: 0 }, collide: false });
     }
   }
 

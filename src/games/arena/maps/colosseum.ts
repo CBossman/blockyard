@@ -43,7 +43,10 @@ const PEN = 27.5;
 
 /** The spike grates: in front of the north gate (before the emperor) and the south one. */
 const GRATES = [box({ x: -2, y: FLOOR, z: -12 }, { x: 2, y: FLOOR, z: -8 }), box({ x: -2, y: FLOOR, z: 8 }, { x: 2, y: FLOOR, z: 12 })];
-/** The podia to fight from, east and west: x from..to, 2 high. */
+/**
+ * The podia to fight from, east and west: x from..to, a block high (a monster hops a block, so
+ * nobody stands out of their reach up there).
+ */
 const PODIA = [
   { x0: 13, x1: 16, z0: -3, z1: 3 },
   { x0: -16, x1: -13, z0: -3, z1: 3 },
@@ -329,14 +332,8 @@ function features(bp: Blueprint) {
     for (let x = p.x0; x <= p.x1; x++)
       for (let z = p.z0; z <= p.z1; z++) {
         const rim = x === p.x0 || x === p.x1 || z === p.z0 || z === p.z1;
-        bp.set(x, FLOOR + 1, z, 'travertine_bricks');
-        bp.set(x, FLOOR + 2, z, rim ? 'travertine_bricks' : 'travertine');
+        bp.set(x, FLOOR + 1, z, rim ? 'travertine_bricks' : 'travertine');
       }
-    // Steps up on its north and south sides: a slab, then onto it.
-    for (let x = p.x0; x <= p.x1; x++) {
-      bp.set(x, FLOOR + 1, p.z0 - 1, 'travertine_slab');
-      bp.set(x, FLOOR + 1, p.z1 + 1, 'travertine_slab');
-    }
   }
   // Broken columns, each its own height, a fallen drum beside the shortest.
   LIONS.forEach((a, i) => {
@@ -436,7 +433,7 @@ const DECOR: Decor[] = [
   // Gladiators in marble at the back of the podia, facing the middle.
   ...PODIA.map((p) => {
     const x = p.x0 > 0 ? p.x1 - 0.5 : p.x0 + 1.5;
-    return { model: STATUE, at: { x, y: FLOOR + 3, z: 0.5 }, face: faceTo(x, 0.5, C.x, C.z) };
+    return { model: STATUE, at: { x, y: FLOOR + 2, z: 0.5 }, face: faceTo(x, 0.5, C.x, C.z) };
   }),
 ];
 
@@ -467,7 +464,7 @@ const TRAPS: TrapSpec[] = [
     name: "Lions' Fire",
     kind: 'jets',
     element: 'fire',
-    lever: { at: { x: 14.5, y: FLOOR + 3, z: 0.5 }, face: Math.PI / 2 },
+    lever: { at: { x: 14.5, y: FLOOR + 2, z: 0.5 }, face: Math.PI / 2 },
     price: 90,
     time: 7,
     cooldown: 40,

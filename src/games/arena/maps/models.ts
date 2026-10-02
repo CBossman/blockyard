@@ -48,10 +48,10 @@ export function portcullis(width: number, height: number): Model {
   const bp = voxels({ x: W, y: H, z: 3 }, (x, y, z) => {
     const bar = x % 5 === 2 || x % 5 === 3;
     const beam = y % 12 >= 8 && y % 12 <= 9 && y > 4;
-    if (beam && z >= 0) return z === 1 ? 'spruce_planks' : x % 5 === 2 && z !== 1 ? 'iron_block' : 'spruce_planks';
+    if (beam && z >= 0) return z === 1 ? 'spruce_planks' : x % 5 === 2 && z !== 1 ? 'bronze' : 'spruce_planks';
     if (!bar || z !== 1) return undefined;
     // The points: the bar's foot narrows.
-    if (y < 3) return x % 5 === 2 && y >= 1 ? 'iron_block' : y >= 2 ? 'iron_block' : undefined;
+    if (y < 3) return x % 5 === 2 && y >= 1 ? 'deepslate' : y >= 2 ? 'deepslate' : undefined;
     return 'deepslate';
   });
   return { bp, scale: 1 / 8, pivot: { x: W / 2, y: 0, z: 1.5 } };
@@ -105,7 +105,8 @@ export function spikes(w: number, d: number): Model {
 
 /**
  * A pendulum: an iron pole `length` blocks long hanging from its pivot (the top), a great curved
- * blade at its foot, its edge along x (it swings about x, so across z).
+ * blade of bright steel at its foot, its edge along x and glowing faintly (it shows at night; it
+ * swings about x, so across z).
  */
 export function scythe(length: number): Model {
   const L = Math.round(length * 8);
@@ -119,19 +120,19 @@ export function scythe(length: number): Model {
     const u = x / 14;
     const top = -L + 6 - Math.round(4 * (1 - u * u));
     const bottom = top - Math.max(1, Math.round(5 * Math.sqrt(1 - u * u)));
-    list.push([x, bottom, 0, x, top, 0, Math.abs(x) > 11 || bottom === top ? 'iron_block' : 'light_gray_concrete']);
-    list.push([x, bottom, 0, x, bottom, 0, 'iron_block']);
+    list.push([x, bottom, 0, x, top, 0, 'iron_block']);
+    list.push([x, bottom, 0, x, bottom, 0, 'sea_lantern']);
   }
   return { bp: parts(list), scale: 1 / 8, pivot: { x: 0.5, y: 0.5, z: 0.5 } };
 }
 
-/** The drop hammer's head: a block of iron-banded basalt, `w` blocks square and `h` high, its shaft above. Pivot: its foot's middle. */
+/** The drop hammer's head: a block of bronze-banded basalt, `w` blocks square and `h` high, its iron shaft above. Pivot: its foot's middle. */
 export function hammerHead(w: number, h: number): Model {
   const list: Part[] = [[0, 0, 0, w - 1, h - 1, w - 1, 'basalt_bricks']];
-  list.push([0, 1, 0, w - 1, 1, w - 1, 'iron_block']);
-  list.push([0, h - 2, 0, w - 1, h - 2, w - 1, 'iron_block']);
+  list.push([0, 1, 0, w - 1, 1, w - 1, 'bronze']);
+  list.push([0, h - 2, 0, w - 1, h - 2, w - 1, 'bronze']);
   const m = Math.floor(w / 2);
-  list.push([m, h, m, m, h + 9, m, 'iron_block']);
+  list.push([m, h, m, m, h + 9, m, 'deepslate']);
   return { bp: parts(list), scale: 1, pivot: { x: w / 2, y: 0, z: w / 2 } };
 }
 

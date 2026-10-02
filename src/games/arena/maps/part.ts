@@ -11,12 +11,13 @@ import { place, resetModels } from './props';
 import { setupTraps, startTraps, updateTraps } from './traps';
 
 
-/** When each fighter was last shown the fly-over (by id): not twice for one arrival. */
-const introduced = new Map<string, number>();
+/** Which map's fly-over each fighter was last shown, and when (by id): not twice for one arrival. */
+const introduced = new Map<string, { map: string; at: number }>();
 
 function introduce(game: GameContext, p: Player, full: boolean) {
-  if (p.bot || (introduced.get(p.id) ?? -99) > game.clock.total - 3) return;
-  introduced.set(p.id, game.clock.total);
+  const last = introduced.get(p.id);
+  if (p.bot || (last && last.map === map().id && last.at > game.clock.total - 3)) return;
+  introduced.set(p.id, { map: map().id, at: game.clock.total });
   game.clients.send(p, INTRO_MSG, { map: map().id, full } satisfies IntroMessage);
 }
 
