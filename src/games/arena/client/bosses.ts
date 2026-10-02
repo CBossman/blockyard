@@ -59,6 +59,7 @@ function bossesKit(): ClientKit {
   let el: HTMLElement;
   let phaseEl: HTMLElement;
   let phaseTimer: ReturnType<typeof setTimeout> | null = null;
+  let unstyle: (() => void) | null = null;
   /** Each walking boss's last footfall (half walk cycles), by figure. */
   const strides = new Map<number, number>();
   /** The `/bosscam` cheat's view, while it's on. */
@@ -91,7 +92,7 @@ function bossesKit(): ClientKit {
   return {
     name: 'arena.bosses',
     setup(client) {
-      client.hud.style(CSS);
+      unstyle = client.hud.style(CSS);
       const root = client.hud.layer('arena.bosses', 'panels');
       el = document.createElement('div');
       el.className = 'ab-cine';
@@ -164,6 +165,7 @@ function bossesKit(): ClientKit {
     frame(client, dt) {
       if (client.events.some((e) => e.t === 'reset')) {
         marks = [];
+        strides.clear();
         if (cine) stop(client, 0);
       }
       if (cine) playCine(client, dt);
@@ -184,6 +186,7 @@ function bossesKit(): ClientKit {
 
     dispose() {
       if (phaseTimer) clearTimeout(phaseTimer);
+      unstyle?.();
     },
   };
 
@@ -340,7 +343,12 @@ function bossesKit(): ClientKit {
   /** The `/bosscam` view: round the boss from in front of it (its figure's facing), looking at it. */
   function viewBoss(client: Client, c: CamMessage) {
     const f = client.figures.all.find((x) => x.id === c.id && !x.player);
-    if (!f) return;
+    if (!f) {
+      // It's gone: the view's the player's again.
+      cam = null;
+      client.camera.release(0.5);
+      return;
+    }
     f.root.getWorldPosition(tmp);
     fwd.set(0, 0, 1).applyQuaternion(f.root.quaternion);
     const a = Math.atan2(fwd.x, fwd.z) + c.angle;
