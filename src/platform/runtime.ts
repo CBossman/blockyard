@@ -751,6 +751,9 @@ export class Runtime {
           loop: (name, opts) => this.sfx.loop(name, opts),
           defineLoop: (name, voice) => this.sfx.defineLoop(name, voice),
           acoustics: (a) => this.sfx.acoustics(a),
+          get music() {
+            return settings().music;
+          },
         },
         items: { look: (id, look) => this.content.lookItem(id, look), get: (id) => this.content.items.get(id) },
         input: {
@@ -1365,6 +1368,7 @@ export class Runtime {
     this.view.baseFov = s.fov;
     this.view.viewBobbing = s.viewBobbing;
     this.input.setBindings(s.keys);
+    this.sfx.setLevel(s.volume);
     this.replays.applySettings(s);
     this.link.send({ t: 'env', dayLength: s.dayMinutes * 60 });
     this.link.send({ t: 'radius', columns: this.hostRadius(s) });

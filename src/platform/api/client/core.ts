@@ -316,6 +316,12 @@ export interface ClientAudio {
   defineLoop(name: string, voice: LoopVoice): void;
   /** How the world sounds from now on: distance muffling, the space's reverb (`Acoustics`). */
   acoustics(a: Acoustics): void;
+  /**
+   * The player's music volume (0..1; Settings → Sound in the pause menu): a game's music plays at
+   * it (its plays' and loops' volume times this), and stops at 0. Read it as the music plays: the
+   * player may change it at any time.
+   */
+  readonly music: number;
 }
 
 /**
