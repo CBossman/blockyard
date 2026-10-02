@@ -352,7 +352,8 @@ function simulate(seed: number, classes: ClassId[], mapId: string) {
   let navMade: { x0: number; z0: number; n: number; h: Float32Array; bad: Uint8Array } | null = null;
   const makeNav = () => {
     const m = map();
-    const R = Math.ceil(m.radius + 7);
+    // (Out past the floor to the gates' pens too: a fighter who follows a monster in must find the way out.)
+    const R = Math.ceil(m.radius + 14);
     const x0 = Math.floor(m.center.x) - R, z0 = Math.floor(m.center.z) - R, n = 2 * R + 1;
     const h = new Float32Array(n * n).fill(NaN);
     /** Lava, frost, water: never walked into. */
@@ -773,6 +774,8 @@ function simulate(seed: number, classes: ClassId[], mapId: string) {
       const b = bossOf(e);
       if (b && (b.held || b.transition > 0 || b.shield || b.dying)) s += 60;
       if (e.type === 'phylactery') s -= 14;
+      // Not into the gates' pens after them while there's anything on the floor (more come in there).
+      if (flat(e.position, map().center) > map().radius + 1) s += 30;
       if (e.type === 'egg_sac') s -= 6;
       if (da._rite !== undefined) s -= 12;
       if (da._drain !== undefined || da._chant !== undefined) s -= 8;

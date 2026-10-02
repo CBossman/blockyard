@@ -246,6 +246,16 @@ export default function arenaBestiary() {
     check(n === 4 && high > 2 && s.hurt() > 0, 'bats fly and bite');
   }
 
+  // A bat with a tall wall between: over it and down onto us.
+  {
+    const s = scene(23);
+    for (let z = -2; z <= 11; z++) for (let y = FLOOR + 1; y <= FLOOR + 8; y++) s.game.world.setBlock(-4, y, z, 'stone');
+    const b = s.spawn('bat', 0.5, 0.5, { flock: true });
+    s.run(20);
+    log(`bat behind a wall: ${b.alive ? 'still flying' : 'gone'}, ${s.hurt().toFixed(1)} bites`);
+    check(s.hurt() > 0, 'a bat gets over a wall to bite');
+  }
+
   // The armory against the knight: a hammer's slam goes under its shield and leaves it reeling,
   // its guard hanging open; frozen, it's open too.
   {
