@@ -24,7 +24,7 @@ export interface MissileSpec {
   cause?: string;
   /** Seconds it stays stuck in a wall (a bolt), else it's gone where it stops. */
   stick?: number;
-  /** A puff behind it every so often: colour, seconds between. */
+  /** Puffs behind it every so often, drawn by each screen as it flies (`client/fx.ts`): colour, seconds between. */
   trail?: { color: string; every: number; size?: number };
   /** After it hits someone (the damage done): its own effects; how much the next takes (times). */
   hit?(game: GameContext, m: Missile, e: Entity): void;
@@ -43,13 +43,15 @@ export interface Missile {
   left: number;
   damage: number;
   hit: Set<Entity>;
-  puff: number;
+  /** Its number, for the screens drawing its trail (0: none). */
+  n: number;
 }
 
 const FWD_STREAK = new math.Vector3(0, 0, -1);
 const FWD_MODEL = new math.Vector3(0, 0, 1);
 const flying: Missile[] = [];
 const stuck: { prop: Prop; until: number }[] = [];
+let trails = 0;
 
 /** Loose one from `from` along `dir` (a unit vector). */
 export function launch(game: GameContext, by: Player, spec: MissileSpec, from: Vec3, dir: Vec3): Missile {
@@ -58,8 +60,14 @@ export function launch(game: GameContext, by: Player, spec: MissileSpec, from: V
   prop.quaternion.setFromUnitVectors('streak' in spec.look ? FWD_STREAK : FWD_MODEL, d);
   const vel = d.clone().multiplyScalar(spec.speed);
   prop.launch(from, vel, { by });
-  const m: Missile = { spec, by, pos: new math.Vector3(from.x, from.y, from.z), vel, dir: d, prop, age: 0, left: spec.pierce, damage: spec.damage, hit: new Set(), puff: 0 };
+  const m: Missile = { spec, by, pos: new math.Vector3(from.x, from.y, from.z), vel, dir: d, prop, age: 0, left: spec.pierce, damage: spec.damage, hit: new Set(), n: 0 };
   flying.push(m);
+  // Its trail is each screen's to draw, from where and how fast it goes (one word now, one as it lands).
+  if (spec.trail) {
+    m.n = ++trails;
+    const t = spec.trail;
+    game.clients.send('all', 'armory.trail', { n: m.n, x: from.x, y: from.y, z: from.z, vx: vel.x, vy: vel.y, vz: vel.z, life: spec.life, color: t.color, every: t.every, size: t.size ?? 0.12 });
+  }
   return m;
 }
 
@@ -119,20 +127,14 @@ export function updateMissiles(game: GameContext, dt: number) {
       continue;
     }
     m.pos.addScaledVector(m.vel, dt);
-    if (m.age >= s.life) {
-      finish(game, i, m, { x: m.pos.x, y: m.pos.y, z: m.pos.z }, null);
-      continue;
-    }
-    if (s.trail && (m.puff -= dt) <= 0) {
-      m.puff = s.trail.every;
-      game.fx.burst({ x: m.pos.x, y: m.pos.y, z: m.pos.z }, { color: s.trail.color, count: 2, speed: 0.5, size: s.trail.size ?? 0.12, glow: 1.4, life: 0.35, gravity: -0.5 });
-    }
+    if (m.age >= s.life) finish(game, i, m, { x: m.pos.x, y: m.pos.y, z: m.pos.z }, null);
   }
 }
 
 /** It stops at `at`: stuck in the wall a while, or gone; its own end. */
 function finish(game: GameContext, i: number, m: Missile, at: Vec3, wall: Vec3 | null) {
   flying.splice(i, 1);
+  if (m.n) game.clients.send('all', 'armory.land', { n: m.n });
   if (wall && m.spec.stick) {
     // (Setting where it is stops its flight on every screen.)
     m.prop.position.set(at.x, at.y, at.z);

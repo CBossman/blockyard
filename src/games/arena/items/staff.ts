@@ -130,16 +130,17 @@ function fireball(game: GameContext, p: Player, item: string, def: StaffItem) {
   );
 }
 
-/** Emberheart: the ground where a fireball burst burns for a while, setting alight whatever walks in. */
+/** Emberheart: the ground where a fireball burst burns for a while, setting alight whatever walks in (its flames each screen's: `client/fx.ts`). */
+const POOL = { radius: 2.4, time: 4 };
 function firePool(game: GameContext, p: Player, at: Vec3, item: string) {
   const ground = { x: at.x, y: Math.floor(at.y - 0.5) + 1, z: at.z };
   const hit = game.world.raycast({ x: at.x, y: at.y + 0.2, z: at.z }, { x: 0, y: -1, z: 0 }, 4);
   if (hit) ground.y = hit.point.y;
+  game.clients.send('all', 'armory.pool', { x: ground.x, y: ground.y, z: ground.z, radius: POOL.radius, time: POOL.time });
   let n = 0;
   const tick = () => {
-    if (n++ >= 10) return;
-    game.fx.burst({ x: ground.x, y: ground.y + 0.2, z: ground.z }, { color: '#ff7a1a', count: 10, speed: 1.4, size: 0.18, glow: 1.6, life: 0.6, gravity: -3 });
-    for (const e of game.entities.near(ground, 2.4)) if (e.alive && Math.abs(e.position.y - ground.y) < 1.5) burn(game, e, p, 4, 2, item);
+    if (n++ >= POOL.time / 0.4) return;
+    for (const e of game.entities.near(ground, POOL.radius)) if (e.alive && Math.abs(e.position.y - ground.y) < 1.5) burn(game, e, p, 4, 2, item);
     game.clock.after(0.4, tick);
   };
   tick();
