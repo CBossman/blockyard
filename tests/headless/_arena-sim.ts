@@ -62,6 +62,8 @@ const PREFER_CLASS: Record<ClassId, Partial<Record<BlessingId, number>>> = {
   berserker: { tremor: 7, berserk: 8.5 },
   pyromancer: { arcane: 9.2, wildfire: 8.6, bombardier: 8, berserk: 1, giant: 1 },
 };
+/** Monsters that shoot or cast from where they stand: gone after wherever they are. */
+const SHOOTERS = new Set(['skeleton', 'imp', 'necromancer', 'cultist']);
 /** Each class's main weapon (the forge's), and what it holds at range. */
 const MAIN: Record<ClassId, string> = { gladiator: 'gladius', hunter: 'daggers', berserker: 'battle_axe', pyromancer: 'fire_staff' };
 
@@ -859,12 +861,12 @@ function simulate(seed: number, classes: ClassId[], mapId: string) {
       const d = flat(q, me);
       const dx = (q.x - me.x) / (d || 1), dz = (q.z - me.z) / (d || 1);
       // One still in a gate's pen: wait for it at the floor's edge (more come in there), unless it's
-      // been there a good while (stuck: then go in and get it).
+      // been there a good while (stuck: then go in and get it), or it shoots from there.
       const c = map().center;
       const out = flat(q, c) - (map().radius + 1);
       if (out > 0) outSince.set(target.id, outSince.get(target.id) ?? now);
       else outSince.delete(target.id);
-      const wait = out > 0 && now - outSince.get(target.id)! < 25;
+      const wait = out > 0 && !SHOOTERS.has(target.type) && now - outSince.get(target.id)! < 25;
       const goal = wait ? { x: c.x + ((q.x - c.x) * (map().radius - 3)) / (out + map().radius + 1), y: q.y, z: c.z + ((q.z - c.z) * (map().radius - 3)) / (out + map().radius + 1) } : q;
       if (wait && flat(goal, me) > 1.5) {
         const r = route(f, goal);
