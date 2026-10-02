@@ -5,17 +5,22 @@ import type { Mark } from '../../src/games/arena/bosses/messages';
 import { launch } from './_harness';
 
 /**
- * Probe: how each boss plays against a decent fighter, alone, with wave-appropriate arms. The
- * fighter closes in and swings, strafes, reads the telegraphs (it jumps the shockwaves, rolls
- * through the blows, gets out of the rings and lanes, smashes eggs, breaks phylacteries, throws a
- * bomb now and then) but misses some of them (`skill`). Logged: how long it takes, what hurt.
- * Its arms stand in for what the armory will give by then (`power`: rarities and blessings), so
- * re-run it when those land. `node scripts/headless.mjs tests/headless/_arena-duels.ts`
+ * Probe: how each boss wave plays for a decent fighter alone, with that wave's arms: the boss and
+ * the wave's roster as the director brings them (`/wave`), the arsenal's weapons of the rarity a
+ * fighter would have by then, its blessings' worth of extra power, armour, Stout Heart, potions.
+ * The fighter closes in and swings, strafes, reads the telegraphs (it jumps the shockwaves, rolls
+ * through the blows, gets out of the rings, lanes and pools, smashes eggs, breaks phylacteries,
+ * kills what's on it, throws a bomb now and then, drinks when low) but misses some of them
+ * (`skill`). Logged: how long the boss takes from its entrance, and what hurt.
+ * `node scripts/headless.mjs tests/headless/_arena-duels.ts` (`DUEL_BOSS=lich` for one boss,
+ * `DUEL_LOG=1` for every hit and every read).
  */
 const FLOOR = 70;
 
 interface Setup {
   boss: string;
+  /** Its wave. */
+  wave: number;
   /** What it has: weapon, bombs; how much harder its blows land than that weapon's (rarities, blessings). */
   weapon: string;
   bombs: number;
@@ -52,10 +57,12 @@ function duel(o: Setup) {
   game.events.on('playerDamage', ({ amount, weapon, source }) => {
     const k = weapon ?? (source && source !== 'world' && source.kind === 'entity' ? (source === boss ? `${source.type}:${s.move?.name ?? 'after'}` : source.type) : 'other');
     hurt.set(k, (hurt.get(k) ?? 0) + amount);
-    if (process.env.DUEL_LOG) log.push(`${h.time.toFixed(2)} -${amount} ${k} move=${s.move?.name}/${s.step} t=${s.t.toFixed(2)} pressed=${JSON.stringify(last?.pressed)} hp=${me.health.toFixed(1)}`);
+    if (process.env.DUEL_LOG) log.push(`${h.time.toFixed(2)} -${amount} ${k} move=${s.move?.name}/${s.step} t=${s.t.toFixed(2)} roll=${JSON.stringify(me.abilities.roll)} ground=${me.onGround} hp=${me.health.toFixed(1)}`);
   });
-  game.commands.run(`boss ${o.boss} now`);
+  game.commands.run(`wave ${o.wave}`);
+  h.run(10, { until: () => game.entities.count(o.boss) > 0 });
   const boss = game.entities.all(o.boss)[0];
+  if (!boss) throw new Error(`wave ${o.wave} brought no ${o.boss}`);
   const s = bossState(boss);
   const rng = mulberry(o.seed);
   const decided = new Map<string, boolean>();
@@ -75,7 +82,6 @@ function duel(o: Setup) {
   let resting = false;
 
   const pilot: Pilot = () => {
-    for (const e of game.entities.all()) if (e !== boss && e.data.master === undefined) e.remove();
     const calls = h.find('message', 'arena.boss.mark');
     for (; seen < calls.length; seen++) {
       const m = calls[seen].args[0] as Mark;
@@ -98,7 +104,7 @@ function duel(o: Setup) {
       return (last = { yaw: Math.atan2(p.x - b.x, p.z - b.z), pitch: 0, down: ['KeyW', strafe > 0 ? 'KeyD' : 'KeyA'], pressed: [], clicked: 0 });
     }
     // What to hit: an egg sac or a phylactery first, then the nearest thing near, else the boss.
-    const near = game.entities.all().filter((e) => e.alive && e !== boss && Math.hypot(e.position.x - p.x, e.position.z - p.z) < 5);
+    const near = game.entities.all().filter((e) => e.alive && e !== boss && !e.data.scenery && Math.hypot(e.position.x - p.x, e.position.z - p.z) < 5);
     const objective = game.entities.all().filter((e) => e.alive && (e.type === 'egg_sac' || e.type === 'phylactery'));
     // (Whatever's on it first: a decent fighter doesn't let the small ones chew on it.)
     const onMe = near.filter((e) => e.type !== 'egg_sac' && e.type !== 'phylactery' && dist(e.position, p) < 3.2).sort((a, b) => dist(a.position, p) - dist(b.position, p));
@@ -166,6 +172,7 @@ function duel(o: Setup) {
     if (s.move && s.step === 'windup' && s.t < 0.2 && dist(boss.position, p) < 10 && reads(key)) {
       if (JUMP.has(s.move.name)) down.push('Space');
       else if (ROLL.has(s.move.name)) pressed.push('KeyQ');
+      if (process.env.DUEL_LOG) log.push(`${h.time.toFixed(2)} react ${s.move.name} t=${s.t.toFixed(2)}`);
     }
     // A bomb now and then, when it's busy winding up close by.
     bombT -= 0.1;
@@ -198,20 +205,20 @@ function mulberry(seed: number) {
 }
 
 export default function arenaDuels() {
+  // Its gear by then: a weapon of the rarity it'd have bought or forged, its blessings' worth of power, a class's or Iron Skin's armour, Stout Heart, potions.
   const runs: Omit<Setup, 'seed' | 'skill'>[] = [
-    // (Its gear by then: the wave rewards' weapons, rarer ones' and blessings' power, Iron Skin and armour, Stout Heart, potions.)
-    { boss: 'colossus', weapon: 'iron_sword', bombs: 4, power: 1, armor: 2, potions: 2, health: 20 },
-    { boss: 'warden', weapon: 'diamond_sword', bombs: 4, power: 1.25, armor: 8, potions: 3, health: 26 },
-    { boss: 'broodmother', weapon: 'diamond_sword', bombs: 4, power: 1.6, armor: 10, potions: 3, health: 26 },
-    { boss: 'lich', weapon: 'diamond_sword', bombs: 4, power: 2.2, armor: 12, potions: 4, health: 26 },
+    { boss: 'colossus', wave: 5, weapon: 'gladius_rare', bombs: 3, power: 1.1, armor: 4, potions: 2, health: 20 },
+    { boss: 'warden', wave: 10, weapon: 'diamond_sword_rare', bombs: 4, power: 1.15, armor: 8, potions: 3, health: 26 },
+    { boss: 'broodmother', wave: 15, weapon: 'diamond_sword_epic', bombs: 4, power: 1.2, armor: 10, potions: 3, health: 26 },
+    { boss: 'lich', wave: 20, weapon: 'diamond_sword_legendary', bombs: 4, power: 1.25, armor: 12, potions: 4, health: 26 },
   ];
-  for (const r of runs) {
+  for (const r of runs.filter((x) => !process.env.DUEL_BOSS || x.boss === process.env.DUEL_BOSS)) {
     for (const skill of [0.85, 0.55]) {
-      const out = [1, 2, 3].map((seed) => duel({ ...r, skill, seed }));
+      const out = [1, 2, 3, 4, 5, 6].map((seed) => duel({ ...r, skill, seed }));
       const won = out.filter((x) => x.won);
       const mins = won.map((x) => (x.time / 60).toFixed(1)).join(', ');
       console.log(
-        `  ${r.boss} (${r.weapon} x${r.power}, armour ${r.armor}, reads ${Math.round(skill * 100)}%): won ${won.length}/3 in ${mins || '-'} min; lost: ${out
+        `  ${r.boss} (${r.weapon} x${r.power}, armour ${r.armor}, reads ${Math.round(skill * 100)}%): won ${won.length}/${out.length} in ${mins || '-'} min; lost: ${out
           .filter((x) => !x.won)
           .map((x) => `at ${Math.round(x.left * 100)}% after ${(x.time / 60).toFixed(1)} min`)
           .join('; ') || 'none'}`,
