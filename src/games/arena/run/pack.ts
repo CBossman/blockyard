@@ -126,7 +126,7 @@ export function drop(game: GameContext, p: Player): boolean {
   const r = hasRarities(s.item) ? rarityOf(s.item) : 'common';
   game.items.spawnPickup(s.item, { x: eye.x + fx * 0.6, y: eye.y - 0.4, z: eye.z + fz * 0.6 }, {
     count: s.count,
-    velocity: { x: fx * 6, y: 3, z: fz * 6 },
+    velocity: { x: fx * 4.5, y: 2.5, z: fz * 4.5 },
     delay: 1,
     from: p,
     despawn: 60,
