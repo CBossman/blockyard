@@ -1,22 +1,38 @@
 import type { Client, ClientKit } from '@platform/client';
-import { MSG, type WaveCard } from '../../hud/messages';
+import { MSG, type FoeMsg, type WaveCard } from '../../hud/messages';
 import { clock, el, hidden, num } from './store';
 
-/** How long a card stays up (seconds), and how long its numbers take to count up. */
+/** How long a card stays up (seconds), and how long its numbers take to count up; how long a new foe's. */
 const SHOW = 6.5;
 const COUNT = 0.9;
+const FOE_SHOW = 4.6;
 
 /**
- * A wave won, on each fighter's screen (the server's `wave`): a card under the wave's place —
- * WAVE 7 CLEARED, then what they did in it counting up (the time it took, their kills, the gold
- * they earned, their damage), the party's best of it (in co-op, crowned) and what's coming next
- * (a boss's wave in blood). It arrives with the brass and the crowd's cheer, and goes after a few
- * seconds, leaving the break to the shop and the blessings.
+ * The cards on each fighter's screen.
+ *
+ * A wave won (the server's `wave`): a card under the wave's place, WAVE 7 CLEARED, then what they
+ * did in it counting up (the time it took, their kills, the gold they earned, their damage), the
+ * party's best of it (in co-op, crowned) and what's coming next (a boss's wave in blood). It
+ * arrives with the brass and the crowd's cheer, and goes after a few seconds, leaving the break to
+ * the shop and the blessings.
+ *
+ * A new foe (the server's `foe`: the first of a kind of monster this run): a card sliding in at
+ * the left, NEW FOE and what it is in a fight, its name in its colour, and how to beat it.
  */
 export function cards(): ClientKit {
   let unstyle: (() => void) | null = null;
   let layer: HTMLElement;
   let card: { el: HTMLElement; at: number; counts: { el: HTMLElement; to: number; fmt: (n: number) => string }[]; ticked: number } | null = null;
+  let foe: { el: HTMLElement; until: number } | null = null;
+
+  const showFoe = (client: Client, f: FoeMsg) => {
+    foe?.el.remove();
+    const e = el('div.ar-foe', el('div.ar-foe-k', el('i'), 'New foe', el('span', f.role)), el('div.ar-foe-n', f.name), el('div.ar-foe-rule'), el('div.ar-foe-t', f.tip));
+    e.style.setProperty('--c', f.color);
+    layer.append(e);
+    foe = { el: e, until: client.time + FOE_SHOW };
+    client.audio.play('ar_sting_foe', { volume: 0.8 });
+  };
 
   const show = (client: Client, c: WaveCard) => {
     card?.el.remove();
@@ -61,15 +77,26 @@ export function cards(): ClientKit {
         const c = d as WaveCard;
         if (c && typeof c.wave === 'number' && typeof c.kills === 'number') show(client, c);
       });
+      client.on(MSG.foe, (d) => {
+        const f = d as FoeMsg;
+        if (f && typeof f.name === 'string' && typeof f.tip === 'string') showFoe(client, f);
+      });
     },
     frame(client) {
       layer.style.visibility = hidden(client) ? 'hidden' : '';
-      if (!card) return;
       if (client.events.some((e) => e.t === 'reset')) {
-        card.el.remove();
-        card = null;
+        card?.el.remove();
+        foe?.el.remove();
+        card = foe = null;
         return;
       }
+      if (foe && client.time > foe.until) {
+        const going = foe.el;
+        going.classList.add('out');
+        window.setTimeout(() => going.remove(), 450);
+        foe = null;
+      }
+      if (!card) return;
       const t = client.time - card.at;
       // The numbers count up, one after another, a tick as each lands.
       card.counts.forEach((c, i) => {
@@ -132,5 +159,21 @@ const CSS = `
 @keyframes ar-card-in { from { opacity: 0; transform: translate(-50%, 16px) scale(0.97); } }
 @keyframes ar-card-slam { from { opacity: 0; transform: scale(1.25); letter-spacing: 0.5em; } }
 @keyframes ar-card-fade { from { opacity: 0; transform: translateY(4px); } }
+/* A new foe: at the left, under the feed. */
+.ar-foe {
+  --c: #e8dcc0; position: absolute; left: 26px; top: 34%; width: 330px; padding: 12px 18px 14px 16px; color: var(--ar-fg, #f5efe4);
+  background: linear-gradient(90deg, rgba(14, 10, 8, 0.82), rgba(14, 10, 8, 0.55) 75%, transparent);
+  box-shadow: inset 2px 0 0 var(--c);
+  animation: ar-foe-in 520ms cubic-bezier(0.2, 0.8, 0.2, 1) both; transition: opacity 420ms ease, transform 420ms ease;
+}
+.ar-foe.out { opacity: 0; transform: translateX(-16px); }
+.ar-foe-k { display: flex; align-items: center; gap: 9px; font: 600 11px/1 var(--ar-label, sans-serif); letter-spacing: 0.36em; text-transform: uppercase; color: var(--ar-bronze, #c0773a); }
+.ar-foe-k i { width: 5px; height: 5px; background: var(--c); transform: rotate(45deg); box-shadow: 0 0 6px var(--c); }
+.ar-foe-k span { margin-left: auto; padding: 2px 6px 1px; border-radius: 2px; letter-spacing: 0.22em; color: var(--ar-fg2, rgba(245, 239, 228, 0.7)); box-shadow: inset 0 0 0 1px var(--ar-line2, rgba(224, 168, 96, 0.42)); }
+.ar-foe-n { margin-top: 7px; font: 800 28px/1 var(--ar-title, Georgia, serif); letter-spacing: 0.1em; text-transform: uppercase; color: color-mix(in srgb, var(--c) 75%, white); text-shadow: 0 0 16px color-mix(in srgb, var(--c) 40%, transparent), 0 2px 3px rgba(0, 0, 0, 0.6); }
+.ar-foe-rule { margin-top: 9px; width: 120px; height: 1px; background: linear-gradient(90deg, var(--c), transparent); animation: ar-foe-rule 700ms ease both 200ms; }
+.ar-foe-t { margin-top: 9px; font: 500 14px/1.4 var(--sans); color: var(--ar-fg2, rgba(245, 239, 228, 0.7)); text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8); }
+@keyframes ar-foe-in { from { opacity: 0; transform: translateX(-24px); } }
+@keyframes ar-foe-rule { from { width: 0; } }
 @media (max-width: 1100px), (max-height: 760px) { .ar-card { width: 440px; top: 132px; padding: 12px 20px; } .ar-card-t { font-size: 36px; } .ar-card-cell .v { font-size: 22px; } }
 `;

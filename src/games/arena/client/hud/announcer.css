@@ -105,10 +105,7 @@ body:has(.ar-card:not(.out)) .ar-stage {
 .ar-call.k-back {
   --c: var(--ar-good, #9fd870);
 }
-/* A boss slain: gold, with the rays; the endless waves: in the night's violet. */
-.ar-call.k-slain {
-  --c: #ffcf3f;
-}
+/* The endless waves: in the night's violet. */
 .ar-call.k-endless {
   --c: #c9a2ff;
 }
@@ -119,15 +116,11 @@ body:has(.ar-card:not(.out)) .ar-stage {
 .ar-call.k-defeat .ar-call-t {
   font-size: 100px;
 }
-.ar-call.k-slain .ar-call-t {
-  font-size: 72px;
-}
 /* The Crowd's Favour: gold rays turning behind it. */
 .ar-call.k-favour {
   --c: #ffcf3f;
 }
-.ar-call.k-favour::before,
-.ar-call.k-slain::before {
+.ar-call.k-favour::before {
   content: '';
   position: absolute;
   left: 50%;

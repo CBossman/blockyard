@@ -65,7 +65,7 @@ export default function arenaMultiplayer() {
     if (msgs(ann, 'ar.wave').length) cleared = pickups();
   }
   check(zombies === 10, `wave 1 for three: ${zombies} zombies`);
-  check(msgs<{ k: string }>(bob, 'ar.call').some((c) => c.k === 'out') && calls(ann, 'feed').some((a) => a[0] === 'Bob is down'), 'Bob fell; the others hear');
+  check(msgs<{ k: string }>(bob, 'ar.call').some((c) => c.k === 'out') && calls(ann, 'feed').some((a) => a[0] === 'Bob has fallen'), 'Bob fell; the others hear');
   check(!ends(ann).length, 'one down is not the end');
   check(player('Bob').alive && Math.hypot(player('Bob').position.x, player('Bob').position.z) < 3, `Bob back on the floor when the wave is won: ${JSON.stringify(player('Bob').position)}`);
   check(cleared === 6, `a reward set each: ${cleared} pickups`);

@@ -9,7 +9,6 @@ const KINDS: Record<CallMsg['k'], { time: number; sting: string; big: boolean }>
   final: { time: 3.2, sting: 'ar_sting_final', big: true },
   boss: { time: 2.6, sting: 'ar_sting_boss', big: true },
   endless: { time: 3, sting: 'ar_sting_final', big: true },
-  slain: { time: 3.2, sting: 'ar_sting_slain', big: true },
   // (A blessing's own chime is the armory's, played by the server.)
   blessing: { time: 2.4, sting: '', big: true },
   twist: { time: 2.6, sting: 'ar_sting_twist', big: true },
@@ -44,8 +43,8 @@ const LONG = 16;
 
 /**
  * The announcer, on each screen: big callouts in the middle of the screen for the run's moments (a
- * wave begins, a boss's, the final one, the endless ones, its twist, the Crowd's Favour, a boss
- * slain, a blessing taken, their own fall and return, victory and defeat), each with its sting
+ * wave begins, a boss's, the final one, the endless ones, its twist, the Crowd's Favour, a
+ * blessing taken, their own fall and return, victory and defeat), each with its sting
  * (`client/sounds/hud.ts`); smaller ones under the crosshair for their feats (a double kill, a
  * parry: bigger and higher the bigger the feat) and their friends' fortunes; and the last seconds
  * before a wave counted down, a drum a second. Big callouts wait their turn (victory and defeat

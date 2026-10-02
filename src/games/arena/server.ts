@@ -115,7 +115,6 @@ function slain(game: GameContext, p: Player, type: string, weapon?: string) {
 
 /** Someone fell with others still fighting: they watch from the stands until the wave's won. */
 function fall(game: GameContext, p: Player) {
-  game.hud.feed(`${p.name} is down`, { color: '#ff8a4c' });
   bus.emit('fell', { player: p });
   game.clock.after(1.5, () => {
     if (p.alive || !game.players.includes(p)) return;
@@ -253,9 +252,8 @@ export default defineServer(shared, {
       // Before the fight, `start` arms everyone; after everyone left, the next one starts it.
       if (state.phase === 'intro') return;
       arm(game, player);
+      // (The HUD greets them: `hud/part.ts`.)
       if (state.phase === 'waiting') return begin(game);
-      player.hud.banner('ARENA', state.phase === 'fighting' ? `Joining wave ${state.wave}` : `Survive ${finalWave()} waves`, { duration: 2.4, color: '#ffb36b' });
-      game.hud.feed(`${player.name} joins the fight`, { color: '#ffb36b' });
     });
     game.events.on('playerLeave', () => {
       // The last one out: the arena resets for whoever comes next.
