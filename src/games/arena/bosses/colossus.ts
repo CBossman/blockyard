@@ -1,4 +1,5 @@
 import { Models, type Entity, type GameContext, type Vec3 } from '@platform';
+import { bus } from '../run/bus';
 import { spawnMonster } from '../run/spawn';
 import { map } from '../run/state';
 import { adds, angle, announce, brain, fighters, fromSky, lane, near, ring, stagger, strike, sweep, type Ctx, type Move } from './fight';
@@ -232,6 +233,7 @@ function crash(c: Ctx) {
   game.fx.burst({ x: p.x, y: p.y + 4.5, z: p.z }, { color: '#fff1a8', count: 16, speed: 2, size: 0.12, gravity: -2, glow: 1.5, life: 1.5 });
   game.audio.play('colossus_crash', { at: p, volume: 1.4 });
   game.hud.pop('STUNNED!', { color: COLOR, sub: 'It ran into the wall: hit it now' });
+  bus.emit('feat', { player: c.target, name: 'boss_crash', text: `${c.target.name} sent the Colossus into the wall!` });
   stagger(self, game, 3);
   c.s.vulnerable = 3;
 }

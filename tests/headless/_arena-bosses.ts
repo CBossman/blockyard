@@ -5,6 +5,8 @@ import { sounds } from '../../src/platform/client-kits';
 import arenaClient from '../../src/games/arena/client';
 import { bus } from '../../src/games/arena/run/bus';
 import { bossState, type BossState } from '../../src/games/arena/bosses/fight';
+import { bossKind } from '../../src/games/arena/bosses';
+import { WAVES } from '../../src/games/arena/run/director';
 import { check, launch } from './_harness';
 
 /**
@@ -184,6 +186,28 @@ function phase(sc: Scene, at: number, n: number) {
   run(sc, 3, () => sc.s.phase === n && sc.s.transition === 0);
   check(sc.s.phase === n, `${sc.boss.type} in phase ${n} below ${Math.round(at * 100)}%`);
   check(sc.h.find('message', 'arena.boss.phase').length > before, `${sc.boss.type}: phase ${n} announced`);
+}
+
+/** A boss wave as the director runs it: the boss first, its entrance, and the escort only after. */
+function directed(log: (s: string) => void) {
+  const h = launch('arena', { seed: 71 });
+  games.push(h);
+  const game = h.ctx as GameContext;
+  const me = game.player as Player;
+  me.maxHealth = 1000;
+  me.health = 1000;
+  const wave = WAVES.findIndex((w) => w.boss) + 1;
+  game.commands.run(`wave ${wave}`);
+  h.run(8, { until: () => game.entities.all().some((e) => bossKind(e.type)) });
+  const boss = game.entities.all().find((e) => bossKind(e.type));
+  check(boss, `wave ${wave} brings its boss (${WAVES[wave - 1].boss})`);
+  let early = 0;
+  h.run(5.2, { until: () => (early = game.entities.all().filter((e) => !bossKind(e.type)).length) > 0 });
+  check(!early, `the escort waits for the entrance (${early} came in during it)`);
+  h.run(4);
+  const escort = game.entities.all().filter((e) => !bossKind(e.type)).length;
+  log(`wave ${wave}: ${boss.type} first, its entrance, then ${escort} of its escort`);
+  check(escort > 0, 'the escort comes in after the entrance');
 }
 
 function colossus(log: (s: string) => void) {
@@ -410,6 +434,7 @@ function timing(log: (s: string) => void) {
 
 export default function arenaBosses() {
   const log = (r: string) => console.log(`  ${r}`);
+  directed(log);
   colossus(log);
   warden(log);
   broodmother(log);

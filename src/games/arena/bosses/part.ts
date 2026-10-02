@@ -51,7 +51,8 @@ function entrance(game: GameContext, e: Entity, kind: BossKind) {
   s.held = true;
   // Come in under a gate's arch: it strides out into the open as the camera finds it.
   if (roofed(game, p, kind.height)) s.emerge = { yaw, height: kind.height, back: kind.define(game).hitbox.width / 2 + 0.6 };
-  state.spawnTimer = Math.max(state.spawnTimer, INTRO);
+  // The rest of the wave waits at the gates (once the director's done bringing this one in).
+  game.clock.after(0, () => (state.spawnTimer = Math.max(state.spawnTimer, INTRO)));
   for (const f of fighters(game)) {
     f.protect(INTRO + 0.6);
     root(game, f, INTRO, true);
