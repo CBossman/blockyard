@@ -105,7 +105,7 @@ function loose(p: Player, item: string, def: CrossbowItem, game: Parameters<type
   const look = new math.Vector3(p.look.x, p.look.y, p.look.z);
   const up = new math.Vector3(0, 1, 0);
   for (let i = 0; i < n; i++) {
-    const turn = n > 1 ? (i - (n - 1) / 2) * 4 * DEG : 0;
+    const turn = n > 1 ? (i - (n - 1) / 2) * 7 * DEG : 0;
     const dir = look.clone().applyAxisAngle(up, turn);
     const from = { x: eye.x + dir.x * 0.6 + Math.cos(p.yaw) * 0.1, y: eye.y - 0.12 + dir.y * 0.6, z: eye.z + dir.z * 0.6 - Math.sin(p.yaw) * 0.1 };
     launch(

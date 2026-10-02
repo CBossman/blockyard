@@ -343,7 +343,8 @@ function slam(use: ItemUse<ArmsMelee>, r: Hand, def: ArmsMelee, item: string, k:
   const s = def.slam!;
   const me = use.player;
   const game = use.game;
-  r.cooldown = r.max = def.cooldown * 1.2;
+  // (Quick to raise again: the charge is the wait.)
+  r.cooldown = r.max = def.cooldown * 0.7;
   me.viewModel.play('arena_slam');
   use.host.swing(me);
   // Where it lands: a little ahead, on the ground under it.
