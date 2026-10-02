@@ -13,7 +13,7 @@ import { PARTS } from './parts';
 import { resetGold } from './run/gold';
 import { resetUsables } from './run/use';
 import { catchUp, payWave } from './run/coins';
-import { bledOut, standAll, standing } from './run/downed';
+import { bledOut, counts, standAll, standing } from './run/downed';
 import { closeShop, openShop } from './run/shop';
 import { CLASSES, classOf, classWaiting, closeClassMenus, hasChosen, offerClass } from './run/classes';
 import { INTRO_TIME } from './maps/messages';
@@ -266,6 +266,7 @@ export default defineServer(shared, {
       if (r) r.damage += amount;
     });
     game.events.on('playerDamage', ({ player, amount }) => {
+      if (!counts(player)) return;
       state.damageTaken += amount;
       const r = runs.get(player.id);
       if (r) r.hurt = true;

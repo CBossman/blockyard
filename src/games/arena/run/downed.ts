@@ -47,6 +47,8 @@ let finishing: Player | null = null;
 export const isDowned = (p: Player) => downs.has(p.id);
 /** They're dying of bleeding out (already counted as a down), not of a blow on their feet. */
 export const bledOut = (p: Player) => p === finishing;
+/** A blow they took that counts as damage taken (the end screen's, the wave's, Untouched): not on the ground, not the bleed-out's end. */
+export const counts = (p: Player) => p !== finishing && !downs.has(p.id);
 /** In the fight on their feet: alive, playing, not downed. */
 export const standing = (p: Player) => p.alive && !p.spectating && !downs.has(p.id);
 
@@ -143,8 +145,16 @@ function bleedOut(game: GameContext, p: Player) {
   p.abilities.crawl.on = false;
   bar(p, false);
   tell(game, p, null);
+  // Just what's left of them, armour aside (not a blow of thousands that would swamp what anyone
+  // sums of damage taken), again if something softened it; and the tallies skip it (`bledOut`).
   finishing = p;
-  p.damage(9999, { source: d?.by ?? 'world', knockback: 0 });
+  const armor = p.armor;
+  p.armor = 0;
+  for (let i = 0; i < 4 && p.alive; i++) {
+    p.protect(0);
+    p.damage(Math.max(1, p.health) * 2 ** i, { source: d?.by ?? 'world', knockback: 0 });
+  }
+  p.armor = armor;
   finishing = null;
 }
 
