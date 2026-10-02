@@ -1,4 +1,5 @@
 import type { GameContext, IconRef, MenuEntry, MenuHandle, Player } from '@platform';
+import { INTRO_DONE_MSG } from '../maps/messages';
 import { bus } from './bus';
 import { levelOf, savedXp } from './progression';
 import { runs, state } from './state';
@@ -66,8 +67,8 @@ export const classOf = (p: Player): ClassId => {
   return isClass(c) ? c : 'gladiator';
 };
 
-/** Someone arriving after the first wave may change their class for this long. */
-const LATE_CHOICE = 20;
+/** Someone arriving after the first wave may change their class for this long (their fly-over first). */
+const LATE_CHOICE = 24;
 /** Pyromancer: bombs each wave, and how much harder their blasts hit. */
 const KINDLING = 2;
 const KINDLING_BLAST = 1.3;
@@ -125,6 +126,16 @@ export function canChoose(game: GameContext, p: Player) {
 }
 
 const menus = new Map<string, MenuHandle>();
+/** People whose class menu waits for their fly-over to end, and when it opens at the latest (by id). */
+const waiting = new Map<string, number>();
+
+/** Put the classes up on their screen once their fly-over's over (`after` seconds at the latest; sooner if their screen says it's done). */
+export function offerClass(game: GameContext, p: Player, after: number) {
+  if (!p.bot) waiting.set(p.id, game.clock.now + after);
+}
+
+/** Someone's class menu is still waiting for their fly-over. */
+export const classWaiting = () => waiting.size > 0;
 /** Who has chosen this run (the countdown moves on once everyone has). */
 const chosen = new Set<string>();
 export const hasChosen = (p: Player) => p.bot || chosen.has(p.id);
@@ -187,10 +198,11 @@ export function closeClassMenu(p: Player) {
   m?.close();
 }
 
-/** The first wave's begun: anyone still choosing keeps what they have. */
+/** The first wave's begun: anyone still choosing (or yet to) keeps what they have. */
 export function closeClassMenus() {
   for (const m of [...menus.values()]) m.close();
   menus.clear();
+  waiting.clear();
 }
 
 export function classesListen(game: GameContext) {
@@ -207,14 +219,25 @@ export function classesListen(game: GameContext) {
     const s = hit.source;
     if (hit.target.kind === 'entity' && hit.cause === 'explosion' && s && s !== 'world' && s.kind === 'player' && classOf(s) === 'pyromancer') hit.amount *= KINDLING_BLAST;
   });
+  // Their screen's fly-over is done (played out or skipped): their menu now.
+  game.events.on('clientMessage', ({ player, name }) => {
+    if (name === INTRO_DONE_MSG && waiting.has(player.id)) waiting.set(player.id, game.clock.now);
+  });
   game.events.on('playerLeave', ({ player }) => {
     menus.delete(player.id);
     chosen.delete(player.id);
+    waiting.delete(player.id);
   });
 }
 
-/** Someone late who didn't choose in time: their menu goes, and they keep what they have. */
+/** Menus whose fly-overs are over go up; someone late who didn't choose in time: their menu goes, and they keep what they have. */
 export function classesUpdate(game: GameContext) {
+  for (const [id, at] of waiting) {
+    if (game.clock.now < at) continue;
+    waiting.delete(id);
+    const p = game.players.find((x) => x.id === id);
+    if (p && canChoose(game, p)) showClassMenu(game, p);
+  }
   for (const [id, m] of menus) {
     const p = game.players.find((x) => x.id === id);
     if (p && !canChoose(game, p)) {
