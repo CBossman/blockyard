@@ -74,9 +74,12 @@ function affixesFor(game: GameContext, type: string): Affix[] {
   return all;
 }
 
-/** A monster just in: an elite, perhaps (not a boss, a goblin, or one split, summoned or flocking). */
+/**
+ * A monster just in: an elite, perhaps (not a boss, a goblin, or one split, summoned or flocking;
+ * and none on a boss's wave, which is the boss's).
+ */
 export function rollElite(game: GameContext, e: Entity, type: string) {
-  if (bossKind(type) || type === 'goblin' || !monsterKind(type) || e.data.spawned || e.data.flock || e.data.master) return;
+  if (state.boss || bossKind(type) || type === 'goblin' || !monsterKind(type) || e.data.spawned || e.data.flock || e.data.master) return;
   if (!game.rng.chance(eliteChance(state.wave))) return;
   makeElite(game, e, game.rng.pick(affixesFor(game, type)));
 }
