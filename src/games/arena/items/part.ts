@@ -1,12 +1,14 @@
 import type { GameContext } from '@platform';
+import { WEAPON_MODELS } from '../models/weapons';
 import type { ArenaPart } from '../part';
+import { setBoltModel } from './crossbow';
 import { noteRoll, tickCombat } from './combat';
 import { shedArmor } from './index';
 import { forge, forgePrice } from './forge';
 import { clearMissiles, updateMissiles } from './missiles';
 import { resetPotions, updatePotions } from './potions';
 import { RARE_BASES, RARITIES, variant, type Rarity } from './rarity';
-import { clearSpears, updateSpears } from './spear';
+import { clearSpears, spearModels, updateSpears } from './spear';
 import { clearStatuses, freeze, frozen, updateStatuses } from './status';
 
 /**
@@ -18,6 +20,9 @@ export const armoryPart: ArenaPart = {
   name: 'armory',
   setup(game) {
     clear();
+    // What flies and sticks in the sand: the spears (each rarity's) and the crossbow's bolts.
+    spearModels(game, Object.fromEntries(RARITIES.map((r) => [variant('spear', r), WEAPON_MODELS[variant('spear', r)]])));
+    setBoltModel(game.props.gltf(WEAPON_MODELS.bolt, { radius: 1 }));
     game.events.on('ability', ({ player, name }) => {
       if (name === 'roll') noteRoll(game, player);
     });

@@ -35,10 +35,10 @@ const _d = new math.Vector3();
 const out = new Map<Player, Thrown>();
 const models = new Map<string, PropModel>();
 
-/** The spears' models (each rarity's), as props (in `setup`). */
+/** The spears' models (each rarity's), as props (in `setup`): the size a fighter holds one at. */
 export function spearModels(game: GameContext, urls: Record<string, string>) {
   models.clear();
-  for (const [item, url] of Object.entries(urls)) models.set(item, game.props.gltf(url, { radius: 2 }));
+  for (const [item, url] of Object.entries(urls)) models.set(item, game.props.gltf(url, { radius: 2, scale: 0.55 }));
 }
 
 export const spearOut = (p: Player): boolean => out.has(p);

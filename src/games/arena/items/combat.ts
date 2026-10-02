@@ -26,21 +26,15 @@ export const tickCombat = (game: GameContext) => void (clockNow = game.clock.now
 export const afterRoll = (p: Player): boolean => clockNow - (rolled.get(p) ?? -99) < 1.1;
 
 /**
- * Is `who` in front of `e`? It faces the way it's going when it's on the move (a goblin fleeing, an
- * archer backing off), else whoever it's after; so a chasing monster always faces its quarry, and
- * one after a friend of yours shows you its back.
+ * Is `who` in front of `e`? A monster faces whoever it's after (the nearest fighter), so one
+ * chasing you always faces you, and one after a friend of yours may show you its back.
  */
 export function frontOf(e: Entity, who: Player): boolean {
+  const t = e.nearestPlayer();
+  if (!t || t === who) return true;
   const q = e.position;
-  const v = e.velocity;
-  let fx = v.x;
-  let fz = v.z;
-  if (Math.hypot(fx, fz) < 1.5) {
-    const t = e.nearestPlayer();
-    if (!t) return true;
-    fx = t.position.x - q.x;
-    fz = t.position.z - q.z;
-  }
+  const fx = t.position.x - q.x;
+  const fz = t.position.z - q.z;
   const wx = who.position.x - q.x;
   const wz = who.position.z - q.z;
   const l = Math.hypot(fx, fz) * Math.hypot(wx, wz);
