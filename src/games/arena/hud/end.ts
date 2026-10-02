@@ -45,11 +45,11 @@ export const className = (id: string) => (id ? id[0].toUpperCase() + id.slice(1)
 /**
  * The end-of-run screen: VICTORY or DEFEATED over the run's track (a mark for every wave, the
  * bosses' bigger, lit as far as they got, the one that ended it in blood), the fighter's own run
- * (time, kills, damage, gold, bosses, their best chain), the party's (in co-op: each fighter,
- * the best of them crowned), their experience (the XP it earned by what for, the level bar filling
- * from where it was, a level-up, unlocks) and the way on: play again, keep fighting (after a
- * victory, into the endless waves, when the run offers it), or switch game. Each fighter's own
- * (`player.hud.widget`), modal (the mouse is theirs): closed, it comes straight back (there's
+ * (time, kills, damage, gold, bosses, their best chain, revives, times down, damage taken), the
+ * party's (in co-op: each fighter, the best of them crowned), their experience (the XP it earned
+ * by what for, the level bar filling from where it was, a level-up, unlocks) and the way on: play
+ * again, keep fighting (after a victory, into the endless waves), or switch game. Each fighter's
+ * own (`player.hud.widget`), modal (the mouse is theirs): closed, it comes straight back (there's
  * nothing else to do but choose).
  *
  * Its look is the HUD's (`hud.css`'s `--ar-*` tokens, read through the theme): marble type on
@@ -77,6 +77,9 @@ export const END: { name: string; def: WidgetDefinition } = {
             <div class="cell"><span class="v gold">{{gold}}</span><span class="k">Gold earned</span></div>
             <div class="cell"><span class="v">{{bosses}}</span><span class="k">Bosses slain</span></div>
             <div class="cell"><span class="v">{{chain}}</span><span class="k">Best chain</span></div>
+            <div class="cell"><span class="v">{{revives}}</span><span class="k">Revives</span></div>
+            <div class="cell"><span class="v">{{downs}}</span><span class="k">Times down</span></div>
+            <div class="cell"><span class="v">{{taken}}</span><span class="k">Damage taken</span></div>
           </div>
         </div>
         <div class="panel xp" data-if="xp">
@@ -258,6 +261,9 @@ export function endScreen(p: Player, run: EndRun, tallies: Tallies, extras: EndE
     gold: num(t.gold),
     bosses: String(t.bosses),
     chain: String(t.chain),
+    revives: String(t.revives),
+    downs: String(t.downs),
+    taken: num(t.taken),
     xp,
     crew: coop
       ? fighters.map((id) => {

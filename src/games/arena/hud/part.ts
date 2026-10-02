@@ -286,6 +286,7 @@ export const hudPart: ArenaPart = {
 
     bus.on('downed', ({ player, bleed }) => {
       downs.set(player.id, game.clock.now + bleed);
+      tallies.down(player);
       for (const p of game.players) if (p !== player) call(game, p, { k: 'ally', t: `${player.name} is down`, s: 'Hold E on them to revive' });
       crowd(game, { v: 0.6, r: 'gasp' });
     });
@@ -294,12 +295,14 @@ export const hudPart: ArenaPart = {
       downs.delete(player.id);
       call(game, player, { k: 'back', t: by ? 'Revived' : 'Back on your feet', s: by ? `${by.name} pulled you up` : undefined });
       if (!by) return;
+      tallies.revived(by);
       call(game, by, { k: 'ally', t: `You revived ${player.name}` });
       crowd(game, { v: 0.6, r: 'cheer' });
     });
 
     bus.on('fell', ({ player }) => {
-      downs.delete(player.id);
+      // (Bleeding out after going down is the same fall.)
+      if (!downs.delete(player.id)) tallies.down(player);
       call(game, player, { k: 'out', t: 'You fell', s: "You'll be back when this wave is cleared" });
       crowd(game, { v: 0.5, r: 'gasp' });
     });

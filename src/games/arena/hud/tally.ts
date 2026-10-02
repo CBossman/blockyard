@@ -10,9 +10,12 @@ export interface Tally {
   taken: number;
   /** The most kills in one chain (each within `CHAIN` of the last). */
   chain: number;
+  /** Friends lifted, and times gone down (or out). */
+  revives: number;
+  downs: number;
 }
 
-const fresh = (): Tally => ({ kills: 0, damage: 0, gold: 0, bosses: 0, taken: 0, chain: 0 });
+const fresh = (): Tally => ({ kills: 0, damage: 0, gold: 0, bosses: 0, taken: 0, chain: 0, revives: 0, downs: 0 });
 
 /** Kills this close together (seconds) are one chain. */
 export const CHAIN = 2.5;
@@ -86,6 +89,14 @@ export class Tallies {
 
   taken(p: Player, n: number) {
     this.both(p, (t) => (t.taken += n));
+  }
+
+  revived(by: Player) {
+    this.both(by, (t) => t.revives++);
+  }
+
+  down(p: Player) {
+    this.both(p, (t) => t.downs++);
   }
 
   /** This wave's best (most kills, then damage) of those who fought it, if anyone killed anything. */
