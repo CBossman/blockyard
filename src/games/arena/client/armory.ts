@@ -1,7 +1,7 @@
 import type { ViewAnimation } from '@platform';
 import type { Client, ClientKit, Node } from '@platform/client';
 import { firstPerson } from '@platform/client/kits';
-import { Quat, Vec3 } from '@platform/client/math';
+import { Mat4, Quat, Vec3 } from '@platform/client/math';
 import type { CrossbowItem } from '../items/crossbow';
 import type { ArmsMelee } from '../items/melee';
 import { crossbowMove, meleeMove, type CrossbowShown } from '../items/moves';
@@ -11,7 +11,8 @@ import type { ClientPart } from './part';
 /**
  * The armory on each screen: the first-person view (the platform's kit, `fp`, which the Arena's
  * `client.ts` lists in place of `firstPerson.standard()`) with the Arena's own swings and holds;
- * the gladius's shield on the off hand, raised to guard; the guard, the warhammer's raised charge
+ * the off hand (`client.view.item`): the gladius's shield, raised to guard, and the daggers'
+ * twin; a ring round the crosshair (a charge, a span, a parry window); the guard, the warhammer's raised charge
  * and the spear raised to throw, the moment the button goes down (the host decides what they do);
  * and the crossbow's screen half (spanning shown as a reload, aiming as aiming down sights, other
  * players' figures shouldering it).
@@ -105,6 +106,14 @@ const POSES: Record<string, ViewAnimation> = {
 const SHIELD_REST = new Vec3(-0.52, -0.5, -0.78);
 const SHIELD_UP = new Vec3(-0.22, -0.27, -0.62);
 const SHIELD_SCALE = 0.38;
+/**
+ * The daggers' twin in the off hand: held low at the left, the hand just below the screen's edge,
+ * the blade up and in toward the middle; every other stab it thrusts too.
+ */
+const TWIN_AT = new Vec3(-0.42, -0.6, -0.8);
+const TWIN_SCALE = 0.62;
+const TWIN_THRUST = new Vec3(0.1, 0.1, -0.3);
+const TWIN_TIME = 0.2;
 
 /** Development: a pose held as if its button were down (screenshots have no mouse): `__armoryPose('arena_guard')`. */
 let forced: string | null = null;
@@ -167,23 +176,26 @@ function armory(): ClientKit {
   /** How long the fire button's been held with a warhammer in hand, and since the guard went up (seconds). */
   let held = 0;
   let guardFor = 99;
-  /** The shield on show (by item), its node, and how far it's raised (0..1). */
-  let shield: { id: string; node: Node } | null = null;
+  /** What's in the off hand (a shield, a twin dagger: by item), its node; how far a shield's raised (0..1), and a twin's thrust (seconds left) and turn. */
+  let off: { id: string; node: Node } | null = null;
   let raised = 0;
+  let thrust = 0;
+  let stabs = 0;
   const qRest = new Quat().setFromAxisAngle(new Vec3(0, 1, 0), 0.5).multiply(new Quat().setFromAxisAngle(new Vec3(1, 0, 0), -0.15));
   const qUp = new Quat().setFromAxisAngle(new Vec3(0, 1, 0), 0.12);
+  const qTwin = twinTurn();
   const at = new Vec3();
   const q = new Quat();
 
-  const setShield = (client: Client, id: string | null) => {
-    if (shield?.id === id) return;
-    if (shield) client.view.free(shield.node);
-    shield = null;
+  const setOff = (client: Client, id: string | null) => {
+    if (off?.id === id) return;
+    if (off) client.view.free(off.node);
+    off = null;
     if (!id) return;
     const node = client.view.item(id);
     if (!node) return;
     client.view.root.add(node);
-    shield = { id, node };
+    off = { id, node };
   };
 
   return {
@@ -220,23 +232,44 @@ function armory(): ClientKit {
       else if (melee && def.guard && pose === 'arena_guard' && guardFor < def.guard.parry + 0.15) showRing?.(1 - guardFor / (def.guard.parry + 0.15), '#ffe28a');
       else if (span >= 0) showRing?.(span, '#e8e2d4');
       else showRing?.(null);
-      // The gladius's shield on the off hand, raised behind the guard.
-      setShield(client, melee && def.guard && id ? shieldOf(rarityOf(id)) : null);
-      if (!shield) return;
-      raised += ((pose === 'arena_guard' ? 1 : 0) - raised) * Math.min(1, dt * 16);
+      // The off hand: the gladius's shield (raised behind the guard), the daggers' twin.
+      const twin = melee && !!def.backstab && !!id;
+      setOff(client, melee && def.guard && id ? shieldOf(rarityOf(id)) : twin ? id : null);
+      if (!off) return;
       const bob = me.bob.amount * Math.sin(me.bob.phase) * 0.02;
+      off.node.visible = fp.visible;
+      if (twin) {
+        // Every other stab, the twin goes in too.
+        for (const e of client.events) if (e.t === 'use' && ++stabs % 2 === 0) thrust = TWIN_TIME;
+        thrust = Math.max(0, thrust - dt);
+        const k = Math.sin((1 - thrust / TWIN_TIME) * Math.PI) * (thrust > 0 ? 1 : 0);
+        off.node.position.copy(TWIN_AT).addScaledVector(TWIN_THRUST, k);
+        off.node.position.y += bob;
+        off.node.quaternion.copy(qTwin);
+        off.node.scale.setScalar(TWIN_SCALE);
+        return;
+      }
+      raised += ((pose === 'arena_guard' ? 1 : 0) - raised) * Math.min(1, dt * 16);
       at.copy(SHIELD_REST).lerp(SHIELD_UP, raised);
       at.y += bob * (1 - raised);
-      shield.node.position.copy(at);
-      shield.node.quaternion.copy(q.copy(qRest).slerp(qUp, raised));
-      shield.node.scale.setScalar(SHIELD_SCALE);
-      shield.node.visible = fp.visible;
+      off.node.position.copy(at);
+      off.node.quaternion.copy(q.copy(qRest).slerp(qUp, raised));
+      off.node.scale.setScalar(SHIELD_SCALE);
     },
     dispose() {
-      shield?.node.parent?.remove(shield.node);
-      shield = null;
+      off?.node.parent?.remove(off.node);
+      off = null;
     },
   };
+}
+
+/** The twin dagger's turn: its blade (+z) up and in toward the middle, its flat (+y) to the eye. */
+function twinTurn(): Quat {
+  const axis = new Vec3(0.3, 0.85, -0.42).normalize();
+  const face = new Vec3(0.55, 0.05, 0.8);
+  face.addScaledVector(axis, -face.dot(axis)).normalize();
+  const x = new Vec3().crossVectors(face, axis);
+  return new Quat().setFromRotationMatrix(new Mat4().makeBasis(x, face, axis));
 }
 
 /**
