@@ -36,7 +36,7 @@ const ARMS_NEEDED = 4;
 const BLASTS = new Set(['bomb', 'powder_keg', 'volatile', 'lightning', 'fire_staff', 'storm_wand']);
 const BLAST_WINDOW = 0.4;
 /** Kills this close together are one multikill. */
-const MULTI_WINDOW = 1.6;
+const MULTI_WINDOW = 1.2;
 /** Monsters slain, all time: Arena Veteran, and Slayer. */
 const VETERAN_KILLS = 250;
 const SLAYER_KILLS = 2500;

@@ -13,23 +13,23 @@ import { map, state } from './state';
  */
 
 /** Each kill, and each feat by name (a feat not named here: `FEAT_DEFAULT`). */
-const KILL = 0.03;
+const KILL = 0.025;
 const FEATS: Record<string, number> = {
-  double_kill: 0.05,
-  triple_kill: 0.09,
-  multi_kill: 0.14,
-  rampage: 0.2,
-  kaboom: 0.12,
-  trap: 0.05,
-  clutch: 0.08,
+  double_kill: 0.04,
+  triple_kill: 0.07,
+  multi_kill: 0.1,
+  rampage: 0.12,
+  kaboom: 0.1,
+  trap: 0.04,
+  clutch: 0.07,
   elite: 0.05,
-  goblin: 0.15,
-  boss_slain: 0.6,
+  goblin: 0.12,
+  boss_slain: 0.5,
   revive: 0.1,
-  phoenix: 0.1,
-  untouched: 0.08,
+  phoenix: 0.08,
+  untouched: 0.06,
   last_stand: 0.15,
-  parry: 0.06,
+  parry: 0.05,
 };
 const FEAT_DEFAULT = 0.05;
 /** A boss's blows: this much per point of damage dealt to it. */

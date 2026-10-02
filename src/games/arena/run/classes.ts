@@ -118,8 +118,11 @@ function body(p: Player, c: FighterClass, sign: 1 | -1) {
   if (c.speed) p.speed = sign > 0 ? c.speed : 1;
 }
 
-/** May they change class now: before the first wave, or just arrived. */
-export const canChoose = (game: GameContext, p: Player) => state.phase === 'countdown' || game.clock.now - (runs.get(p.id)?.armedAt ?? -99) < LATE_CHOICE;
+/** May they change class now: before the first wave, or just arrived after it. */
+export function canChoose(game: GameContext, p: Player) {
+  const r = runs.get(p.id);
+  return state.phase === 'countdown' || (!!r && r.from > 0 && game.clock.now - r.armedAt < LATE_CHOICE);
+}
 
 const menus = new Map<string, MenuHandle>();
 /** Who has chosen this run (the countdown moves on once everyone has). */
