@@ -28,6 +28,8 @@ export interface ArenaEvents {
   hype: { value: number; favour: boolean };
   /** Something worth a callout (the announcer, the crowd): a multikill, a parry, a trap kill… */
   feat: { player: Player | null; name: string; text: string };
+  /** A fighter took a blessing (`id`; `name` with its level: Berserker II), chosen or (`chosen` false) given them as the wave began. */
+  blessed: { player: Player; id: string; name: string; text: string; chosen: boolean };
 }
 
 type Listener<K extends keyof ArenaEvents> = (e: ArenaEvents[K]) => void;

@@ -19,6 +19,15 @@ export function rollWeapon(game: GameContext, luck = 0, not?: string): string {
   return variant(base, rollRarity(game.rng.next(), luck));
 }
 
+/** The mystery chest's roll on wave `wave` (of 20): later waves favour the rarer. `rng` gives numbers 0..1. */
+export function rollChest(rng: () => number, wave: number): string {
+  const luck = Math.min(1, Math.max(0, (wave - 1) / 19));
+  const total = CHEST.reduce((a, [, w]) => a + w, 0);
+  let t = rng() * total;
+  const base = (CHEST.find(([, w]) => (t -= w) <= 0) ?? CHEST[CHEST.length - 1])[0];
+  return variant(base, rollRarity(rng(), luck));
+}
+
 /** A weapon dropped on the ground: a beam of its rarity's colour (a legendary's brighter, and heard). */
 export function dropWeapon(game: GameContext, id: string, at: Vec3, opts: { for?: Player; despawn?: number } = {}): Pickup {
   const r = rarityOf(id);
