@@ -15,7 +15,8 @@ import { clock, el, hidden, hud, num, project, replay } from './store';
  *   Crowd's Favour is on, counting it down;
  * - bottom left, over the health: the party (in co-op: each friend's name, class and health, or
  *   down and bleeding out, or sitting the wave out) over the blessings (an icon each in its
- *   rarity's colour, the newest arriving with a flash).
+ *   rarity's colour, the newest arriving with a flash);
+ * - the hotbar's weapons marked in their rarity's colour (the theme draws it: `hud.css`).
  */
 export function status(): ClientKit {
   let unstyle: (() => void) | null = null;
@@ -79,6 +80,7 @@ function build(client: Client, layer: HTMLElement): (dt: number) => void {
   let goldTarget = 0;
   let hypeKey = '';
   let favourOn = false;
+  let hotbarKey = '';
   /** "+12"s by the counter: the one adding up now, and when it fades. */
   let pop: { el: HTMLElement; n: number; until: number } | null = null;
   /** Gold popped where it was picked up, rising and fading. */
@@ -230,6 +232,18 @@ function build(client: Client, layer: HTMLElement): (dt: number) => void {
       pop = null;
     }
 
+    // The hotbar's weapons in their rarities: each slot marked for the theme to colour.
+    const slots = client.me.hotbar?.slots ?? [];
+    const hk2 = slots.map((s) => s?.item ?? '').join('|');
+    if (hk2 !== hotbarKey) {
+      hotbarKey = hk2;
+      document.querySelectorAll<HTMLElement>('.hotbar .slot').forEach((el, i) => {
+        const r = RARE.exec(slots[i]?.item ?? '')?.[1];
+        if (r) el.dataset.rarity = r;
+        else delete el.dataset.rarity;
+      });
+    }
+
     // The crowd.
     const h = hud.hype;
     const hk = `${h.v}|${h.f}`;
@@ -261,6 +275,9 @@ function build(client: Client, layer: HTMLElement): (dt: number) => void {
     }
   };
 }
+
+/** A weapon's rarity, by its id (`items/rarity.ts`: `gladius_epic`; a common one is its plain id). */
+const RARE = /_(rare|epic|legendary)$/;
 
 /** What a gold bonus was for, by the run's word (`gold`'s `why`). */
 const WHY: Record<string, string> = { wave: 'wave bonus', boss: 'boss bounty', goblin: "goblin's loot", gift: "emperor's gift", start: 'purse' };
