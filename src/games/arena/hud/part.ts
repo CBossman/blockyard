@@ -419,9 +419,10 @@ export const hudPart: ArenaPart = {
       send(game, 'all', MSG.hype, hypeMsg());
       for (const p of game.players) if (!p.bot) send(game, p, MSG.me, meMsg(game, p));
     }
-    if (now >= partyAt && game.players.length > 1) {
+    // The party (none once only one's left: their screen drops the rows).
+    if (now >= partyAt) {
       partyAt = now + 0.25;
-      send(game, 'all', MSG.party, partyMsg(game));
+      send(game, 'all', MSG.party, game.players.length > 1 ? partyMsg(game) : { list: [] });
     }
   },
 };

@@ -93,6 +93,7 @@ function build(client: Client, layer: HTMLElement): (dt: number) => void {
     if (g.d < 0) {
       // Spent: the counter drops at once, no pop.
       shownGold = goldTarget;
+      goldN.textContent = num(shownGold);
       return;
     }
     const now = client.time;
