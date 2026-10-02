@@ -9,7 +9,8 @@ import { state } from './state';
 /**
  * Coins: every monster slain spills its worth in gold where it fell (a coin, or a scatter of piles
  * for a big one), pulled to whoever comes near and counted into their purse (`gold.ts`). A monster's
- * worth is its cost to the director times `GOLD_PER_COST`, three times that for a champion; a
+ * worth is its cost to the director times `GOLD_PER_COST`, more for a champion (`data.worth` times,
+ * the bestiary's elites say; else three); a
  * Treasure Goblin bursts into a shower, a boss into a fortune. Gold Rush and the Crowd's Favour
  * each double it. Whatever's left lying when a wave's won is raked up and shared out, and each
  * fighter gets the wave's bonus.
@@ -49,7 +50,8 @@ export function worth(e: Entity): number {
   if (bossKind(e.type)) return BOSS_GOLD;
   if (e.type === 'goblin') return GOBLIN_GOLD;
   const base = (monsterKind(e.type)?.cost ?? 1) * GOLD_PER_COST;
-  return Math.round(base * (e.data.elite ? ELITE : 1));
+  const elite = typeof e.data.worth === 'number' ? e.data.worth : e.data.elite ? ELITE : 1;
+  return Math.round(base * elite);
 }
 
 /** Spill `value` gold at `at`: a coin, or piles flung about. */

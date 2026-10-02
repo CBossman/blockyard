@@ -1,4 +1,4 @@
-import { math, type Entity, type GameContext, type Vec3 } from '@platform';
+import { math, type GameContext, type Vec3 } from '@platform';
 import { along } from '../maps';
 import { MONSTERS, monsterKind } from '../monsters';
 import { BOSSES, bossKind } from '../bosses';
@@ -103,7 +103,7 @@ export const TWISTS = {
   gold_rush: { name: 'Gold Rush', text: 'Every coin counts double', color: '#ffd23a', from: 3 },
   frenzy: { name: 'Frenzy', text: 'They pour in twice as fast, but frailer', color: '#ff7ab8', from: 4 },
   storm: { name: 'Thunderstorm', text: 'Lightning strikes the sand: mind the marks', color: '#9fd4ff', from: 5 },
-  elite_night: { name: 'Elite Night', text: 'Champions walk among them: tougher, gilded, worth triple', color: '#ffb347', from: 6 },
+  elite_night: { name: 'Elite Night', text: 'Thrice the champions tonight, each with a power of its own', color: '#ffb347', from: 6 },
   glass: { name: 'Glass Cannon', text: 'Every blow lands twice as hard: theirs and yours', color: '#cfe9ff', from: 7 },
 } as const;
 export type Twist = keyof typeof TWISTS;
@@ -121,8 +121,6 @@ export const crowd = (game: GameContext) => 1 + 0.5 * Math.max(0, game.players.l
 
 /** What a kind that isn't in the game yet stands for in a roster: this much budget each, filled from those that are. */
 const STAND_IN = 2;
-/** Chance a monster comes in as a champion on Elite Night. */
-const ELITE_NIGHT = 0.35;
 
 function rollTwist(game: GameContext, n: number, w: WaveSpec): Twist | null {
   if (w.calm || w.boss || n === finalWave() || !game.rng.chance(TWIST_CHANCE)) return null;
@@ -314,9 +312,8 @@ export function directorListen(game: GameContext) {
       entity.data.speed = 1.25;
       entity.setSpeed(1.25);
     }
-    // A Frenzy's monsters come quick and frail.
+    // A Frenzy's monsters come quick and frail. (Elite Night's champions are the bestiary's: `monsters/`.)
     if (state.twist === 'frenzy') entity.health = Math.ceil(entity.maxHealth * 0.65);
-    if (state.twist === 'elite_night' && !entity.data.elite && game.rng.chance(ELITE_NIGHT)) champion(entity);
   });
   bus.on('slain', ({ by, type, at }) => {
     // Under a Blood Moon, hearts fall more often.
@@ -337,11 +334,4 @@ export function directorListen(game: GameContext) {
 export function resetDirector() {
   storm.at = null;
   storm.next = 0;
-}
-
-/** Elite Night's champions: tougher (armour), gilded, worth more (`data.elite`: the gold and the XP read it). */
-function champion(e: Entity) {
-  e.data.elite = true;
-  e.armor = Math.max(e.armor, 8);
-  e.glow('#ffb347');
 }
