@@ -1,5 +1,6 @@
 import { math, type DamageEvent, type Entity, type GameContext, type Player, type Vec3 } from '@platform';
 import { bus } from '../run/bus';
+import { ARMOR_CAP } from './index';
 import { guarding, type ArmsMelee } from './melee';
 import { wave } from './missiles';
 import { bleed, burn, frozen, isBoss, stagger, thaw } from './status';
@@ -65,6 +66,9 @@ export function combatDamage(game: GameContext, hit: DamageEvent) {
   const { target, source } = hit;
   if (target.kind === 'player') {
     const p = target;
+    // Armour does no more past the Arena's cap, whatever gave the points (the platform takes its
+    // 4% a point off after this).
+    if (p.armor > ARMOR_CAP) hit.amount *= (1 - 0.04 * ARMOR_CAP) / (1 - 0.04 * Math.min(20, p.armor));
     const h = guarding(p);
     const def = h && heldMelee(game, p);
     if (!h || !def?.guard || !source || source === 'world' || source.kind !== 'entity') return;

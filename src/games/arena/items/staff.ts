@@ -140,7 +140,7 @@ function firePool(game: GameContext, p: Player, at: Vec3, item: string) {
   let n = 0;
   const tick = () => {
     if (n++ >= POOL.time / 0.4) return;
-    for (const e of game.entities.near(ground, POOL.radius)) if (e.alive && Math.abs(e.position.y - ground.y) < 1.5) burn(game, e, p, 4, 2, item);
+    for (const e of game.entities.near(ground, POOL.radius)) if (e.alive && Math.abs(e.position.y - ground.y) < 1.5) burn(game, e, p, 3, 2, item);
     game.clock.after(0.4, tick);
   };
   tick();

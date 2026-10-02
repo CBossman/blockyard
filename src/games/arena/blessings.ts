@@ -1,5 +1,6 @@
 import { math, type DamageEvent, type Entity, type GameContext, type IconRef, type MenuHandle, type Player, type Vec3 } from '@platform';
 import { combatDamage, frontOf, guardMods } from './items/combat';
+import { addArmor } from './items/index';
 import { bus } from './run/bus';
 import { crossbowMods } from './items/crossbow';
 import { meleeMods } from './items/melee';
@@ -44,7 +45,7 @@ export const BLESSINGS = {
     apply: (_g, p) => void p.inventory.give('arrow', 12),
   },
   fleet: { name: 'Fleet-footed', rarity: 'common', text: 'Run 20% faster, and roll twice as often', icon: { block: 'ice' }, apply: (_g, p) => boost(p) },
-  ironskin: { name: 'Iron Skin', rarity: 'common', stacks: 2, text: 'Take 24% less damage', icon: { block: 'iron_block' }, apply: (_g, p) => void (p.armor = Math.min(20, p.armor + 6)) },
+  ironskin: { name: 'Iron Skin', rarity: 'common', stacks: 2, text: 'Take 12% less damage (armour tops out at 48%)', icon: { block: 'iron_block' }, apply: (_g, p) => addArmor(p, 3) },
   stout: {
     name: 'Stout Heart',
     rarity: 'common',

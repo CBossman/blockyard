@@ -30,10 +30,18 @@ export function defineArt(game: GameContext) {
 
 /** Armour: worn, not carried (bought, or walked over), each piece over the last; points as `player.armor`'s (4% each). */
 export const ARMOR = {
-  leather_armor: { name: 'Leather Armour', points: 3 },
-  mail_armor: { name: 'Mail Armour', points: 6 },
-  plate_armor: { name: 'Plate Armour', points: 10 },
+  leather_armor: { name: 'Leather Armour', points: 2 },
+  mail_armor: { name: 'Mail Armour', points: 4 },
+  plate_armor: { name: 'Plate Armour', points: 7 },
 } as const;
+/**
+ * The most armour a fighter in the Arena has, from everything together (worn, a class, Iron Skin):
+ * 12 points, 48% off. Over it, armour does no more (`combat.ts` holds each blow to it, whatever
+ * gave the points).
+ */
+export const ARMOR_CAP = 12;
+/** Armour points added (or taken, `n` negative), never past the cap. */
+export const addArmor = (p: Player, n: number) => void (p.armor = Math.max(0, Math.min(ARMOR_CAP, p.armor + n)));
 export type ArmorId = keyof typeof ARMOR;
 /** What each fighter wears (its points), by player. */
 const worn = new WeakMap<Player, number>();
@@ -45,7 +53,7 @@ export function wearArmor(game: GameContext, p: Player, id: ArmorId): boolean {
   const now = ARMOR[id].points;
   if (now <= was) return false;
   worn.set(p, now);
-  p.armor = Math.min(20, p.armor + now - was);
+  addArmor(p, now - was);
   game.audio.play('arena_armor', { at: p.position });
   p.hud.toast(`${ARMOR[id].name}: ${now * 4}% less damage taken`);
   return true;
