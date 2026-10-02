@@ -187,6 +187,7 @@ export function showClassMenu(game: GameContext, p: Player) {
     onClose: () => {
       if (menus.get(p.id) === m) menus.delete(p.id);
       chosen.add(p.id);
+      bus.emit('classSet', { player: p });
     },
   });
   menus.set(p.id, m);
