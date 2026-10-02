@@ -1,4 +1,5 @@
 import { CHARACTER_STYLE, Models, type Behavior, type DamageEvent, type Entity, type GameContext } from '@platform';
+import { baseOf } from '../items/rarity';
 import { map } from '../run/state';
 import { MONSTER_MODELS } from './models';
 import type { MonsterKind } from './registry';
@@ -24,7 +25,7 @@ interface KnightState {
   _told?: number;
 }
 
-/** Weapons whose blows no shield turns: magic (the armory's staffs and wand). */
+/** Weapons whose blows no shield turns: magic (the armory's staffs and wand, of any rarity). */
 const MAGIC = new Set(['fire_staff', 'frost_staff', 'storm_wand']);
 /** How far either side of straight ahead the shield covers (radians). */
 const COVER = 1.25;
@@ -118,7 +119,7 @@ export function knightGuard(game: GameContext, hit: DamageEvent) {
     s._open = Math.max(s._open ?? 0, now + 1.6);
     return;
   }
-  if ((hit.cause !== 'melee' && hit.cause !== 'projectile' && hit.cause !== 'gun') || (hit.weapon && MAGIC.has(hit.weapon))) return;
+  if ((hit.cause !== 'melee' && hit.cause !== 'projectile' && hit.cause !== 'gun') || (hit.weapon && MAGIC.has(baseOf(hit.weapon)))) return;
   if ((s._open ?? 0) > now || ((self.data.stunned as number | undefined) ?? 0) > 0) return;
   const src = hit.source && hit.source !== 'world' ? hit.source : null;
   const from = hit.from ?? src?.position;

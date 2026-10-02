@@ -75,7 +75,8 @@ export default function arenaBestiary() {
     // Magic from in front.
     s.run(2);
     before = hp();
-    k.damage(6, { source: s.me, cause: 'projectile', weapon: 'fire_staff' });
+    k.damage(3, { source: s.me, cause: 'projectile', weapon: 'fire_staff' });
+    k.damage(3, { source: s.me, cause: 'projectile', weapon: 'frost_staff_epic' });
     const magic = before - hp();
     log(`knight: front ${front.toFixed(1)}, behind ${back.toFixed(1)}, above ${above.toFixed(1)}, blast ${blast.toFixed(1)}, magic ${magic.toFixed(1)}`);
     check(front === 0 && back > 0 && above > 0 && blast > 0 && magic > 0, 'the knight blocks only blows from in front');
