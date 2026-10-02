@@ -164,9 +164,11 @@ const chargeMove: Move = {
     const p = c.self.position;
     const a = angle(p, c.target.position);
     const dir = { x: Math.cos(a), y: 0, z: Math.sin(a) };
-    // As far as the floor goes that way (up to 22 blocks).
-    const hit = c.game.world.raycast({ x: p.x, y: p.y + 1.2, z: p.z }, dir, 22);
-    const len = Math.max(6, (hit ? Math.hypot(hit.point.x - p.x, hit.point.z - p.z) : 22) - 0.5);
+    // As far as the floor goes that way (up to 22 blocks): to a wall, or something solid (a portcullis).
+    const eye = { x: p.x, y: p.y + 1.2, z: p.z };
+    const wall = c.game.world.raycast(eye, dir, 22);
+    const prop = c.game.props.raycast(eye, dir, 22);
+    const len = Math.max(6, Math.min(wall ? Math.hypot(wall.point.x - p.x, wall.point.z - p.z) : 22, prop ? prop.distance : 22) - 0.5);
     c.s.mem.charge = { dir, len, from: { ...p }, hit: [] as string[], t: 0 };
     c.self.lookAt(c.target);
     c.self.animate('charge_wind', { fade: 0.25 });
@@ -195,16 +197,13 @@ const chargeMove: Move = {
     }
     if (Math.floor(ch.t * 8) !== Math.floor((ch.t - c.dt) * 8)) game.fx.burst({ x: p.x, y: p.y + 0.2, z: p.z }, { color: '#d8c08a', count: 8, speed: 2, size: 0.18, gravity: -0.5, life: 0.8, drag: 2 });
     const gone = Math.hypot(p.x - ch.from.x, p.z - ch.from.z);
-    // Stopped dead against something (after getting going): a wall or a pillar stuns it; a step it climbs.
+    // Stopped dead against something once it's going (a wall, a pillar, a portcullis: it steps up a
+    // ledge on its own): it's stunned.
     const moved = ch.last ? Math.hypot(p.x - ch.last.x, p.z - ch.last.z) : 1;
     ch.last = { ...p };
     if (ch.t > 0.35 && moved < 0.02) {
-      const wall = game.world.raycast({ x: p.x, y: p.y + 1.7, z: p.z }, ch.dir, 2.8);
-      if (wall) {
-        crash(c);
-        return true;
-      }
-      if (self.onGround) self.jump();
+      crash(c);
+      return true;
     }
     return gone >= ch.len || ch.t > 2.6;
   },
@@ -313,7 +312,7 @@ export const colossus: BossKind = {
     name: 'The Bone Colossus',
     model: Models.gltf(MODEL.colossus, { clips: { idle: 'idle', walk: 'walk' }, head: 'skull', scale: 3.5 }),
     hitbox: { width: 3.2, height: 6.4 },
-    health: 950,
+    health: 800,
     speed: 2.3,
     knockbackResistance: 1,
     jump: 9,

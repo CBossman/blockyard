@@ -179,9 +179,9 @@ const prison: Move = {
       caged++;
       f.damage(2, { source: self, knockback: 0, cause: 'magic' });
       f.hud.pop('CAGED', { color: SOUL, sub: 'Fight your way out: it holds 3 seconds' });
-      const cage = own(game.props.spawn(propModel(game, MODEL.soul_cage, 2), { position: { x: q.x, y: q.y, z: q.z } }));
+      const cage = own(game, game.props.spawn(propModel(game, MODEL.soul_cage, 2), { position: { x: q.x, y: q.y, z: q.z } }));
       game.clock.after(3.2, () => {
-        drop(cage);
+        drop(game, cage);
         game.fx.burst({ x: q.x, y: q.y + 1.2, z: q.z }, { color: SOUL, count: 30, speed: 4, size: 0.14, gravity: 2, glow: 1.2 });
       });
     }
