@@ -26,7 +26,7 @@ interface WraithState {
 const GHOST = '#6affc8';
 const DRAIN_RANGE = 6.5;
 /** What its drain takes each tick (a third of a second), and the damage to it that breaks the tether. */
-const DRAIN = 1;
+const DRAIN = 1.3;
 const BREAK = 8;
 
 /** Where to come back: beside or behind them, a few blocks off, somewhere it fits. */
@@ -128,7 +128,7 @@ const wraithAI: Behavior = (self, game, dt) => {
     self.stop();
     self.lookAt(target);
     s._tell -= dt;
-    if (lost >= 3 || d > DRAIN_RANGE + 1) {
+    if (lost >= 5 || d > DRAIN_RANGE + 1) {
       s._tell = undefined;
       self.glow(null);
       self.animate('none');
@@ -186,7 +186,7 @@ export const wraith: MonsterKind = {
     name: 'Wraith',
     model: LOOK,
     hitbox: { width: 0.7, height: 2 },
-    health: 24,
+    health: 28,
     speed: 3.6,
     knockbackResistance: 0.4,
     ai: wraithAI,

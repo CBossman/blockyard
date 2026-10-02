@@ -22,13 +22,15 @@ interface SlimeSize {
   hop: [number, number];
   /** Seconds between hops. */
   rest: [number, number];
+  /** How far past its body its coming down splashes (blocks): whoever's in it is hurt, less at the edge. */
+  splash: number;
   pitch: number;
 }
 
 const SIZES: Record<string, SlimeSize> = {
-  slime: { name: 'Slime', into: 'slime_small', health: 28, width: 1.1, height: 0.95, damage: 6, hop: [5.5, 7.5], rest: [1, 1.5], pitch: 0.75 },
-  slime_small: { name: 'Small Slime', into: 'slime_tiny', health: 11, width: 0.62, height: 0.55, damage: 3.5, hop: [6, 7], rest: [0.7, 1.1], pitch: 1.05 },
-  slime_tiny: { name: 'Tiny Slime', health: 4, width: 0.38, height: 0.32, damage: 1.5, hop: [6.5, 6], rest: [0.4, 0.8], pitch: 1.5 },
+  slime: { name: 'Slime', into: 'slime_small', health: 28, width: 1.1, height: 0.95, damage: 6, hop: [5.5, 7.5], rest: [1, 1.5], splash: 1.1, pitch: 0.75 },
+  slime_small: { name: 'Small Slime', into: 'slime_tiny', health: 11, width: 0.62, height: 0.55, damage: 3.5, hop: [6, 7], rest: [0.7, 1.1], splash: 0.5, pitch: 1.05 },
+  slime_tiny: { name: 'Tiny Slime', health: 4, width: 0.38, height: 0.32, damage: 1.5, hop: [6.5, 6], rest: [0.4, 0.8], splash: 0, pitch: 1.5 },
 };
 
 /** Seconds of a fighter's running a hop allows for. */
@@ -71,7 +73,7 @@ function slimeAI(o: SlimeSize): Behavior {
       // Down: a squelch, and a splash on whoever it came down on.
       s._air = false;
       game.audio.play('slime', { at: e, pitch: o.pitch * game.rng.range(0.9, 1.1), volume: 0.7 });
-      if (s._hit === 0 && flat(e, p) < o.width * 0.5 + 0.9 && Math.abs(p.y - e.y) < 1.2) land(game, e, target, o, s, self);
+      if (s._hit === 0) splash(game, e, o, s, self);
     }
     // Out of sight of them (a wall, a gate between): it oozes along the way round, and hops along
     // it now and then (a hop straight at them would only hit the wall, for good).
@@ -118,6 +120,21 @@ function slimeAI(o: SlimeSize): Behavior {
       self.animate('hop', { fade: 0.05 });
     }
   };
+}
+
+/** Come down on the ground: whoever it lands on is hurt, and those about it a little less. */
+function splash(game: GameContext, at: Vec3, o: SlimeSize, s: SlimeState, self: Entity) {
+  const inner = o.width * 0.5 + 0.9;
+  if (o.splash > 0) game.fx.burst({ x: at.x, y: at.y + 0.15, z: at.z }, { color: '#7fe05a', count: 22, speed: 5, gravity: 14, size: 0.1, life: 0.5 });
+  for (const p of game.players) {
+    const d = flat(at, p.position);
+    if (!p.alive || d > inner + o.splash || Math.abs(p.position.y - at.y) > 1.2) continue;
+    if (d < inner) land(game, at, p, o, s, self);
+    else {
+      s._hit = 0.8;
+      p.damage(o.damage * 0.6, { source: self, knockback: 0.6, cause: 'melee' });
+    }
+  }
 }
 
 /** Come down on someone: a splash, and they're hurt and knocked about. */

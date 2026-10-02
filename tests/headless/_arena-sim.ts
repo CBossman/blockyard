@@ -209,9 +209,13 @@ function simulate(seed: number, classes: ClassId[], mapId: string) {
   bus.on('downed', () => void (cur() && cur()!.downs++));
   bus.on('fell', () => void (cur() && cur()!.falls++));
   const lastHit = new Map<string, string>();
-  game.events.on('playerDamage', ({ player, amount, source }) => {
+  // (A blow counts for no more than a fighter's whole health: one who bleeds out is finished off
+  // with an outsize blow, credited to whoever downed them, which would swamp the tallies.)
+  game.events.on('playerDamage', ({ player, amount: dealt, source }) => {
+    const amount = Math.min(dealt, player.maxHealth);
     const k = source && source !== 'world' && source.kind === 'entity' ? source.type + (source.data.elite ? `(${source.data.elite})` : '') : source === 'world' ? 'world' : 'other';
     lastHit.set(player.id, k);
+    if (process.env.DEBUG_DMG && k.startsWith(process.env.DEBUG_DMG)) console.log(`    [${game.clock.now.toFixed(2)}] w${state.wave} ${k} -> ${player.name} ${amount.toFixed(1)} health ${player.health.toFixed(1)} alive ${player.alive} downed ${isDowned(player)}`);
     const w = cur();
     if (w && state.phase === 'fighting') w.taken[k] = (w.taken[k] ?? 0) + amount;
   });
@@ -238,8 +242,8 @@ function simulate(seed: number, classes: ClassId[], mapId: string) {
     k.n++;
     k.life += game.clock.now - b;
   });
-  game.events.on('playerDamage', ({ amount, source }) => {
-    if (source && source !== 'world' && source.kind === 'entity') kindOf(source.type).dealt += amount;
+  game.events.on('playerDamage', ({ player, amount, source }) => {
+    if (source && source !== 'world' && source.kind === 'entity') kindOf(source.type).dealt += Math.min(amount, player.maxHealth);
   });
   game.events.on('playerDeath', ({ player }) => {
     const f = fighters.find((x) => x.p === player);
