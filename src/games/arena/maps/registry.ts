@@ -187,6 +187,11 @@ export interface ArenaMap {
   portcullises?: Portcullis[];
   traps?: TrapSpec[];
   hazards?: Hazard[];
+  /**
+   * Where a crowd sits, if it has one (round `center`: from `inner` to `outer` blocks out, `low`
+   * to `high` up): they throw petals into the pit when they cheer (`client/maps/crowd.ts`).
+   */
+  stands?: { inner: number; outer: number; low: number; high: number };
   /** Its set pieces (props), what burns on it (each screen draws the flames), and its air. */
   decor?: Decor[];
   fires?: Fire[];

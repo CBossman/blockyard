@@ -511,6 +511,7 @@ export const COLOSSEUM: ArenaMap = {
     { x: 16.5, y: FLOOR + 1, z: 10.5 },
   ],
   traps: TRAPS,
+  stands: { inner: POD - 1, outer: BACK, low: POD_TOP + 1, high: GALLERY + 1 },
   decor: DECOR,
   fires: FIRES,
   air: { kind: 'dust', heading: 0.6, wind: 1.2, gust: 3.5, loop: 'amb_arena_wind', calls: ['amb_hawk', 'amb_horn'] },

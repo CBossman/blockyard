@@ -6,10 +6,13 @@ import { chooseMap, runEnded, setupChoice, updateChoice } from './choice';
 import { opened, startGates, updateGates } from './gates';
 import { startHazards, updateHazards } from './hazards';
 import { MAPS } from './index';
-import { INTRO_MSG, type IntroMessage } from './messages';
+import { CHEER_MSG, INTRO_MSG, type CheerMessage, type IntroMessage } from './messages';
 import { place, resetModels } from './props';
 import { setupTraps, startTraps, updateTraps } from './traps';
 
+
+/** When the crowd last cheered for a feat (petals, not every moment). */
+let cheered = -99;
 
 /** Which map's fly-over each fighter was last shown, and when (by id): not twice for one arrival. */
 const introduced = new Map<string, { map: string; at: number }>();
@@ -38,6 +41,16 @@ export const mapsPart: ArenaPart = {
       for (const p of game.players) introduce(game, p, true);
     });
     bus.on('runEnd', () => runEnded(game));
+    // The crowd throws petals: a shower for the Crowd's Favour, a handful for a feat.
+    cheered = -99;
+    bus.on('hype', ({ favour }) => {
+      if (favour && map().stands) game.clients.send('all', CHEER_MSG, { big: true } satisfies CheerMessage);
+    });
+    bus.on('feat', () => {
+      if (!map().stands || game.clock.total - cheered < 4) return;
+      cheered = game.clock.total;
+      game.clients.send('all', CHEER_MSG, { big: false } satisfies CheerMessage);
+    });
     game.events.on('playerReady', ({ player }) => {
       if (inFight()) introduce(game, player, false);
     });

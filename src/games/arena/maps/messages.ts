@@ -10,6 +10,12 @@ export interface IntroMessage {
   full: boolean;
 }
 
+/** The crowd cheering (the Crowd's Favour, `big`, or a feat): the stands throw petals into the pit. */
+export const CHEER_MSG = 'arena.cheer';
+export interface CheerMessage {
+  big: boolean;
+}
+
 /** A trap's gone off: its id, and for how long (seconds) it's going. */
 export const TRAP_MSG = 'arena.trap';
 export interface TrapMessage {
