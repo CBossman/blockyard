@@ -9,6 +9,10 @@ export interface IntroMessage {
   map: string;
   full: boolean;
 }
+/** How long it runs (seconds): a fight's start, a joiner's, and the ease back into their own view (the run waits it out before the class pick). */
+export const INTRO_TIME = { full: 6, short: 3.4, ease: 1.2 };
+/** A screen's fly-over is over (played out, or skipped): from the screen, no data. */
+export const INTRO_DONE_MSG = 'arena.introDone';
 
 /** The crowd cheering (the Crowd's Favour, `big`, or a feat): the stands throw petals into the pit. */
 export const CHEER_MSG = 'arena.cheer';

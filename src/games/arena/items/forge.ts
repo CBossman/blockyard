@@ -10,7 +10,7 @@ import { baseOf, hasRarities, nextRarity, RARITY, rarityOf, variant, type RareBa
  */
 
 /** Each step's price, times the weapon's own (`ARMS[base].price`). */
-const STEP: Record<Exclude<Rarity, 'common'>, number> = { rare: 0.8, epic: 1.5, legendary: 2.5 };
+const STEP: Record<Exclude<Rarity, 'common'>, number> = { rare: 1, epic: 2, legendary: 3.5 };
 
 /** What forging `id` up costs, or null: it doesn't come in rarities, or it's legendary already. */
 export function forgePrice(id: string): number | null {

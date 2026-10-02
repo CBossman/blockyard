@@ -1,4 +1,5 @@
 import type { GameContext, MenuHandle, Player } from '@platform';
+import { bus } from '../run/bus';
 import { map, setMap } from '../run/state';
 import { MAPS, mapById, type ArenaMap } from './index';
 
@@ -8,8 +9,9 @@ import { MAPS, mapById, type ArenaMap } from './index';
  * bottom of the screen, under the HUD's end screen, which makes room for it; M brings the same up
  * as a menu when nothing else is up), the most votes winning and a tie (or no votes) going to the
  * rotation's next. In a room of one's own it's a pick: the same at the end of a run (the same map
- * again if nobody picks), and M picks a map to start over on at any time. The change happens as
- * the next fight starts (`chooseMap`, from the maps' part's `start`).
+ * again if nobody picks), and M picks a map to start over on at any time. A won run carried on
+ * into the endless waves (`keepFighting`) stands the vote down; it opens again when that ends. The
+ * change happens as the next fight starts (`chooseMap`, from the maps' part's `start`).
  */
 
 export const PICK_KEY = 'KeyM';
@@ -64,6 +66,7 @@ export function setupChoice(game: GameContext) {
   game.events.on('playerReady', ({ player }) => {
     if (own(game) && !player.bot) game.clock.after(8, () => game.players.includes(player) && player.hud.toast('Your own arena · M picks the map'));
   });
+  bus.on('keepFighting', () => standDown(game));
   game.events.on('playerLeave', ({ player }) => {
     votes.delete(player.id);
     menus.delete(player.id);
@@ -78,6 +81,17 @@ export function runEnded(game: GameContext) {
   voting = true;
   // A moment for the results to land before the vote's put up under them.
   game.clock.after(AFTER, () => voting && refresh(game));
+}
+
+/** The fight goes on after all (a won run carried on into the endless waves): no vote, the same map. */
+function standDown(game: GameContext) {
+  if (!voting) return;
+  voting = false;
+  planned = null;
+  votes.clear();
+  for (const p of game.players) if (!p.bot) p.hud.widget(VOTE).remove();
+  for (const menu of menus.values()) menu.close();
+  menus.clear();
 }
 
 /** What wins as the votes stand: the most votes; a tie (or none) to what was coming anyway. */

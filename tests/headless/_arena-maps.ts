@@ -1,5 +1,6 @@
 import type { Entity, GameContext, Player, Vec3 } from '@platform';
 import { FLOOR, along, inBox, MAPS, type ArenaMap, type Gate, type TrapSpec } from '../../src/games/arena/maps';
+import { INTRO_MSG, type IntroMessage } from '../../src/games/arena/maps/messages';
 import { bus } from '../../src/games/arena/run/bus';
 import { addGold, gold } from '../../src/games/arena/run/gold';
 import { map } from '../../src/games/arena/run/state';
@@ -14,7 +15,9 @@ import { check, launch } from './_harness';
  * boss fits on (its floor, clear air 9 high for 3 blocks round, open floor 12 long in front of it
  * for its entrance's camera). Then each trap: a fighter with gold
  * walks up to its lever and presses E, pays, and zombies held where it works are hurt and slain
- * by it, the kills theirs. The waves' own monsters are cleared as they come.
+ * by it, the kills theirs. The waves' own monsters are cleared as they come. Last, the run's start
+ * and end as the maps see them: every fight's start sends the whole fly-over (a restart right after
+ * another too), and a won run carried on (`keepFighting`) stands the vote down till it ends.
  * `node scripts/headless.mjs tests/headless/_arena-maps.ts` (MAP=id for one map).
  */
 
@@ -34,8 +37,48 @@ export default function arenaMaps() {
     failed.push(...r.failed);
     console.log(`  ${r.row}`);
   }
+  if (!only) {
+    const r = flow(failed);
+    rows.push(r);
+    console.log(`  ${r}`);
+  }
   check(!failed.length, `monsters that never got there:\n    ${failed.join('\n    ')}`);
   return rows.join(' · ');
+}
+
+/** The run's start and end, as the maps see them: the fly-over; the vote and `keepFighting`. */
+function flow(failed: string[]): string {
+  // A fight begins, and begins again straight after (a restart): the whole fly-over each time.
+  const h = launch('arena', { seed: 5 });
+  const game = h.ctx as GameContext;
+  const me = game.player as Player;
+  const fullOnes = () => h.find('message', INTRO_MSG).filter((c) => (c.args[0] as IntroMessage | undefined)?.full).length;
+  h.run(0.2, { pilot: () => ({}) });
+  const first = fullOnes();
+  game.restart();
+  h.run(1, { pilot: () => ({}) });
+  game.restart();
+  h.run(1, { pilot: () => ({}) });
+  const sent = fullOnes() - first;
+  if (sent !== 2) failed.push(`a fight's start (twice running) sent ${sent} fly-overs, not 2`);
+  // A run ends: the vote goes up; carried on into the endless waves, it's stood down.
+  const vote = (method: string) => h.find('hud', method).filter((c) => c.args[0] === 'arena-vote').length;
+  bus.emit('runEnd', { won: true, wave: 20, endless: false, map: MAPS[0], time: 600, results: [] });
+  h.run(2.5, { pilot: () => ({}) });
+  const up = vote('widget') > 0;
+  bus.emit('keepFighting', { player: me });
+  h.run(0.5, { pilot: () => ({}) });
+  const down = vote('widgetRemove') > 0;
+  // Its endless waves end: the vote's up again.
+  const before = vote('widget');
+  bus.emit('runEnd', { won: false, wave: 23, endless: true, map: MAPS[0], time: 900, results: [] });
+  h.run(2.5, { pilot: () => ({}) });
+  const again = vote('widget') > before;
+  if (!up) failed.push('the vote isn’t put up as a run ends');
+  if (!down) failed.push('the vote stays up past keepFighting');
+  if (!again) failed.push('the vote isn’t put up again as the endless run ends');
+  const yes = (b: boolean) => (b ? 'yes' : 'NO');
+  return `flow: a fly-over at each fight's start ${yes(sent === 2)}; vote up ${yes(up)}, down on keepFighting ${yes(down)}, up again after the endless waves ${yes(again)}`;
 }
 
 function probe(m: ArenaMap): { row: string; failed: string[] } {

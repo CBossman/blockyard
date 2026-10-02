@@ -1,5 +1,5 @@
 import type { Entity, GameContext, Player } from '@platform';
-import { bossKind } from '../bosses';
+import { isBossType } from '../bosses/ids';
 import { SHOWS } from './moves';
 
 /**
@@ -60,7 +60,7 @@ function of(e: Entity): Status {
   return s;
 }
 
-export const isBoss = (e: Entity): boolean => !!bossKind(e.type);
+export const isBoss = (e: Entity): boolean => isBossType(e.type);
 
 /** Frozen solid, or reeling: it can't move or strike. */
 export const stunned = (e: Entity): boolean => {

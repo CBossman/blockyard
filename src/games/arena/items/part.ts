@@ -3,7 +3,7 @@ import { WEAPON_MODELS } from '../models/weapons';
 import type { ArenaPart } from '../part';
 import { setBoltModel } from './crossbow';
 import { noteRoll, tickCombat } from './combat';
-import { shedArmor } from './index';
+import { shedArmor } from './armor';
 import { forge, forgePrice } from './forge';
 import { clearMissiles, updateMissiles } from './missiles';
 import { resetPotions, updatePotions } from './potions';
