@@ -94,11 +94,11 @@ export function spikes(w: number, d: number): Model {
     if (y === 0) return x % 4 === 0 || z % 4 === 0 ? 'deepslate' : undefined;
     const sx = x % 4;
     const sz = z % 4;
-    // A spike every 4: two across at its foot, one at its tip.
+    // A spike every 4: two across at its foot, one at its tip; dark iron, honed bright to the point.
     const at = (sx === 1 || sx === 2) && (sz === 1 || sz === 2);
     if (!at) return undefined;
-    if (y > 9) return sx === 1 && sz === 1 ? 'iron_block' : undefined;
-    return 'iron_block';
+    if (y > 9) return sx === 1 && sz === 1 ? (y > 12 ? 'iron_block' : 'light_gray_concrete') : undefined;
+    return y < 5 ? 'deepslate' : 'gray_concrete';
   });
   return { bp, scale: 1 / 8, pivot: { x: 0, y: 0, z: 0 } };
 }

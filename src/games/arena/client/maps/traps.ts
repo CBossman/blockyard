@@ -57,7 +57,9 @@ export function trapFx(): ClientKit {
         const old = going.get(spec.id);
         if (old) end(old);
         const g: Going = { spec, from: client.time + WARN, until: client.time + m.time, owed: 0, loops: [] };
-        if (spec.kind === 'jets') for (const j of spec.jets) g.loops.push(client.audio.loop(spec.element === 'frost' ? 'trap_frost_loop' : 'trap_fire_loop', { at: j.at, volume: 0 }));
+        // Heard roaring at each jet (at every other one of many).
+        if (spec.kind === 'jets')
+          for (const j of spec.jets.filter((_, i) => spec.jets.length <= 4 || i % 2 === 0)) g.loops.push(client.audio.loop(spec.element === 'frost' ? 'trap_frost_loop' : 'trap_fire_loop', { at: j.at, volume: 0 }));
         going.set(spec.id, g);
       });
     },
@@ -75,15 +77,17 @@ export function trapFx(): ClientKit {
         if (spec.kind === 'jets') {
           for (const l of g.loops) l.set({ volume: 0.9 * k });
           const colours = spec.element === 'frost' ? FROST : spec.element === 'soul' ? SOUL : FIRE;
-          g.owed += dt * 70 * spec.jets.length * k;
+          // A hot glow at each mouth; the tongue of flame (or frost) widening as it goes.
+          for (const j of spec.jets) client.fx.flare(j.at, (spec.element === 'frost' ? 0.7 : 1.1) * k * rand(0.85, 1.1));
+          g.owed += dt * 120 * spec.jets.length * k;
           while (g.owed >= 1) {
             g.owed -= 1;
             const j = pick(spec.jets);
-            const speed = j.length * rand(1.6, 2.2);
-            const at = { x: j.at.x + rand(-0.12, 0.12), y: j.at.y + rand(-0.1, 0.1), z: j.at.z + rand(-0.12, 0.12) };
-            const spread = 0.18;
-            const v = { x: (j.dir.x + rand(-spread, spread)) * speed, y: (j.dir.y + rand(-spread, spread) * 0.6) * speed, z: (j.dir.z + rand(-spread, spread)) * speed };
-            client.fx.particles(at, pick(colours), { count: 1, speed: 0.3, size: rand(0.16, 0.34), gravity: spec.element === 'frost' ? 1 : -2.5, glow: spec.element === 'frost' ? 0.6 : 1, life: rand(0.38, 0.55), spread: 0.05, up: 0, drag: 1.1, velocity: v, collide: true });
+            const speed = j.length * rand(1.5, 2);
+            const at = { x: j.at.x + rand(-0.15, 0.15), y: j.at.y + rand(-0.12, 0.12), z: j.at.z + rand(-0.15, 0.15) };
+            const spread = 0.2;
+            const v = { x: (j.dir.x + rand(-spread, spread)) * speed, y: (j.dir.y + rand(-spread, spread) * 0.5) * speed, z: (j.dir.z + rand(-spread, spread)) * speed };
+            client.fx.particles(at, pick(colours), { count: 1, speed: 0.4, size: rand(0.3, 0.6), gravity: spec.element === 'frost' ? 1 : -3, glow: spec.element === 'frost' ? 0.6 : 1, life: rand(0.42, 0.6), spread: 0.08, up: 0, drag: 1.4, velocity: v, collide: false });
             if (spec.element === 'fire' && Math.random() < 0.08) client.fx.particles({ x: at.x + v.x * 0.4, y: at.y + 0.6, z: at.z + v.z * 0.4 }, SMOKE, { count: 1, speed: 0.2, size: rand(0.1, 0.18), gravity: -0.6, glow: 0, life: rand(1, 1.5), spread: 0.2, up: 0.8, drag: 0.9, collide: false });
           }
         } else if (spec.kind === 'sluice') {

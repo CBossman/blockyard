@@ -36,8 +36,12 @@ const PLAZA = 54;
 
 /** The gates: east, south, west and north (under the emperor's box). */
 const GATES = [0, Math.PI / 2, Math.PI, -Math.PI / 2];
-/** The lions' heads on the pit wall, between the gates. */
-const LIONS = [Math.PI / 4, (Math.PI * 3) / 4, (-Math.PI * 3) / 4, -Math.PI / 4];
+/** The lions' heads on the pit wall, either side of each quarter between the gates. */
+const LIONS = [0, 1, 2, 3, 4, 5, 6, 7].map((i) => Math.PI / 8 + (i * Math.PI) / 4);
+/** The broken columns, on the diagonals (between two lions, out of their fire). */
+const COLUMNS_AT = [Math.PI / 4, (Math.PI * 3) / 4, (-Math.PI * 3) / 4, -Math.PI / 4];
+/** The gates' braziers stand this far round from them (radians), banners hung under them. */
+const FLANK = 0.2;
 /** Monsters come into the gates' pens here. */
 const PEN = 27.5;
 
@@ -336,7 +340,7 @@ function features(bp: Blueprint) {
       }
   }
   // Broken columns, each its own height, a fallen drum beside the shortest.
-  LIONS.forEach((a, i) => {
+  COLUMNS_AT.forEach((a, i) => {
     const cx = Math.round(Math.cos(a) * 11);
     const cz = Math.round(Math.sin(a) * 11);
     const h = [5, 3, 6, 2][i];
@@ -372,7 +376,7 @@ function features(bp: Blueprint) {
 }
 
 /** Braziers on the parapet: at the gates' sides and over the lions. */
-const FIRES: Fire[] = [...GATES.flatMap((a) => [a - 0.2, a + 0.2]), ...LIONS].map((a) => {
+const FIRES: Fire[] = [...GATES.flatMap((a) => [a - FLANK, a + FLANK]), ...LIONS].map((a) => {
   const r = PIT + 0.5;
   return { at: { x: Math.round(Math.cos(a) * r) + 0.5, y: POD_TOP + 4, z: Math.round(Math.sin(a) * r) + 0.5 }, size: 0.9 };
 });
@@ -405,8 +409,8 @@ function design(): BannerDesign {
 }
 const BANNER = banner(design());
 
-/** Banners down the podium wall between the gates and the lions, facing the middle; the box's own either side of it. */
-const BANNERS: Decor[] = [Math.PI / 8, (Math.PI * 3) / 8, (Math.PI * 5) / 8, (Math.PI * 7) / 8, (-Math.PI * 7) / 8, (-Math.PI * 5) / 8, (-Math.PI * 3) / 8, (-Math.PI * 1) / 8].map((a) => {
+/** Banners down the podium wall either side of every gate, under its braziers, facing the middle. */
+const BANNERS: Decor[] = GATES.flatMap((g) => [g - FLANK, g + FLANK]).map((a) => {
   const x = C.x + Math.cos(a) * (PIT - 0.56);
   const z = C.z + Math.sin(a) * (PIT - 0.56);
   return { model: BANNER, at: { x, y: POD_TOP + 0.9, z }, face: faceTo(x, z, C.x, C.z) };
@@ -465,7 +469,7 @@ const TRAPS: TrapSpec[] = [
     kind: 'jets',
     element: 'fire',
     lever: { at: { x: 14.5, y: FLOOR + 2, z: 0.5 }, face: Math.PI / 2 },
-    price: 90,
+    price: 100,
     time: 7,
     cooldown: 40,
     zone: [],
