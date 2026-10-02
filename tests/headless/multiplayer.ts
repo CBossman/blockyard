@@ -97,8 +97,12 @@ function arena() {
     p.api.maxHealth = 400;
     p.api.health = 400;
   }
-  pa.api.teleport({ x: -14.5, y: host.sim.surfaceY(-15, 0) + 1, z: 0.5 });
-  pb.api.teleport({ x: 15.5, y: host.sim.surfaceY(15, 0) + 1, z: 0.5 });
+  // Either side of the middle of whichever arena the fight's on (the public rotation may have
+  // moved on from the Colosseum after an earlier test's run in this process).
+  const mid = host.sim.ctx.world.spawn;
+  const at = (dx: number) => ({ x: Math.floor(mid.x) + dx + 0.5, y: host.sim.surfaceY(Math.floor(mid.x) + dx, Math.floor(mid.z)) + 1, z: Math.floor(mid.z) + 0.5 });
+  pa.api.teleport(at(-15));
+  pb.api.teleport(at(15));
   // (A fight opens with the map's fly-over and the class pick before the first wave comes in:
   // up to 90 s, until both have been hurt.)
   let t = 0;
