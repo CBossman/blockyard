@@ -702,3 +702,53 @@
 .widget-screen:has(.gw-arena-end) .gw-arena-end {
   pointer-events: auto;
 }
+
+/* ---------- Down and bleeding out (the run's own screen, client/run.ts): in the HUD's type and colours ---------- */
+.ar-downed-card {
+  filter: var(--ar-halo);
+  text-shadow: none;
+}
+.ar-downed-title {
+  font: 800 54px/1 var(--ar-title);
+  letter-spacing: 0.18em;
+  margin-right: -0.18em;
+  background: linear-gradient(180deg, #ffd9d2 5%, #e0505a 50%, #8e1820 92%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.ar-downed.reviving .ar-downed-title {
+  background: linear-gradient(180deg, #f2ffe8 5%, var(--ar-good) 55%, #4a7a2a 95%);
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+.ar-downed-left {
+  margin-top: 10px;
+  font: 500 16px/1 var(--ar-label);
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--ar-fg);
+}
+.ar-downed-bar {
+  width: 280px;
+  height: 4px;
+  margin: 12px auto 10px;
+  border: none;
+  border-radius: 0;
+  background: rgba(20, 8, 8, 0.6);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+.ar-downed-bar i {
+  background: linear-gradient(90deg, #8e1820, var(--ar-blood));
+  box-shadow: 0 0 8px rgba(216, 52, 60, 0.7);
+}
+.ar-downed.reviving .ar-downed-bar i {
+  background: linear-gradient(90deg, #4a7a2a, var(--ar-good));
+  box-shadow: 0 0 8px rgba(159, 216, 112, 0.7);
+}
+.ar-downed-hint {
+  font: 500 12px/1.3 var(--ar-label);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ar-fg2);
+}
