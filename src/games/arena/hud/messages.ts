@@ -150,4 +150,6 @@ export interface EndMsg {
 export interface LevelMsg {
   level: number;
   unlocks: { kind: string; name: string }[];
+  /** It's landing on the end screen (which shows it): only its brass. */
+  end?: true;
 }

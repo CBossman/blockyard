@@ -7,7 +7,7 @@ import { bus, type RunResult, type Unlock } from '../run/bus';
 import { finalWave, TWISTS, WAVES, type Twist } from '../run/director';
 import { addGold, gold } from '../run/gold';
 import { map, state } from '../run/state';
-import { className, END, endActions, endScreen, type EndExtras, type EndRun } from './end';
+import { className, END, endActions, endScreen, LEVEL_UP_AT, type EndExtras, type EndRun } from './end';
 import { MSG, type CallMsg, type CrowdMsg, type FighterState, type GoreMsg, type HitMsg, type MeMsg, type PartyMsg, type RunMsg, type WaveCard } from './messages';
 import { Tallies } from './tally';
 
@@ -210,6 +210,11 @@ function endRun(game: GameContext, run: EndRun, results: RunResult[]) {
   game.clock.after(run.won ? 3.4 : 2.2, () => {
     if (ended !== done) return;
     for (const p of game.players) endScreen(p, run, tallies, done.extras);
+    // The brass as a level gained lands on the screen.
+    game.clock.after(LEVEL_UP_AT, () => {
+      if (ended !== done) return;
+      for (const r of results) if (r.xp.level > r.xp.from) tell(game, r.player, MSG.level, { level: r.xp.level, unlocks: [], end: true });
+    });
   });
 }
 

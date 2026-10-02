@@ -277,6 +277,9 @@ export function endScreen(p: Player, run: EndRun, tallies: Tallies, extras: EndE
   p.hud.widget(END.name, data);
 }
 
+/** Seconds into the end screen that its level-up lands (its `.up`'s animation delay, after the bar fills). */
+export const LEVEL_UP_AT = 2.7;
+
 /** The end screen's buttons (`END.def.actions`, set by the HUD's part): play again, leave, or keep fighting. */
 export function endActions(game: GameContext, keep: (p: Player) => void): WidgetDefinition['actions'] {
   return {

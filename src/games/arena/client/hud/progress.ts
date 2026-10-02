@@ -85,7 +85,10 @@ export function progress(): ClientKit {
       });
       client.on(MSG.level, (d) => {
         const l = d as LevelMsg;
-        if (l && typeof l.level === 'number' && Array.isArray(l.unlocks)) showLevel(client, l);
+        if (!l || typeof l.level !== 'number' || !Array.isArray(l.unlocks)) return;
+        // (On the end screen, it shows the level: only its brass here.)
+        if (l.end) client.audio.play('ar_level_up', { volume: 0.9 });
+        else showLevel(client, l);
       });
     },
     frame(client) {
