@@ -6,6 +6,7 @@ import type { ArenaMap } from './registry';
 
 export { FLOOR, along, inBox, mapNear, type ArenaMap, type Box, type Fire, type Gate, type IntroKey, type TrapSpec } from './registry';
 export { MAP_BLOCKS } from './blocks';
+export { INTRO_TIME, introSeconds } from './messages';
 
 /** Every map, in the order the public rotation takes them (the first is the default). */
 export const MAPS: readonly ArenaMap[] = [COLOSSEUM, NECROPOLIS, FORGE, SANCTUM];

@@ -86,6 +86,8 @@ export interface ArenaEvents {
   ready: { player: Player; ready: number; of: number };
   /** A fighter chose to keep fighting past a victory, into the endless waves (the end screen's button). */
   keepFighting: { player: Player };
+  /** A fighter's fly-over of the map is over (played out or skipped, `maps/intro.ts`): their screen's free for the run's menus. */
+  introOver: { player: Player };
   /** A fighter took a blessing (`id`; `name` with its level: Berserker II), chosen or (`chosen` false) given them as the wave began. */
   blessed: { player: Player; id: string; name: string; text: string; chosen: boolean };
 }
