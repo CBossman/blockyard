@@ -224,6 +224,26 @@ export default function arenaBestiary() {
     check(n === 4 && high > 2 && s.hurt() > 0, 'bats fly and bite');
   }
 
+  // Frozen or reeling (the armory's `data.stunned`): a knight in reach does nothing, a bat drops.
+  {
+    const s = scene(20);
+    const k = s.spawn('knight', -7, 0.5);
+    const b = s.spawn('bat', 0.5, 0.5, { flock: true });
+    s.run(4);
+    const flying = b.position.y - FLOOR - 1;
+    k.data.stunned = 99;
+    b.data.stunned = 99;
+    s.heal();
+    s.run(4);
+    const still = s.hurt();
+    const dropped = b.position.y - FLOOR - 1;
+    k.data.stunned = 0;
+    b.data.stunned = 0;
+    s.run(6);
+    log(`stunned: the knight did ${still} to us in 4 s, ${s.hurt().toFixed(1)} once it came to; the bat fell from ${flying.toFixed(1)} to ${dropped.toFixed(1)}, back up to ${(b.position.y - FLOOR - 1).toFixed(1)}`);
+    check(still === 0 && s.hurt() > 0 && dropped < flying - 2 && flying > 1.5 && b.position.y - FLOOR - 1 > 1.5, 'stunned monsters hold still, then carry on');
+  }
+
   // Elites: the chance grows from wave 6; affixes do what they say.
   {
     const s = scene(18);

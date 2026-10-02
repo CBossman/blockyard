@@ -2,7 +2,7 @@ import { CHARACTER_STYLE, Models, type Behavior, type DamageEvent, type Entity, 
 import { map } from '../run/state';
 import { MONSTER_MODELS } from './models';
 import type { MonsterKind } from './registry';
-import { ahead, heading, show, turnToward, wrap } from './util';
+import { ahead, heading, held, show, turnToward, wrap } from './util';
 
 /**
  * The Knight: a revenant in plate behind a kite shield. The shield turns aside whatever comes at it
@@ -15,7 +15,8 @@ interface KnightState {
   /** Where it faces (`heading`), turning no faster than it can. */
   _face?: number;
   _cd?: number;
-  _wind?: number;
+  /** Its swing's wind-up (the tell). */
+  _tell?: number;
   /** Its guard is down until then (after a swing, or blown open). */
   _open?: number;
   _bash?: number;
@@ -40,6 +41,7 @@ function guard(game: GameContext, self: Entity, up: boolean) {
 
 const knightAI: Behavior = (self, game, dt) => {
   const s = self.data as KnightState;
+  if (held(self, () => s._tell !== undefined && ((s._tell = undefined), true))) return;
   const now = game.clock.now;
   s._cd = Math.max(0, (s._cd ?? 1.5) - dt);
   s._bash = Math.max(0, (s._bash ?? 0) - dt);
@@ -56,13 +58,13 @@ const knightAI: Behavior = (self, game, dt) => {
   guard(game, self, !open);
   // Winding up a swing (the shield still up): the sword raised and glinting, its feet planted,
   // still turning to follow.
-  if (s._wind !== undefined) {
+  if (s._tell !== undefined) {
     self.stop();
     s._face = turnToward(s._face, want, TURN * 0.6 * dt);
     self.lookAt(ahead(e, s._face, 4, 1.5));
-    s._wind -= dt;
-    if (s._wind > 0) return;
-    s._wind = undefined;
+    s._tell -= dt;
+    if (s._tell > 0) return;
+    s._tell = undefined;
     self.glow(null);
     self.animate('attack');
     game.audio.play('knight_swing', { at: e });
@@ -90,7 +92,7 @@ const knightAI: Behavior = (self, game, dt) => {
   if (d > REACH - 0.4) self.moveTo(target);
   else self.stop();
   if (d <= REACH && s._cd === 0 && facing && self.canSee(target)) {
-    s._wind = 0.6;
+    s._tell = 0.6;
     self.stop();
     self.animate('raise');
     self.glow('#ffd27a');
