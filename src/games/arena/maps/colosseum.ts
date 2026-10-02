@@ -499,8 +499,8 @@ export const COLOSSEUM: ArenaMap = {
   time: 0.66,
   dusk: 0.07,
   intro: [
-    { at: { x: 52, y: FLOOR + 14, z: 40 }, look: { x: 0, y: FLOOR + 16, z: 0 } },
-    { at: { x: 34, y: FLOOR + 36, z: 30 }, look: { x: 0, y: FLOOR + 8, z: 0 } },
+    { at: { x: 60, y: FLOOR + 9, z: 47 }, look: { x: 0, y: FLOOR + 17, z: 0 } },
+    { at: { x: 30, y: FLOOR + 35, z: 26 }, look: { x: 0, y: FLOOR + 8, z: 0 } },
     { at: { x: 6, y: FLOOR + 24, z: 20 }, look: { x: 0, y: FLOOR + 8, z: -20 } },
     { at: { x: -8, y: FLOOR + 11, z: 6 }, look: { x: 0.5, y: POD_TOP + 3, z: -24 } },
   ],
