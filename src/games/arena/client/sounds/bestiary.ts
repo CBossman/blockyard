@@ -133,6 +133,39 @@ export function defineBestiarySounds(client: Client) {
     for (let i = 0; i < 6; i++) s.noise({ duration: 0.06, filter: 'bandpass', from: 1200, q: 2, volume: 0.18, delay: 0.25 + i * 0.1 + Math.random() * 0.05 });
   });
 
+  // The Minotaur: a snort and a low bellow.
+  a.define('minotaur', (s) => {
+    s.noise({ duration: 0.25, filter: 'bandpass', from: 900, to: 400, q: 2, volume: 0.35 });
+    s.tone({ wave: 'sawtooth', from: 95 * s.pitch, to: 75 * s.pitch, duration: 0.7, attack: 0.1, volume: 0.35, lowpass: 600, delay: 0.15 });
+  });
+  a.define('minotaur_hurt', (s) => {
+    s.tone({ wave: 'sawtooth', from: 150 * s.pitch, to: 90 * s.pitch, duration: 0.35, volume: 0.35, lowpass: 900 });
+    s.noise({ duration: 0.2, filter: 'bandpass', from: 700, q: 2, volume: 0.25 });
+  });
+  a.define('minotaur_death', (s) => {
+    s.tone({ wave: 'sawtooth', from: 110 * s.pitch, to: 40 * s.pitch, duration: 1.4, volume: 0.45, lowpass: 700, vibrato: { rate: 6, depth: 4 } });
+    s.noise({ duration: 1, filter: 'lowpass', from: 900, to: 120, volume: 0.35, delay: 0.3 });
+  });
+  // Its bellow before it charges: a roar that swells.
+  a.define('bellow', (s) => {
+    s.tone({ wave: 'sawtooth', from: 70 * s.pitch, to: 95 * s.pitch, duration: 1.1, attack: 0.25, volume: 0.45, lowpass: { freq: 400, to: 1100 }, vibrato: { rate: 7, depth: 5 } });
+    s.tone({ wave: 'sawtooth', from: 105 * s.pitch, to: 140 * s.pitch, duration: 1.1, attack: 0.25, volume: 0.25, lowpass: 900 });
+    s.noise({ duration: 1, filter: 'bandpass', from: 500, to: 1200, q: 1.5, volume: 0.25, attack: 0.3 });
+  });
+  // The charge: hooves drumming.
+  a.define('stampede', (s) => {
+    for (let i = 0; i < 9; i++) {
+      s.tone({ from: 80 * s.pitch, to: 40, duration: 0.12, volume: 0.45, delay: i * 0.19 });
+      s.noise({ duration: 0.08, filter: 'lowpass', from: 900, to: 200, volume: 0.25, delay: i * 0.19 + 0.02 });
+    }
+  });
+  // Into the wall: a crash, and its head ringing.
+  a.define('crash', (s) => {
+    s.noise({ duration: 0.6, filter: 'lowpass', from: 2400, to: 150, volume: 0.9 });
+    s.tone({ from: 100 * s.pitch, to: 30, duration: 0.6, volume: 0.8 });
+    for (let i = 0; i < 3; i++) s.tone({ wave: 'sine', from: 1800 + i * 450, duration: 1.2, volume: 0.05, delay: 0.2 + i * 0.1, vibrato: { rate: 9, depth: 30 } });
+  });
+
   // The Cultist: a low muttering.
   a.define('cultist', (s) => {
     for (let i = 0; i < 4; i++) s.tone({ wave: 'sawtooth', from: (130 + (i % 2) * 18) * s.pitch, duration: 0.22, volume: 0.13, bandpass: { freq: 600, q: 3 }, delay: i * 0.2 });

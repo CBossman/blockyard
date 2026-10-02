@@ -5,7 +5,8 @@
  * Dependency-free (Node 22+): `node src/games/arena/tools/monsters/build.mjs [ids...]` (with ids,
  * only those are rebuilt and index.ts is left alone). Every file is read back and checked.
  *
- * - People-shaped monsters (`people.mjs`: the knight, the cultist, the imp, the wraith, the golem)
+ * - People-shaped monsters (`people.mjs`: the knight, the cultist, the imp, the wraith, the
+ *   minotaur, the golem)
  *   are the platform's characters (`src/platform/character/build.ts`, read here as it is) with
  *   their armour, robes, horns and wings painted on, on the humanoid rig (docs/HUMANOID.md): the
  *   platform walks them, swings their arms and raises them, and the Arena's screens pose what's
@@ -21,7 +22,7 @@ import { fileURLToPath } from 'node:url';
 import { readGlb } from '../voxel.mjs';
 import { figureGlb } from './glb.mjs';
 import { bat, slime, spider } from './beasts.mjs';
-import { cultist, golem, imp, knight, wraith } from './people.mjs';
+import { cultist, golem, imp, knight, minotaur, wraith } from './people.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const OUT = join(HERE, '../../monsters/models');
@@ -41,6 +42,7 @@ const MODELS = [
   { id: 'imp', name: 'Imp', make: imp },
   { id: 'wraith', name: 'Wraith', make: wraith },
   { id: 'golem', name: 'Golem', make: golem },
+  { id: 'minotaur', name: 'Minotaur', make: minotaur },
 ];
 
 function check(buf, m) {

@@ -8,6 +8,7 @@ import cultist from './cultist.glb?url';
 import imp from './imp.glb?url';
 import wraith from './wraith.glb?url';
 import golem from './golem.glb?url';
+import minotaur from './minotaur.glb?url';
 
 /** The monsters' models (GLB), written by `src/games/arena/tools/monsters/build.mjs` (see its header). */
-export const MONSTER_MODELS = { spider, slime, slime_small, slime_tiny, bat, knight, cultist, imp, wraith, golem };
+export const MONSTER_MODELS = { spider, slime, slime_small, slime_tiny, bat, knight, cultist, imp, wraith, golem, minotaur };

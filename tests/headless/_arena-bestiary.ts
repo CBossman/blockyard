@@ -140,6 +140,40 @@ export default function arenaBestiary() {
     check(blow < 7.5 && blast > blow * 1.4, 'stone shrugs off blows, cracks under blasts');
   }
 
+  // The minotaur charges down its line: standing in it you're gored; stepped aside, it runs into the wall, stunned.
+  {
+    const s = scene(19);
+    const m = s.spawn('minotaur', 4.5, 0.5);
+    let gored = false;
+    s.game.events.on('playerDamage', ({ source, amount }) => {
+      if (source === m && amount >= 8) gored = true;
+    });
+    s.run(6);
+    log(`minotaur: gored us standing in its line ${gored}`);
+    check(gored, 'the charge gores whoever stays in its way');
+    // Again, toward the wall behind us; we step out of the line during the tell.
+    s.me.teleport({ x: -14.5, y: FLOOR + 1, z: 8.5 }, 0, 0);
+    m.teleport({ x: -5.5, y: FLOOR + 1.05, z: 8.5 });
+    m.data._cd = 0;
+    m.data._stun = 0;
+    m.data._charge = undefined;
+    let stepped = false;
+    let stunned = false;
+    s.run(6, () => {
+      if (m.data._paw !== undefined && !stepped) {
+        stepped = true;
+        s.me.teleport({ x: -12.5, y: FLOOR + 1, z: 13.5 }, 0, 0);
+      }
+      if (((m.data._stun as number | undefined) ?? 0) > 0) stunned = true;
+      return {};
+    });
+    const before = m.health;
+    m.data._stun = 2;
+    m.damage(10, { source: s.me, cause: 'melee' });
+    log(`minotaur into the wall: stepped aside ${stepped}, stunned ${stunned}; a blow of 10 while dazed does ${(before - m.health).toFixed(1)}`);
+    check(stepped && stunned && before - m.health > 10, 'a missed charge into a wall stuns it, and dazed it takes more');
+  }
+
   // The imp throws fire and sets you alight.
   {
     const s = scene(15);

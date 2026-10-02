@@ -79,11 +79,6 @@ function coat(vox, part, colour, where = () => true, axes = 'xyz') {
   for (const [q, c] of add.values()) vox.set(part, q[0], q[1], q[2], c);
 }
 
-/** Every cell of a part, as [i, j, k, colour]. */
-function cellsOf(vox, part) {
-  return [...(vox.parts.get(part) ?? new Map())].map(([key, c]) => [(key % 1024) - 512, (Math.floor(key / 1024) % 1024) - 512, Math.floor(key / 1048576) - 512, c]);
-}
-
 /**
  * Paint in a hand's posed space: the knight's shield arm is held out by the screens' pose (the
  * forearm forward, a quarter turn up from hanging), so what it holds is drawn as it will be seen
@@ -339,6 +334,77 @@ export function imp() {
   // A ball of fire in the right fist.
   const g = J.gripR;
   ball(vox, 'handR', [g[0] - 0.5, g[1] - 1, g[2] + 4], [2.6, 2.6, 2.6], (i, j, k, d) => (d < 0.35 ? 'fireCore' : 'fire'));
+  return { vox, palette: P, skeleton, extras: { wear }, rigid: TRUNK };
+}
+
+// ---------------------------------------------------------------------------------------------
+// The minotaur: a bull-headed brute in a leather harness, a shaggy mane, horns sweeping forward,
+// a gold ring through its nose, hooves, and a great double axe.
+
+export function minotaur() {
+  const look = { build: 'heavy', skin: '#6e4a30', hair: 'bald', face: 'glow', eyes: '#ff4a2a', top: 'tank', topColor: '#6e4a30', bottom: 'shorts', bottomColor: '#3a2416', shoes: 'boots', shoeColor: '#2a2420' };
+  const { vox, palette: P, joints: J, skeleton, wear } = person(look);
+  P.add('fur', 0x6e4a30, { rough: 0.95, vary: 0.07 });
+  P.add('furDark', 0x4a301e, { rough: 0.95, vary: 0.07 });
+  P.add('muzzle', 0x86604a, { rough: 0.6 });
+  P.add('nostril', 0x1e120c, { rough: 0.6 });
+  P.add('horn', 0xe8dcbc, { rough: 0.35 });
+  P.add('hornTip', 0x3a2c22, { rough: 0.35 });
+  P.add('ring', 0xe0b83a, { rough: 0.2, metal: 1 });
+  P.add('strap', 0x3a2416, { rough: 0.5 });
+  P.add('buckle', 0xc8ccd2, { rough: 0.25, metal: 1 });
+  P.add('hoof', 0x26201c, { rough: 0.4 });
+  P.add('iron', 0x8a929c, { rough: 0.3, metal: 0.9 });
+  P.add('edge', 0xd8dee6, { rough: 0.2, metal: 1 });
+  P.add('haft', 0x5a3a22, { rough: 0.7 });
+  P.add('glowEye', 0xff4a2a, { rough: 0.2, glow: 1 });
+  // Its hide: the tank top and arms are its own fur.
+  for (const part of ['chest', 'spine', 'upperArmL', 'upperArmR', 'lowerArmL', 'lowerArmR']) vox.recolour(part, (i, j, k, c) => (c.startsWith('top') ? 'fur' : undefined));
+  // The bull's head: a broad skull, a long muzzle, a ring through the nose, small burning eyes,
+  // ears out to the sides and horns sweeping out and forward.
+  vox.parts.get('head').clear();
+  vox.parts.get('neck').clear();
+  fill(vox, 'head', [-7, 35, -6], [7, 48, 6], (i, j, k) => (hash(i, j, k, 2) < 0.3 ? 'furDark' : 'fur'), (p) => inRound(p, [-7, 35, -6], [7, 48, 6], [2.5, 2.5, 2.5]));
+  // The muzzle narrows toward the nose, two nostrils low on its end.
+  fill(vox, 'head', [-4.5, 35.5, 4], [4.5, 43, 12], (i, j, k) => (k >= 11 && j === 38 && Math.abs(C(i)) > 1 && Math.abs(C(i)) < 2.6 ? 'nostril' : 'muzzle'), (p) => inRound(p, [-4.5 + (p[2] - 4) * 0.12, 35.5, 4], [4.5 - (p[2] - 4) * 0.12, 43 - (p[2] - 4) * 0.25, 12], [1.5, 1.5, 1.5]));
+  for (const m of [1, -1]) {
+    for (const [dx, dy] of [[0, 0], [0, 1]]) vox.set('head', (m > 0 ? 5 : -6) + dx, 44 + dy, 5, 'glowEye');
+    vox.set('head', m > 0 ? 4 : -5, 46, 5, 'furDark');
+    vox.set('head', m > 0 ? 5 : -6, 46, 5, 'furDark');
+    capsule(vox, 'head', [m * 6.5, 44.5, 0], [m * 10.5, 43.5, -1.5], 1.4, 0.7, 'furDark');
+    // A horn: out from the temple, curving forward and up.
+    let p = [m * 5.5, 46.5, 1];
+    for (let t = 0; t < 10; t++) {
+      const a = t / 9;
+      const q = [m * (5.5 + Math.sin(a * 2.1) * 8.5), 46.5 + a * a * 6, 1 + Math.max(0, a - 0.35) * 11];
+      capsule(vox, 'head', p, q, 2.4 - a * 1.6, 2.4 - Math.min(1, a + 0.11) * 1.6, a > 0.82 ? 'hornTip' : 'horn');
+      p = q;
+    }
+  }
+  for (let i = -2; i < 2; i++) vox.set('head', i, 36, 12, 'ring');
+  for (const i of [-3, 2]) vox.set('head', i, 37, 12, 'ring');
+  // A shaggy mane over its neck and shoulders.
+  coat(vox, 'chest', (i, j, k) => (hash(i, j, k, 8) < 0.5 ? 'furDark' : 'fur'), (p) => p[1] > 31 && (p[2] < 1 || Math.abs(p[0]) < 4.5));
+  // A leather harness across its chest, a buckle where the straps cross.
+  for (const part of ['chest', 'spine']) {
+    vox.recolour(part, (i, j, k, c) => {
+      if (c !== 'fur' && c !== 'furDark') return;
+      const x = C(i), y = C(j) - 22;
+      if (Math.abs(Math.abs(x) - (y - 1) * 0.55) < 0.9 && y > 0 && y < 12) return Math.abs(x) < 1.2 && y < 4 ? 'buckle' : 'strap';
+    });
+  }
+  // Hooves, cloven.
+  for (const side of ['L', 'R']) vox.recolour(`foot${side}`, (i, j, k) => (k === 3 && (i === 3 || i === -4) ? false : 'hoof'));
+  // The labrys: a haft through the front of the right fist, two crescent blades at its head.
+  const g = J.gripR;
+  const at = (x, y, z, c) => vox.set('handR', Math.floor(g[0] + x), Math.floor(g[1] + y), Math.floor(g[2] + z), c);
+  for (let y = -10; y < 16; y++) for (const [x, z] of [[0, 2], [-1, 2], [0, 3], [-1, 3]]) at(x, y, z, y === -10 || y === 15 ? 'iron' : 'haft');
+  for (const side of [1, -1]) {
+    for (let d = 1; d < 10; d++) {
+      const half = 2 + d * 0.7 - Math.max(0, d - 7) * 1.6;
+      for (let y = Math.round(10 - half); y < Math.round(10 + half); y++) for (const x of [0, -1]) at(x, y, side > 0 ? 3 + d : 2 - d, d > 7 ? 'edge' : 'iron');
+    }
+  }
   return { vox, palette: P, skeleton, extras: { wear }, rigid: TRUNK };
 }
 

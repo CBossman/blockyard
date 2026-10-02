@@ -71,7 +71,7 @@ function about(f: Figure, r: number, y: number, rim = false) {
 }
 
 /** How tall each kind stands (for auras and tethers), blocks. */
-const HEIGHT: Record<string, number> = { knight: 1.95, wraith: 2, imp: 1.15, golem: 2.8, cultist: 1.95, bat: 0.6, slime: 0.95, slime_small: 0.55, slime_tiny: 0.32, spider: 0.9, brute: 2.5 };
+const HEIGHT: Record<string, number> = { minotaur: 2.4, knight: 1.95, wraith: 2, imp: 1.15, golem: 2.8, cultist: 1.95, bat: 0.6, slime: 0.95, slime_small: 0.55, slime_tiny: 0.32, spider: 0.9, brute: 2.5 };
 const heightOf = (f: Figure) => (HEIGHT[f.type] ?? 1.9) * f.root.scale.x;
 
 // The knight's shield arm: up before it (the forearm level, the shield square ahead), or lowered.
@@ -89,6 +89,10 @@ function bestiaryKit(): ClientKit {
   const tethers = new Map<number, { player: string; color: RGB; tick: number }>();
   const blessed = new Map<number, { until: number; tick: number }>();
   const links: { from: number; to: number; left: number }[] = [];
+  /** Lines on the ground where a charge will run. */
+  const lines: { x: number; y: number; z: number; dir: number; length: number; width: number; time: number; age: number; tick: number; color: RGB }[] = [];
+  /** Monsters reeling (a minotaur into a wall): till when. */
+  const dazed = new Map<number, number>();
   /** Cultists at their rite (by id): how long it's been, and how long it takes. */
   const rites = new Map<number, { age: number; time: number }>();
   let clock = 0;
@@ -116,6 +120,14 @@ function bestiaryKit(): ClientKit {
         const t = d as { id: number; player: string | null; color?: string };
         if (t.player) tethers.set(t.id, { player: t.player, color: rgb(t.color ?? '#6affc8', 1.6), tick: 0 });
         else tethers.delete(t.id);
+      });
+      client.on('bestiary.line', (d) => {
+        const l = d as { x: number; y: number; z: number; dir: number; length: number; width: number; time: number; color: string };
+        lines.push({ ...l, age: 0, tick: 0, color: rgb(l.color, 1.4) });
+      });
+      client.on('bestiary.dazed', (d) => {
+        const z = d as { id: number; time: number };
+        dazed.set(z.id, clock + z.time);
       });
       client.on('bestiary.rite', (d) => {
         const r = d as { id: number; time: number };
@@ -164,6 +176,19 @@ function bestiaryKit(): ClientKit {
             if (Math.random() < dt * 30) fx.particles(about(f, 0.9, 0.2), [1.6, 0.06, 0.1], { count: 1, speed: 0.3, size: 0.1, glow: 2, gravity: -2.5, life: 0.8, spread: 0.1 });
           }
         }
+        // Reeling: swaying on its feet, stars round its head.
+        const until = dazed.get(f.id);
+        if (until !== undefined) {
+          if (until < clock || f.state.dying > 0) {
+            dazed.delete(f.id);
+            f.root.rotation.z = 0;
+          } else {
+            f.root.rotation.z = Math.sin(clock * 5) * 0.12;
+            const h = heightOf(f);
+            const a = clock * 4;
+            if (Math.random() < dt * 20) fx.particles({ x: f.root.position.x + Math.cos(a) * 0.6, y: f.root.position.y + h + 0.15, z: f.root.position.z + Math.sin(a) * 0.6 }, [2, 1.7, 0.4], { count: 1, speed: 0, size: 0.12, glow: 2.6, gravity: 0, life: 0.35, spread: 0 });
+          }
+        }
         // Elites' auras.
         const a = auras.get(f.id);
         if (a && f.state.dying === 0) {
@@ -193,6 +218,7 @@ function bestiaryKit(): ClientKit {
       for (const id of auras.keys()) if (!shown.has(id)) auras.delete(id);
       for (const id of raised.keys()) if (!shown.has(id)) (raised.delete(id), guards.delete(id));
       for (const id of rites.keys()) if (!shown.has(id)) rites.delete(id);
+      for (const id of dazed.keys()) if (!shown.has(id)) dazed.delete(id);
       // The wraith's tether: a stream of ghost-light from its claws to whoever it drains.
       for (const [id, t] of tethers) {
         const w = shown.get(id);
@@ -254,6 +280,24 @@ function bestiaryKit(): ClientKit {
           const d = Math.sqrt(Math.random()) * r.radius * k;
           fx.particles({ x: r.x + Math.cos(a) * d, y: r.y + 0.1, z: r.z + Math.sin(a) * d }, r.color, { count: 1, speed: 0.3, size: 0.08, glow: 1.5, gravity: -2, life: 0.3, spread: 0.05 });
         }
+      }
+      // A charge's line: from the beast along the way it will run, the far end creeping out.
+      for (let i = lines.length - 1; i >= 0; i--) {
+        const l = lines[i];
+        l.age += dt;
+        if (l.age >= l.time) {
+          lines.splice(i, 1);
+          continue;
+        }
+        if ((l.tick -= dt) > 0) continue;
+        l.tick = 0.05;
+        const reach = l.length * Math.min(1, 0.35 + l.age / l.time);
+        const sx = Math.sin(l.dir), sz = Math.cos(l.dir);
+        for (let d = 1; d < reach; d += 0.7)
+          for (const side of [-1, 1]) {
+            const w = (l.width / 2) * side;
+            fx.particles({ x: l.x + sx * d + sz * w, y: l.y + 0.12, z: l.z + sz * d - sx * w }, l.color, { count: 1, speed: 0, size: 0.12, glow: 2.4, gravity: 0, life: 0.1, spread: 0 });
+          }
       }
       // Fire left burning on the sand.
       for (let i = fires.length - 1; i >= 0; i--) {

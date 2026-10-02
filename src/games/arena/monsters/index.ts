@@ -9,11 +9,12 @@ import { imp } from './imp';
 import { golem } from './golem';
 import { cultist } from './cultist';
 import { bat } from './bat';
+import { minotaur } from './minotaur';
 
 export type { MonsterKind } from './registry';
 
 /** Every kind of monster (bosses are `bosses/`). */
-export const MONSTERS: readonly MonsterKind[] = [zombie, skeleton, spider, sapper, necromancer, brute, goblin, knight, wraith, slime, slimeSmall, slimeTiny, imp, golem, cultist, bat];
+export const MONSTERS: readonly MonsterKind[] = [zombie, skeleton, spider, sapper, necromancer, brute, goblin, knight, wraith, slime, slimeSmall, slimeTiny, imp, golem, cultist, bat, minotaur];
 
 const byId = new Map(MONSTERS.map((m) => [m.id, m]));
 export const monsterKind = (id: string): MonsterKind | undefined => byId.get(id);

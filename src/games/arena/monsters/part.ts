@@ -5,6 +5,7 @@ import { knightGuard } from './knight';
 import { golemCracks } from './golem';
 import { empoweredHits } from './cultist';
 import { impFire } from './imp';
+import { minotaurDazed } from './minotaur';
 import { AFFIXES, eliteHits, eliteLanded, eliteList, eliteNight, elitesTick, eliteSlain, makeElite, resetElites, rollElite, type Affix } from './elites';
 import { MONSTERS, monsterKind } from './index';
 
@@ -25,6 +26,7 @@ export const bestiaryPart: ArenaPart = {
       knightGuard(game, hit);
       if (hit.cancelled) return;
       golemCracks(hit);
+      minotaurDazed(hit);
       empoweredHits(game, hit);
       eliteHits(game, hit);
     });
