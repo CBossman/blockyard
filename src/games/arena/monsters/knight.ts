@@ -7,8 +7,9 @@ import { ahead, heading, held, show, turnToward, wrap } from './util';
 /**
  * The Knight: a revenant in plate behind a kite shield. The shield turns aside whatever comes at it
  * from in front (blades, arrows, bolts), so it's beaten from the side or behind, from above (a
- * jumping blow), with magic, or blown open with a bomb. It turns slowly, so a fighter who circles it gets round
- * its guard; and it lowers the shield to swing, which is the moment to hit it from the front.
+ * jumping blow), with magic or a slam along the ground, or blown open with a bomb; and a parry
+ * leaves it reeling, its guard hanging open. It turns slowly, so a fighter who circles it gets
+ * round its guard; and it lowers the shield to swing, which is the moment to hit it from the front.
  */
 
 interface KnightState {
@@ -41,8 +42,12 @@ function guard(game: GameContext, self: Entity, up: boolean) {
 
 const knightAI: Behavior = (self, game, dt) => {
   const s = self.data as KnightState;
-  if (held(self, () => s._tell !== undefined && ((s._tell = undefined), true))) return;
   const now = game.clock.now;
+  // Reeling (a parry, a bash, a slam) or frozen: its guard hangs open till it comes to.
+  if (held(self, () => s._tell !== undefined && ((s._tell = undefined), true))) {
+    guard(game, self, false);
+    return;
+  }
   s._cd = Math.max(0, (s._cd ?? 1.5) - dt);
   s._bash = Math.max(0, (s._bash ?? 0) - dt);
   const target = self.nearestPlayer();
@@ -114,11 +119,14 @@ export function knightGuard(game: GameContext, hit: DamageEvent) {
     return;
   }
   if ((hit.cause !== 'melee' && hit.cause !== 'projectile' && hit.cause !== 'gun') || (hit.weapon && MAGIC.has(hit.weapon))) return;
-  if ((s._open ?? 0) > now) return;
+  if ((s._open ?? 0) > now || ((self.data.stunned as number | undefined) ?? 0) > 0) return;
   const src = hit.source && hit.source !== 'world' ? hit.source : null;
   const from = hit.from ?? src?.position;
   if (!from) return;
   const e = self.position;
+  // A blow along the ground from where it lands (a hammer's slam), not from whoever struck it,
+  // goes under it.
+  if (hit.cause === 'melee' && src && from.y < e.y + 0.7 && Math.hypot(from.x - src.position.x, from.z - src.position.z) > 0.5) return;
   // From above: a fighter come down on it out of a jump.
   if (src?.kind === 'player' && src.position.y > e.y + 0.9) return;
   if (Math.abs(wrap(heading(e, from) - (s._face ?? 0))) > COVER) return;
@@ -148,7 +156,7 @@ export const knight: MonsterKind = {
   weight: 0.8,
   max: 4,
   role: 'melee',
-  tip: 'Its shield turns blows from in front: hit it from the side, behind or above, or bomb it',
+  tip: 'Its shield turns blows from in front: hit it from the side, behind or above, parry it, or bomb it',
   color: '#d8dee6',
   define: () => ({
     name: 'Knight',
