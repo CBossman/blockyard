@@ -1,7 +1,7 @@
 import { CHARACTER_STYLE, Models, type Behavior, type DamageEvent, type GameContext } from '@platform';
 import { MONSTER_MODELS } from './models';
 import type { MonsterKind } from './registry';
-import { flat, grounded, ring, show } from './util';
+import { flat, grounded, ring } from './util';
 
 /**
  * The Golem: three metres of stone, slow and hard to hurt (armour turns aside a third of every
@@ -88,7 +88,6 @@ const golemAI: Behavior = (self, game, dt) => {
     self.glow(RUNE);
     game.audio.play('golem_charge', { at: e, volume: 1.2 });
     ring(game, e, POUND.radius, POUND.time, RUNE);
-    show(game, 'charge', { id: self.id, time: POUND.time, color: RUNE });
     return;
   }
   if (d < 3.4 && s._punch === 0 && self.canSee(target)) {

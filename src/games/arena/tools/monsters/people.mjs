@@ -253,7 +253,7 @@ export function cultist() {
   P.add('robeShade', 0x4a0a10, { rough: 0.88 });
   P.add('trim', 0xd0a038, { rough: 0.3, metal: 1 });
   P.add('shadow', 0x120608, { rough: 0.9 });
-  P.add('staff', 0x3a2416, { rough: 0.7 });
+  P.add('staff', 0x6a4426, { rough: 0.7 });
   P.add('crystal', 0xff2a3a, { rough: 0.1, glow: 1 });
   P.add('rope', 0xb08850, { rough: 0.9 });
   P.add('bone', 0xe6dcc6, { rough: 0.5 });
@@ -275,9 +275,9 @@ export function cultist() {
   const g = J.gripR;
   const at = (x, y, z, c) => vox.set('handR', Math.floor(g[0] + x), Math.floor(g[1] + y), Math.floor(g[2] + z), c);
   // (Through the front of the fist, ahead of the forearm.)
-  for (let y = -6; y < 30; y++) at(0, y, 2, 'staff'), at(-1, y, 2, 'staff');
-  for (const [x, z] of [[-2, 2], [1, 2], [-1, 1], [0, 3]]) for (let y = 28; y < 32; y++) at(x + (y > 30 ? (x > 0 ? 1 : -1) : 0), y, z, 'bone');
-  ball(vox, 'handR', [g[0] - 0.5, g[1] + 34, g[2] + 2.5], [2.2, 3.2, 2.2], 'crystal');
+  for (let y = -8; y < 30; y++) for (const [x, z] of [[0, 2], [-1, 2], [0, 3], [-1, 3]]) at(x, y, z, y % 7 === 0 ? 'trim' : 'staff');
+  for (const [x, z] of [[-2, 2], [1, 2], [-1, 1], [0, 4], [-2, 3], [1, 3]]) for (let y = 28; y < 33; y++) at(x + (y > 30 ? (x > 0 ? 1 : x < -1 ? -1 : 0) : 0), y, z, 'trim');
+  ball(vox, 'handR', [g[0] - 0.5, g[1] + 35, g[2] + 3], [2.6, 3.8, 2.6], 'crystal');
   return { vox, palette: P, skeleton, extras: { wear }, rigid: TRUNK };
 }
 
@@ -349,8 +349,8 @@ export function imp() {
 export function wraith() {
   const look = { build: 'slim', skin: '#d6e2d8', hair: 'bald', face: 'skull', eyes: '#8affd8', top: 'tunic', topColor: '#24303a', bottom: 'trousers', bottomColor: '#1a2028', shoes: 'flats', shoeColor: '#1a2028' };
   const { vox, palette: P, joints: J, skeleton, wear } = person(look);
-  P.add('shroud', 0x26323e, { rough: 0.95, vary: 0.06 });
-  P.add('shroudShade', 0x18202a, { rough: 0.95 });
+  P.add('shroud', 0x5a706c, { rough: 0.95, vary: 0.06, glow: 0.12 });
+  P.add('shroudShade', 0x3a4a48, { rough: 0.95, glow: 0.06 });
   P.add('shadow', 0x060a0c, { rough: 0.9 });
   P.add('wisp', 0x6affc8, { rough: 0.6, glow: 0.85 });
   P.add('wispDim', 0x3aa888, { rough: 0.6, glow: 0.5 });

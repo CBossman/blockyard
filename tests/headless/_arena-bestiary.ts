@@ -33,7 +33,7 @@ function scene(seed: number) {
     for (const e of game.entities.all()) if (!mine.has(e) && !e.data.spawned && !e.data.flock) e.remove();
   };
   me.teleport({ x: -8.5, y: FLOOR + 1, z: 8.5 }, -Math.PI / 2, 0);
-  const run = (seconds: number, pilot: Pilot = () => ({})) => h.run(seconds, { pilot: () => (clear(), pilot()) });
+  const run = (seconds: number, pilot: Pilot = () => ({})) => h.run(seconds, { pilot: (t) => (clear(), pilot(t)) });
   return { h, game, me, spawn, run, hurt: () => hurt, heal: () => ((me.health = me.maxHealth), (hurt = 0)) };
 }
 

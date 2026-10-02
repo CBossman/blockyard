@@ -1,4 +1,246 @@
+import type { Client, ClientKit, Figure } from '@platform/client';
+import { Color, Euler, Quat } from '@platform/client/math';
 import type { ClientPart } from './part';
 
-/** The bestiary on screen: monster voices, elite auras. (A stub for now: the part's owner fills it in.) */
-export const bestiaryClient: ClientPart = { name: 'bestiaryClient', kits: [] };
+/**
+ * The bestiary on each screen: what the server tells it once and it draws itself (so nothing's
+ * streamed): warning rings on the sand, elites' auras, the wraith's draining tether, a cultist's
+ * blessing, fire left burning; and the poses its monsters need (the knight's shield held up before
+ * it, lowered after it swings; the wraith floating).
+ */
+
+type RGB = [number, number, number];
+const rgb = (css: string, k = 1): RGB => {
+  const c = new Color(css);
+  return [c.r * k, c.g * k, c.b * k];
+};
+
+interface Ring {
+  x: number;
+  y: number;
+  z: number;
+  radius: number;
+  time: number;
+  color: RGB;
+  age: number;
+  tick: number;
+}
+interface Fire {
+  x: number;
+  y: number;
+  z: number;
+  left: number;
+  tick: number;
+}
+interface Aura {
+  affix: string;
+  color: RGB;
+  tick: number;
+}
+
+/** Each affix's aura: particles about the figure, how often, and how. */
+const AURAS: Record<string, { every: number; draw(c: Client, f: Figure, color: RGB, h: number): void }> = {
+  fiery: { every: 0.06, draw: (c, f, color, h) => c.fx.particles(about(f, 0.45, h * 0.5), color, { count: 2, speed: 0.6, size: 0.12, glow: 2.2, gravity: -4, life: 0.5, spread: 0.3, up: 1 }) },
+  frozen: { every: 0.1, draw: (c, f, color, h) => c.fx.particles(about(f, 0.5, h * 0.6), color, { count: 2, speed: 0.4, size: 0.07, glow: 1.6, gravity: 1.5, life: 0.9, spread: 0.4, up: 0.2 }) },
+  vampiric: { every: 0.12, draw: (c, f, color, h) => c.fx.particles(about(f, 0.4, h * 0.55), color, { count: 2, speed: 0.3, size: 0.09, glow: 1.4, gravity: -0.8, life: 0.8, spread: 0.35, drag: 1 }) },
+  shielded: { every: 0.12, draw: (c, f, color, h) => c.fx.particles(about(f, 0.8, h * 0.5, true), color, { count: 1, speed: 0.1, size: 0.08, glow: 2, gravity: 0, life: 0.5, spread: 0.05 }) },
+  hasted: { every: 0.05, draw: (c, f, color, h) => c.fx.particles(about(f, 0.3, h * 0.4), color, { count: 1, speed: 0.1, size: 0.06, glow: 2, gravity: 0, life: 0.35, spread: 0.4, drag: 3 }) },
+  explosive: { every: 0.08, draw: (c, f, color, h) => c.fx.particles(about(f, 0.25, h * 0.85), color, { count: 1, speed: 1.4, size: 0.06, glow: 2.4, gravity: 6, life: 0.35, spread: 0.15, up: 1.5 }) },
+  splitting: { every: 0.12, draw: (c, f, color, h) => c.fx.particles(about(f, 0.45, h * 0.3), color, { count: 2, speed: 0.5, size: 0.1, glow: 1, gravity: 3, life: 0.6, spread: 0.3, up: 0.5 }) },
+  juggernaut: { every: 0.1, draw: (c, f, color, h) => c.fx.particles(about(f, 0.7, h * 0.05), color, { count: 2, speed: 0.6, size: 0.12, glow: 1.4, gravity: -1.5, life: 0.7, spread: 0.2, up: 0.3 }) },
+};
+
+/** A point about a figure: round it at `r` (blocks, its size's), `y` up, on its rim if `rim`. */
+function about(f: Figure, r: number, y: number, rim = false) {
+  const p = f.root.position;
+  const s = f.root.scale.x;
+  const a = Math.random() * Math.PI * 2;
+  const d = (rim ? 1 : Math.sqrt(Math.random())) * r * s;
+  return { x: p.x + Math.cos(a) * d, y: p.y + y * s + (Math.random() - 0.5) * y * s, z: p.z + Math.sin(a) * d };
+}
+
+/** How tall each kind stands (for auras and tethers), blocks. */
+const HEIGHT: Record<string, number> = { knight: 1.95, wraith: 2, imp: 1.15, golem: 2.8, cultist: 1.95, bat: 0.6, slime: 0.95, slime_small: 0.55, slime_tiny: 0.32, spider: 0.9, brute: 2.5 };
+const heightOf = (f: Figure) => (HEIGHT[f.type] ?? 1.9) * f.root.scale.x;
+
+// The knight's shield arm: up before it (the forearm level, the shield square ahead), or lowered.
+const e1 = new Euler(0, 0, 0, 'YXZ');
+const q1 = new Quat();
+const ARM = { up: { upper: [-0.5, 0.12, 0.08], lower: [-1.07, 0, 0] }, down: { upper: [-0.12, 0, 0.12], lower: [-0.55, 0, 0] } };
+
+function bestiaryKit(): ClientKit {
+  const rings: Ring[] = [];
+  const fires: Fire[] = [];
+  const auras = new Map<number, Aura>();
+  /** Knights' guards (by id): down after a swing; how far up each shows (eased). */
+  const guards = new Map<number, boolean>();
+  const raised = new Map<number, number>();
+  const tethers = new Map<number, { player: string; color: RGB; tick: number }>();
+  const blessed = new Map<number, { until: number; tick: number }>();
+  const links: { from: number; to: number; left: number }[] = [];
+  let clock = 0;
+
+  return {
+    name: 'arena.bestiary',
+    setup(client) {
+      client.on('bestiary.ring', (d) => {
+        const r = d as { x: number; y: number; z: number; radius: number; time: number; color: string };
+        rings.push({ ...r, color: rgb(r.color, 1.4), age: 0, tick: 0 });
+      });
+      client.on('bestiary.fire', (d) => {
+        const f = d as { x: number; y: number; z: number; time: number };
+        fires.push({ x: f.x, y: f.y, z: f.z, left: f.time, tick: 0 });
+      });
+      client.on('bestiary.elite', (d) => {
+        const e = d as { id: number; affix: string; color: string };
+        auras.set(e.id, { affix: e.affix, color: rgb(e.color, 1.6), tick: Math.random() * 0.1 });
+      });
+      client.on('bestiary.guard', (d) => {
+        const g = d as { id: number; up: boolean };
+        guards.set(g.id, g.up);
+      });
+      client.on('bestiary.tether', (d) => {
+        const t = d as { id: number; player: string | null; color?: string };
+        if (t.player) tethers.set(t.id, { player: t.player, color: rgb(t.color ?? '#6affc8', 1.6), tick: 0 });
+        else tethers.delete(t.id);
+      });
+      client.on('bestiary.empower', (d) => {
+        const b = d as { from: number; ids: number[]; time: number };
+        for (const id of b.ids) {
+          blessed.set(id, { until: clock + b.time, tick: 0 });
+          links.push({ from: b.from, to: id, left: 0.6 });
+        }
+      });
+    },
+    frame(client, dt) {
+      clock += dt;
+      const fx = client.fx;
+      const shown = new Map(client.figures.all.map((f) => [f.id, f]));
+      for (const f of client.figures.all) {
+        if (f.player !== null) continue;
+        // Knights hold their shields up before them, lowered for a moment after a swing.
+        if (f.type === 'knight' && f.rig) {
+          const want = guards.get(f.id) === false ? 0 : 1;
+          const g = (raised.get(f.id) ?? 1) + (want - (raised.get(f.id) ?? 1)) * Math.min(1, dt * 7);
+          raised.set(f.id, g);
+          const j = f.rig.joints;
+          const rest = f.rig.rest;
+          for (const [joint, key] of [['upperArmL', 'upper'], ['lowerArmL', 'lower']] as const) {
+            const u = ARM.up[key];
+            const d = ARM.down[key];
+            q1.setFromEuler(e1.set(d[0] + (u[0] - d[0]) * g, d[1] + (u[1] - d[1]) * g, d[2] + (u[2] - d[2]) * g, 'YXZ'));
+            j[joint].quaternion.copy(rest[joint].quaternion).multiply(q1);
+          }
+        }
+        // Wraiths float, rising and falling, wisps trailing off their rags.
+        if (f.type === 'wraith' && f.state.dying === 0) {
+          f.root.position.y += 0.22 + Math.sin(clock * 2.2 + f.id) * 0.12;
+          if (Math.random() < dt * 14) fx.particles(about(f, 0.45, 0.35), [0.25, 1.2, 0.85], { count: 1, speed: 0.3, size: 0.07, glow: 1.6, gravity: -1.2, life: 0.9, spread: 0.1, drag: 1.5 });
+        }
+        // Elites' auras.
+        const a = auras.get(f.id);
+        if (a && f.state.dying === 0) {
+          const spec = AURAS[a.affix];
+          a.tick -= dt;
+          if (spec && a.tick <= 0) {
+            a.tick = spec.every;
+            spec.draw(client, f, a.color, heightOf(f));
+          }
+        }
+        // Blessed by a cultist: a red haze rising off them.
+        const b = blessed.get(f.id);
+        if (b) {
+          if (b.until < clock) blessed.delete(f.id);
+          else if ((b.tick -= dt) <= 0) {
+            b.tick = 0.1;
+            fx.particles(about(f, 0.35, heightOf(f) * 0.5), [1.4, 0.08, 0.12], { count: 1, speed: 0.4, size: 0.08, glow: 1.6, gravity: -2, life: 0.6, spread: 0.3 });
+          }
+        }
+      }
+      // Forget what's gone.
+      for (const id of auras.keys()) if (!shown.has(id)) auras.delete(id);
+      for (const id of raised.keys()) if (!shown.has(id)) (raised.delete(id), guards.delete(id));
+      // The wraith's tether: a stream of ghost-light from its claws to whoever it drains.
+      for (const [id, t] of tethers) {
+        const w = shown.get(id);
+        if (!w) {
+          tethers.delete(id);
+          continue;
+        }
+        const p = client.figures.all.find((f) => f.player === t.player);
+        const to = p ? { x: p.root.position.x, y: p.root.position.y + 1.2, z: p.root.position.z } : t.player === client.me.id ? meChest(client) : null;
+        if (!to || (t.tick -= dt) > 0) continue;
+        t.tick = 0.03;
+        const from = { x: w.root.position.x, y: w.root.position.y + 1.4, z: w.root.position.z };
+        for (let n = 0; n < 3; n++) {
+          const k = Math.random();
+          const at = { x: from.x + (to.x - from.x) * k, y: from.y + (to.y - from.y) * k + Math.sin(k * Math.PI) * 0.4, z: from.z + (to.z - from.z) * k };
+          // Drawn toward the wraith: the life flowing into it.
+          const v = { x: (from.x - to.x) * 1.2, y: (from.y - to.y) * 1.2, z: (from.z - to.z) * 1.2 };
+          fx.particles(at, t.color, { count: 1, speed: 0.2, size: 0.08, glow: 2.4, gravity: 0, life: 0.25, spread: 0.05, velocity: v });
+        }
+      }
+      // A cultist's blessing reaching out to each it empowers.
+      for (let i = links.length - 1; i >= 0; i--) {
+        const l = links[i];
+        l.left -= dt;
+        const a = shown.get(l.from);
+        const b = shown.get(l.to);
+        if (l.left <= 0 || !a || !b) {
+          links.splice(i, 1);
+          continue;
+        }
+        const from = { x: a.root.position.x, y: a.root.position.y + 2.4, z: a.root.position.z };
+        const to = { x: b.root.position.x, y: b.root.position.y + heightOf(b) * 0.6, z: b.root.position.z };
+        const k = 1 - l.left / 0.6;
+        const at = { x: from.x + (to.x - from.x) * k, y: from.y + (to.y - from.y) * k + Math.sin(k * Math.PI) * 0.8, z: from.z + (to.z - from.z) * k };
+        fx.particles(at, [1.6, 0.1, 0.15], { count: 3, speed: 0.4, size: 0.1, glow: 2.4, gravity: 0, life: 0.35, spread: 0.08 });
+      }
+      // Warning rings: the rim traced, filling in toward it as the moment comes.
+      for (let i = rings.length - 1; i >= 0; i--) {
+        const r = rings[i];
+        r.age += dt;
+        if (r.age >= r.time) {
+          rings.splice(i, 1);
+          continue;
+        }
+        if ((r.tick -= dt) > 0) continue;
+        r.tick = 0.05;
+        const k = r.age / r.time;
+        const n = Math.ceil(r.radius * 5);
+        const spin = r.age * 1.5;
+        for (let m = 0; m < n; m++) {
+          const a = spin + (m / n) * Math.PI * 2;
+          fx.particles({ x: r.x + Math.cos(a) * r.radius, y: r.y + 0.12, z: r.z + Math.sin(a) * r.radius }, r.color, { count: 1, speed: 0, size: 0.11, glow: 2, gravity: 0, life: 0.12, spread: 0 });
+        }
+        const inner = r.radius * k;
+        for (let m = 0; m < Math.ceil(inner * 3); m++) {
+          const a = Math.random() * Math.PI * 2;
+          fx.particles({ x: r.x + Math.cos(a) * inner, y: r.y + 0.1, z: r.z + Math.sin(a) * inner }, r.color, { count: 1, speed: 0.2, size: 0.09, glow: 1.4, gravity: -1, life: 0.25, spread: 0.05 });
+        }
+      }
+      // Fire left burning on the sand.
+      for (let i = fires.length - 1; i >= 0; i--) {
+        const f = fires[i];
+        f.left -= dt;
+        if (f.left <= 0) {
+          fires.splice(i, 1);
+          continue;
+        }
+        if ((f.tick -= dt) > 0) continue;
+        f.tick = 0.07;
+        const fade = Math.min(1, f.left / 1.2);
+        fx.particles({ x: f.x, y: f.y + 0.1, z: f.z }, [1.6 * fade, 0.45 * fade, 0.08 * fade], { count: 2, speed: 0.5, size: 0.14, glow: 2.4, gravity: -5, life: 0.45, spread: 0.55, up: 1 });
+      }
+    },
+  };
+}
+
+/** Where our own chest is (we don't see our figure in first person). */
+function meChest(client: Client) {
+  const p = client.me.position;
+  return { x: p.x, y: p.y + 1.2, z: p.z };
+}
+
+/** The bestiary on screen: elite auras, telegraphs, its monsters' poses (its voices are `sounds/bestiary.ts`). */
+export const bestiaryClient: ClientPart = { name: 'bestiaryClient', kits: [bestiaryKit()] };

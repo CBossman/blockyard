@@ -122,9 +122,9 @@ export function spider() {
 // sword). Three sizes: the big one splits into two small ones, each of those into two tiny ones.
 
 const SLIMES = {
-  big: { w: 14, h: 12, r: 4.5, eye: 3, junk: true },
-  small: { w: 8, h: 7, r: 2.8, eye: 2, junk: false },
-  tiny: { w: 4.5, h: 4, r: 1.6, eye: 1, junk: false },
+  big: { w: 14, h: 12, r: 7, eye: 3, junk: true },
+  small: { w: 8, h: 7, r: 4, eye: 2, junk: false },
+  tiny: { w: 4.5, h: 4, r: 2.2, eye: 1, junk: false },
 };
 
 export function slime(size) {
