@@ -1,7 +1,7 @@
 import { CHARACTER_STYLE, Models, type Behavior, type DamageEvent, type GameContext } from '@platform';
 import { MONSTER_MODELS } from './models';
 import type { MonsterKind } from './registry';
-import { flat, grounded, ring, shakeNear } from './util';
+import { flat, grounded, held, ring, shakeNear } from './util';
 
 /**
  * The Golem: three metres of stone, slow and hard to hurt (armour turns aside a third of every
@@ -14,7 +14,7 @@ import { flat, grounded, ring, shakeNear } from './util';
 interface GolemState {
   _cd?: number;
   _pound?: number;
-  _wind?: number;
+  _tell?: number;
   _punch?: number;
   _step?: number;
 }
@@ -40,6 +40,14 @@ function slam(game: GameContext, self: Parameters<Behavior>[0]) {
 
 const golemAI: Behavior = (self, game, dt) => {
   const s = self.data as GolemState;
+  if (
+    held(self, () => {
+      const had = s._pound !== undefined || s._tell !== undefined;
+      s._pound = s._tell = undefined;
+      return had;
+    })
+  )
+    return;
   s._cd = (s._cd ?? game.rng.range(3, 5)) - dt;
   s._punch = Math.max(0, (s._punch ?? 1) - dt);
   const target = self.nearestPlayer();
@@ -60,12 +68,12 @@ const golemAI: Behavior = (self, game, dt) => {
     s._punch = 1.2;
     return;
   }
-  if (s._wind !== undefined) {
+  if (s._tell !== undefined) {
     self.stop();
     self.lookAt(target);
-    s._wind -= dt;
-    if (s._wind > 0) return;
-    s._wind = undefined;
+    s._tell -= dt;
+    if (s._tell > 0) return;
+    s._tell = undefined;
     self.glow(null);
     self.animate('attack');
     game.audio.play('golem_punch', { at: e });
@@ -91,7 +99,7 @@ const golemAI: Behavior = (self, game, dt) => {
     return;
   }
   if (d < 3.4 && s._punch === 0 && self.canSee(target)) {
-    s._wind = 0.55;
+    s._tell = 0.55;
     self.stop();
     self.glow(RUNE);
     game.audio.play('golem', { at: e, pitch: 1.2 });

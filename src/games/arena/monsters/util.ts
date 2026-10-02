@@ -47,6 +47,31 @@ export function shakeNear(game: GameContext, at: Vec3, strength: number, duratio
   }
 }
 
+/**
+ * Frozen or reeling (the armory's statuses set `data.stunned`, the seconds left): it stands still
+ * and does nothing, its own timers held. Whatever it was winding up is undone as it's caught
+ * (`undo`, which says whether it was showing a tell), and that tell's glow goes when it comes to,
+ * so its next move gets a fresh tell. Whether it's held.
+ */
+export function held(self: Entity, undo: () => boolean): boolean {
+  const d = self.data as { stunned?: number; _held?: boolean; _unglow?: boolean };
+  if ((d.stunned ?? 0) > 0) {
+    if (!d._held) {
+      d._held = true;
+      d._unglow = undo();
+      if (d._unglow) self.animate('none');
+    }
+    self.stop();
+    return true;
+  }
+  if (d._held) {
+    d._held = false;
+    if (d._unglow) self.glow(null);
+    d._unglow = false;
+  }
+  return false;
+}
+
 /** Players standing (not in the air) within `radius` of `at`. */
 export function grounded(game: GameContext, at: Vec3, radius: number, rise = 1.2): Player[] {
   return game.players.filter((p) => p.alive && !p.spectating && flat(p.position, at) <= radius && p.position.y - at.y < rise && (p.onGround || p.position.y - at.y < 0.5));

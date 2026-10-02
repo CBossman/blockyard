@@ -1,5 +1,7 @@
 import type { Entity, GameContext, Player } from '@platform';
 import type { Pilot } from '../../src/platform/host/headless';
+import { slamAt } from '../../src/games/arena/items/combat';
+import { freeze } from '../../src/games/arena/items/status';
 import { makeElite, eliteChance } from '../../src/games/arena/monsters/elites';
 import { spawnMonster } from '../../src/games/arena/run/spawn';
 import { state } from '../../src/games/arena/run/state';
@@ -73,7 +75,8 @@ export default function arenaBestiary() {
     // Magic from in front.
     s.run(2);
     before = hp();
-    k.damage(6, { source: s.me, cause: 'projectile', weapon: 'fire_staff' });
+    k.damage(3, { source: s.me, cause: 'projectile', weapon: 'fire_staff' });
+    k.damage(3, { source: s.me, cause: 'projectile', weapon: 'frost_staff_epic' });
     const magic = before - hp();
     log(`knight: front ${front.toFixed(1)}, behind ${back.toFixed(1)}, above ${above.toFixed(1)}, blast ${blast.toFixed(1)}, magic ${magic.toFixed(1)}`);
     check(front === 0 && back > 0 && above > 0 && blast > 0 && magic > 0, 'the knight blocks only blows from in front');
@@ -222,6 +225,61 @@ export default function arenaBestiary() {
     const n = s.game.entities.count('bat');
     log(`bats: ${n} in the flock, up to ${high.toFixed(1)} over the floor, ${s.hurt().toFixed(1)} bites`);
     check(n === 4 && high > 2 && s.hurt() > 0, 'bats fly and bite');
+  }
+
+  // The armory against the knight: a hammer's slam goes under its shield and leaves it reeling,
+  // its guard hanging open; frozen, it's open too.
+  {
+    const s = scene(21);
+    const k = s.spawn('knight', -4.5, 0.5);
+    k.setSpeed(0);
+    s.me.teleport({ x: -8.5, y: FLOOR + 1, z: 8.5 }, -Math.PI / 2, 0);
+    s.run(1.5);
+    let hp = k.health;
+    k.damage(3, { source: s.me, cause: 'melee', weapon: 'gladius', knockback: 2.2 });
+    const bash = hp - k.health;
+    hp = k.health;
+    slamAt(s.game, s.me, { x: -6.5, y: FLOOR + 1, z: 8.5 }, { radius: 3, damage: 8, knockback: 0.4, weapon: 'warhammer', stagger: 1.4 });
+    const slam = hp - k.health;
+    s.run(0.1);
+    const reeling = k.data._down === true;
+    hp = k.health;
+    k.damage(5, { source: s.me, cause: 'melee', weapon: 'gladius' });
+    const open = hp - k.health;
+    s.run(2.5);
+    freeze(s.game, k, 1.5);
+    s.run(0.1);
+    hp = k.health;
+    k.damage(5, { source: s.me, cause: 'melee', weapon: 'gladius' });
+    const frozen = hp - k.health;
+    // A slam by its own cause (the hammer's): through, and the guard knocked open.
+    s.run(3);
+    hp = k.health;
+    k.damage(4, { source: s.me, cause: 'slam', weapon: 'warhammer', from: { x: -6, y: FLOOR + 1, z: 8.5 } });
+    k.damage(4, { source: s.me, cause: 'melee', weapon: 'gladius' });
+    const slammed = hp - k.health;
+    log(`knight vs the armory: a bash from in front ${bash}, the slam ${slam.toFixed(1)}, reeling ${reeling} so a blade does ${open.toFixed(1)}; frozen, ${frozen.toFixed(1)}; a 'slam' then a blade ${slammed.toFixed(1)}`);
+    check(bash === 0 && slam > 0 && reeling && open > 0 && frozen > 0 && slammed >= 8, 'a slam goes under the shield and opens its guard; so does a freeze');
+  }
+
+  // Frozen or reeling (the armory's `data.stunned`): a knight in reach does nothing, a bat drops.
+  {
+    const s = scene(20);
+    const k = s.spawn('knight', -7, 0.5);
+    const b = s.spawn('bat', 0.5, 0.5, { flock: true });
+    s.run(4);
+    const flying = b.position.y - FLOOR - 1;
+    k.data.stunned = 99;
+    b.data.stunned = 99;
+    s.heal();
+    s.run(4);
+    const still = s.hurt();
+    const dropped = b.position.y - FLOOR - 1;
+    k.data.stunned = 0;
+    b.data.stunned = 0;
+    s.run(6);
+    log(`stunned: the knight did ${still} to us in 4 s, ${s.hurt().toFixed(1)} once it came to; the bat fell from ${flying.toFixed(1)} to ${dropped.toFixed(1)}, back up to ${(b.position.y - FLOOR - 1).toFixed(1)}`);
+    check(still === 0 && s.hurt() > 0 && dropped < flying - 2 && flying > 1.5 && b.position.y - FLOOR - 1 > 1.5, 'stunned monsters hold still, then carry on');
   }
 
   // Elites: the chance grows from wave 6; affixes do what they say.

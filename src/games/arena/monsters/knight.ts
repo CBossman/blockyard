@@ -1,28 +1,31 @@
 import { CHARACTER_STYLE, Models, type Behavior, type DamageEvent, type Entity, type GameContext } from '@platform';
+import { baseOf } from '../items/rarity';
 import { map } from '../run/state';
 import { MONSTER_MODELS } from './models';
 import type { MonsterKind } from './registry';
-import { ahead, heading, show, turnToward, wrap } from './util';
+import { ahead, heading, held, show, turnToward, wrap } from './util';
 
 /**
  * The Knight: a revenant in plate behind a kite shield. The shield turns aside whatever comes at it
  * from in front (blades, arrows, bolts), so it's beaten from the side or behind, from above (a
- * jumping blow), with magic, or blown open with a bomb. It turns slowly, so a fighter who circles it gets round
- * its guard; and it lowers the shield to swing, which is the moment to hit it from the front.
+ * jumping blow), with magic or a slam along the ground, or blown open with a bomb; and a parry
+ * leaves it reeling, its guard hanging open. It turns slowly, so a fighter who circles it gets
+ * round its guard; and it lowers the shield to swing, which is the moment to hit it from the front.
  */
 
 interface KnightState {
   /** Where it faces (`heading`), turning no faster than it can. */
   _face?: number;
   _cd?: number;
-  _wind?: number;
+  /** Its swing's wind-up (the tell). */
+  _tell?: number;
   /** Its guard is down until then (after a swing, or blown open). */
   _open?: number;
   _bash?: number;
   _told?: number;
 }
 
-/** Weapons whose blows no shield turns: magic (the armory's staffs and wand). */
+/** Weapons whose blows no shield turns: magic (the armory's staffs and wand, of any rarity). */
 const MAGIC = new Set(['fire_staff', 'frost_staff', 'storm_wand']);
 /** How far either side of straight ahead the shield covers (radians). */
 const COVER = 1.25;
@@ -41,6 +44,11 @@ function guard(game: GameContext, self: Entity, up: boolean) {
 const knightAI: Behavior = (self, game, dt) => {
   const s = self.data as KnightState;
   const now = game.clock.now;
+  // Reeling (a parry, a bash, a slam) or frozen: its guard hangs open till it comes to.
+  if (held(self, () => s._tell !== undefined && ((s._tell = undefined), true))) {
+    guard(game, self, false);
+    return;
+  }
   s._cd = Math.max(0, (s._cd ?? 1.5) - dt);
   s._bash = Math.max(0, (s._bash ?? 0) - dt);
   const target = self.nearestPlayer();
@@ -56,13 +64,13 @@ const knightAI: Behavior = (self, game, dt) => {
   guard(game, self, !open);
   // Winding up a swing (the shield still up): the sword raised and glinting, its feet planted,
   // still turning to follow.
-  if (s._wind !== undefined) {
+  if (s._tell !== undefined) {
     self.stop();
     s._face = turnToward(s._face, want, TURN * 0.6 * dt);
     self.lookAt(ahead(e, s._face, 4, 1.5));
-    s._wind -= dt;
-    if (s._wind > 0) return;
-    s._wind = undefined;
+    s._tell -= dt;
+    if (s._tell > 0) return;
+    s._tell = undefined;
     self.glow(null);
     self.animate('attack');
     game.audio.play('knight_swing', { at: e });
@@ -90,7 +98,7 @@ const knightAI: Behavior = (self, game, dt) => {
   if (d > REACH - 0.4) self.moveTo(target);
   else self.stop();
   if (d <= REACH && s._cd === 0 && facing && self.canSee(target)) {
-    s._wind = 0.6;
+    s._tell = 0.6;
     self.stop();
     self.animate('raise');
     self.glow('#ffd27a');
@@ -100,23 +108,28 @@ const knightAI: Behavior = (self, game, dt) => {
 
 /**
  * A blow at a Knight (the `damage` event): turned aside by its shield when it comes from in front,
- * with its guard up, and isn't a blast, fire or magic; a bomb knocks its guard open for a moment.
+ * with its guard up, and isn't a blast, a slam, fire or magic; a bomb or a slam knocks its guard
+ * open for a moment.
  */
 export function knightGuard(game: GameContext, hit: DamageEvent) {
   const self = hit.target;
   if (self.kind !== 'entity' || self.type !== 'knight' || !self.alive) return;
   const s = self.data as KnightState;
   const now = game.clock.now;
-  if (hit.cause === 'explosion') {
+  // A blast, or a hammer's slam on the ground: through, and its guard knocked open.
+  if (hit.cause === 'explosion' || hit.cause === 'slam') {
     s._open = Math.max(s._open ?? 0, now + 1.6);
     return;
   }
-  if ((hit.cause !== 'melee' && hit.cause !== 'projectile' && hit.cause !== 'gun') || (hit.weapon && MAGIC.has(hit.weapon))) return;
-  if ((s._open ?? 0) > now) return;
+  if ((hit.cause !== 'melee' && hit.cause !== 'projectile' && hit.cause !== 'gun') || (hit.weapon && MAGIC.has(baseOf(hit.weapon)))) return;
+  if ((s._open ?? 0) > now || ((self.data.stunned as number | undefined) ?? 0) > 0) return;
   const src = hit.source && hit.source !== 'world' ? hit.source : null;
   const from = hit.from ?? src?.position;
   if (!from) return;
   const e = self.position;
+  // A blow along the ground from where it lands (a hammer's slam), not from whoever struck it,
+  // goes under it.
+  if (hit.cause === 'melee' && src && from.y < e.y + 0.7 && Math.hypot(from.x - src.position.x, from.z - src.position.z) > 0.5) return;
   // From above: a fighter come down on it out of a jump.
   if (src?.kind === 'player' && src.position.y > e.y + 0.9) return;
   if (Math.abs(wrap(heading(e, from) - (s._face ?? 0))) > COVER) return;
@@ -146,7 +159,7 @@ export const knight: MonsterKind = {
   weight: 0.8,
   max: 4,
   role: 'melee',
-  tip: 'Its shield turns blows from in front: hit it from the side, behind or above, or bomb it',
+  tip: 'Its shield turns blows from in front: hit it from the side, behind or above, parry it, or bomb it',
   color: '#d8dee6',
   define: () => ({
     name: 'Knight',

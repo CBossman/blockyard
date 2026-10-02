@@ -2,7 +2,7 @@ import { Models, type Behavior, type Entity, type GameContext, type Player, type
 import { spawnMonster } from '../run/spawn';
 import { MONSTER_MODELS } from './models';
 import type { MonsterKind } from './registry';
-import { flat } from './util';
+import { flat, held } from './util';
 
 /**
  * Slimes: they come at you in hops, squashing down before each (the tell) and landing on you. Kill
@@ -41,6 +41,7 @@ interface SlimeState {
 function slimeAI(o: SlimeSize): Behavior {
   return (self, game, dt) => {
     const s = self.data as SlimeState;
+    if (held(self, () => ((s._crouch = undefined), false))) return;
     s._rest = (s._rest ?? game.rng.range(0.3, 1)) - dt;
     s._hit = Math.max(0, (s._hit ?? 0) - dt);
     const target = self.nearestPlayer();

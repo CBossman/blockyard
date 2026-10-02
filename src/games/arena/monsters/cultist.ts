@@ -3,7 +3,7 @@ import { bossKind } from '../bosses';
 import { spawnMonster } from '../run/spawn';
 import { MONSTER_MODELS } from './models';
 import type { MonsterKind } from './registry';
-import { near, ring, show } from './util';
+import { held, near, ring, show } from './util';
 
 /**
  * The Cultist hangs back behind the others and chants: its staff raised and its crystal blazing,
@@ -38,14 +38,20 @@ function flock(game: GameContext, self: Entity): Entity[] {
     .slice(0, EMPOWER.most);
 }
 
+/** Its own speed (`data.speed`, which slows multiply on top of) times `k`: at once, unless it's held still. */
+function quicken(e: Entity, k: number) {
+  const speed = ((e.data.speed as number | undefined) ?? 1) * k;
+  e.data.speed = speed;
+  if (!((e.data.stunned as number | undefined) ?? 0)) e.setSpeed(speed);
+}
+
 function empower(game: GameContext, self: Entity) {
   const until = game.clock.now + EMPOWER.time;
   const ids: number[] = [];
   for (const e of flock(game, self)) {
     e.data.empowered = until;
-    const base = (e.data.speed as number | undefined) ?? 1;
-    e.setSpeed(base * EMPOWER.speed);
-    game.clock.after(EMPOWER.time, () => e.alive && !empowered(game, e) && e.setSpeed((e.data.speed as number | undefined) ?? 1));
+    quicken(e, EMPOWER.speed);
+    game.clock.after(EMPOWER.time, () => e.alive && !empowered(game, e) && quicken(e, 1 / EMPOWER.speed));
     ids.push(e.id);
   }
   if (!ids.length) return;
@@ -71,6 +77,15 @@ function sacrifice(game: GameContext, self: Entity) {
 
 const cultistAI: Behavior = (self, game, dt) => {
   const s = self.data as CultistState;
+  // Caught mid-chant or at its rite, it must begin again.
+  if (
+    held(self, () => {
+      const had = s._chant !== undefined || s._rite !== undefined;
+      s._chant = s._rite = undefined;
+      return had;
+    })
+  )
+    return;
   s._cd = (s._cd ?? game.rng.range(1.5, 3)) - dt;
   const lost = Math.max(0, (s._hp ?? self.health) - self.health);
   s._hp = self.health;
@@ -136,7 +151,12 @@ const cultistAI: Behavior = (self, game, dt) => {
   if (!self.canSee(target) && d > 13) self.moveTo(target);
   else self.moveDirection(nx * away - nz * st, nz * away + nx * st);
   self.lookAt(target);
-  if (s._cd <= 0 && flock(game, self).length) {
+  if (s._cd <= 0) {
+    // Nobody near to bless: it looks again in a moment, not every tick.
+    if (!flock(game, self).length) {
+      s._cd = 0.5;
+      return;
+    }
     s._chant = 1;
     self.stop();
     self.animate('raise');
