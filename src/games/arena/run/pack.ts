@@ -26,6 +26,8 @@ export const isWeapon = (game: GameContext, item: string) => {
   return !!k && !NOT_WEAPONS.has(k);
 };
 const nameOf = (game: GameContext, item: string) => game.items.get(item)?.name ?? item;
+/** A name with its article: a Spear, an Epic Spear. */
+const aName = (game: GameContext, item: string) => `${/^[aeiou]/i.test(nameOf(game, item)) ? 'an' : 'a'} ${nameOf(game, item)}`;
 
 /** What the merchant pays for `count` of `item` (at least a coin). */
 export function sellPrice(game: GameContext, item: string, count = 1): number {
@@ -78,7 +80,7 @@ export function arrive(game: GameContext, p: Player, item: string): 'take' | 're
     const g = sellPrice(game, item);
     addGold(game, p, g, p.position, 'sold');
     p.audio.play('coin');
-    p.hud.toast(`+${g} gold for a ${nameOf(game, item)}: you carry a ${nameOf(game, old)}`);
+    p.hud.toast(`+${g} gold for ${aName(game, item)}: you carry ${aName(game, old)}`);
     return 'sold';
   }
   const slot = better(p, item);
