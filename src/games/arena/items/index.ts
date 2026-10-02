@@ -1,6 +1,20 @@
-import type { GameContext } from '@platform';
+import type { GameContext, ItemKit, Player } from '@platform';
+import { bows, consumables, throwables } from '@platform/kits';
 import type { ConsumableItem, ThrowableItem } from '@platform/items';
 import { ARENA_ATLAS, paintArenaAtlas } from '../art';
+import { defineArms } from './arms';
+import { crossbows } from './crossbow';
+import { melee } from './melee';
+import { staffs } from './staff';
+
+export { ARMS, armName, type Arm } from './arms';
+export { ALL_VARIANTS, RARE_BASES, RARITIES, RARITY, baseOf, hasRarities, nextRarity, rarityColor, rarityOf, rollRarity, variant, type Rarity, type RareBase } from './rarity';
+
+/**
+ * The Arena's kinds of item, in the order they run (the server's `items`): bombs, bows, the
+ * arsenal's own melee weapons (and the bare fist), crossbows, staffs and wands, potions.
+ */
+export const ARMORY_KITS: ItemKit[] = [throwables(), bows(), melee(), crossbows(), staffs(), consumables()];
 
 /**
  * The Arena's own art: mob skins, item sprites and the held weapons' textures painted into the
@@ -12,18 +26,40 @@ export function defineArt(game: GameContext) {
   game.items.atlas(ARENA_ATLAS, { width: a.width, height: a.height, pixels: a.albedo, emissive: a.emissive });
 }
 
+/** Armour: worn, not carried (bought, or walked over), each piece over the last; points as `player.armor`'s (4% each). */
+export const ARMOR = {
+  leather_armor: { name: 'Leather Armour', points: 3 },
+  mail_armor: { name: 'Mail Armour', points: 6 },
+  plate_armor: { name: 'Plate Armour', points: 10 },
+} as const;
+export type ArmorId = keyof typeof ARMOR;
+/** What each fighter wears (its points), by player. */
+const worn = new WeakMap<Player, number>();
+export const armorOf = (p: Player): number => worn.get(p) ?? 0;
+
+/** Put on a piece of armour (if it's better than what they wear): their armour goes up by the difference. */
+export function wearArmor(game: GameContext, p: Player, id: ArmorId): boolean {
+  const was = worn.get(p) ?? 0;
+  const now = ARMOR[id].points;
+  if (now <= was) return false;
+  worn.set(p, now);
+  p.armor = Math.min(20, p.armor + now - was);
+  game.audio.play('arena_armor', { at: p.position });
+  p.hud.toast(`${ARMOR[id].name}: ${now * 4}% less damage taken`);
+  return true;
+}
+
+/** Fresh for a fight: nothing worn (their armour's set back to nothing as they're armed). */
+export const shedArmor = (p: Player) => void worn.delete(p);
+
 /** The weapons and what's picked up: what each does. (How they look is each screen's: `client/looks.ts`.) */
 export function defineItems(game: GameContext) {
   const it = game.items;
-  it.define('wooden_sword', { kind: 'melee', name: 'Wooden Sword', damage: 4, cooldown: 0.45, reach: 3.3, rank: 1 });
-  it.define('stone_sword', { kind: 'melee', name: 'Stone Sword', damage: 5, cooldown: 0.45, reach: 3.4, rank: 2 });
-  it.define('iron_sword', { kind: 'melee', name: 'Iron Sword', damage: 6.5, cooldown: 0.42, reach: 3.5, knockback: 1.1, rank: 3 });
-  // Two-handed: long reach and a heavy shove, but a slower thrust.
-  it.define('pike', { kind: 'melee', name: 'Pike', damage: 7.5, cooldown: 0.7, reach: 5, knockback: 2.2, rank: 3.5 });
-  it.define('battle_axe', { kind: 'melee', name: 'Battle Axe', damage: 10, cooldown: 0.85, reach: 3.3, knockback: 1.8, sweep: true, rank: 4 });
-  it.define('diamond_sword', { kind: 'melee', name: 'Diamond Sword', damage: 9, cooldown: 0.4, reach: 3.7, knockback: 1.2, sweep: true, rank: 5 });
-  // What it shoots is drawn by the server, as an arrow (the bow's own look is each screen's).
-  it.define('bow', { kind: 'bow', name: 'Bow', ammo: 'arrow', projectile: 'arrow', damage: [2, 9], drawTime: 0.9, speed: 42, rank: 0 });
+  it.define('wooden_sword', { kind: 'melee', name: 'Wooden Sword', damage: 4, cooldown: 0.45, reach: 3.3, rank: 1, heft: 'blade' });
+  it.define('stone_sword', { kind: 'melee', name: 'Stone Sword', damage: 5, cooldown: 0.45, reach: 3.4, rank: 2, heft: 'blade' });
+  it.define('iron_sword', { kind: 'melee', name: 'Iron Sword', damage: 6.5, cooldown: 0.42, reach: 3.5, knockback: 1.1, rank: 3, heft: 'blade' });
+  // The arsenal, each in every rarity (`arms.ts`): the gladius to the bow.
+  defineArms(game);
   it.define('arrow', { kind: 'misc', name: 'Arrow', stack: 64 });
   // Thrown with G (or the attack button in hand): it bounces about for a moment, then goes off,
   // throwing monsters across the pit. It never hurts a fighter (the server's no-friendly-fire).
@@ -41,6 +77,7 @@ export function defineItems(game: GameContext) {
     stack: 8,
     rank: -1,
   } satisfies ThrowableItem);
+  // Drunk with R wherever it's carried (`potions.ts`), or the right button with it in hand.
   it.define('health_potion', {
     kind: 'consumable',
     name: 'Health Potion',
@@ -82,4 +119,8 @@ export function defineItems(game: GameContext) {
       return true;
     },
   });
+  // Armour, put on when it's walked over (or bought).
+  for (const id of Object.keys(ARMOR) as ArmorId[]) {
+    it.define(id, { kind: 'misc', name: ARMOR[id].name, onPickup: (g, _count, player) => (wearArmor(g, player, id), true) });
+  }
 }
