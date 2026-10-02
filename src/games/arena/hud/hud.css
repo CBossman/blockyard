@@ -326,8 +326,9 @@
   background: linear-gradient(180deg, #ff6a5e, var(--ar-blood) 50%, #8e1820) !important;
   box-shadow: 0 0 10px rgba(255, 90, 80, 0.5);
   transition: width 260ms ease;
-  /* Quarter marks: the boss's phases read at a glance. */
-  -webkit-mask: linear-gradient(90deg, #000 calc(25% - 1px), transparent calc(25% - 1px) 25%, #000 25% calc(50% - 1px), transparent calc(50% - 1px) 50%, #000 50% calc(75% - 1px), transparent calc(75% - 1px) 75%, #000 75%);
+  /* Marks at the thirds, where the bosses turn to their next phase. */
+  -webkit-mask: linear-gradient(90deg, #000 calc(33.33% - 1px), transparent calc(33.33% - 1px) calc(33.33% + 1px), #000 calc(33.33% + 1px) calc(66.67% - 1px), transparent calc(66.67% - 1px) calc(66.67% + 1px), #000 calc(66.67% + 1px));
+  mask: linear-gradient(90deg, #000 calc(33.33% - 1px), transparent calc(33.33% - 1px) calc(33.33% + 1px), #000 calc(33.33% + 1px) calc(66.67% - 1px), transparent calc(66.67% - 1px) calc(66.67% + 1px), #000 calc(66.67% + 1px));
 }
 @keyframes ar-boss-in {
   from {
