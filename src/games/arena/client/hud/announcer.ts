@@ -1,0 +1,118 @@
+import type { Client, ClientKit } from '@platform/client';
+import { MSG, type CallMsg } from '../../hud/messages';
+import css from './announcer.css?raw';
+import { el, hidden, hud } from './store';
+
+/** How long each kind of callout holds the screen (seconds), and its sting. */
+const KINDS: Record<CallMsg['k'], { time: number; sting: string; big: boolean }> = {
+  wave: { time: 2.5, sting: 'ar_sting_wave', big: true },
+  final: { time: 3.2, sting: 'ar_sting_final', big: true },
+  boss: { time: 2.6, sting: 'ar_sting_boss', big: true },
+  twist: { time: 2.6, sting: 'ar_sting_twist', big: true },
+  favour: { time: 2.8, sting: 'ar_sting_favour', big: true },
+  out: { time: 3.2, sting: 'ar_sting_out', big: true },
+  back: { time: 1.8, sting: 'ar_sting_back', big: true },
+  victory: { time: 3.2, sting: 'ar_sting_victory', big: true },
+  defeat: { time: 2.2, sting: 'ar_sting_defeat', big: true },
+  down: { time: 2.4, sting: 'ar_sting_out', big: true },
+  feat: { time: 1.7, sting: 'ar_sting_feat', big: false },
+  ally: { time: 2.2, sting: 'ar_sting_ally', big: false },
+};
+
+/** Feats that come in sizes (multikills): how big each is, 0..3: louder, higher, bigger. */
+const TIER: Record<string, number> = { double_kill: 0, triple_kill: 1, multi_kill: 2, quad_kill: 2, massacre: 3, rampage: 3 };
+
+/**
+ * The announcer, on each screen: big callouts in the middle of the screen for the run's moments (a
+ * wave begins, a boss's, the final one, its twist, the Crowd's Favour, their own fall and return,
+ * victory and defeat), each with its sting (`client/sounds/hud.ts`); smaller ones under the
+ * crosshair for their feats (a double kill, a parry: bigger and higher the bigger the feat) and
+ * their friends' fortunes; and the last seconds before a wave counted down, a drum a second. Big
+ * callouts wait their turn (victory and defeat don't).
+ */
+export function announcer(): ClientKit {
+  let unstyle: (() => void) | null = null;
+  let layer: HTMLElement;
+  let stage: HTMLElement;
+  let feats: HTMLElement;
+  let count: HTMLElement;
+  let queue: CallMsg[] = [];
+  let showing: { el: HTMLElement; until: number } | null = null;
+  let lastCount = '';
+
+  const show = (client: Client, c: CallMsg) => {
+    const k = KINDS[c.k];
+    showing?.el.remove();
+    const e = el(`div.ar-call.k-${c.k}`, c.q ? el('div.ar-call-q', c.q) : null, el('div.ar-call-t', c.t), el('div.ar-call-rule'), c.s ? el('div.ar-call-s', c.s) : null);
+    if (c.c) e.style.setProperty('--c', c.c);
+    e.style.setProperty('--life', `${k.time}s`);
+    stage.append(e);
+    showing = { el: e, until: client.time + k.time };
+    client.audio.play(k.sting, { volume: 0.9 });
+  };
+
+  const feat = (client: Client, c: CallMsg) => {
+    const k = KINDS[c.k];
+    const tier = c.name ? (TIER[c.name] ?? 1) : 0;
+    const e = el(`div.ar-feat.t${tier}.k-${c.k}`, el('div.ar-feat-t', c.t), c.s ? el('div.ar-feat-s', c.s) : null);
+    if (c.c) e.style.setProperty('--c', c.c);
+    e.style.setProperty('--life', `${k.time}s`);
+    feats.prepend(e);
+    while (feats.children.length > 3) feats.lastChild!.remove();
+    window.setTimeout(() => e.remove(), k.time * 1000 + 100);
+    client.audio.play(k.sting, { volume: 0.8 + tier * 0.1, pitch: c.k === 'feat' ? 1 + tier * 0.12 : 1 });
+  };
+
+  return {
+    name: 'arena.hud.announcer',
+    setup(client) {
+      unstyle = client.hud.style(css);
+      layer = client.hud.layer('arena.announcer', 'panels');
+      stage = el('div.ar-stage');
+      feats = el('div.ar-feats');
+      count = el('div.ar-count');
+      layer.append(count, stage, feats);
+      client.on(MSG.call, (d) => {
+        const c = d as CallMsg;
+        if (!c || typeof c.t !== 'string' || !(c.k in KINDS)) return;
+        if (!KINDS[c.k].big) return feat(client, c);
+        // The run's end takes the stage at once; the rest wait their turn.
+        if (c.k === 'victory' || c.k === 'defeat') {
+          queue = [];
+          show(client, c);
+        } else queue.push(c);
+      });
+    },
+    frame(client) {
+      layer.style.visibility = hidden(client) ? 'hidden' : '';
+      if (client.events.some((e) => e.t === 'reset')) {
+        queue = [];
+        showing?.el.remove();
+        showing = null;
+        feats.replaceChildren();
+      }
+      if (showing && client.time >= showing.until) {
+        const going = showing.el;
+        going.classList.add('out');
+        window.setTimeout(() => going.remove(), 450);
+        showing = null;
+      }
+      if (!showing && queue.length) show(client, queue.shift()!);
+
+      // The last three seconds before a wave, a drum each.
+      const r = hud.run;
+      const n = r && (r.phase === 'countdown' || r.phase === 'intermission') && r.next > 0 && r.next <= 3 ? r.next : 0;
+      const key = n ? `${r!.phase}${r!.wave}:${n}` : '';
+      if (key !== lastCount) {
+        lastCount = key;
+        if (n) {
+          count.replaceChildren(el('span', String(n)));
+          client.audio.play('ar_count', { volume: 0.8, pitch: 1 + (3 - n) * 0.06 });
+        }
+      }
+    },
+    dispose() {
+      unstyle?.();
+    },
+  };
+}

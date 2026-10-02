@@ -1,5 +1,6 @@
 import type { Client } from '@platform/client';
 import { defineCreatureSounds } from './creatures';
+import { defineHudSounds } from './hud';
 
 /**
  * The Arena's voices, synthesised on each screen (`client.audio.define`: nothing is recorded or
@@ -7,4 +8,5 @@ import { defineCreatureSounds } from './creatures';
  */
 export function defineSounds(client: Client) {
   defineCreatureSounds(client);
+  defineHudSounds(client);
 }
