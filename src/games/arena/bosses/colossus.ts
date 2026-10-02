@@ -33,7 +33,6 @@ const sweepMove: Move = {
     c.s.mem.sweep = a;
     c.self.lookAt(c.target);
     c.self.animate('sweep_wind', { fade: 0.25 });
-    c.self.glow(COLOR);
     sweep(c.game, p, REACH, a, ARC, c.s.t, COLOR);
     c.game.audio.play('colossus_wind', { at: p });
   },
@@ -58,7 +57,6 @@ const stompMove: Move = {
   start(c) {
     const p = c.self.position;
     c.self.animate('stomp_wind', { fade: 0.25 });
-    c.self.glow(COLOR);
     ring(c.game, p, STOMP, c.s.t, COLOR);
     c.game.audio.play('colossus_wind', { at: p, pitch: 0.7 });
   },
@@ -135,7 +133,6 @@ const ribsMove: Move = {
   windup: 1.1,
   start(c) {
     c.self.animate('rib_open', { fade: 0.3 });
-    c.self.glow(COLOR);
     c.game.audio.play('rib_creak', { at: c.self.position });
   },
   act(c) {
@@ -254,7 +251,6 @@ const twinMove: Move = {
       const p = c.self.position;
       m.twinAt = angle(p, c.target.position);
       sweep(c.game, p, REACH, m.twinAt, ARC, 0.55, '#ff6a2a');
-      c.self.glow('#ff6a2a');
     }
     if (m.twinT < 0.55) return false;
     c.s.mem.sweep = m.twinAt;

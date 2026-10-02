@@ -59,6 +59,8 @@ function bossesKit(): ClientKit {
   let el: HTMLElement;
   let phaseEl: HTMLElement;
   let phaseTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Each walking boss's last footfall (half walk cycles), by figure. */
+  const strides = new Map<number, number>();
   /** The `/bosscam` cheat's view, while it's on. */
   let cam: CamMessage | null = null;
   const fwd = new Vec3();
@@ -177,6 +179,7 @@ function bossesKit(): ClientKit {
         for (const f of client.figures.all) if (!f.player && f.state.dying === 0) aura(client, f, ambient);
         ambient = 0;
       }
+      for (const f of client.figures.all) if (!f.player && STEPS[f.type]) footfall(client, f);
     },
 
     dispose() {
@@ -376,6 +379,22 @@ function bossesKit(): ClientKit {
     return [look[0] + n.x * k, look[1] + n.y * k, look[2] + n.z * k];
   }
 
+  /** A walking boss's feet coming down (each half of its walk cycle): a thud, dust, the ground shaking under whoever's near. */
+  function footfall(client: Client, f: Figure) {
+    const step = STEPS[f.type];
+    const n = Math.floor(f.state.walkPhase / Math.PI);
+    const last = strides.get(f.id);
+    strides.set(f.id, n);
+    if (last === undefined || n === last || f.state.walkAmount < 0.4 || f.state.air) return;
+    f.root.getWorldPosition(tmp);
+    const at = { x: tmp.x, y: tmp.y + 0.1, z: tmp.z };
+    client.audio.play(step.sound, { at, volume: step.volume, pitch: 0.9 + Math.random() * 0.2 });
+    client.fx.particles(at, DUST, { count: step.dust, speed: 1.6, size: 0.16, gravity: -0.4, life: 0.9, spread: step.spread, up: 0.4, drag: 2 });
+    const me = client.me.position;
+    const d = Math.hypot(me.x - at.x, me.z - at.z);
+    if (step.shake && d < 14) client.fx.shake(step.shake * (1 - d / 14), 0.25);
+  }
+
   /** A boss's own air about it: the Colossus's embers, the Warden's soul fire, the Broodmother's venom, the Lich King's frost. */
   function aura(client: Client, f: Figure, dt: number) {
     const look = AURA[f.type];
@@ -387,6 +406,15 @@ function bossesKit(): ClientKit {
     if (count) client.fx.particles(p, look.rgb, { count, speed: look.speed, size: look.size, gravity: look.gravity, glow: look.glow, life: look.life, spread: look.spread, up: look.up, drag: 1 });
   }
 }
+
+/** Dust kicked up by a boss's feet. */
+const DUST = rgbOf('#c9b48a');
+/** The bosses that walk: each footfall's sound, how loud, how much dust over how wide, how much it shakes the ground. */
+const STEPS: Record<string, { sound: string; volume: number; dust: number; spread: number; shake: number }> = {
+  colossus: { sound: 'colossus_step', volume: 1, dust: 10, spread: 1.6, shake: 0.12 },
+  warden: { sound: 'warden_step', volume: 0.7, dust: 5, spread: 0.8, shake: 0.04 },
+  broodmother: { sound: 'brood_step', volume: 0.6, dust: 4, spread: 2, shake: 0 },
+};
 
 /** How far from a falling boss `h` tall the camera circles. */
 const FALL_REACH = (h: number) => h * 1.6 + 3.5;

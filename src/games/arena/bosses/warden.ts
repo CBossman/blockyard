@@ -15,7 +15,7 @@ import type { BossKind } from './registry';
  * of his health he's enraged and chains two at once.
  */
 
-const LOOK: CharacterLook = { build: 'heavy', skin: '#4e4466', hair: 'long', hairColor: '#17101f', facialHair: 'beard', face: 'glow', eyes: '#e4c4ff', top: 'tunic', topColor: '#2a1640', accent: '#c9a23a', bottom: 'trousers', bottomColor: '#140f1c', shoes: 'boots', shoeColor: '#0e0b12', hat: 'crown', ragged: true };
+const LOOK: CharacterLook = { build: 'heavy', skin: '#5a4e76', hair: 'long', hairColor: '#1c1326', facialHair: 'beard', face: 'glow', eyes: '#e4c4ff', top: 'tunic', topColor: '#36204f', accent: '#c9a23a', bottom: 'trousers', bottomColor: '#140f1c', shoes: 'boots', shoeColor: '#0e0b12', hat: 'crown', ragged: true };
 const COLOR = '#c9a2ff';
 const SOUL = '#b76bff';
 const FIREBALL: ProjectileSpec = { sprite: Sprite.soul_fireball, speed: 17, gravity: 1.5, damage: 5, knockback: 1.1, glow: '#5fe8ff' };
@@ -58,7 +58,6 @@ const slam: Move = {
   windup: 0.95,
   start(c) {
     c.self.animate('raise');
-    c.self.glow(SOUL);
     ring(c.game, c.self.position, SLAM, c.s.t, SOUL);
     c.game.audio.play('brute', { at: c.self.position, pitch: 0.7 });
   },
@@ -164,7 +163,6 @@ const prison: Move = {
     s.mem.prison = at;
     s.focus = f.id;
     self.animate('cast');
-    self.glow(SOUL);
     ring(game, at, PRISON, c.s.t, SOUL);
     game.audio.play('prison_hum', { at });
     f.hud.pop('SOUL PRISON', { color: SOUL, sub: 'Get out of the ring!' });
@@ -234,7 +232,7 @@ const wardenAI = brain({
     },
   ],
   always(c) {
-    if (c.s.enraged && !c.s.move) c.self.glow(Math.sin(c.self.age * 6) > 0.6 ? '#ff2a2a' : null);
+    if (c.s.enraged && !c.s.move) c.self.glow(Math.sin(c.self.age * 4) > 0.85 ? '#ff2a2a' : null);
   },
 });
 

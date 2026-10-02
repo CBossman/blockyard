@@ -1,5 +1,8 @@
-import type { Entity, GameContext, Player, Vec3 } from '@platform';
+import type { Entity, GameContext, Player, SynthVoice, Vec3 } from '@platform';
+import type { Client } from '../../src/platform/api/client';
 import type { Headless, Pilot } from '../../src/platform/host/headless';
+import { sounds } from '../../src/platform/client-kits';
+import arenaClient from '../../src/games/arena/client';
 import { bus } from '../../src/games/arena/run/bus';
 import { bossState, type BossState } from '../../src/games/arena/bosses/fight';
 import { check, launch } from './_harness';
@@ -31,6 +34,7 @@ interface Scene {
 
 function scene(seed: number, type: string, at: Vec3 = { x: 0.5, y: FLOOR + 1, z: 18.5 }, intro = false): Scene {
   const h = launch('arena', { seed });
+  games.push(h);
   const game = h.ctx as GameContext;
   const me = game.player as Player;
   me.maxHealth = 1000;
@@ -43,14 +47,16 @@ function scene(seed: number, type: string, at: Vec3 = { x: 0.5, y: FLOOR + 1, z:
   check(boss, `${type} came in`);
   const s = bossState(boss);
   const clear = () => {
-    for (const e of game.entities.all()) if (e !== boss && e.data.master === undefined) e.remove();
+    for (const e of game.entities.all()) if (e !== sc.boss && e.data.master === undefined) e.remove();
   };
   const only = (move: string) => {
+    const s = sc.s;
     for (const k of Object.keys(s.cds)) s.cds[k] = 99;
     for (const name of ['sweep', 'twin', 'stomp', 'rain', 'ribs', 'charge', 'swipe', 'slam', 'fireballs', 'chain', 'prison', 'bite', 'web', 'leap', 'eggs', 'spray', 'bolts', 'nova', 'spikes', 'raise', 'storm']) s.cds[name] = 99;
     s.cds[move] = 0;
   };
-  return { h, game, me, boss, s, hits, clear, only, since: (t) => hits.filter((x) => x.t >= t).reduce((a, x) => a + x.amount, 0) };
+  const sc: Scene = { h, game, me, boss, s, hits, clear: () => clear(), only: (m) => only(m), since: (t) => hits.filter((x) => x.t >= t).reduce((a, x) => a + x.amount, 0) };
+  return sc;
 }
 
 /** Put the fighter `d` blocks from the boss across the open floor (toward the middle and past it), facing it. */
@@ -63,6 +69,27 @@ function facing(sc: Scene, d: number) {
   let at = { x: p.x + dx * d, y: FLOOR + 1, z: p.z + dz * d };
   if (Math.hypot(at.x - 0.5, at.z - 0.5) < 4) at = { x: p.x + dx * (d + 7), y: FLOOR + 1, z: p.z + dz * (d + 7) };
   sc.me.teleport(at, Math.atan2(dx, dz), 0);
+}
+
+/** Every sound the bosses' fights asked every screen for (`audio.play`), and the games that asked. */
+const asked = new Set<string>();
+const games: Headless[] = [];
+
+/** The engine's own sounds (`audio/sfx.ts`), which every screen has. */
+const ENGINE_SOUNDS = ['hit', 'hurt', 'pickup', 'heal', 'wave', 'victory', 'defeat', 'spawn', 'click', 'countdown', 'lock', 'alarm', 'explosion', 'explosion_big', 'whoosh', 'arrow_hit'];
+/** What the screens' own code plays (the stings, the footfalls: `client/bosses.ts`). */
+const SCREEN_SOUNDS = ['boss_sting', 'boss_vanquished', 'boss_phase', 'colossus_step', 'warden_step', 'brood_step'];
+
+/** Every sound asked for is one the Arena's screens have (its client code's voices, the standard kits', the engine's). */
+function voices(log: (s: string) => void) {
+  for (const h of games) for (const c of h.find('audio', 'play')) asked.add(c.args[0] as string);
+  const defined = new Set<string>();
+  const client = { audio: { play() {}, define: (n: string, _v: SynthVoice) => defined.add(n) }, items: { look() {}, get() {} } } as unknown as Client;
+  for (const k of sounds.standard()) k.setup?.(client);
+  arenaClient.client.setup!(client);
+  const missing = [...asked, ...SCREEN_SOUNDS].filter((n) => !defined.has(n) && !ENGINE_SOUNDS.includes(n));
+  log(`${asked.size} sounds asked for in the fights, all on the screens`);
+  check(!missing.length, `sounds the screens don't have: ${missing.join(', ')}`);
 }
 
 /** Run until `until` (or `max` seconds), keeping the floor clear, with `pilot` at the controls. */
@@ -372,5 +399,31 @@ export default function arenaBosses() {
   warden(log);
   broodmother(log);
   lich(log);
+  party(log);
+  voices(log);
   timing(log);
+}
+
+/** Three fighters: all held for the entrance, the boss tougher for them, and adds for each. */
+function party(log: (s: string) => void) {
+  const sc = scene(61, 'colossus', { x: 0.5, y: FLOOR + 1, z: 12.5 });
+  const b1 = sc.game.bots.add('Ann');
+  const b2 = sc.game.bots.add('Bob');
+  run(sc, 1);
+  for (const [i, b] of [b1, b2].entries()) b.teleport({ x: -3 + i * 6, y: FLOOR + 1, z: 12.5 }, 0, 0);
+  // A fresh one, with its entrance (the floor's kept to it now).
+  sc.boss.remove();
+  sc.game.commands.run('boss colossus');
+  const boss = sc.game.entities.all('colossus').find((e) => e.alive)!;
+  sc.boss = boss;
+  sc.s = bossState(boss);
+  run(sc, 1);
+  check([sc.me, b1, b2].every((p) => p.frozen), 'the whole party is held for the entrance');
+  run(sc, 5);
+  check([sc.me, b1, b2].every((p) => !p.frozen), 'and let go after it');
+  const hp = boss.health;
+  boss.damage(27, { source: sc.me });
+  const took = hp - boss.health;
+  log(`three fighters: a blow of 27 takes ${took.toFixed(1)} (the boss ${(27 / took).toFixed(1)} times as tough)`);
+  check(Math.abs(27 / took - 2.4) < 0.05, 'a boss is 2.4 times as tough for three');
 }

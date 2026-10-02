@@ -71,6 +71,12 @@ export function defineBossSounds(client: Client) {
     bonesRattle(s, 4, 0, 0.3);
     s.tone({ wave: 'sawtooth', from: 70 * s.pitch, to: 50, duration: 0.35, volume: 0.25, lowpass: 600 });
   });
+  // Its footfall: a deep thud and a rattle.
+  a.define('colossus_step', (s) => {
+    s.tone({ from: 60 * s.pitch, to: 30, duration: 0.45, volume: 0.7 });
+    s.noise({ duration: 0.3, filter: 'lowpass', from: 700, to: 120, volume: 0.45 });
+    bonesRattle(s, 3, 0.03, 0.1);
+  });
   a.define('colossus_wind', (s) => {
     s.noise({ duration: 0.9, filter: 'bandpass', from: 300 * s.pitch, to: 900 * s.pitch, q: 2, volume: 0.35, attack: 0.5 });
     bonesRattle(s, 6, 0, 0.15);
@@ -129,6 +135,10 @@ export function defineBossSounds(client: Client) {
     for (const d of [0, 0.03]) s.tone({ wave: 'sawtooth', from: 90 * s.pitch, to: 30 * s.pitch, duration: 2.8, attack: 0.05, volume: 0.3, lowpass: { freq: 1400, to: 200 }, vibrato: { rate: 6, depth: 5 }, delay: d });
     s.noise({ duration: 2.4, filter: 'bandpass', from: 1200, to: 300, q: 1, volume: 0.3, delay: 0.2 });
   }, { reverb: 0.7 });
+  a.define('warden_step', (s) => {
+    s.tone({ from: 75 * s.pitch, to: 40, duration: 0.3, volume: 0.45 });
+    s.noise({ duration: 0.18, filter: 'lowpass', from: 900, to: 200, volume: 0.25 });
+  });
   a.define('warden_swing', (s) => {
     s.noise({ duration: 0.3, filter: 'bandpass', from: 2400, to: 400, q: 1.4, volume: 0.6 });
   });
@@ -171,6 +181,10 @@ export function defineBossSounds(client: Client) {
     s.tone({ wave: 'sawtooth', from: 900 * s.pitch, to: 420 * s.pitch, duration: 1.5, volume: 0.12, vibrato: { rate: 26, depth: 40 }, bandpass: { freq: 1500, q: 2 } });
     chitter(s, 16, 1100, 0.08, 0.1);
   }, { reverb: 0.6 });
+  // Her legs on the stone: a scatter of clicks.
+  a.define('brood_step', (s) => {
+    for (let i = 0; i < 4; i++) s.noise({ duration: 0.02, filter: 'bandpass', from: (1800 + Math.random() * 900) * s.pitch, to: 1200, q: 4, volume: 0.2, delay: i * 0.035 + Math.random() * 0.02 });
+  });
   a.define('brood_hiss', (s) => {
     s.noise({ duration: 0.6, filter: 'highpass', from: 3500 * s.pitch, to: 2800, volume: 0.4, attack: 0.08 });
     chitter(s, 4, 900, 0.07);

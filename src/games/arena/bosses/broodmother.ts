@@ -93,7 +93,6 @@ const leap: Move = {
     c.s.mem.leap = { t: 0, flight: 0 };
     self.lookAt(target);
     self.animate('leap_wind', { fade: 0.2 });
-    self.glow(COLOR);
     // The ring fills until she lands (the wind-up and the flight).
     ring(game, to, LEAP, c.s.t + 1.1, COLOR);
     game.audio.play('brood_hiss', { at: self.position, pitch: 0.8 });
@@ -143,7 +142,6 @@ const eggs: Move = {
   windup: 0.9,
   start(c) {
     c.self.animate('lay', { fade: 0.25 });
-    c.self.glow(COLOR);
     c.game.audio.play('brood_lay', { at: c.self.position });
   },
   act(c) {

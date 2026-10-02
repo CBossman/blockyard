@@ -19,7 +19,7 @@ import type { BossKind } from './registry';
 const COLOR = '#7fe3ff';
 const FROST_C = '#9fe8ff';
 const SOUL_C = '#9b7bff';
-const FROST: ProjectileSpec = { speed: 24, gravity: 0, damage: 4, knockback: 0.5, glow: FROST_C, weapon: 'frost' };
+const FROST: ProjectileSpec = { speed: 24, gravity: 0, damage: 3, knockback: 0.5, glow: FROST_C, weapon: 'frost' };
 const NOVA = 7.5;
 /** Spacing of the ice spikes along their lane, and how wide each one bites. */
 const SPIKE_STEP = 1.35;
@@ -62,7 +62,6 @@ const nova: Move = {
   windup: 1,
   start(c) {
     c.self.animate('nova_wind', { fade: 0.2 });
-    c.self.glow(FROST_C);
     ring(c.game, c.self.position, NOVA, c.s.t, FROST_C);
     c.game.audio.play('frost_charge', { at: c.self.position, pitch: 0.6 });
   },
@@ -107,7 +106,6 @@ const spikes: Move = {
     c.s.mem.spikes = { a, len };
     self.lookAt(target);
     self.animate('nova_wind', { fade: 0.2 });
-    self.glow(FROST_C);
     lane(game, { x: p.x + Math.cos(a) * 1.5, y: p.y, z: p.z + Math.sin(a) * 1.5 }, to, SPIKE_R * 2, c.s.t, FROST_C);
     game.audio.play('frost_charge', { at: p, pitch: 0.8 });
   },
@@ -163,7 +161,6 @@ const raise: Move = {
   windup: 1.1,
   start(c) {
     c.self.animate('summon', { fade: 0.25 });
-    c.self.glow('#5fe87f');
     c.game.audio.play('lich_raise', { at: c.self.position });
   },
   act(c) {
@@ -198,7 +195,6 @@ const storm: Move = {
   windup: 1.1,
   start(c) {
     c.self.animate('storm', { fade: 0.3, loop: true });
-    c.self.glow(SOUL_C);
     c.game.audio.play('lich_roar', { at: c.self.position, volume: 1.4 });
     c.s.mem.storm = { t: 0, next: 0 };
   },
