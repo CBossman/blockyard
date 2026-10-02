@@ -23,6 +23,8 @@ interface KnightState {
   _open?: number;
   _bash?: number;
   _told?: number;
+  /** The swing coming is its second (a quicker follow-through after the first). */
+  _second?: boolean;
 }
 
 /** Weapons whose blows no shield turns: magic (the armory's staffs and wand, of any rarity). */
@@ -31,8 +33,10 @@ const MAGIC = new Set(['fire_staff', 'frost_staff', 'storm_wand']);
 const COVER = 1.25;
 /** How fast it turns (radians a second): slow enough to be circled. */
 const TURN = 1.7;
-/** How far its sword reaches. */
+/** How far its sword reaches, and what its swings do (the first, and the follow-through). */
 const REACH = 2.3;
+const SWING = 7;
+const SECOND = 5;
 
 /** Its guard: up (true) or down, as every screen should pose its shield arm. */
 function guard(game: GameContext, self: Entity, up: boolean) {
@@ -75,7 +79,20 @@ const knightAI: Behavior = (self, game, dt) => {
     self.animate('attack');
     game.audio.play('knight_swing', { at: e });
     const d = self.distanceTo(target);
-    if (d <= REACH + 0.7 && Math.abs(wrap(want - s._face)) < 1.1 && self.canSee(target)) target.damage(5, { source: self, knockback: 1.3, cause: 'melee' });
+    if (d <= REACH + 0.7 && Math.abs(wrap(want - s._face)) < 1.1 && self.canSee(target)) target.damage(s._second ? SECOND : SWING, { source: self, knockback: 1.3, cause: 'melee' });
+    // Still near after its first: a second, quicker swing (its own short tell) follows through.
+    if (!s._second && d <= REACH + 2.5) {
+      s._second = true;
+      s._tell = 0.4;
+      game.clock.after(0.15, () => {
+        if (!self.alive || s._tell === undefined) return;
+        self.animate('raise');
+        self.glow('#ffd27a');
+        game.audio.play('knight_raise', { at: self.position, pitch: 1.25 });
+      });
+      return;
+    }
+    s._second = false;
     // The shield comes back up a moment later: its opening.
     s._open = now + 0.9;
     s._cd = 1.9;

@@ -62,6 +62,8 @@ const PREFER_CLASS: Record<ClassId, Partial<Record<BlessingId, number>>> = {
   berserker: { tremor: 7, berserk: 8.5 },
   pyromancer: { arcane: 9.2, wildfire: 8.6, bombardier: 8, berserk: 1, giant: 1 },
 };
+/** Monsters that shoot or cast from where they stand: gone after wherever they are. */
+const SHOOTERS = new Set(['skeleton', 'imp', 'necromancer', 'cultist']);
 /** Each class's main weapon (the forge's), and what it holds at range. */
 const MAIN: Record<ClassId, string> = { gladiator: 'gladius', hunter: 'daggers', berserker: 'battle_axe', pyromancer: 'fire_staff' };
 
@@ -209,9 +211,13 @@ function simulate(seed: number, classes: ClassId[], mapId: string) {
   bus.on('downed', () => void (cur() && cur()!.downs++));
   bus.on('fell', () => void (cur() && cur()!.falls++));
   const lastHit = new Map<string, string>();
-  game.events.on('playerDamage', ({ player, amount, source }) => {
+  // (A blow counts for no more than a fighter's whole health: one who bleeds out is finished off
+  // with an outsize blow, credited to whoever downed them, which would swamp the tallies.)
+  game.events.on('playerDamage', ({ player, amount: dealt, source }) => {
+    const amount = Math.min(dealt, player.maxHealth);
     const k = source && source !== 'world' && source.kind === 'entity' ? source.type + (source.data.elite ? `(${source.data.elite})` : '') : source === 'world' ? 'world' : 'other';
     lastHit.set(player.id, k);
+    if (process.env.DEBUG_DMG && k.startsWith(process.env.DEBUG_DMG)) console.log(`    [${game.clock.now.toFixed(2)}] w${state.wave} ${k} -> ${player.name} ${amount.toFixed(1)} health ${player.health.toFixed(1)} alive ${player.alive} downed ${isDowned(player)}`);
     const w = cur();
     if (w && state.phase === 'fighting') w.taken[k] = (w.taken[k] ?? 0) + amount;
   });
@@ -238,8 +244,8 @@ function simulate(seed: number, classes: ClassId[], mapId: string) {
     k.n++;
     k.life += game.clock.now - b;
   });
-  game.events.on('playerDamage', ({ amount, source }) => {
-    if (source && source !== 'world' && source.kind === 'entity') kindOf(source.type).dealt += amount;
+  game.events.on('playerDamage', ({ player, amount, source }) => {
+    if (source && source !== 'world' && source.kind === 'entity') kindOf(source.type).dealt += Math.min(amount, player.maxHealth);
   });
   game.events.on('playerDeath', ({ player }) => {
     const f = fighters.find((x) => x.p === player);
@@ -257,6 +263,8 @@ function simulate(seed: number, classes: ClassId[], mapId: string) {
   /** A boss's moves that a jump clears (the shockwaves along the ground), and when each boss's present move began. */
   const GROUNDED = new Set(['stomp', 'slam', 'nova', 'twin']);
   const moveSeen = new Map<number, { move: string; at: number }>();
+  /** Since when each monster's been off the floor (in a gate's pen), by id. */
+  const outSince = new Map<number, number>();
   const bosses = () => game.entities.all().filter((e) => bossKind(e.type) && e.alive);
   const bossOf = (e: Entity) => (bossKind(e.type) ? (e.data.boss as BossState | undefined) : undefined);
   /** A tell's mark from a boss's screen message. */
@@ -348,7 +356,8 @@ function simulate(seed: number, classes: ClassId[], mapId: string) {
   let navMade: { x0: number; z0: number; n: number; h: Float32Array; bad: Uint8Array } | null = null;
   const makeNav = () => {
     const m = map();
-    const R = Math.ceil(m.radius + 7);
+    // (Out past the floor to the gates' pens too: a fighter who follows a monster in must find the way out.)
+    const R = Math.ceil(m.radius + 14);
     const x0 = Math.floor(m.center.x) - R, z0 = Math.floor(m.center.z) - R, n = 2 * R + 1;
     const h = new Float32Array(n * n).fill(NaN);
     /** Lava, frost, water: never walked into. */
@@ -769,6 +778,8 @@ function simulate(seed: number, classes: ClassId[], mapId: string) {
       const b = bossOf(e);
       if (b && (b.held || b.transition > 0 || b.shield || b.dying)) s += 60;
       if (e.type === 'phylactery') s -= 14;
+      // Not into the gates' pens after them while there's anything on the floor (more come in there).
+      if (flat(e.position, map().center) > map().radius + 1) s += 30;
       if (e.type === 'egg_sac') s -= 6;
       if (da._rite !== undefined) s -= 12;
       if (da._drain !== undefined || da._chant !== undefined) s -= 8;
@@ -849,7 +860,19 @@ function simulate(seed: number, classes: ClassId[], mapId: string) {
       if (!lobbed) look(q, big ? Math.min(2.4, big * 0.4) : target.type === 'spider' || target.type.startsWith('slime') || target.type === 'spiderling' ? 0.4 : target.type === 'bat' ? 0.3 : target.type === 'golem' ? 2 : 1.2);
       const d = flat(q, me);
       const dx = (q.x - me.x) / (d || 1), dz = (q.z - me.z) / (d || 1);
-      if (d > range) {
+      // One still in a gate's pen: wait for it at the floor's edge (more come in there), unless it's
+      // been there a good while (stuck: then go in and get it), or it shoots from there.
+      const c = map().center;
+      const out = flat(q, c) - (map().radius + 1);
+      if (out > 0) outSince.set(target.id, outSince.get(target.id) ?? now);
+      else outSince.delete(target.id);
+      const wait = out > 0 && !SHOOTERS.has(target.type) && now - outSince.get(target.id)! < 25;
+      const goal = wait ? { x: c.x + ((q.x - c.x) * (map().radius - 3)) / (out + map().radius + 1), y: q.y, z: c.z + ((q.z - c.z) * (map().radius - 3)) / (out + map().radius + 1) } : q;
+      if (wait && flat(goal, me) > 1.5) {
+        const r = route(f, goal);
+        [mx, mz] = [r.dx, r.dz];
+        if (r.hop && p.onGround) pressed.push('Space');
+      } else if (!wait && d > range) {
         const r = route(f, q);
         [mx, mz] = [r.dx, r.dz];
         if (r.hop && p.onGround) pressed.push('Space');

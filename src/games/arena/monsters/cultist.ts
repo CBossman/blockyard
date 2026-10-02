@@ -3,7 +3,7 @@ import { bossKind } from '../bosses';
 import { spawnMonster } from '../run/spawn';
 import { MONSTER_MODELS } from './models';
 import type { MonsterKind } from './registry';
-import { held, near, ring, show } from './util';
+import { held, inward, near, ring, show } from './util';
 
 /**
  * The Cultist hangs back behind the others and chants: its staff raised and its crystal blazing,
@@ -148,8 +148,13 @@ const cultistAI: Behavior = (self, game, dt) => {
   const nz = (e.z - p.z) / l;
   const away = d < 8 ? 1 : d > 13 ? -1 : 0;
   const st = (s._strafe ?? 1) * 0.5;
-  if (!self.canSee(target) && d > 13) self.moveTo(target);
-  else self.moveDirection(nx * away - nz * st, nz * away + nx * st);
+  // Out of sight of them, it finds its way back round (backing off blind took it out of the
+  // arena, round walls and through the gates); keeping back, it turns along the arena's edge.
+  if (!self.canSee(target) || d > 13) self.moveTo(target);
+  else {
+    const [ix, iz] = inward(e);
+    self.moveDirection(nx * away - nz * st + ix, nz * away + nx * st + iz);
+  }
   self.lookAt(target);
   if (s._cd <= 0) {
     // Nobody near to bless: it looks again in a moment, not every tick.

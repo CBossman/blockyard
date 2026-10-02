@@ -22,20 +22,29 @@ interface SlimeSize {
   hop: [number, number];
   /** Seconds between hops. */
   rest: [number, number];
+  /** How far past its body its coming down splashes (blocks): whoever's in it is hurt, less at the edge. */
+  splash: number;
   pitch: number;
 }
 
 const SIZES: Record<string, SlimeSize> = {
-  slime: { name: 'Slime', into: 'slime_small', health: 28, width: 1.1, height: 0.95, damage: 4, hop: [5.5, 7.5], rest: [1, 1.5], pitch: 0.75 },
-  slime_small: { name: 'Small Slime', into: 'slime_tiny', health: 11, width: 0.62, height: 0.55, damage: 2.5, hop: [6, 7], rest: [0.7, 1.1], pitch: 1.05 },
-  slime_tiny: { name: 'Tiny Slime', health: 4, width: 0.38, height: 0.32, damage: 1, hop: [6.5, 6], rest: [0.4, 0.8], pitch: 1.5 },
+  slime: { name: 'Slime', into: 'slime_small', health: 28, width: 1.1, height: 0.95, damage: 6, hop: [5.5, 7.5], rest: [1, 1.5], splash: 1.1, pitch: 0.75 },
+  slime_small: { name: 'Small Slime', into: 'slime_tiny', health: 11, width: 0.62, height: 0.55, damage: 3.5, hop: [6, 7], rest: [0.7, 1.1], splash: 0.5, pitch: 1.05 },
+  slime_tiny: { name: 'Tiny Slime', health: 4, width: 0.38, height: 0.32, damage: 1.5, hop: [6.5, 6], rest: [0.4, 0.8], splash: 0, pitch: 1.5 },
 };
+
+/** Seconds of a fighter's running a hop allows for. */
+const LEAD = 0.3;
 
 interface SlimeState {
   _rest?: number;
   _crouch?: number;
   _air?: boolean;
   _hit?: number;
+  /** The way its next hop goes when it's finding its way round something (x, z), not at them. */
+  _way?: [number, number];
+  /** Seconds it's been going nowhere, finding its way round. */
+  _stuck?: number;
 }
 
 function slimeAI(o: SlimeSize): Behavior {
@@ -64,17 +73,45 @@ function slimeAI(o: SlimeSize): Behavior {
       // Down: a squelch, and a splash on whoever it came down on.
       s._air = false;
       game.audio.play('slime', { at: e, pitch: o.pitch * game.rng.range(0.9, 1.1), volume: 0.7 });
-      if (s._hit === 0 && flat(e, p) < o.width * 0.5 + 0.9 && Math.abs(p.y - e.y) < 1.2) land(game, e, target, o, s, self);
+      if (s._hit === 0) splash(game, e, o, s, self);
+    }
+    // Out of sight of them (a wall, a gate between): it oozes along the way round, and hops along
+    // it now and then (a hop straight at them would only hit the wall, for good).
+    if (s._crouch === undefined && !self.canSee(target)) {
+      self.moveTo(target);
+      const v = self.velocity;
+      const sp = Math.hypot(v.x, v.z);
+      s._stuck = sp < 0.3 ? (s._stuck ?? 0) + dt : 0;
+      if (s._rest <= 0 && (sp > 0.4 || s._stuck > 0.5)) {
+        if (sp > 0.4) s._way = [v.x / sp, v.z / sp];
+        else {
+          // Caught on a corner (it's wider than a block): a hop off to one side of the way to them.
+          const l = Math.hypot(p.x - e.x, p.z - e.z) || 1;
+          const side = game.rng.chance(0.5) ? 1 : -1;
+          s._way = [((p.x - e.x) / l) * 0.5 - ((p.z - e.z) / l) * side, ((p.z - e.z) / l) * 0.5 + ((p.x - e.x) / l) * side];
+        }
+        s._stuck = 0;
+        s._crouch = 0.22;
+        self.animate('hop', { fade: 0.05 });
+      }
+      return;
     }
     self.stop();
-    // Squashing down to hop (the tell), then off toward them.
+    // Squashing down to hop (the tell), then off toward them (or along its way round).
     if (s._crouch !== undefined) {
       s._crouch -= dt;
       if (s._crouch > 0) return;
       s._crouch = undefined;
-      const l = Math.hypot(p.x - e.x, p.z - e.z) || 1;
+      // At where they'll be when it comes down (a running fighter is led, a little).
+      const v = target.velocity;
+      const ax = p.x + v.x * LEAD - e.x;
+      const az = p.z + v.z * LEAD - e.z;
+      const l = Math.hypot(ax, az) || 1;
       const far = Math.min(1, l / 6);
-      self.impulse(((p.x - e.x) / l) * o.hop[0] * (0.55 + 0.45 * far), o.hop[1], ((p.z - e.z) / l) * o.hop[0] * (0.55 + 0.45 * far));
+      const [wx, wz] = s._way ?? [ax / l, az / l];
+      const k = s._way ? 0.7 : 0.55 + 0.45 * far;
+      s._way = undefined;
+      self.impulse(wx * o.hop[0] * k, o.hop[1], wz * o.hop[0] * k);
       s._rest = game.rng.range(o.rest[0], o.rest[1]);
       return;
     }
@@ -83,6 +120,21 @@ function slimeAI(o: SlimeSize): Behavior {
       self.animate('hop', { fade: 0.05 });
     }
   };
+}
+
+/** Come down on the ground: whoever it lands on is hurt, and those about it a little less. */
+function splash(game: GameContext, at: Vec3, o: SlimeSize, s: SlimeState, self: Entity) {
+  const inner = o.width * 0.5 + 0.9;
+  if (o.splash > 0) game.fx.burst({ x: at.x, y: at.y + 0.15, z: at.z }, { color: '#7fe05a', count: 22, speed: 5, gravity: 14, size: 0.1, life: 0.5 });
+  for (const p of game.players) {
+    const d = flat(at, p.position);
+    if (!p.alive || d > inner + o.splash || Math.abs(p.position.y - at.y) > 1.2) continue;
+    if (d < inner) land(game, at, p, o, s, self);
+    else {
+      s._hit = 0.8;
+      p.damage(o.damage * 0.6, { source: self, knockback: 0.6, cause: 'melee' });
+    }
+  }
 }
 
 /** Come down on someone: a splash, and they're hurt and knocked about. */

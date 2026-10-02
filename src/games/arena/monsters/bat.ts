@@ -25,6 +25,8 @@ const HOVER = 3.2;
 const ORBIT = 5;
 /** Seconds out of sight of whom it's after before it gives up on getting round what's between. */
 const LOST = 20;
+/** How high over them (blocks) it crosses to get over what's between. */
+const CRUISE = 12;
 /** Bats diving at once: one, and another with more fighters. */
 const divers = (game: GameContext) => game.entities.all('bat').filter((b) => (b.data as BatState)._mode === 'shriek' || (b.data as BatState)._mode === 'dive').length;
 
@@ -107,12 +109,15 @@ const batAI: Behavior = (self, game, dt) => {
   if (!self.canSee(target)) {
     const c = map().center;
     const t = (s._lost = (s._lost ?? 0) + dt);
+    // Over the walls: up to a height clear of them, across, then straight down onto them.
+    const high = Math.max(c.y, p.y) + CRUISE;
     if (t > LOST) {
       s._lost = 0;
       self.teleport({ x: c.x, y: c.y + HOVER + 4, z: c.z });
-    } else if (t % 9 < 3) flyTo(self, { x: c.x, y: Math.max(c.y, p.y) + HOVER + 1, z: c.z });
-    else if (t % 9 < 5) flyTo(self, { x: e.x, y: Math.max(e.y, p.y + HOVER) + 4, z: e.z });
-    else flyTo(self, { x: p.x, y: p.y + HOVER + 4, z: p.z });
+    } else if (t % 10 < 3) flyTo(self, { x: c.x, y: Math.max(c.y, p.y) + HOVER + 1, z: c.z });
+    else if (t % 10 < 5) flyTo(self, { x: e.x, y: high, z: e.z });
+    else if (Math.hypot(p.x - e.x, p.z - e.z) > 1.5) flyTo(self, { x: p.x, y: high, z: p.z });
+    else flyTo(self, { x: p.x, y: p.y + HOVER, z: p.z });
     return;
   }
   s._lost = 0;

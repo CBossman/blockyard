@@ -25,6 +25,9 @@ interface WraithState {
 
 const GHOST = '#6affc8';
 const DRAIN_RANGE = 6.5;
+/** What its drain takes each tick (a third of a second), and the damage to it that breaks the tether. */
+const DRAIN = 1.3;
+const BREAK = 8;
 
 /** Where to come back: beside or behind them, a few blocks off, somewhere it fits. */
 function blinkSpot(game: GameContext, self: Entity, target: Player): Vec3 | null {
@@ -33,7 +36,8 @@ function blinkSpot(game: GameContext, self: Entity, target: Player): Vec3 | null
   const back = Math.atan2(-look.x, -look.z);
   for (let n = 0; n < 8; n++) {
     const a = back + game.rng.range(-1.3, 1.3) * (n < 5 ? 1 : 2.4);
-    const r = game.rng.range(2.8, 4.2);
+    // (Out of a blade's reach, inside its drain's.)
+    const r = game.rng.range(4.5, 5.8);
     const at = { x: p.x + Math.sin(a) * r, y: p.y + 0.05, z: p.z + Math.cos(a) * r };
     if (inPit(game, at) && flat(at, self.position) > 2) return at;
   }
@@ -99,11 +103,11 @@ const wraithAI: Behavior = (self, game, dt) => {
     self.stop();
     self.lookAt(target);
     s._taken = (s._taken ?? 0) + lost;
-    if (d > DRAIN_RANGE + 2 || !self.canSee(target) || (s._taken ?? 0) >= 5) {
+    if (d > DRAIN_RANGE + 2 || !self.canSee(target) || (s._taken ?? 0) >= BREAK) {
       game.audio.play('drain_break', { at: e });
       game.fx.burst({ x: e.x, y: e.y + 1.4, z: e.z }, { color: GHOST, count: 18, speed: 3, glow: 1, life: 0.4 });
       endDrain(game, self, s);
-      s._stun = (s._taken ?? 0) >= 5 ? 0.9 : 0;
+      s._stun = (s._taken ?? 0) >= BREAK ? 0.9 : 0;
       s._dcd = 4;
       return;
     }
@@ -111,7 +115,7 @@ const wraithAI: Behavior = (self, game, dt) => {
     s._tick = (s._tick ?? 0) - dt;
     if (s._tick <= 0) {
       s._tick = 0.3;
-      if (target.damage(0.7, { source: self, knockback: 0, cause: 'drain' })) self.heal(1);
+      if (target.damage(DRAIN, { source: self, knockback: 0, cause: 'drain' })) self.heal(1);
     }
     if (s._drain <= 0) {
       endDrain(game, self, s);
@@ -124,7 +128,7 @@ const wraithAI: Behavior = (self, game, dt) => {
     self.stop();
     self.lookAt(target);
     s._tell -= dt;
-    if (lost >= 3 || d > DRAIN_RANGE + 1) {
+    if (lost >= 5 || d > DRAIN_RANGE + 1) {
       s._tell = undefined;
       self.glow(null);
       self.animate('none');
@@ -182,7 +186,7 @@ export const wraith: MonsterKind = {
     name: 'Wraith',
     model: LOOK,
     hitbox: { width: 0.7, height: 2 },
-    health: 20,
+    health: 28,
     speed: 3.6,
     knockbackResistance: 0.4,
     ai: wraithAI,

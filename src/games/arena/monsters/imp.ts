@@ -1,7 +1,7 @@
 import { CHARACTER_STYLE, Models, type Behavior, type GameContext, type Player, type ProjectileSpec } from '@platform';
 import { MONSTER_MODELS } from './models';
 import type { MonsterKind } from './registry';
-import { held } from './util';
+import { held, inward } from './util';
 
 /**
  * The Imp: a little winged devil, quick and never still, hopping about at a distance and lobbing
@@ -70,7 +70,8 @@ const impAI: Behavior = (self, game, dt) => {
   } else {
     const away = d < 6 ? 1 : d > 11 ? -1 : 0;
     const st = (s._strafe ?? 1) * 0.8;
-    self.moveDirection(nx * away - nz * st, nz * away + nx * st);
+    const [ix, iz] = inward(e);
+    self.moveDirection(nx * away - nz * st + ix, nz * away + nx * st + iz);
     // Never still: a hop now and then.
     if (s._hop <= 0 && self.onGround) {
       s._hop = game.rng.range(0.7, 1.6);

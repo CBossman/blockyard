@@ -108,6 +108,20 @@ export default function arenaBestiary() {
     check(s.hurt() > 0, 'slimes land on you');
   }
 
+  // A slime with a wall between: it oozes round the end of it (a hop at us would only hit the wall).
+  {
+    const s = scene(22);
+    for (let z = 0; z <= 9; z++) for (let y = FLOOR + 1; y <= FLOOR + 3; y++) s.game.world.setBlock(-4, y, z, 'stone');
+    const sl = s.spawn('slime', 0.5, 0.5);
+    let hopped = 0;
+    s.run(16, () => {
+      if (sl.alive && sl.position.x < -4.5) hopped++;
+      return {};
+    });
+    log(`slime behind a wall: came round it ${hopped > 0}, ${s.hurt().toFixed(1)} damage`);
+    check(hopped > 0 && s.hurt() > 0, 'a slime finds its way round a wall');
+  }
+
   // The wraith blinks in from far off, then drains.
   {
     const s = scene(13);
@@ -123,7 +137,8 @@ export default function arenaBestiary() {
       return {};
     });
     log(`wraith: blinked ${blinked}, came within ${closest.toFixed(1)}; drained ${s.hurt().toFixed(1)}`);
-    check(blinked && closest < 5, 'the wraith blinks close');
+    // (Back in its drain's reach, out of a blade's.)
+    check(blinked && closest < 6.5, 'the wraith blinks close');
     check(s.hurt() > 1, 'the wraith drains');
   }
 
@@ -229,6 +244,16 @@ export default function arenaBestiary() {
     const n = s.game.entities.count('bat');
     log(`bats: ${n} in the flock, up to ${high.toFixed(1)} over the floor, ${s.hurt().toFixed(1)} bites`);
     check(n === 4 && high > 2 && s.hurt() > 0, 'bats fly and bite');
+  }
+
+  // A bat with a tall wall between: over it and down onto us.
+  {
+    const s = scene(23);
+    for (let z = -2; z <= 11; z++) for (let y = FLOOR + 1; y <= FLOOR + 8; y++) s.game.world.setBlock(-4, y, z, 'stone');
+    const b = s.spawn('bat', 0.5, 0.5, { flock: true });
+    s.run(20);
+    log(`bat behind a wall: ${b.alive ? 'still flying' : 'gone'}, ${s.hurt().toFixed(1)} bites`);
+    check(s.hurt() > 0, 'a bat gets over a wall to bite');
   }
 
   // The armory against the knight: a hammer's slam goes under its shield and leaves it reeling,
