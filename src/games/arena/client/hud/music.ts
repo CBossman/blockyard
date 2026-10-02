@@ -4,10 +4,6 @@ import { hud } from './store';
 
 /** Seconds ahead a beat is put together and handed to the sound (it plays exactly on time from there). */
 const AHEAD = 0.12;
-/** The music's loudness settings, which M steps through (kept on this machine). */
-const LEVELS = [1, 0.5, 0] as const;
-const LEVEL_NAMES = ['loud', 'quiet', 'off'];
-const KEY = 'arena.music';
 
 /** The four bars' chords (D, E flat, D, C minor: D Phrygian dominant), as semitones from A3 for the bass root and the chord. */
 const BARS = [
@@ -32,16 +28,14 @@ type Mood = 'off' | 'calm' | 'fight' | 'boss' | 'final' | 'end';
  * - The Crowd's Favour rings bells over it; out of the fight, it's quieter and the drums drop.
  * - Victory and defeat end it (their stings say the rest), the drone left low.
  *
- * M steps it loud, quiet and off (remembered on this machine).
+ * It plays at the player's music volume (Settings → Sound: `client.audio.music`), silent at 0.
  */
 export function music(): ClientKit {
   let drone: ClientLoop | null = null;
-  let level = load();
   let nextBeat = 0;
   let beat = 0;
   let mood: Mood = 'off';
   let alt = false;
-  let mHeld = false;
 
   const stop = () => {
     drone?.stop();
@@ -51,22 +45,13 @@ export function music(): ClientKit {
   return {
     name: 'arena.hud.music',
     frame(client) {
-      // M: louder, quieter, off.
-      const m = client.input.isDown('KeyM');
-      if (m && !mHeld && client.me.id) {
-        level = (level + 1) % LEVELS.length;
-        save(level);
-        client.hud.toast(`Music: ${LEVEL_NAMES[level]}`);
-      }
-      mHeld = m;
-
       const now = moodOf(client);
       if (now !== mood) {
         // A new mood starts on the next beat (a wave's sting is playing over the change).
         mood = now;
         if (mood === 'off') stop();
       }
-      const vol = LEVELS[level] * (hud.me?.state === 'out' ? 0.55 : 1);
+      const vol = client.audio.music * (hud.me?.state === 'out' ? 0.55 : 1);
       if (mood === 'off' || vol === 0) {
         drone?.set({ volume: 0 });
         nextBeat = client.time;
@@ -96,23 +81,6 @@ export function music(): ClientKit {
     },
     dispose: stop,
   };
-}
-
-function load(): number {
-  try {
-    const n = Number(localStorage.getItem(KEY));
-    return n >= 0 && n < LEVELS.length ? n : 0;
-  } catch {
-    return 0;
-  }
-}
-
-function save(n: number) {
-  try {
-    localStorage.setItem(KEY, String(n));
-  } catch {
-    // (Storage off: it holds for this visit.)
-  }
 }
 
 function moodOf(client: Client): Mood {

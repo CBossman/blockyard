@@ -89,13 +89,20 @@ export function announcer(): ClientKit {
         } else queue.push({ c, at: performance.now() });
       });
     },
-    frame(client) {
-      layer.style.visibility = hidden(client) ? 'hidden' : '';
+    frame(client, dt) {
+      const off = hidden(client);
+      layer.style.visibility = off ? 'hidden' : '';
       if (client.events.some((e) => e.t === 'reset')) {
         queue = [];
         showing?.el.remove();
         showing = null;
         feats.replaceChildren();
+      }
+      // Someone else has the screen (a boss's entrance, its fall: they fade the HUD out): the callouts wait.
+      if (!off && (showing || queue.length) && !layer.checkVisibility({ opacityProperty: true })) {
+        if (showing) showing.until += dt;
+        for (const q of queue) q.at += dt * 1000;
+        return;
       }
       if (showing && client.time >= showing.until) {
         const going = showing.el;
