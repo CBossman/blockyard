@@ -16,13 +16,23 @@ const C = { x: 0.5, z: 0.5 };
 const PIT = 22;
 const POD = 25;
 const BACK = 35;
-const OUT = 38.5;
+const OUT = 39.5;
+/** How far the facade's columns and cornices stand out from it. */
+const RELIEF = OUT + 0.7;
 /** The podium's top (the front row stands on it). */
 const POD_TOP = FLOOR + 6;
 /** Where the tiers end, and the gallery's floor over them. */
 const TIERS = BACK - POD;
 const GALLERY = POD_TOP + TIERS + 1;
-const ATTIC = FLOOR + 26;
+const ATTIC = FLOOR + 27;
+/** Round the ring: the aisles up the stands, the podium's pilasters, the gallery's columns, the facade's bays, the masts. */
+const AISLES = 16;
+const PILASTERS = 20;
+const COLUMNS = 36;
+const BAYS = 60;
+const MASTS = 20;
+/** The plaza round it. */
+const PLAZA = 54;
 
 /** The gates: east, south, west and north (under the emperor's box). */
 const GATES = [0, Math.PI / 2, Math.PI, -Math.PI / 2];
@@ -39,12 +49,11 @@ const PODIA = [
   { x0: -16, x1: -13, z0: -3, z1: 3 },
 ];
 
-const ang = (a: number) => ((a % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
-/** How far (blocks, round the ring at radius `d`) angle `a` is from `b`. */
-const arc = (a: number, b: number, d: number) => {
-  const t = Math.abs(ang(a) - ang(b));
-  return Math.min(t, Math.PI * 2 - t) * d;
-};
+const TAU = Math.PI * 2;
+/** Where angle `a` falls among `n` equal divisions of the circle: 0 at a division, up to 1 just before the next. */
+const turn = (a: number, n: number) => ((((a / TAU) * n) % 1) + 1) % 1;
+/** How far (blocks, round the ring at radius `d`) angle `a` is from the nearest of `n` divisions. */
+const off = (a: number, n: number, d: number) => Math.abs(turn(a, n) - Math.round(turn(a, n))) * (TAU / n) * d;
 /** Where block (x, z) is across a gate's way (its `side`, blocks from the axis), and along it. */
 function inGate(x: number, z: number): { g: number; side: number; along: number } | null {
   for (let g = 0; g < GATES.length; g++) {
@@ -58,9 +67,9 @@ function inGate(x: number, z: number): { g: number; side: number; along: number 
 }
 
 function build(): Blueprint {
-  const bp = Blueprint.centered(0, 0, Math.ceil(OUT) + 1, FLOOR - 4, ATTIC + 6);
+  const bp = Blueprint.centered(0, 0, Math.ceil(RELIEF) + 1, FLOOR - 4, ATTIC + 7);
 
-  bp.columns(0, 0, OUT, (x, z, d, a) => {
+  bp.columns(0, 0, RELIEF, (x, z, d, a) => {
     if (d < PIT) return pit(bp, x, z, d, a);
     if (d < POD) return podium(bp, x, z, d, a);
     if (d < BACK) return tier(bp, x, z, d, a);
@@ -81,11 +90,11 @@ function pit(bp: Blueprint, x: number, z: number, d: number, a: number) {
   else {
     const g = inGate(x, z);
     const worn = hash(x, z, 2);
-    if (g && Math.abs(g.side) < 1.6) floor = worn < 0.2 ? 'sand' : worn < 0.3 ? 'travertine' : 'travertine_bricks';
+    if (g && Math.abs(g.side) < 1.6) floor = worn < 0.2 ? 'arena_sand' : worn < 0.3 ? 'travertine' : 'travertine_bricks';
     else {
-      // Sand, gravel where it's been churned, blood where it's soaked in (in blots).
-      const blot = hash(x >> 2, z >> 2, 3) + hash(x, z, 4) * 0.25;
-      floor = blot > 1.08 ? 'bloody_sand' : worn < 0.07 ? 'gravel' : worn < 0.1 ? 'sandstone' : 'sand';
+      // Sand; blood soaked in here and there, a stain spreading.
+      const stain = hash(x >> 1, z >> 1, 3) < 0.035 || (hash(x >> 1, z >> 1, 3) < 0.06 && worn < 0.5);
+      floor = stain ? 'bloody_sand' : worn < 0.05 ? 'sandstone' : 'arena_sand';
     }
   }
   bp.set(x, FLOOR, z, floor);
@@ -96,7 +105,7 @@ function mosaic(d: number, a: number): BlockRef {
   if (d > 3.9) return 'gilt';
   if (d < 0.8) return 'gilt';
   const ray = Math.abs(Math.sin(a * 4)) < 0.5 / Math.max(d, 1) + 0.1;
-  return ray ? 'red_concrete' : 'diorite';
+  return ray ? 'red_concrete' : 'marble';
 }
 
 /**
@@ -106,7 +115,7 @@ function mosaic(d: number, a: number): BlockRef {
 function podium(bp: Blueprint, x: number, z: number, d: number, a: number) {
   for (let y = FLOOR - 3; y <= POD_TOP; y++) bp.set(x, y, z, 'travertine');
   if (d < PIT + 1) {
-    const pilaster = (arc(a, 0, PIT) % 7) < 1.3;
+    const pilaster = off(a, PILASTERS, PIT) < 0.75;
     for (let y = FLOOR + 1; y <= POD_TOP; y++) {
       let b: BlockRef = 'travertine_bricks';
       if (y === FLOOR + 1) b = 'travertine';
@@ -128,11 +137,11 @@ function tier(bp: Blueprint, x: number, z: number, d: number, a: number) {
   const i = Math.floor(d - POD);
   const top = POD_TOP + 1 + i;
   for (let y = FLOOR - 3; y <= top; y++) bp.set(x, y, z, 'travertine');
-  const aisle = arc(a, 0, d) % 13 < 1.2;
+  const aisle = off(a, AISLES, d) < 0.7;
   bp.set(x, top, z, aisle ? 'travertine_slab[type=top]' : i % 2 ? 'travertine' : 'travertine_bricks');
   if (aisle) {
     // A doorway (a vomitorium) in some aisles, halfway up.
-    if (i === 4 && Math.floor(arc(a, 0, d) / 13) % 3 === 0) {
+    if (i === 4 && Math.round((a / TAU) * AISLES + AISLES) % 2 === 1) {
       bp.set(x, top + 1, z, 'air');
       bp.set(x, top + 2, z, 'air');
     }
@@ -144,55 +153,77 @@ function tier(bp: Blueprint, x: number, z: number, d: number, a: number) {
 }
 
 /**
- * The rim: the stands' back wall, a gallery over the top tier with the plebs standing, and the
- * facade: three orders of arches and an attic with windows, masts on top.
+ * The rim: the stands' back wall, a gallery over the top tier with the plebs standing under a
+ * colonnade, and the facade: three orders of arches between engaged columns, cornices standing
+ * out between them, an attic with windows, masts on top.
  */
 function rim(bp: Blueprint, x: number, z: number, d: number, a: number) {
-  const step = arc(a, 0, d) % 4;
+  const u = turn(a, BAYS);
+  const pier = u < 0.24 || u > 0.86;
+  const column = u < 0.1 || u > 0.96;
+  if (d >= OUT) {
+    // Standing out from the facade: a half-column at each pier, the cornices between the orders.
+    bp.set(x, FLOOR, z, 'travertine_bricks');
+    for (const level of [7, 14, 21, 27]) bp.set(x, FLOOR + level, z, 'travertine_bricks');
+    if (column) for (let level = 1; level <= 20; level++) if (level % 7 !== 0) bp.set(x, FLOOR + level, z, level % 7 === 1 || level % 7 === 6 ? 'travertine_bricks' : 'travertine');
+    return;
+  }
   for (let y = FLOOR - 3; y <= FLOOR; y++) bp.set(x, y, z, 'travertine');
   if (d < BACK + 1) {
-    // The back wall up to the gallery's floor; on it, the plebs standing under a colonnade.
-    for (let y = FLOOR + 1; y <= GALLERY; y++) bp.set(x, y, z, 'travertine');
+    // The back wall up to the gallery's floor (dark stone where it's seen through the arches); on
+    // it, the plebs standing under a colonnade.
+    for (let y = FLOOR + 1; y < GALLERY; y++) bp.set(x, y, z, 'stone_bricks');
     bp.set(x, GALLERY, z, 'travertine_bricks');
-    if (step < 1) for (let y = GALLERY + 1; y <= GALLERY + 4; y++) bp.set(x, y, z, y === GALLERY + 4 ? 'travertine_bricks' : 'diorite');
+    if (off(a, COLUMNS, d) < 0.6) for (let y = GALLERY + 1; y <= GALLERY + 4; y++) bp.set(x, y, z, y === GALLERY + 4 ? 'travertine_bricks' : 'marble');
     else if (hash(x, z, 10) < 0.6) bp.set(x, GALLERY + 1, z, hash(x, z, 11) < 0.5 ? 'crowd_a' : 'crowd_c');
     portico(bp, x, z);
     return;
   }
-  if (d < BACK + 2) {
-    // The ambulatory behind the arches: dark corridors between floors; the gallery over them.
+  if (d < BACK + 3) {
+    // The ambulatory behind the arches, two blocks deep: dark corridors between floors; the
+    // gallery over them.
     for (let y = FLOOR + 1; y <= GALLERY; y++) {
       const level = y - FLOOR;
-      const floor = level === 6 || level === 12 || y === GALLERY;
+      const floor = level === 7 || level === 14 || y === GALLERY;
       bp.set(x, y, z, floor ? 'travertine_bricks' : 'air');
     }
     bp.set(x, FLOOR, z, 'stone_bricks');
-    if (hash(x, z, 13) < 0.5) bp.set(x, GALLERY + 1, z, hash(x, z, 14) < 0.5 ? 'crowd_b' : 'crowd_a');
+    if (d < BACK + 2 && hash(x, z, 13) < 0.5) bp.set(x, GALLERY + 1, z, hash(x, z, 14) < 0.5 ? 'crowd_b' : 'crowd_a');
     portico(bp, x, z);
     return;
   }
-  // The facade: pilasters, arches on three orders, an attic with windows, a cornice.
+  // The facade, bay by bay (`u` across a bay: the pier at 0, the arch's middle at a half).
   for (let y = FLOOR + 1; y <= ATTIC; y++) {
     const level = y - FLOOR;
-    const order = level <= 6 ? 0 : level <= 12 ? 1 : level <= 18 ? 2 : 3;
-    const base = order * 6;
-    const lv = level - base;
     let b: BlockRef | 'air' = 'travertine';
-    if (order < 3) {
-      // An arch: 2 wide, 4 high with a rounded top; its frame in bricks; a cornice between orders.
-      const open = step >= 1 && step < 3 && lv >= 1 && lv <= 4;
-      if (open) b = 'air';
-      else if (lv === 6 || lv === 0) b = 'travertine_bricks';
-      else if (step < 1) b = lv === 5 ? 'travertine_bricks' : 'travertine';
+    if (level <= 21) {
+      // Three orders of 7: an arch 5 high, rounded at the top, its keystone; the entablature.
+      const lv = ((level - 1) % 7) + 1;
+      if (lv === 7) b = 'travertine_bricks';
+      else if (!pier && lv <= 4) b = 'air';
+      else if (!pier && lv === 5 && u > 0.34 && u < 0.76) b = 'air';
+      else if (!pier && lv === 6 && u > 0.5 && u < 0.6) b = 'travertine_bricks';
     } else {
-      const window = step >= 1.5 && step < 2.5 && (lv === 3 || lv === 4);
-      if (window) b = 'air';
-      else if (lv === 1 || y === ATTIC) b = 'travertine_bricks';
+      // The attic: a small window in every other bay, a band at its foot, pilasters, its cornice.
+      const lv = level - 21;
+      if (!pier && lv >= 3 && lv <= 4 && Math.floor((a / TAU) * BAYS + BAYS) % 2 === 0 && u > 0.38 && u < 0.72) b = 'air';
+      else if (lv === 1 || y === ATTIC || column) b = 'travertine_bricks';
     }
     bp.set(x, y, z, b);
   }
-  // Masts on the rim, every so often (the velarium's).
-  if (d > OUT - 1 && arc(a, 0, d) % 12 < 0.9) for (let y = ATTIC + 1; y <= ATTIC + 5; y++) bp.set(x, y, z, y === ATTIC + 1 ? 'travertine_bricks' : 'spruce_log');
+  // Masts on the rim (the velarium's), a gilt finial each.
+  if (d > OUT - 1 && off(a, MASTS, OUT) < 0.6) for (let y = ATTIC + 1; y <= ATTIC + 6; y++) bp.set(x, y, z, y === ATTIC + 1 ? 'travertine_bricks' : y === ATTIC + 6 ? 'gilt' : 'oak_log');
+}
+
+/** The plaza round it: travertine paving in rings, a kerb at its edge. */
+function plaza(): Blueprint {
+  const bp = Blueprint.centered(0, 0, PLAZA, FLOOR, FLOOR);
+  bp.columns(0, 0, PLAZA, (x, z, d, a) => {
+    if (d < RELIEF) return;
+    const joint = Math.floor(d) % 4 === 0 || off(a, 96, d) < 0.5;
+    bp.set(x, FLOOR, z, d > PLAZA - 1 ? 'travertine_bricks' : joint ? 'travertine' : hash(x, z, 30) < 0.5 ? 'travertine_bricks' : 'travertine');
+  });
+  return bp;
 }
 
 /** The colonnade's entablature and roof over the gallery. */
@@ -216,7 +247,7 @@ function gates(bp: Blueprint) {
       if (Math.abs(g.side) > half + 1) continue;
       const wall = Math.abs(g.side) > half || g.along > PEN + 2.4;
       for (let y = FLOOR + 1; y <= FLOOR + 6; y++) bp.set(x, y, z, wall || y === FLOOR + 6 ? 'travertine_bricks' : 'air');
-      bp.set(x, FLOOR, z, wall ? 'travertine_bricks' : hash(x, z, 12) < 0.3 ? 'gravel' : 'stone_bricks');
+      bp.set(x, FLOOR, z, wall ? 'travertine_bricks' : 'stone_bricks');
     }
   for (const a of GATES) {
     const fx = Math.cos(a);
@@ -258,9 +289,10 @@ function box_(bp: Blueprint) {
       bp.set(x, POD_TOP, z, z === zf ? 'gilt' : (x + z) % 2 ? 'purple_concrete' : 'white_concrete');
       if (z > -PIT) bp.set(x, POD_TOP - 1, z, 'travertine_bricks');
     }
-    // A balustrade along its front, gilt on top.
-    bp.set(x, POD_TOP + 1, zf, Math.abs(x) % 2 ? 'travertine_slab' : 'travertine_bricks');
-    if (Math.abs(x) % 2 === 0) bp.set(x, POD_TOP + 2, zf, 'travertine_slab');
+    // A low balustrade along its front, posts at its ends and either side of the emperor.
+    const post = Math.abs(x) === 6 || Math.abs(x) === 3;
+    bp.set(x, POD_TOP + 1, zf, post ? 'travertine_bricks' : 'travertine_slab');
+    if (post) bp.set(x, POD_TOP + 2, zf, 'gilt');
     // The back wall, hung with red drapes.
     for (let y = POD_TOP + 1; y <= POD_TOP + 7; y++) bp.set(x, y, zb - 2, y > POD_TOP + 5 ? 'gilt' : 'red_wool');
     // The canopy: purple and gilt stripes, a gilt rim.
@@ -318,7 +350,7 @@ function features(bp: Blueprint) {
         for (let y = FLOOR + 2; y <= FLOOR + 1 + h; y++) {
           // Broken off raggedly at the top.
           if (y === FLOOR + 1 + h && hash(cx + dx, cz + dz, i) < 0.45) continue;
-          bp.set(cx + dx, y, cz + dz, 'diorite');
+          bp.set(cx + dx, y, cz + dz, 'marble');
         }
       }
     if (h === 6) for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) bp.set(cx + dx, FLOOR + 8, cz + dz, Math.abs(dx) + Math.abs(dz) === 2 ? 'gilt' : 'travertine_bricks');
@@ -326,8 +358,8 @@ function features(bp: Blueprint) {
       // A drum that fell, lying toward the middle.
       const fx = -Math.sign(cx);
       for (let k = 2; k <= 3; k++) {
-        bp.set(cx + fx * k, FLOOR + 1, cz, 'diorite');
-        bp.set(cx + fx * k, FLOOR + 1, cz + Math.sign(cz), 'diorite');
+        bp.set(cx + fx * k, FLOOR + 1, cz, 'marble');
+        bp.set(cx + fx * k, FLOOR + 1, cz + Math.sign(cz), 'marble');
       }
     }
   });
@@ -393,10 +425,10 @@ const LION_MOUTH = (a: number) => ({ x: C.x + Math.cos(a) * (PIT - 0.5), y: FLOO
 
 const DECOR: Decor[] = [
   ...BANNERS,
-  { model: THRONE, at: { x: 0.5, y: POD_TOP + 1, z: -POD - 1.6 }, face: 0 },
-  { model: EMPEROR, at: { x: 0.5, y: POD_TOP + 1, z: -POD + 0.6 }, face: 0 },
-  { model: GUARD, at: { x: -3.5, y: POD_TOP + 1, z: -PIT + 0.8 }, face: 0 },
-  { model: GUARD, at: { x: 4.5, y: POD_TOP + 1, z: -PIT + 0.8 }, face: 0 },
+  { model: THRONE, at: { x: 0.5, y: POD_TOP + 1, z: -PIT - 0.6 }, face: 0 },
+  { model: EMPEROR, at: { x: 0.5, y: POD_TOP + 1, z: -PIT + 1.2 }, face: 0 },
+  { model: GUARD, at: { x: -4, y: POD_TOP + 1, z: -PIT + 1.3 }, face: 0 },
+  { model: GUARD, at: { x: 5, y: POD_TOP + 1, z: -PIT + 1.3 }, face: 0 },
   ...LIONS.map((a) => {
     const m = LION_MOUTH(a);
     return { model: LION, at: m, face: faceTo(m.x, m.z, C.x, C.z) };
@@ -456,7 +488,7 @@ export const COLOSSEUM: ArenaMap = {
   color: '#ffb36b',
   icon: 'travertine_bricks',
   origin: C,
-  build: () => [build()],
+  build: () => [build(), plaza()],
   center: { x: 0.5, y: FLOOR + 1, z: 0.5 },
   radius: PIT - 1,
   gates: GATES.map(gate),
@@ -466,10 +498,10 @@ export const COLOSSEUM: ArenaMap = {
   time: 0.66,
   dusk: 0.07,
   intro: [
-    { at: { x: 70, y: FLOOR + 40, z: 62 }, look: { x: 0, y: FLOOR + 12, z: 0 } },
-    { at: { x: 34, y: FLOOR + 34, z: 46 }, look: { x: 0, y: FLOOR + 10, z: 0 } },
-    { at: { x: 6, y: FLOOR + 22, z: 30 }, look: { x: 0, y: FLOOR + 8, z: -20 } },
-    { at: { x: -10, y: FLOOR + 12, z: 8 }, look: { x: 0.5, y: POD_TOP + 3, z: -24 } },
+    { at: { x: 52, y: FLOOR + 14, z: 40 }, look: { x: 0, y: FLOOR + 16, z: 0 } },
+    { at: { x: 34, y: FLOOR + 36, z: 30 }, look: { x: 0, y: FLOOR + 8, z: 0 } },
+    { at: { x: 6, y: FLOOR + 24, z: 20 }, look: { x: 0, y: FLOOR + 8, z: -20 } },
+    { at: { x: -8, y: FLOOR + 11, z: 6 }, look: { x: 0.5, y: POD_TOP + 3, z: -24 } },
   ],
   shop: { x: -6.5, y: FLOOR + 1, z: 5.5 },
   chests: [

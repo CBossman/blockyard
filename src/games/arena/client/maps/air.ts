@@ -242,13 +242,15 @@ export function air(): ClientKit {
       }
       const s = f.size;
       const colours = FLAMES[f.tint ?? 'fire'];
-      let n = (fireOwed.get(f) ?? 0) + dt * 46 * s * (d > 28 ? 0.5 : 1);
+      // Its heart glowing, flickering.
+      if (d < 30) client.fx.flare({ x: f.at.x, y: f.at.y + 0.25 * s, z: f.at.z }, s * rand(0.7, 0.95));
+      let n = (fireOwed.get(f) ?? 0) + dt * 85 * s * (d > 28 ? 0.5 : 1);
       while (n >= 1) {
         n -= 1;
-        const r = Math.sqrt(Math.random()) * 0.28 * s;
+        const r = Math.sqrt(Math.random()) * 0.3 * s;
         const ang = Math.random() * Math.PI * 2;
         const at = { x: f.at.x + Math.cos(ang) * r, y: f.at.y + rand(-0.05, 0.1), z: f.at.z + Math.sin(ang) * r };
-        client.fx.particles(at, pick(colours), { count: 1, speed: 0.25, size: rand(0.1, 0.2) * s, gravity: -1.6, glow: 1, life: rand(0.3, 0.55), spread: 0.04, up: rand(1.2, 2.1) * s, drag: 1.2, velocity: { x: w.x * 0.12, y: 0, z: w.z * 0.12 }, collide: false });
+        client.fx.particles(at, pick(colours), { count: 1, speed: 0.25, size: rand(0.14, 0.3) * s, gravity: -1.6, glow: 1, life: rand(0.35, 0.65), spread: 0.04, up: rand(1.3, 2.3) * s, drag: 1.2, velocity: { x: w.x * 0.12, y: 0, z: w.z * 0.12 }, collide: false });
         if (Math.random() < 0.06) client.fx.particles(at, pick(f.tint === 'fire' || !f.tint ? EMBER : colours), { count: 1, speed: 0.6, size: rand(0.03, 0.05), gravity: -0.6, glow: 1, life: rand(1, 1.8), spread: 0.1, up: 2.2 * s, drag: 0.6, velocity: { x: w.x * 0.3, y: 0, z: w.z * 0.3 }, collide: false });
         if (Math.random() < 0.05 && f.tint !== 'frost') client.fx.particles({ ...at, y: at.y + 0.5 * s }, SMOKE, { count: 1, speed: 0.15, size: rand(0.2, 0.32) * s, gravity: -0.4, glow: 0, life: rand(1.2, 1.8), spread: 0.1, up: 0.8, drag: 0.8, velocity: { x: w.x * 0.35, y: 0, z: w.z * 0.35 }, collide: false });
       }

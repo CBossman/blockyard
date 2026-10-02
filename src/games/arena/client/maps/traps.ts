@@ -19,6 +19,7 @@ function linear(hex: string): [number, number, number] {
 }
 const FIRE = ['#fff1b8', '#ffd27a', '#ffa035', '#ff7418', '#e8460c'].map(linear);
 const FROST = ['#ffffff', '#dff6ff', '#a8e6ff', '#7cd0f5'].map(linear);
+const SOUL = ['#e6fff0', '#9dffc4', '#4ff09a', '#22c070', '#14904f'].map(linear);
 const LAVA = ['#ffd25a', '#ff8a1e', '#ff5a10'].map(linear);
 const SMOKE = linear('#3a3430');
 
@@ -73,7 +74,7 @@ export function trapFx(): ClientKit {
         const k = Math.min(1, (t - g.from) / 0.25, (g.until - t) / 0.4);
         if (spec.kind === 'jets') {
           for (const l of g.loops) l.set({ volume: 0.9 * k });
-          const colours = spec.element === 'frost' ? FROST : FIRE;
+          const colours = spec.element === 'frost' ? FROST : spec.element === 'soul' ? SOUL : FIRE;
           g.owed += dt * 70 * spec.jets.length * k;
           while (g.owed >= 1) {
             g.owed -= 1;
@@ -83,7 +84,7 @@ export function trapFx(): ClientKit {
             const spread = 0.18;
             const v = { x: (j.dir.x + rand(-spread, spread)) * speed, y: (j.dir.y + rand(-spread, spread) * 0.6) * speed, z: (j.dir.z + rand(-spread, spread)) * speed };
             client.fx.particles(at, pick(colours), { count: 1, speed: 0.3, size: rand(0.16, 0.34), gravity: spec.element === 'frost' ? 1 : -2.5, glow: spec.element === 'frost' ? 0.6 : 1, life: rand(0.38, 0.55), spread: 0.05, up: 0, drag: 1.1, velocity: v, collide: true });
-            if (spec.element !== 'frost' && Math.random() < 0.12) client.fx.particles({ x: at.x + v.x * 0.4, y: at.y + 0.6, z: at.z + v.z * 0.4 }, SMOKE, { count: 1, speed: 0.2, size: rand(0.3, 0.5), gravity: -0.6, glow: 0, life: rand(1, 1.5), spread: 0.2, up: 0.8, drag: 0.9, collide: false });
+            if (spec.element === 'fire' && Math.random() < 0.12) client.fx.particles({ x: at.x + v.x * 0.4, y: at.y + 0.6, z: at.z + v.z * 0.4 }, SMOKE, { count: 1, speed: 0.2, size: rand(0.3, 0.5), gravity: -0.6, glow: 0, life: rand(1, 1.5), spread: 0.2, up: 0.8, drag: 0.9, collide: false });
           }
         } else if (spec.kind === 'sluice') {
           g.owed += dt * 30 * k;

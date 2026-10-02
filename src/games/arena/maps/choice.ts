@@ -42,6 +42,19 @@ export function setupChoice(game: GameContext) {
     css: VOTE_CSS,
     actions: { vote: (p, id) => vote(game, p, id) },
   });
+  game.commands.register('map', {
+    usage: '<map>',
+    help: 'Start the fight over on another map',
+    cheat: true,
+    complete: () => MAPS.map((m) => m.id),
+    run: ([id], g) => {
+      const m = mapById(id);
+      if (!m) return `Maps: ${MAPS.map((x) => x.id).join(', ')}`;
+      voting = false;
+      planned = m;
+      g.restart();
+    },
+  });
   game.events.on('playerLeave', ({ player }) => {
     votes.delete(player.id);
     menus.delete(player.id);

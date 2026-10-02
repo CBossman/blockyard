@@ -15,10 +15,10 @@ export interface Model {
 }
 
 /** A box of one block in a build: [x0, y0, z0, x1, y1, z1] (inclusive), and the block. */
-type Part = [number, number, number, number, number, number, BlockRef];
+export type Part = [number, number, number, number, number, number, BlockRef];
 
 /** A build from boxes (later ones over earlier ones), the bounds worked out from them. */
-function parts(list: Part[]): Blueprint {
+export function parts(list: Part[]): Blueprint {
   const lo = { x: Infinity, y: Infinity, z: Infinity };
   const hi = { x: -Infinity, y: -Infinity, z: -Infinity };
   for (const [x0, y0, z0, x1, y1, z1] of list) {

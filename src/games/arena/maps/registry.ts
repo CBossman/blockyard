@@ -77,7 +77,7 @@ export interface Pendulum {
  *
  * - `spikes`: iron spikes shoot up through the grates of its zone (the floor's cells) and stab
  *   whatever stands there, again and again.
- * - `jets`: fire (or frost, which slows) roars out of `jets` along the floor.
+ * - `jets`: fire (a soul fire's green, or frost, which slows) roars out of `jets` along the floor.
  * - `pendulum`: scythe blades swing to and fro on their poles, cutting through whatever's under
  *   their arc (`blades`).
  * - `bell`: the great bell (`bell`) tolls three times, a holy blast at each toll through
@@ -98,7 +98,7 @@ export type TrapSpec = {
   zone: Box[];
 } & (
   | { kind: 'spikes' }
-  | { kind: 'jets'; element: 'fire' | 'frost'; jets: Jet[] }
+  | { kind: 'jets'; element: 'fire' | 'soul' | 'frost'; jets: Jet[] }
   | { kind: 'pendulum'; blades: Pendulum[] }
   | { kind: 'bell'; bell: Vec3; reach: number }
   | { kind: 'crusher'; head: Box; drop: number }

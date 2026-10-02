@@ -3,7 +3,7 @@ import type { BlockDefinition } from '@platform';
 /**
  * The maps' own blocks (`shared.ts` lists them): the Colosseum's travertine and its painted crowd,
  * the Necropolis's crypts and graves, the Forge's basalt and magma, the Sanctum's ice. All painted
- * here in code. (29 of the game's 68 block variants.)
+ * here in code. (31 of the game's 68 block variants.)
  */
 
 /** A steady pseudo-random number in [0, 1) for a pixel (and a seed). */
@@ -53,13 +53,29 @@ const gilt = {
   },
 };
 
-/** Sand churned and stained where blood's soaked in. */
+const SAND = ['#e0c48c', '#d8ba7f', '#e6cc98', '#d2b277', '#dcc088'];
+
+/** The arena's sand: warm, raked fine. */
+const arenaSand = {
+  paint: (x: number, y: number) => pick(SAND, (rnd(x, y, 14) * 0.7 + rnd(x >> 2, y >> 1, 15) * 0.3 + (y % 4 === 0 ? 0.15 : 0)) % 1),
+};
+
+/** Sand where blood's soaked in: a dark stain spreading through it. */
 const bloodySand = {
   paint: (x: number, y: number) => {
-    const blot = rnd(x >> 2, y >> 2, 11) + rnd(x, y, 12) * 0.3;
-    if (blot > 1.05) return '#5e1810';
-    if (blot > 0.95) return '#7a2416';
-    return pick(['#dbcf9e', '#d2c591', '#e2d6a8', '#c9bb86'], rnd(x, y, 13));
+    const d = Math.hypot(x - 7.5, y - 7.5) + rnd(x >> 1, y >> 1, 11) * 4 - 2;
+    if (d < 4) return rnd(x, y, 12) < 0.3 ? '#4e140c' : '#6a1d12';
+    if (d < 6.5) return rnd(x, y, 12) < 0.5 ? '#8a3a22' : '#7a2c18';
+    return arenaSand.paint(x, y);
+  },
+};
+
+/** White marble, faintly veined: columns, statues, the mosaic's ground. */
+const marble = {
+  paint: (x: number, y: number) => {
+    const vein = Math.abs(Math.sin(x * 0.45 + y * 0.9 + rnd(x >> 3, y >> 3, 16) * 5)) < 0.08;
+    if (vein) return '#b9b6ae';
+    return pick(['#efece4', '#e8e4da', '#f4f1ea', '#e2ded3'], rnd(x >> 1, y >> 1, 17) * 0.6 + rnd(x, y, 18) * 0.4);
   },
 };
 
@@ -269,7 +285,9 @@ export const MAP_BLOCKS: Record<string, BlockDefinition> = {
   travertine_bricks: { label: 'Travertine Bricks', texture: travertineBricks, hardness: 2 },
   travertine_slab: { label: 'Travertine Slab', texture: travertineBricks, shape: 'slab', full: 'travertine_bricks', hardness: 2 },
   gilt: { texture: gilt, hardness: 2, glow: 0.12 },
+  arena_sand: { label: 'Arena Sand', texture: arenaSand, hardness: 0.5 },
   bloody_sand: { label: 'Bloody Sand', texture: bloodySand, hardness: 0.5 },
+  marble: { texture: marble, hardness: 2 },
   arena_grate: { label: 'Grate', texture: grate, transparency: 'cutout', hardness: 3 },
   crowd_a: crowd(0),
   crowd_b: crowd(1),

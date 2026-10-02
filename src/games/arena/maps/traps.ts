@@ -67,6 +67,19 @@ export function setupTraps(game: GameContext, maps: readonly ArenaMap[]) {
       use: (g, p) => pull(g, spec, p),
     });
   }
+  game.commands.register('trap', {
+    usage: '<trap>',
+    help: 'Set a trap off, free',
+    cheat: true,
+    complete: () => (map().traps ?? []).map((t) => t.id),
+    run: ([id], g, p) => {
+      const spec = (map().traps ?? []).find((t) => t.id === id);
+      if (!spec) return `Traps here: ${(map().traps ?? []).map((t) => t.id).join(', ')}`;
+      const r = running.get(spec.id);
+      if (r) r.ready = 0;
+      pull(g, spec, p, true);
+    },
+  });
 }
 
 /** What a lever's prompt says to this fighter. */
@@ -79,11 +92,11 @@ function label(game: GameContext, spec: TrapSpec, p: Player): string | null {
   return gold(p) >= spec.price ? `${spec.name} · ${spec.price} gold` : `${spec.name} · needs ${spec.price} gold`;
 }
 
-function pull(game: GameContext, spec: TrapSpec, p: Player) {
+function pull(game: GameContext, spec: TrapSpec, p: Player, free = false) {
   const r = running.get(spec.id);
   const t = now(game);
   if (!inFight() || !r || t < r.ready) return;
-  if (!spend(game, p, spec.price)) {
+  if (!free && !spend(game, p, spec.price)) {
     p.audio.play('trap_deny');
     p.hud.toast(`${spec.name} needs ${spec.price} gold`);
     return;
