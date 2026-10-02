@@ -665,9 +665,11 @@
   color: var(--ar-fg3);
 }
 .widget-screen:has(.gw-arena-end) {
-  background:
-    radial-gradient(ellipse 70% 60% at 50% 42%, rgba(12, 7, 4, 0.5), rgba(6, 3, 2, 0.88)),
-    linear-gradient(180deg, rgba(6, 3, 2, 0.5), transparent 25%, transparent 75%, rgba(6, 3, 2, 0.6));
-  backdrop-filter: blur(5px) saturate(0.7);
-  animation: ar-fade 700ms ease both;
+  /* Its veil is the screens' own (client/hud/status.css), under the map vote; only the screen's content takes the mouse. */
+  background: none;
+  backdrop-filter: none;
+  pointer-events: none;
+}
+.widget-screen:has(.gw-arena-end) .gw-arena-end {
+  pointer-events: auto;
 }

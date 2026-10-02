@@ -592,11 +592,32 @@
   }
 }
 
-/* The end screen (hud/end.ts) has the screen to itself: the rest of the HUD and any menu out of the way under it. */
-body:has(.gw-arena-end) :is(.hud, .gamehud) > :not(.gw-layer, .water-tint),
-body:has(.gw-arena-end) .gw-layer > .gw-slot:not(:has(.gw-arena-end)),
-body:has(.gw-arena-end) .menu-screen {
+/*
+ * The end screen (hud/end.ts) has the screen to itself, over a veil of its own (a layer under the
+ * widgets, so the map vote, the maps' 'arena-vote' widget, shows over it and takes its clicks):
+ * the rest of the HUD and the other widgets out of the way under it.
+ */
+.ar-endveil {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity 700ms ease;
+  background:
+    radial-gradient(ellipse 70% 60% at 50% 42%, rgba(12, 7, 4, 0.5), rgba(6, 3, 2, 0.88)),
+    linear-gradient(180deg, rgba(6, 3, 2, 0.5), transparent 25%, transparent 75%, rgba(6, 3, 2, 0.6));
+  backdrop-filter: blur(5px) saturate(0.7);
+}
+body:has(.gw-arena-end) .ar-endveil {
+  opacity: 1;
+}
+body:has(.gw-arena-end) :is(.hud, .gamehud) > :not(.gw-layer, .water-tint, [data-layer='arena.endveil']),
+body:has(.gw-arena-end) .gw-layer > .gw-slot:not(:has(.gw-arena-end, .gw-arena-vote)) {
   opacity: 0 !important;
   pointer-events: none !important;
   transition: opacity 400ms ease;
+}
+/* With the vote up under it, the end screen moves up out of its way. */
+body:has(.gw-arena-vote) .gw-arena-end {
+  transform: translateY(-70px);
+  transition: transform 500ms ease;
 }

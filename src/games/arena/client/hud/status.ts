@@ -24,6 +24,8 @@ export function status(): ClientKit {
     name: 'arena.hud.status',
     setup(client) {
       unstyle = client.hud.style(css);
+      // The end screen's veil first, under everything of the Arena's (and the widgets).
+      client.hud.layer('arena.endveil', 'panels').append(el('div.ar-endveil'));
       layer = client.hud.layer('arena.status', 'panels');
       draw = build(client, layer);
     },
