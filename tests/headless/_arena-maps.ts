@@ -1,5 +1,6 @@
 import type { Entity, GameContext, Player, Vec3 } from '@platform';
 import { FLOOR, along, inBox, MAPS, type ArenaMap, type Gate, type TrapSpec } from '../../src/games/arena/maps';
+import { INTRO_MSG, type IntroMessage } from '../../src/games/arena/maps/messages';
 import { bus } from '../../src/games/arena/run/bus';
 import { addGold, gold } from '../../src/games/arena/run/gold';
 import { map } from '../../src/games/arena/run/state';
@@ -9,12 +10,16 @@ import { check, launch } from './_harness';
  * Probe: every map is walkable, and its traps work. On each, zombies brought in at every gate
  * and every boss gate must find their way to a fighter standing in the middle, at the shop, at
  * each chest and at spots round the floor (each placement in turn); the map's own places (the
- * middle, the shop, the chests, the lookout) must have room for a body, the shop 3 by 3 of clear
- * floor, and neither the shop nor a chest in a trap's way; every boss gate must be open floor a
+ * middle, the shop, the chests, the lookout) must have room for a body; nowhere a fighter can get
+ * to from the middle may be somewhere they can't get back from (a pit, a ledge: unless it's a
+ * hazard that burns them out of it); the shop needs 3 by 3 of clear floor, and neither the shop
+ * nor a chest may be in a trap's way; every boss gate must be open floor a
  * boss fits on (its floor, clear air 9 high for 3 blocks round, open floor 12 long in front of it
  * for its entrance's camera). Then each trap: a fighter with gold
  * walks up to its lever and presses E, pays, and zombies held where it works are hurt and slain
- * by it, the kills theirs. The waves' own monsters are cleared as they come.
+ * by it, the kills theirs. The waves' own monsters are cleared as they come. Last, the run's start
+ * and end as the maps see them: every fight's start sends the whole fly-over (a restart right after
+ * another too), and a won run carried on (`keepFighting`) stands the vote down till it ends.
  * `node scripts/headless.mjs tests/headless/_arena-maps.ts` (MAP=id for one map).
  */
 
@@ -34,8 +39,48 @@ export default function arenaMaps() {
     failed.push(...r.failed);
     console.log(`  ${r.row}`);
   }
+  if (!only) {
+    const r = flow(failed);
+    rows.push(r);
+    console.log(`  ${r}`);
+  }
   check(!failed.length, `monsters that never got there:\n    ${failed.join('\n    ')}`);
   return rows.join(' · ');
+}
+
+/** The run's start and end, as the maps see them: the fly-over; the vote and `keepFighting`. */
+function flow(failed: string[]): string {
+  // A fight begins, and begins again straight after (a restart): the whole fly-over each time.
+  const h = launch('arena', { seed: 5 });
+  const game = h.ctx as GameContext;
+  const me = game.player as Player;
+  const fullOnes = () => h.find('message', INTRO_MSG).filter((c) => (c.args[0] as IntroMessage | undefined)?.full).length;
+  h.run(0.2, { pilot: () => ({}) });
+  const first = fullOnes();
+  game.restart();
+  h.run(1, { pilot: () => ({}) });
+  game.restart();
+  h.run(1, { pilot: () => ({}) });
+  const sent = fullOnes() - first;
+  if (sent !== 2) failed.push(`a fight's start (twice running) sent ${sent} fly-overs, not 2`);
+  // A run ends: the vote goes up; carried on into the endless waves, it's stood down.
+  const vote = (method: string) => h.find('hud', method).filter((c) => c.args[0] === 'arena-vote').length;
+  bus.emit('runEnd', { won: true, wave: 20, endless: false, map: MAPS[0], time: 600, results: [] });
+  h.run(2.5, { pilot: () => ({}) });
+  const up = vote('widget') > 0;
+  bus.emit('keepFighting', { player: me });
+  h.run(0.5, { pilot: () => ({}) });
+  const down = vote('widgetRemove') > 0;
+  // Its endless waves end: the vote's up again.
+  const before = vote('widget');
+  bus.emit('runEnd', { won: false, wave: 23, endless: true, map: MAPS[0], time: 900, results: [] });
+  h.run(2.5, { pilot: () => ({}) });
+  const again = vote('widget') > before;
+  if (!up) failed.push('the vote isn’t put up as a run ends');
+  if (!down) failed.push('the vote stays up past keepFighting');
+  if (!again) failed.push('the vote isn’t put up again as the endless run ends');
+  const yes = (b: boolean) => (b ? 'yes' : 'NO');
+  return `flow: a fly-over at each fight's start ${yes(sent === 2)}; vote up ${yes(up)}, down on keepFighting ${yes(down)}, up again after the endless waves ${yes(again)}`;
 }
 
 function probe(m: ArenaMap): { row: string; failed: string[] } {
@@ -63,6 +108,8 @@ function probe(m: ArenaMap): { row: string; failed: string[] } {
     const why = bossRoom(game, g);
     if (why) failed.push(`${m.id}: boss gate ${i + 1} (${fmt(g.at)}): ${why}`);
   });
+  const caught = stuck(game, me, m);
+  for (const c of caught.spots) failed.push(`${m.id}: a fighter can get into ${c} and not back out`);
 
   // Spots round the floor too: out toward the edge, all round.
   const round = [0, 1, 2, 3, 4, 5].map((i) => {
@@ -99,7 +146,7 @@ function probe(m: ArenaMap): { row: string; failed: string[] } {
   }
   const traps = (m.traps ?? []).map((t) => trap(h, game, me, t, failed));
   return {
-    row: `${m.name}: ${trips} trips from ${gates.length} gates to ${spots.length} spots, the slowest ${slowest.toFixed(1)} s; traps ${traps.join(', ')}; ${failed.length} failed`,
+    row: `${m.name}: ${trips} trips from ${gates.length} gates to ${spots.length} spots, the slowest ${slowest.toFixed(1)} s; ${caught.places} places to stand, ${caught.spots.length ? `${caught.spots.length} traps` : 'none a trap'}; traps ${traps.join(', ')}; ${failed.length} failed`,
     failed,
   };
 }
@@ -175,6 +222,96 @@ function trap(h: ReturnType<typeof launch>, game: GameContext, me: Player, t: Tr
   if (!hits) failed.push(`${t.id}: hurt nothing held in it (${where.map(fmt).join('; ')})`);
   if (wrong) failed.push(`${t.id}: ${wrong} hits not credited to the puller`);
   return `${t.id.split('.')[1]} ${hits}/${kills}`;
+}
+
+/** How high a fighter climbs onto something (a jump reaches about 1.27 blocks: a block, not a fence), and how far round the middle they're followed. */
+const CLIMB = 1.2;
+const SWEEP = 46;
+
+/**
+ * Everywhere a fighter can stand (the floor of a column, a ledge, a step; a liquid's surface,
+ * swimming) round the map's middle, and how they move between them: onto a neighbour as high as
+ * a jump reaches (room for the body over them to jump), off a ledge any way down (landing on the
+ * highest thing under it). From the middle, everywhere they can get to; then whether each of those
+ * has a way back to it. A place with no way back is a trap, unless it's in one of the map's
+ * hazards (they burn there, and are back next wave). Returns how many places they can get to, and
+ * the traps (a patch of them as one line).
+ */
+function stuck(game: GameContext, me: Player, m: ArenaMap): { places: number; spots: string[] } {
+  // The ground round the middle generated first.
+  me.teleport({ x: m.center.x, y: m.center.y + 0.05, z: m.center.z }, 0, 0);
+  const w = game.world;
+  const liquid = (x: number, y: number, z: number) => !!w.blockInfo(w.getBlock(x, y, z))?.liquid;
+  const fits = (x: number, y: number, z: number) => w.fits({ x: x + 0.5, y, z: z + 0.5 });
+  type Node = { x: number; z: number; s: number; i: number };
+  const cols = new Map<string, Node[]>();
+  const nodes: Node[] = [];
+  const cx = Math.floor(m.center.x);
+  const cz = Math.floor(m.center.z);
+  for (let x = cx - SWEEP; x <= cx + SWEEP; x++)
+    for (let z = cz - SWEEP; z <= cz + SWEEP; z++) {
+      const list: Node[] = [];
+      for (let y = FLOOR - 4; y <= FLOOR + 30; y++) {
+        const h = w.collisionHeight(x, y, z);
+        let s = -1;
+        if (h > 0 && !liquid(x, y, z) && fits(x, y + h, z)) s = y + h;
+        else if (liquid(x, y, z) && !liquid(x, y + 1, z) && fits(x, y + 0.6, z)) s = y + 0.6;
+        if (s < 0 || list.some((n) => Math.abs(n.s - s) < 0.3)) continue;
+        const n = { x, z, s, i: nodes.length };
+        nodes.push(n);
+        list.push(n);
+      }
+      cols.set(`${x},${z}`, list);
+    }
+  const moves = (a: Node): Node[] => {
+    const out: Node[] = [];
+    for (const [dx, dz] of [
+      [1, 0],
+      [-1, 0],
+      [0, 1],
+      [0, -1],
+    ]) {
+      const list = cols.get(`${a.x + dx},${a.z + dz}`);
+      if (!list) continue;
+      for (const b of list) {
+        if (b.s > a.s + CLIMB || b.s < a.s - 0.6) continue;
+        // Up a step or a jump: room over us at that height.
+        if (b.s <= a.s + 0.6 || fits(a.x, b.s, a.z)) out.push(b);
+      }
+      // Off the edge at our own height (nothing there to walk onto), down onto the highest thing under it.
+      if (fits(a.x + dx, a.s, a.z + dz)) {
+        const under = list.filter((b) => b.s <= a.s + 0.6).sort((p, q) => q.s - p.s)[0];
+        if (under && under.s < a.s - 0.6) out.push(under);
+      }
+    }
+    return out;
+  };
+  const edges = nodes.map(moves);
+  const back: number[][] = nodes.map(() => []);
+  edges.forEach((list, i) => list.forEach((b) => back[b.i].push(i)));
+  const start = [...(cols.get(`${cx},${cz}`) ?? [])].sort((p, q) => Math.abs(p.s - m.center.y) - Math.abs(q.s - m.center.y))[0];
+  if (!start) return { places: 0, spots: ['the middle (no floor there)'] };
+  const search = (from: number, next: (i: number) => number[]) => {
+    const seen = new Uint8Array(nodes.length);
+    const queue = [from];
+    seen[from] = 1;
+    while (queue.length) for (const j of next(queue.pop()!)) if (!seen[j]) (seen[j] = 1), queue.push(j);
+    return seen;
+  };
+  const there = search(start.i, (i) => edges[i].map((b) => b.i));
+  const home = search(start.i, (i) => back[i]);
+  // (As `maps/hazards.ts` judges it: the body's feet a little up.)
+  const burns = (n: Node) => (m.hazards ?? []).some((h) => h.zone.some((b) => inBox(b, { x: n.x + 0.5, y: n.s + 0.3, z: n.z + 0.5 })));
+  const caught = nodes.filter((n) => there[n.i] && !home[n.i] && !burns(n));
+  const spots: string[] = [];
+  const done = new Set<number>();
+  for (const n of caught) {
+    if (done.has(n.i)) continue;
+    const patch = caught.filter((o) => Math.abs(o.x - n.x) <= 6 && Math.abs(o.z - n.z) <= 6);
+    for (const o of patch) done.add(o.i);
+    spots.push(`${patch.length} spot${patch.length === 1 ? '' : 's'} round (${n.x - m.origin.x + 0.5}, ${n.s.toFixed(1)}, ${n.z - m.origin.z + 0.5}) from its origin`);
+  }
+  return { places: nodes.filter((n) => there[n.i]).length, spots };
 }
 
 /** Whether a spot's where a trap does its work (its zone, a jet's flames, a blade's swing, the bell's blast, the sluice). */

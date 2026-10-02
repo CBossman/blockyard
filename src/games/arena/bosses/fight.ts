@@ -37,15 +37,40 @@ export function chest(self: Entity, p: Player, speed: number, lead = 0.6): Vec3 
   return { x: q.x + p.velocity.x * t * lead, y: q.y + 0.9, z: q.z + p.velocity.z * t * lead };
 }
 
-/** A spot on the floor near `at` (within `r`), kept inside the map's fighting floor. */
+/**
+ * Where a body would stand in `p`'s column: on the floor under it (up to `down` blocks down: a
+ * sunken floor, a channel), or atop a step it's in (one block up at most). Null where there's no
+ * such floor, or no room on it, or it's under water or lava.
+ */
+export function standAt(game: GameContext, p: Vec3, down = 4): Vec3 | null {
+  const w = game.world;
+  const x = Math.floor(p.x);
+  const z = Math.floor(p.z);
+  let y = Math.floor(p.y + 0.01);
+  if (w.collisionHeight(x, y, z) >= 1 && w.collisionHeight(x, ++y, z) > 0) return null;
+  for (let k = 0; k <= down + 1; k++, y--) {
+    const h = w.collisionHeight(x, y, z);
+    if (h <= 0) {
+      if (w.blockInfo(w.getBlock(x, y, z))?.liquid) return null;
+      continue;
+    }
+    const q = { x: p.x, y: y + Math.min(1, h), z: p.z };
+    return w.fits({ x: q.x, y: q.y + 0.05, z: q.z }) ? q : null;
+  }
+  return null;
+}
+
+/** A spot on the floor near `at` (within `r`, on the floor there: `standAt`), kept inside the map's fighting floor. */
 export function near(game: GameContext, at: Vec3, r: number, center: Vec3, radius: number): Vec3 {
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < 10; i++) {
     const a = game.rng.range(0, Math.PI * 2);
     const d = Math.sqrt(game.rng.next()) * r;
     const p = { x: at.x + Math.cos(a) * d, y: at.y, z: at.z + Math.sin(a) * d };
-    if (flat(p, center) < radius - 1.5 && game.world.fits({ x: p.x, y: p.y + 0.05, z: p.z })) return p;
+    if (flat(p, center) >= radius - 1.5) continue;
+    const q = standAt(game, p);
+    if (q) return q;
   }
-  return { ...at };
+  return standAt(game, at) ?? { ...at };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -134,6 +159,11 @@ export interface Strike {
   /** How hard it throws them back from `at`, and up. */
   knockback?: number;
   lift?: number;
+  /**
+   * What it is (default `melee`: a blow a shield can take, and a well-timed one parry). A
+   * shockwave, a falling weight, a charge or a spell isn't stopped by a shield: `shockwave`,
+   * `impact`, `magic`.
+   */
   cause?: string;
   weapon?: string;
 }
@@ -171,15 +201,51 @@ export function strike(game: GameContext, s: Strike): { hit: Player[]; dodged: P
 }
 
 // ---------------------------------------------------------------------------------------------
-// Chills and roots
+// What the bosses have done to the fight that wears off: kept per game (a room runs one, a test
+// several in turn, and one game's fighters and props are never another's)
 
-/** Each fighter's chill (slowed: their speed times `factor` until `until`). */
-const chills = new Map<string, { p: Player; factor: number; until: number }>();
-/** Each fighter held in place by a boss (rooted, caged, the entrance), until when. */
-const roots = new Map<string, { p: Player; until: number }>();
+interface Hazard {
+  id: string;
+  source: Entity;
+  at: Vec3;
+  r: number;
+  until: number;
+  next: number;
+  every: number;
+  damage: number;
+  chill?: [factor: number, seconds: number];
+  weapon: string;
+}
+
+interface Holds {
+  /** Each fighter's chill (slowed: their speed times `factor` until `until`), by id. */
+  chills: Map<string, { p: Player; factor: number; until: number }>;
+  /** Each fighter held in place by a boss (rooted, caged, the entrance), until when. */
+  roots: Map<string, { p: Player; until: number }>;
+  /** Each fighter's venom: damage a tick until it's spent. */
+  venoms: Map<string, { p: Player; ticks: number; per: number; next: number; source: Entity }>;
+  /** Fighters being dragged (a chain): toward where, until when. */
+  pulls: Map<string, { p: Player; to: () => Vec3 | null; until: number }>;
+  /** Pools on the floor. */
+  hazards: Hazard[];
+  /** Props the bosses put in the arena (falling bones and souls, cages, ice spikes): gone with the fight. */
+  props: Set<Prop>;
+}
+
+const holdsOf = new WeakMap<GameContext, Holds>();
+
+function holds(game: GameContext): Holds {
+  let h = holdsOf.get(game);
+  if (!h) holdsOf.set(game, (h = { chills: new Map(), roots: new Map(), venoms: new Map(), pulls: new Map(), hazards: [], props: new Set() }));
+  return h;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Chills, roots, venom, drags
 
 /** Slow a fighter to `factor` of their speed for `seconds` (the strongest chill on them counts). */
 export function chill(game: GameContext, p: Player, factor: number, seconds: number) {
+  const { chills } = holds(game);
   const until = game.clock.now + seconds;
   const c = chills.get(p.id);
   if (!c) {
@@ -198,37 +264,41 @@ export function chill(game: GameContext, p: Player, factor: number, seconds: num
 export function root(game: GameContext, p: Player, seconds: number, weapons = false): boolean {
   if (!p.alive || p.frozen) return false;
   p.freeze(true, { weapons });
-  roots.set(p.id, { p, until: game.clock.now + seconds });
+  holds(game).roots.set(p.id, { p, until: game.clock.now + seconds });
   return true;
 }
 
-/** Each fighter's venom: damage a tick until it's spent. */
-const venoms = new Map<string, { p: Player; ticks: number; per: number; next: number; source: Entity }>();
 const VENOM_TICK = 0.5;
 
 /** Poison a fighter: `damage` all told, a little every half second over `seconds` (a fresh dose replaces what's left). */
 export function venom(game: GameContext, p: Player, damage: number, seconds: number, source: Entity) {
   const ticks = Math.max(1, Math.round(seconds / VENOM_TICK));
-  venoms.set(p.id, { p, ticks, per: damage / ticks, next: game.clock.now + VENOM_TICK, source });
+  holds(game).venoms.set(p.id, { p, ticks, per: damage / ticks, next: game.clock.now + VENOM_TICK, source });
 }
-
-/** Fighters being dragged (a chain): toward where, until when. */
-const pulls = new Map<string, { p: Player; to: () => Vec3 | null; until: number }>();
 
 /** Drag a fighter toward a moving point (`to`, null: let go) over `seconds`, to within a couple of blocks of it. */
 export function pull(game: GameContext, p: Player, to: () => Vec3 | null, seconds: number) {
-  pulls.set(p.id, { p, to, until: game.clock.now + seconds });
+  holds(game).pulls.set(p.id, { p, to, until: game.clock.now + seconds });
   p.impulse(0, 6, 0);
 }
 
-/** Chills, roots, venom and drags wear off (the drags steered, each tick, to arrive as they end). */
+/**
+ * Chills, roots, venom and drags wear off (the drags steered, each tick, to arrive as they end).
+ * A fighter who's left is let go of without being touched.
+ */
 export function updateHolds(game: GameContext) {
+  const { chills, roots, venoms, pulls } = holds(game);
   const now = game.clock.now;
+  const here = (p: Player) => game.players.includes(p);
   for (const [id, d] of pulls) {
+    if (!here(d.p)) {
+      pulls.delete(id);
+      continue;
+    }
     const at = d.to();
     const q = d.p.position;
     const dist = at ? Math.hypot(at.x - q.x, at.z - q.z) : 0;
-    if (!at || now >= d.until || !d.p.alive || !game.players.includes(d.p) || dist < 2.2) {
+    if (!at || now >= d.until || !d.p.alive || dist < 2.2) {
       pulls.delete(id);
       continue;
     }
@@ -239,7 +309,7 @@ export function updateHolds(game: GameContext) {
   }
   for (const [id, v] of venoms) {
     if (now < v.next) continue;
-    if (!v.p.alive || !game.players.includes(v.p) || v.ticks <= 0) {
+    if (!here(v.p) || !v.p.alive || v.ticks <= 0) {
       venoms.delete(id);
       continue;
     }
@@ -249,22 +319,24 @@ export function updateHolds(game: GameContext) {
     v.p.fx.flash('#7fd23a', 0.12, 0.3);
   }
   for (const [id, c] of chills) {
-    if (now < c.until && game.players.includes(c.p)) continue;
-    c.p.speed /= c.factor;
+    if (now < c.until && here(c.p)) continue;
+    if (here(c.p)) c.p.speed /= c.factor;
     chills.delete(id);
   }
   for (const [id, r] of roots) {
-    if (now < r.until && game.players.includes(r.p)) continue;
+    if (now < r.until && here(r.p)) continue;
     // (One who fell meanwhile is the fight's to hold: they watch from the stands.)
-    if (r.p.alive) r.p.freeze(false);
+    if (here(r.p) && r.p.alive) r.p.freeze(false);
     roots.delete(id);
   }
 }
 
 /** A fresh fight: every chill, root, venom and drag off. */
-export function resetHolds() {
-  for (const c of chills.values()) c.p.speed /= c.factor;
-  for (const r of roots.values()) if (r.p.alive) r.p.freeze(false);
+export function resetHolds(game: GameContext) {
+  const { chills, roots, venoms, pulls } = holds(game);
+  const here = (p: Player) => game.players.includes(p);
+  for (const c of chills.values()) if (here(c.p)) c.p.speed /= c.factor;
+  for (const r of roots.values()) if (here(r.p) && r.p.alive) r.p.freeze(false);
   chills.clear();
   roots.clear();
   venoms.clear();
@@ -274,20 +346,6 @@ export function resetHolds() {
 // ---------------------------------------------------------------------------------------------
 // Hazards: pools that hurt whoever stands in them
 
-interface Hazard {
-  id: string;
-  source: Entity;
-  at: Vec3;
-  r: number;
-  until: number;
-  next: number;
-  every: number;
-  damage: number;
-  chill?: [factor: number, seconds: number];
-  weapon: string;
-}
-
-let hazards: Hazard[] = [];
 let hazardSeq = 0;
 
 /** A pool on the floor for `seconds`: every `every` seconds, whoever stands in it takes `damage` (and a chill). */
@@ -302,21 +360,22 @@ export function pool(
 ) {
   const id = `hz${++hazardSeq}`;
   const now = game.clock.now;
-  hazards.push({ id, source, at: { ...at }, r, until: now + seconds, next: now + o.every, every: o.every, damage: o.damage, chill: o.chill, weapon: o.weapon });
+  holds(game).hazards.push({ id, source, at: { ...at }, r, until: now + seconds, next: now + o.every, every: o.every, damage: o.damage, chill: o.chill, weapon: o.weapon });
   mark(game, { k: 'pool', id, at: v3(at), r, t: seconds, c: color });
 }
 
 export function updateHazards(game: GameContext) {
+  const h = holds(game);
   const now = game.clock.now;
-  hazards = hazards.filter((h) => {
-    if (now >= h.until) return false;
-    if (now < h.next) return true;
-    h.next += h.every;
+  h.hazards = h.hazards.filter((z) => {
+    if (now >= z.until) return false;
+    if (now < z.next) return true;
+    z.next += z.every;
     for (const p of fighters(game)) {
       const q = p.position;
-      if (flat(q, h.at) > h.r || Math.abs(q.y - h.at.y) > 1.5) continue;
-      if (h.damage > 0) p.damage(h.damage, { source: h.source.alive ? h.source : 'world', knockback: 0, cause: 'poison', weapon: h.weapon });
-      if (h.chill) chill(game, p, h.chill[0], h.chill[1]);
+      if (flat(q, z.at) > z.r || Math.abs(q.y - z.at.y) > 1.5) continue;
+      if (z.damage > 0) p.damage(z.damage, { source: z.source.alive ? z.source : 'world', knockback: 0, cause: 'poison', weapon: z.weapon });
+      if (z.chill) chill(game, p, z.chill[0], z.chill[1]);
     }
     return true;
   });
@@ -324,17 +383,17 @@ export function updateHazards(game: GameContext) {
 
 /** Take away a boss's hazards (all of them, without one). */
 export function clearHazards(game: GameContext, source?: Entity) {
-  hazards = hazards.filter((h) => {
-    if (source && h.source !== source) return true;
-    mark(game, { k: 'clear', id: h.id });
+  const h = holds(game);
+  h.hazards = h.hazards.filter((z) => {
+    if (source && z.source !== source) return true;
+    mark(game, { k: 'clear', id: z.id });
     return false;
   });
 }
 
 // ---------------------------------------------------------------------------------------------
-// Props the bosses put in the arena (falling bones and souls, cages, ice spikes): gone with the fight
+// Props the bosses put in the arena (falling bones and souls, cages, ice spikes)
 
-const props = new Set<Prop>();
 const models = new WeakMap<GameContext, Map<string, PropModel>>();
 
 /** A glTF prop's model, made once per game. */
@@ -347,13 +406,13 @@ export function propModel(game: GameContext, url: string, radius = 1): PropModel
 }
 
 /** Keep track of a prop of a boss's (and give it back), so a fresh fight clears what's left. */
-export function own<P extends Prop>(p: P): P {
-  props.add(p);
+export function own<P extends Prop>(game: GameContext, p: P): P {
+  holds(game).props.add(p);
   return p;
 }
 
-export function drop(p: Prop) {
-  if (!props.delete(p)) return;
+export function drop(game: GameContext, p: Prop) {
+  if (!holds(game).props.delete(p)) return;
   p.remove();
 }
 
@@ -361,18 +420,19 @@ export function drop(p: Prop) {
 export function fromSky(game: GameContext, url: string, at: Vec3, t: number, land: () => void, o: { height?: number; scale?: number } = {}) {
   const h = o.height ?? 26;
   const from = { x: at.x, y: at.y + h, z: at.z };
-  const p = own(game.props.spawn(propModel(game, url), { position: from, scale: o.scale }));
+  const p = own(game, game.props.spawn(propModel(game, url), { position: from, scale: o.scale }));
   p.quaternion.setFromEuler(new math.Euler(game.rng.range(-0.6, 0.6), game.rng.range(0, Math.PI * 2), game.rng.range(-0.6, 0.6)));
   p.launch(from, { x: 0, y: -h / t, z: 0 });
   game.clock.after(t, () => {
-    drop(p);
+    drop(game, p);
     land();
   });
 }
 
-export function resetProps() {
-  for (const p of props) p.remove();
-  props.clear();
+export function resetProps(game: GameContext) {
+  const h = holds(game);
+  for (const p of h.props) p.remove();
+  h.props.clear();
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -479,6 +539,8 @@ export interface Brain {
   chase?(c: Ctx): void;
   /** Every tick it's in the fight, whatever it's doing (auras, tethers). */
   always?(c: Ctx): void;
+  /** How it stands still through a tell or a recovery (default: it stops; the Lich King hovers). */
+  still?(self: Entity, game: GameContext): void;
 }
 
 const cooldownOf = (game: GameContext, m: Move) => (typeof m.cooldown === 'number' ? m.cooldown : game.rng.range(m.cooldown[0], m.cooldown[1]));
@@ -496,20 +558,35 @@ export function interrupt(c: Ctx) {
   c.self.glow(null);
 }
 
+/** Its speed from now on (times its type's): an enrage. Kept in `data.speed`, which the arsenal's slows go on top of (`items/status.ts`). */
+export function quicken(self: Entity, f: number) {
+  self.data.speed = f;
+  self.setSpeed(f);
+}
+
+/** Its speed as it stands (an enrage's, before any slow). */
+export const pace = (self: Entity) => (self.data.speed as number | undefined) ?? 1;
+
 /**
  * A boss's AI from its moves: it walks at its target; when a move may start (its cooldown done,
  * its `can`), it starts one (by weight), standing through its tell, the blow, the recovery; it
  * goes into its next phase as its health falls past the mark, standing and roaring a moment. It
- * does nothing while its entrance plays or it's beaten (`part.ts`), and reels while staggered.
+ * does nothing while its entrance plays or it's beaten (`part.ts`), and reels while staggered,
+ * by a blast of its own (`stagger`) or by the arsenal's (a parry, a slam: `data.stunned`).
  */
 export function brain(b: Brain): Behavior {
   return (self, game, dt) => {
     const s = bossState(self);
-    if (s.held || s.dying) {
+    const halt = () => (b.still ? b.still(self, game) : self.stop());
+    if (s.dying) {
+      self.stop();
+      return;
+    }
+    if (s.held) {
       const out = s.emerge && { x: -Math.sin(s.emerge.yaw), z: -Math.cos(s.emerge.yaw) };
-      if (s.held && s.emerge && out && (roofed(game, self.position, s.emerge.height) || roofed(game, { x: self.position.x - out.x * s.emerge.back, y: self.position.y, z: self.position.z - out.z * s.emerge.back }, s.emerge.height)))
+      if (s.emerge && out && (roofed(game, self.position, s.emerge.height) || roofed(game, { x: self.position.x - out.x * s.emerge.back, y: self.position.y, z: self.position.z - out.z * s.emerge.back }, s.emerge.height)))
         self.moveDirection(out.x, out.z);
-      else self.stop();
+      else halt();
       return;
     }
     for (const k in s.cds) s.cds[k] -= dt;
@@ -532,12 +609,19 @@ export function brain(b: Brain): Behavior {
       interrupt(c);
       s.phase++;
       s.transition = next.pause ?? 1.8;
-      self.stop();
+      halt();
       next.enter(c);
       return;
     }
-    if (s.transition > 0 || s.stagger > 0) {
-      self.stop();
+    // Reeling from the arsenal (a parry, a slam): its move cut short, the reel shown once.
+    const stunned = ((self.data.stunned as number | undefined) ?? 0) > 0;
+    if (stunned && !s.mem.reeling) {
+      s.mem.reeling = true;
+      if (s.move) interrupt(c);
+      self.animate('stagger', { fade: 0.1 });
+    } else if (!stunned) s.mem.reeling = false;
+    if (s.transition > 0 || s.stagger > 0 || stunned) {
+      halt();
       if (s.transition > 0) self.lookAt(target);
       return;
     }
@@ -546,7 +630,7 @@ export function brain(b: Brain): Behavior {
     if (m && s.step) {
       if (s.step === 'windup') {
         s.t -= dt;
-        self.stop();
+        halt();
         if (s.t > 0) return;
         s.step = 'act';
         m.act(c);
@@ -559,7 +643,7 @@ export function brain(b: Brain): Behavior {
         s.step = 'recover';
         s.t = m.recover * tempo;
       } else {
-        self.stop();
+        halt();
         s.t -= dt;
         if (s.t > 0) return;
         m.end?.(c);
@@ -581,7 +665,7 @@ export function brain(b: Brain): Behavior {
       s.t = mv.windup * tempo;
       s.cds[mv.name] = cooldownOf(game, mv) * tempo + mv.windup * tempo;
       mv.start?.(c);
-      self.stop();
+      halt();
       return;
     }
     if (b.chase) b.chase(c);

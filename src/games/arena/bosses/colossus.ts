@@ -2,7 +2,7 @@ import { Models, type Entity, type GameContext, type Vec3 } from '@platform';
 import { bus } from '../run/bus';
 import { spawnMonster } from '../run/spawn';
 import { map } from '../run/state';
-import { adds, angle, announce, brain, fighters, fromSky, lane, near, ring, stagger, strike, sweep, type Ctx, type Move } from './fight';
+import { adds, angle, announce, brain, fighters, fromSky, lane, near, pace, quicken, ring, stagger, strike, sweep, type Ctx, type Move } from './fight';
 import { MODEL } from './models';
 import type { BossKind } from './registry';
 
@@ -11,7 +11,7 @@ import type { BossKind } from './registry';
  * across whoever's in front of it (step back or roll), stamps a shockwave round itself (jump it),
  * calls bones down out of the sky onto marked circles, and, hurt, tears its ribcage open to let
  * bone thralls climb out and lowers its head to charge: a charge that ends in a wall leaves it
- * stunned. A bomb at its feet staggers it. Below a quarter of its health it burns with fury.
+ * stunned. A bomb at its feet staggers it. Below a third of its health it burns with fury.
  */
 
 const COLOR = '#ffb24a';
@@ -41,7 +41,7 @@ const sweepMove: Move = {
     const p = c.self.position;
     const a = c.s.mem.sweep as number;
     c.self.animate('sweep', { fade: 0.06 });
-    strike(c.game, { source: c.self, at: p, r: REACH, damage: 6, arc: [a - ARC, a + ARC], knockback: 9, lift: 4.5 });
+    strike(c.game, { source: c.self, at: p, r: REACH, damage: 4.5, arc: [a - ARC, a + ARC], knockback: 9, lift: 4.5 });
     c.game.audio.play('colossus_sweep', { at: p });
     c.game.fx.shake(0.15, 0.3);
   },
@@ -62,7 +62,7 @@ const stompMove: Move = {
   act(c) {
     const p = c.self.position;
     c.self.animate('stomp', { fade: 0.06 });
-    strike(c.game, { source: c.self, at: p, r: STOMP, damage: [6, 3], grounded: true, cover: true, knockback: 8, lift: 3 });
+    strike(c.game, { source: c.self, at: p, r: STOMP, damage: [4.5, 2.5], grounded: true, cover: true, knockback: 8, lift: 3, cause: 'shockwave' });
     c.game.fx.shockwave({ x: p.x, y: p.y + 0.1, z: p.z }, STOMP + 0.5, COLOR);
     c.game.fx.burst({ x: p.x, y: p.y + 0.3, z: p.z }, { color: '#d8c08a', count: 50, speed: 6, size: 0.2, gravity: 6, life: 1 });
     c.game.fx.shake(0.4, 0.6);
@@ -107,7 +107,7 @@ const rainMove: Move = {
         ring(game, at, RAIN_R, t, COLOR);
         game.audio.play('bone_whistle', { at, pitch: game.rng.range(0.9, 1.1) });
         fromSky(game, MODEL.bone, at, t, () => {
-          strike(game, { source: self, at, r: RAIN_R, damage: 5, knockback: 5, lift: 3 });
+          strike(game, { source: self, at, r: RAIN_R, damage: 4, knockback: 5, lift: 3, cause: 'impact' });
           game.fx.burst({ x: at.x, y: at.y + 0.4, z: at.z }, { color: '#efe4c8', count: 26, speed: 6, size: 0.16, gravity: 16 });
           game.fx.burst({ x: at.x, y: at.y + 0.3, z: at.z }, { color: '#c9b48a', count: 14, speed: 3, size: 0.18, gravity: -0.5, life: 1, drag: 2 });
           game.fx.shockwave({ x: at.x, y: at.y + 0.1, z: at.z }, RAIN_R + 0.4, COLOR);
@@ -164,9 +164,11 @@ const chargeMove: Move = {
     const p = c.self.position;
     const a = angle(p, c.target.position);
     const dir = { x: Math.cos(a), y: 0, z: Math.sin(a) };
-    // As far as the floor goes that way (up to 22 blocks).
-    const hit = c.game.world.raycast({ x: p.x, y: p.y + 1.2, z: p.z }, dir, 22);
-    const len = Math.max(6, (hit ? Math.hypot(hit.point.x - p.x, hit.point.z - p.z) : 22) - 0.5);
+    // As far as the floor goes that way (up to 22 blocks): to a wall, or something solid (a portcullis).
+    const eye = { x: p.x, y: p.y + 1.2, z: p.z };
+    const wall = c.game.world.raycast(eye, dir, 22);
+    const prop = c.game.props.raycast(eye, dir, 22);
+    const len = Math.max(6, Math.min(wall ? Math.hypot(wall.point.x - p.x, wall.point.z - p.z) : 22, prop ? prop.distance : 22) - 0.5);
     c.s.mem.charge = { dir, len, from: { ...p }, hit: [] as string[], t: 0 };
     c.self.lookAt(c.target);
     c.self.animate('charge_wind', { fade: 0.25 });
@@ -177,7 +179,7 @@ const chargeMove: Move = {
   act(c) {
     c.self.glow(null);
     c.self.animate('charge', { loop: true, fade: 0.1 });
-    c.self.setSpeed(c.s.enraged ? 4 : 3.4);
+    c.self.setSpeed(pace(c.self) * 3.2);
     c.game.audio.play('colossus_roar', { at: c.self.position, pitch: 1.3, volume: 0.9 });
   },
   during(c) {
@@ -191,26 +193,23 @@ const chargeMove: Move = {
       const q = f.position;
       if (Math.hypot(q.x - p.x, q.z - p.z) > 2.4 || Math.abs(q.y - p.y) > 3) continue;
       ch.hit.push(f.id);
-      if (f.damage(8, { source: self, knockback: 0, cause: 'melee' })) f.impulse(ch.dir.x * 12 - ch.dir.z * 6, 7, ch.dir.z * 12 + ch.dir.x * 6);
+      if (f.damage(6, { source: self, knockback: 0, cause: 'impact' })) f.impulse(ch.dir.x * 12 - ch.dir.z * 6, 7, ch.dir.z * 12 + ch.dir.x * 6);
     }
     if (Math.floor(ch.t * 8) !== Math.floor((ch.t - c.dt) * 8)) game.fx.burst({ x: p.x, y: p.y + 0.2, z: p.z }, { color: '#d8c08a', count: 8, speed: 2, size: 0.18, gravity: -0.5, life: 0.8, drag: 2 });
     const gone = Math.hypot(p.x - ch.from.x, p.z - ch.from.z);
-    // Stopped dead against something (after getting going): a wall or a pillar stuns it; a step it climbs.
+    // Stopped dead against something once it's going (a wall, a pillar, a portcullis: it steps up a
+    // ledge on its own): it's stunned.
     const moved = ch.last ? Math.hypot(p.x - ch.last.x, p.z - ch.last.z) : 1;
     ch.last = { ...p };
     if (ch.t > 0.35 && moved < 0.02) {
-      const wall = game.world.raycast({ x: p.x, y: p.y + 1.7, z: p.z }, ch.dir, 2.8);
-      if (wall) {
-        crash(c);
-        return true;
-      }
-      if (self.onGround) self.jump();
+      crash(c);
+      return true;
     }
     return gone >= ch.len || ch.t > 2.6;
   },
   recover: 1,
   end(c) {
-    c.self.setSpeed(c.s.enraged ? 1.25 : 1);
+    c.self.setSpeed(pace(c.self));
     c.self.animate('none', { fade: 0.3 });
   },
 };
@@ -219,7 +218,7 @@ const chargeMove: Move = {
 function crash(c: Ctx) {
   const { self, game } = c;
   const p = self.position;
-  self.setSpeed(c.s.enraged ? 1.25 : 1);
+  self.setSpeed(pace(self));
   game.fx.shake(0.5, 0.8);
   game.fx.burst({ x: p.x, y: p.y + 2.5, z: p.z }, { color: '#9a9a9a', count: 40, speed: 6, size: 0.18, gravity: 14 });
   game.fx.burst({ x: p.x, y: p.y + 4.5, z: p.z }, { color: '#fff1a8', count: 16, speed: 2, size: 0.12, gravity: -2, glow: 1.5, life: 1.5 });
@@ -234,7 +233,7 @@ function crash(c: Ctx) {
 const LOW = '#ff6a2a';
 
 /**
- * Below a quarter of its health: after the sweep (roll it), a low sweep back along the ground a
+ * Below a third of its health: after the sweep (roll it), a low sweep back along the ground a
  * beat later (jump it): a roll won't be ready again in time.
  */
 const twinMove: Move = {
@@ -256,7 +255,7 @@ const twinMove: Move = {
     if (m.twinT < 0.7) return false;
     const a = m.twinAt;
     c.self.animate('sweep', { fade: 0.06, speed: 1.3 });
-    strike(c.game, { source: c.self, at: p, r: REACH, damage: 5, arc: [a - ARC, a + ARC], grounded: true, knockback: 7, lift: 3 });
+    strike(c.game, { source: c.self, at: p, r: REACH, damage: 4, arc: [a - ARC, a + ARC], grounded: true, knockback: 7, lift: 3, cause: 'shockwave' });
     c.game.fx.shockwave({ x: p.x, y: p.y + 0.2, z: p.z }, REACH, LOW);
     c.game.audio.play('colossus_sweep', { at: p, pitch: 0.8 });
     m.twinT = undefined;
@@ -270,7 +269,7 @@ const colossusAI = brain({
   tempo: (s) => (s.enraged ? 0.8 : 1),
   phases: [
     {
-      at: 0.6,
+      at: 0.66,
       enter(c) {
         roar(c.game, c.self);
         announce(c.game, 'The Colossus tears open its ribcage', 'Bone thralls are climbing out', COLOR);
@@ -279,11 +278,11 @@ const colossusAI = brain({
       },
     },
     {
-      at: 0.25,
+      at: 0.33,
       enter(c) {
         roar(c.game, c.self);
         c.s.enraged = true;
-        c.self.setSpeed(1.25);
+        quicken(c.self, 1.25);
         announce(c.game, 'ENRAGED', 'The Bone Colossus burns with fury', '#ff5a2a');
       },
     },
@@ -298,7 +297,7 @@ function roar(game: GameContext, e: Entity) {
   game.fx.shake(0.35, 1.4);
   game.fx.shockwave({ x: p.x, y: p.y + 0.1, z: p.z }, 9, COLOR);
   game.fx.burst({ x: p.x, y: p.y + 0.4, z: p.z }, { color: '#d8c08a', count: 60, speed: 7, size: 0.2, gravity: -0.3, life: 1.4, drag: 2 });
-  strike(game, { source: e, at: p, r: 6, damage: 0.5, knockback: 11, lift: 4 });
+  strike(game, { source: e, at: p, r: 6, damage: 0.5, knockback: 11, lift: 4, cause: 'shockwave' });
 }
 
 export const colossus: BossKind = {
@@ -309,12 +308,11 @@ export const colossus: BossKind = {
   height: 6.6,
   bounty: 150,
   stagger: 2.4,
-  escort: { skeleton: 2 },
   define: () => ({
     name: 'The Bone Colossus',
     model: Models.gltf(MODEL.colossus, { clips: { idle: 'idle', walk: 'walk' }, head: 'skull', scale: 3.5 }),
     hitbox: { width: 3.2, height: 6.4 },
-    health: 950,
+    health: 800,
     speed: 2.3,
     knockbackResistance: 1,
     jump: 9,

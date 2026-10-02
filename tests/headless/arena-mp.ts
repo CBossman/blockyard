@@ -52,7 +52,10 @@ export default function arenaMultiplayer() {
   step(15);
   const armed = (n: string) => ['stone_sword', 'gladius'].some((w) => player(n).inventory.count(w) === 1);
   check(armed('Ann') && armed('Bob'), 'both start with a Gladiator\'s blade');
-  check(menus(ann).includes('Choose your class'), 'and are asked their class');
+  // The map's fly-over first, then the class pick (no screen here says it's done: its length).
+  check(!menus(ann).includes('Choose your class'), 'not asked their class over the fly-over');
+  step(30 * 7);
+  check(menus(ann).includes('Choose your class'), 'then asked their class');
   // Cat arrives during the countdown.
   const cat = join('Cat');
   step(5);
@@ -103,7 +106,17 @@ export default function arenaMultiplayer() {
   step(5);
   const d = player('Dan').inventory;
   check(armed('Dan') && gold(player('Dan')) > 0, `late arrival caught up: ${d.slots.filter(Boolean).map((s) => `${s!.item}x${s!.count}`).join(' ')}, ${gold(player('Dan'))} gold`);
-  check(menus(dan).includes('Choose your class'), 'and may choose a class');
+  // (After his own, shorter fly-over.)
+  check(!menus(dan).includes('Choose your class'), 'not over his fly-over');
+  step(30 * 4);
+  check(menus(dan).includes('Choose your class'), 'then he may choose a class');
+  // He keeps what he has (closes it): only now is he told where he's come in.
+  const joined = () => msgs<{ k: string; q?: string }>(dan, 'ar.call').some((c) => c.k === 'wave' && c.q === 'Joining the fight');
+  check(!joined(), 'not told over his fly-over or his class pick');
+  const classMenu = (events.get(dan) ?? []).flatMap((e) => (e.t === 'call' && e.call.method === 'menu' ? [e.call.args[0] as number] : [])).at(-1)!;
+  host.command(dan, { t: 'message', msg: { t: 'menuClosed', player: '', menu: classMenu } });
+  step(2);
+  check(joined(), 'told where he came in once his class is set');
   check(calls(ann, 'feed').some((a) => a[0] === 'Dan joins the fight'), 'the others hear Dan joined');
 
   const looked = looks(events.get(ann) ?? []);
@@ -118,7 +131,11 @@ export default function arenaMultiplayer() {
   clear();
   step(20);
   clear();
-  for (const n of ['Ann', 'Bob']) player(n).damage(1000);
+  // (Again until it lands: a blow inside someone's moment after a hit, a trap's or a burn's, is ignored.)
+  for (let i = 0; i < 30 && !['Ann', 'Bob'].every((n) => isDowned(player(n))); i++) {
+    for (const n of ['Ann', 'Bob']) if (!isDowned(player(n))) player(n).damage(1000);
+    step(1);
+  }
   step(10);
   check(isDowned(player('Ann')) && isDowned(player('Bob')) && !ends(ann).length, `Cat still standing (${['Ann', 'Bob', 'Cat'].map((n) => `${n}: ${player(n).alive} ${player(n).health} ${isDowned(player(n))} ${blessingsOf(player(n))}`).join('; ')})`);
   player('Cat').damage(1000);

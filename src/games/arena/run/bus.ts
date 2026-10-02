@@ -78,6 +78,8 @@ export interface ArenaEvents {
   levelUp: { player: Player; level: number; unlocks: Unlock[] };
   /** A fighter took up a class (`run/classes.ts`). */
   classPicked: { player: Player; cls: string };
+  /** A fighter's done with the class menu: chosen, kept what they had (closed it), or out of time. */
+  classSet: { player: Player };
   /** Something bought at the shop (a ware's item id, `forge:<item>` at the forge), and what it cost. */
   bought: { player: Player; item: string; price: number };
   /** The mystery chest gave a fighter a weapon (or, `item` null, flew off). */

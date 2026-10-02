@@ -1,7 +1,7 @@
 import { Models, type Entity, type GameContext, type Player, type ProjectileSpec, type Vec3 } from '@platform';
 import { map } from '../run/state';
 import { spawnMonster } from '../run/spawn';
-import { adds, angle, announce, brain, chest, chill, fighters, lob, near, pool, ring, steer, strike, sweep, venom, type Ctx, type Move } from './fight';
+import { adds, angle, announce, brain, chest, chill, fighters, lob, near, pool, quicken, ring, steer, strike, sweep, venom, type Ctx, type Move } from './fight';
 import { HATCH } from './minions';
 import { MODEL } from './models';
 import type { BossKind } from './registry';
@@ -28,7 +28,7 @@ const EGGS = 4;
 const bite: Move = {
   name: 'bite',
   can: (c) => c.d < BITE - 0.6,
-  cooldown: [2, 2.6],
+  cooldown: [2.4, 3],
   windup: 0.55,
   start(c) {
     const p = c.self.position;
@@ -43,7 +43,7 @@ const bite: Move = {
     const p = c.self.position;
     const a = c.s.mem.bite as number;
     c.self.animate('bite', { fade: 0.05 });
-    const { hit } = strike(c.game, { source: c.self, at: p, r: BITE, damage: 6, arc: [a - 0.75, a + 0.75], knockback: 6, lift: 2 });
+    const { hit } = strike(c.game, { source: c.self, at: p, r: BITE, damage: 5, arc: [a - 0.75, a + 0.75], knockback: 6, lift: 2 });
     for (const f of hit) venom(c.game, f, 3, 3, c.self);
     c.game.audio.play('brood_bite', { at: p });
   },
@@ -117,7 +117,7 @@ const leap: Move = {
     // Down: the ground shakes where she lands.
     const p = self.position;
     self.animate('land', { fade: 0.05 });
-    strike(game, { source: self, at: p, r: LEAP, damage: [9, 5], knockback: 10, lift: 4 });
+    strike(game, { source: self, at: p, r: LEAP, damage: [9, 5], knockback: 10, lift: 4, cause: 'impact' });
     game.fx.shockwave({ x: p.x, y: p.y + 0.1, z: p.z }, LEAP + 0.5, COLOR);
     game.fx.burst({ x: p.x, y: p.y + 0.3, z: p.z }, { color: '#d8c08a', count: 40, speed: 6, size: 0.17, gravity: 5, life: 1, drag: 1.5 });
     game.fx.shake(0.35, 0.5);
@@ -220,7 +220,7 @@ const broodAI = brain({
   tempo: (s) => (s.enraged ? 0.75 : 1),
   phases: [
     {
-      at: 0.65,
+      at: 0.66,
       enter(c) {
         roar(c.game, c.self);
         announce(c.game, 'The Broodmother spits venom', 'Stay out of the pools', VENOM_C);
@@ -229,11 +229,11 @@ const broodAI = brain({
       },
     },
     {
-      at: 0.3,
+      at: 0.33,
       enter(c) {
         roar(c.game, c.self);
         c.s.enraged = true;
-        c.self.setSpeed(1.3);
+        quicken(c.self, 1.3);
         // Every egg hatches at once.
         for (const e of eggsOf(c)) e.data.hatchNow = true;
         announce(c.game, 'FRENZY', 'Every egg hatches at once', '#ff5a2a');
@@ -249,7 +249,7 @@ function roar(game: GameContext, e: Entity) {
   game.audio.play('brood_screech', { at: p, volume: 1.6 });
   game.fx.shake(0.3, 1.2);
   game.fx.shockwave({ x: p.x, y: p.y + 0.1, z: p.z }, 8, COLOR);
-  strike(game, { source: e, at: p, r: 5.5, damage: 0.5, knockback: 10, lift: 4 });
+  strike(game, { source: e, at: p, r: 5.5, damage: 0.5, knockback: 10, lift: 4, cause: 'shockwave' });
 }
 
 /** Caught in a web: bogged down, and hard to see through for a moment. */
@@ -268,12 +268,11 @@ export const broodmother: BossKind = {
   height: 3.4,
   bounty: 350,
   stagger: 1.4,
-  escort: { spider: 3 },
   define: () => ({
     name: 'The Broodmother',
     model: Models.gltf(MODEL.broodmother, { clips: { idle: 'idle', walk: 'walk', run: 'run' }, head: 'head', scale: 2 }),
     hitbox: { width: 4.2, height: 2.8 },
-    health: 2000,
+    health: 2300,
     speed: 4.4,
     jump: 9,
     knockbackResistance: 1,

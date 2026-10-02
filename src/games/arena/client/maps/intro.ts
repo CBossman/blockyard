@@ -1,11 +1,9 @@
 import type { Client, ClientKit } from '@platform/client';
 import { mapById, type ArenaMap } from '../../maps';
-import { INTRO_MSG, type IntroMessage } from '../../maps/messages';
+import { INTRO_DONE_MSG, INTRO_MSG, INTRO_TIME as TIME, type IntroMessage } from '../../maps/messages';
 
 type V3 = [number, number, number];
 
-/** How long the fly-over runs (seconds): at a fight's start, for a joiner; and the ease back into their own view. */
-const TIME = { full: 6, short: 3.4, ease: 1.2 };
 /** Its field of view (degrees): a little narrower than play's, for the long views. */
 const FOV = 58;
 /** What ends it early: walking, jumping, a click. */
@@ -29,6 +27,8 @@ export function intro(): ClientKit {
     on = null;
     client.camera.release(ease);
     el.classList.remove('on', 'full', 'card');
+    // (The run puts the class pick up once it's over.)
+    client.send(INTRO_DONE_MSG, {});
   };
 
   return {

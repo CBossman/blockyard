@@ -1,6 +1,6 @@
 import type { GameContext, Player } from '@platform';
 import { ARMS } from './arms';
-import { ARMOR, wearArmor, type ArmorId } from './index';
+import { ARMOR, wearArmor, type ArmorId } from './armor';
 import { RARE_BASES } from './rarity';
 
 /**

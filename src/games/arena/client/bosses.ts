@@ -436,8 +436,9 @@ const AURA: Record<string, { y: number; rate: number; rgb: RGB; speed: number; s
   phylactery: { y: 1.6, rate: 8, rgb: rgbOf('#9fe8ff'), speed: 0.3, size: 0.09, gravity: -1.5, glow: 1.6, life: 0.9, spread: 0.3, up: 0.3 },
 };
 
+/** The HUD theme's faces (`hud.theme`): Cinzel for titles, Oswald for labels. */
 const DISPLAY = `var(--hud-display, 'Cinzel', 'Trajan Pro', 'Palatino Linotype', Georgia, serif)`;
-const TEXT = `var(--hud-text, 'Barlow', 'Segoe UI', sans-serif)`;
+const LABEL = `var(--ar-label, 'Oswald', 'Arial Narrow', sans-serif)`;
 
 const CSS = /* css */ `
 .ab-cine { position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity 400ms ease; --boss: #ffb24a; }
@@ -452,8 +453,12 @@ body:has(.ab-cine.on) :is(.hud, .gamehud) > :not([data-layer="arena.bosses"], .w
 .ab-bar.bottom { bottom: 0; }
 .ab-cine.on .ab-bar { height: 11vh; }
 
-.ab-card { position: absolute; left: 50%; bottom: 15vh; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; text-align: center; white-space: nowrap; }
-.ab-kicker { display: flex; align-items: center; gap: 14px; font: 600 13px/1 ${TEXT}; letter-spacing: 0.42em; margin-right: -0.42em; text-transform: uppercase; color: rgba(255, 244, 222, 0.78);
+.ab-card { position: absolute; left: 50%; bottom: 15vh; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; text-align: center; white-space: nowrap; isolation: isolate; }
+/* A soft shade behind the card, so it reads on a bright floor (the Sanctum's ice) as on a dark one. */
+.ab-card::before { content: ''; position: absolute; left: 50%; top: 50%; z-index: -1; width: min(1200px, 96vw); height: 230%; transform: translate(-50%, -50%); pointer-events: none;
+  background: radial-gradient(closest-side, rgba(5, 4, 4, 0.5), rgba(5, 4, 4, 0.28) 55%, transparent); opacity: 0; transition: opacity 700ms ease; }
+.ab-cine.card .ab-card::before { opacity: 1; }
+.ab-kicker { display: flex; align-items: center; gap: 14px; font: 500 14px/1 ${LABEL}; letter-spacing: 0.42em; margin-right: -0.42em; text-transform: uppercase; color: rgba(255, 244, 222, 0.78);
   opacity: 0; transform: translateY(8px); transition: opacity 500ms ease, transform 700ms cubic-bezier(0.2, 0.8, 0.2, 1); text-shadow: 0 2px 8px rgba(0, 0, 0, 0.8); }
 .ab-kicker i { display: block; width: 7px; height: 7px; background: var(--boss); transform: rotate(45deg); box-shadow: 0 0 10px var(--boss); }
 .ab-name { margin-top: 12px; font: 700 clamp(40px, 7.4vh, 84px)/1 ${DISPLAY}; letter-spacing: 0.9em; margin-right: -0.9em; text-transform: uppercase;
@@ -477,9 +482,10 @@ body:has(.ab-cine.on) :is(.hud, .gamehud) > :not([data-layer="arena.bosses"], .w
   26% { transform: scale(1.07) translate(2px, 1px); }
   100% { transform: scale(1); }
 }
-/* A fall: the card higher, "Vanquished" in gold, the blast whitening it. */
+/* A fall: the card higher, "Vanquished" in the HUD's gold, the blast whitening it. */
 .ab-cine.fall .ab-card { bottom: auto; top: 22vh; }
-.ab-cine.fall .ab-name { color: #ffe9a8; }
+.ab-cine.fall .ab-name { color: transparent; text-shadow: none; background: linear-gradient(180deg, #fff8e6 15%, var(--ar-gold, #f0c060) 60%, #b9802c 95%);
+  -webkit-background-clip: text; background-clip: text; filter: drop-shadow(0 0 14px color-mix(in srgb, var(--boss) 70%, transparent)) drop-shadow(0 3px 0 rgba(0, 0, 0, 0.6)); }
 .ab-cine.blast .ab-name { animation: ab-blast 1100ms ease-out; }
 @keyframes ab-blast { 0% { transform: scale(1.18); filter: brightness(2.2); } 100% { transform: scale(1); filter: brightness(1); } }
 
@@ -489,7 +495,7 @@ body:has(.ab-cine.on) :is(.hud, .gamehud) > :not([data-layer="arena.bosses"], .w
 @keyframes ab-phase { 0% { opacity: 0; transform: translateX(-50%) scale(1.25); } 7% { opacity: 1; transform: translateX(-50%) scale(1); } 85% { opacity: 1; } 100% { opacity: 0; transform: translateX(-50%) translateY(-6px); } }
 .ab-phase-text { font: 700 clamp(22px, 3.6vh, 38px)/1 ${DISPLAY}; letter-spacing: 0.22em; margin-right: -0.22em; text-transform: uppercase; color: #fff4e0;
   text-shadow: 0 0 16px var(--boss), 0 0 36px color-mix(in srgb, var(--boss) 60%, transparent), 0 2px 0 rgba(0, 0, 0, 0.7); }
-.ab-phase-sub { margin-top: 8px; font: 600 14px/1 ${TEXT}; letter-spacing: 0.18em; text-transform: uppercase; color: rgba(255, 240, 214, 0.85); text-shadow: 0 2px 6px rgba(0, 0, 0, 0.9); }
+.ab-phase-sub { margin-top: 8px; font: 500 15px/1 ${LABEL}; letter-spacing: 0.18em; text-transform: uppercase; color: rgba(255, 240, 214, 0.85); text-shadow: 0 2px 6px rgba(0, 0, 0, 0.9); }
 .ab-phase-sub:empty { display: none; }
 @media (max-width: 900px) { .ab-name { letter-spacing: 0.12em; } .ab-cine.card .ab-rule { width: 80vw; } }
 `;
