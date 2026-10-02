@@ -9,7 +9,7 @@ import { check, launch } from './_harness';
  * Probe: every map is walkable, and its traps work. On each, zombies brought in at every gate
  * and every boss gate must find their way to a fighter standing in the middle, at the shop, at
  * each chest and at spots round the floor (each placement in turn); the map's own places (the
- * middle, the shop, the chests) must have room for a body. Then each trap: a fighter with gold
+ * middle, the shop, the chests, the lookout) must have room for a body. Then each trap: a fighter with gold
  * walks up to its lever and presses E, pays, and zombies held where it works are hurt and slain
  * by it, the kills theirs. The waves' own monsters are cleared as they come.
  * `node scripts/headless.mjs tests/headless/_arena-maps.ts` (MAP=id for one map).
@@ -45,7 +45,7 @@ function probe(m: ArenaMap): { row: string; failed: string[] } {
   const failed: string[] = [];
 
   const places: [string, Vec3][] = [['the middle', m.center], ...(m.shop ? [['the shop', m.shop] as [string, Vec3]] : []), ...(m.chests ?? []).map((c, i) => [`chest ${i + 1}`, c] as [string, Vec3])];
-  for (const [name, p] of places) {
+  for (const [name, p] of [...places, ['the lookout', m.lookout] as [string, Vec3]]) {
     if (!game.world.fits({ x: p.x, y: p.y + 0.05, z: p.z })) failed.push(`${m.id}: no room for a body at ${name} (${fmt(p)})`);
   }
 
