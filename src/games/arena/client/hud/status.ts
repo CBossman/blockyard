@@ -10,11 +10,12 @@ import { clock, el, hidden, hud, num, project, replay } from './store';
  *   (a boss has its bar under it); between waves the time to the next and what it is; before the
  *   first, the countdown;
  * - gold and the crowd (bottom right): the fighter's gold, rolling up to what it is with "+12"s
- *   popping beside it (and where it was picked up, when that's in sight), and the crowd's hype as
- *   a meter that glows and shakes while the Crowd's Favour is on, counting it down;
- * - the party (top right, in co-op): each friend's name, health, and whether they're down
- *   (bleeding out, a ring running out) or sitting the wave out;
- * - blessings (bottom left, over the health): an icon each, the newest arriving with a flash.
+ *   popping beside it (a bonus saying what it's for; gold found further off rising where it was,
+ *   when that's in sight), and the crowd's hype as a meter that glows and shakes while the
+ *   Crowd's Favour is on, counting it down;
+ * - bottom left, over the health: the party (in co-op: each friend's name, class and health, or
+ *   down and bleeding out, or sitting the wave out) over the blessings (an icon each in its
+ *   rarity's colour, the newest arriving with a flash).
  */
 export function status(): ClientKit {
   let unstyle: (() => void) | null = null;
@@ -70,6 +71,8 @@ function build(client: Client, layer: HTMLElement): (dt: number) => void {
   layer.append(shade, wave, purse, el('div.ar-left', party, bless), world);
 
   let runKey = '';
+  /** The phase and wave last shown: a new one arrives with a flourish. */
+  let shownAt = '';
   let partyKey = '';
   let blessKey = '';
   let shownGold = 0;
@@ -106,7 +109,9 @@ function build(client: Client, layer: HTMLElement): (dt: number) => void {
     pop.until = now + 1.6;
     replay(gold, 'got');
     client.audio.play('ar_coin', { volume: 0.5, pitch: 0.95 + Math.min(0.3, g.d / 200) });
-    if (g.at) {
+    // Gold found further off (not coins pulled in at their feet) rises where it was.
+    const cam = client.camera.position;
+    if (g.at && Math.hypot(g.at[0] - cam.x, g.at[1] - cam.y, g.at[2] - cam.z) > 3.5) {
       const f = el('div.ar-float', `+${num(g.d)}`);
       world.append(f);
       floaters.push({ el: f, at: { x: g.at[0], y: g.at[1] + 1.2, z: g.at[2] }, t: 0 });
@@ -116,7 +121,6 @@ function build(client: Client, layer: HTMLElement): (dt: number) => void {
   const showRun = (r: RunMsg) => {
     const key = JSON.stringify([r.phase, r.wave, r.of, r.name, r.left, r.total, r.next, r.twist?.name, r.boss?.name, r.upcoming?.name, r.mapName]);
     if (key === runKey) return;
-    const was = runKey;
     runKey = key;
     const on = r.phase === 'countdown' || r.phase === 'fighting' || r.phase === 'intermission';
     wave.classList.toggle('on', on);
@@ -152,8 +156,10 @@ function build(client: Client, layer: HTMLElement): (dt: number) => void {
     // The twist as a chip (a boss is named by its own bar, under this).
     chips.replaceChildren(...(fighting && r.twist ? [chip(r.twist.name, r.twist.color)] : []));
     // A new wave (or the break before one) arrives with a flourish.
-    const head = JSON.parse(was || '[]') as unknown[];
-    if (head[0] !== r.phase || head[1] !== r.wave) replay(wave, 'arrive');
+    if (`${r.phase}${r.wave}` !== shownAt) {
+      shownAt = `${r.phase}${r.wave}`;
+      replay(wave, 'arrive');
+    }
   };
 
   const showParty = (p: PartyMsg | null) => {
@@ -197,7 +203,7 @@ function build(client: Client, layer: HTMLElement): (dt: number) => void {
     const off = hidden(client);
     layer.style.visibility = off ? 'hidden' : '';
     if (client.events.some((e) => e.t === 'reset')) {
-      runKey = partyKey = blessKey = hypeKey = '';
+      runKey = shownAt = partyKey = blessKey = hypeKey = '';
       favourOn = false;
       goldTarget = shownGold = 0;
       pops.replaceChildren();

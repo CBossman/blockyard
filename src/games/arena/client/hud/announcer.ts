@@ -46,10 +46,11 @@ const LONG = 16;
 /**
  * The announcer, on each screen: big callouts in the middle of the screen for the run's moments (a
  * wave begins, a boss's, the final one, the endless ones, its twist, the Crowd's Favour, a boss
- * slain, their own fall and return, victory and defeat), each with its sting (`client/sounds/hud.ts`); smaller ones under the
- * crosshair for their feats (a double kill, a parry: bigger and higher the bigger the feat) and
- * their friends' fortunes; and the last seconds before a wave counted down, a drum a second. Big
- * callouts wait their turn (victory and defeat don't).
+ * slain, a blessing taken, their own fall and return, victory and defeat), each with its sting
+ * (`client/sounds/hud.ts`); smaller ones under the crosshair for their feats (a double kill, a
+ * parry: bigger and higher the bigger the feat) and their friends' fortunes; and the last seconds
+ * before a wave counted down, a drum a second. Big callouts wait their turn (victory and defeat
+ * don't), and wait while something else has the screen.
  */
 export function announcer(): ClientKit {
   let unstyle: (() => void) | null = null;
@@ -67,7 +68,6 @@ export function announcer(): ClientKit {
     showing?.el.remove();
     const e = el(`div.ar-call.k-${c.k}`, c.q ? el('div.ar-call-q', c.q) : null, el('div.ar-call-t', c.t), el('div.ar-call-rule'), c.s ? el('div.ar-call-s', c.s) : null);
     if (c.c) e.style.setProperty('--c', c.c);
-    e.style.setProperty('--life', `${k.time}s`);
     stage.append(e);
     showing = { el: e, until: client.time + k.time };
     if (k.sting) client.audio.play(k.sting, { volume: 0.9 });

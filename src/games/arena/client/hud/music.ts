@@ -47,8 +47,9 @@ export function music(): ClientKit {
     frame(client) {
       const now = moodOf(client);
       if (now !== mood) {
-        // A new mood starts on the next beat (a wave's sting is playing over the change).
+        // A new mood starts its phrase from the top on the next beat (a wave's sting plays over the change).
         mood = now;
+        beat = 0;
         if (mood === 'off') stop();
       }
       const vol = client.audio.music * (hud.me?.state === 'out' ? 0.55 : 1);
@@ -148,6 +149,12 @@ function compose(mood: Mood, beat: number, len: number, k: number): Note[] {
 
   const boss = mood === 'boss' || mood === 'final';
   const heavy = boss ? Math.max(0.7, k) : k;
+  // Out of the fight, watching: the drums drop out, the lyre and the bass go on.
+  if (hud.me?.state === 'out') {
+    if (barBeat === 0) add('bass', 0, 0.1, { f: [hz(bar.root)], d: len * 2 });
+    add('pluck', 0, 0.04, { f: [chordHz(12)[barBeat % 3]], d: 0.5 });
+    return out;
+  }
   // War drums: the downbeats always; more as it builds.
   if (barBeat === 0 || barBeat === 2) add('taiko', 0, 0.42 + heavy * 0.18);
   if (heavy > 0.35 && barBeat === 1) add('taiko', 2, 0.25, { f: [1.08] });
