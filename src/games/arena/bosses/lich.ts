@@ -1,7 +1,7 @@
 import { Models, math, type Entity, type GameContext, type Player, type ProjectileSpec, type Vec3 } from '@platform';
 import { map } from '../run/state';
 import { spawnMonster } from '../run/spawn';
-import { adds, angle, announce, brain, chill, drop, fighters, fromSky, lane, mark, near, own, pool, propModel, quicken, ring, root, stagger, strike, tether, type Ctx, type Move } from './fight';
+import { adds, angle, announce, brain, chill, drop, fighters, fromSky, lane, mark, near, own, pool, propModel, quicken, ring, root, stagger, standAt, strike, tether, type Ctx, type Move } from './fight';
 import { monsterKind } from '../monsters';
 import { MODEL } from './models';
 import type { BossKind } from './registry';
@@ -39,8 +39,8 @@ const HOVER_STORM = 2;
 /** Seconds his phylacteries hold out on their own before they crack and fall (without the reel a fighter's shattering wins). */
 const WARD_TIME = 25;
 
-/** The floor under him (where his spells strike the ground), his feet's height over it aside. */
-const floorAt = (game: GameContext, p: Vec3): Vec3 => ({ x: p.x, y: game.world.surfaceY(Math.floor(p.x), Math.floor(p.z)) + 1, z: p.z });
+/** The floor under him (where his spells strike the ground), his feet's height over it aside: an arch or a roof overhead doesn't count. */
+const floorAt = (game: GameContext, p: Vec3): Vec3 => standAt(game, p, 8) ?? { x: p.x, y: game.world.surfaceY(Math.floor(p.x), Math.floor(p.z)) + 1, z: p.z };
 
 /** How fast to rise or sink (a share of his speed) to float `want` blocks over the floor. */
 function lift(game: GameContext, self: Entity, want: number): number {
@@ -349,7 +349,7 @@ function drift(c: Ctx) {
   const p = self.position;
   const up = lift(game, self, floatHeight(self));
   self.lookAt(target);
-  const mem = c.s.mem as { side?: number; flip?: number; last?: Vec3; stuckT?: number };
+  const mem = c.s.mem as { side?: number; flip?: number; last?: Vec3; stuckT?: number; slowT?: number };
   const q = target.position;
   const l = Math.hypot(p.x - q.x, p.z - q.z) || 1;
   const nx = (p.x - q.x) / l;
@@ -363,9 +363,16 @@ function drift(c: Ctx) {
     return;
   }
   mem.stuckT = 0;
-  mem.last = undefined;
+  // Drifting into something (a pillar, a tomb): the other way.
+  const slid = mem.last ? Math.hypot(p.x - mem.last.x, p.z - mem.last.z) : 1;
+  mem.last = { ...p };
+  mem.slowT = slid < 0.4 * dt ? (mem.slowT ?? 0) + dt : 0;
   mem.flip = (mem.flip ?? 0) - dt;
-  if (mem.flip <= 0) {
+  if (mem.slowT > 0.6) {
+    mem.side = -(mem.side ?? 1);
+    mem.flip = game.rng.range(1.5, 3);
+    mem.slowT = 0;
+  } else if (mem.flip <= 0) {
     mem.side = game.rng.chance(0.5) ? 1 : -1;
     mem.flip = game.rng.range(1.5, 3);
   }

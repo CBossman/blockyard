@@ -37,15 +37,40 @@ export function chest(self: Entity, p: Player, speed: number, lead = 0.6): Vec3 
   return { x: q.x + p.velocity.x * t * lead, y: q.y + 0.9, z: q.z + p.velocity.z * t * lead };
 }
 
-/** A spot on the floor near `at` (within `r`), kept inside the map's fighting floor. */
+/**
+ * Where a body would stand in `p`'s column: on the floor under it (up to `down` blocks down: a
+ * sunken floor, a channel), or atop a step it's in (one block up at most). Null where there's no
+ * such floor, or no room on it, or it's under water or lava.
+ */
+export function standAt(game: GameContext, p: Vec3, down = 4): Vec3 | null {
+  const w = game.world;
+  const x = Math.floor(p.x);
+  const z = Math.floor(p.z);
+  let y = Math.floor(p.y + 0.01);
+  if (w.collisionHeight(x, y, z) >= 1 && w.collisionHeight(x, ++y, z) > 0) return null;
+  for (let k = 0; k <= down + 1; k++, y--) {
+    const h = w.collisionHeight(x, y, z);
+    if (h <= 0) {
+      if (w.blockInfo(w.getBlock(x, y, z))?.liquid) return null;
+      continue;
+    }
+    const q = { x: p.x, y: y + Math.min(1, h), z: p.z };
+    return w.fits({ x: q.x, y: q.y + 0.05, z: q.z }) ? q : null;
+  }
+  return null;
+}
+
+/** A spot on the floor near `at` (within `r`, on the floor there: `standAt`), kept inside the map's fighting floor. */
 export function near(game: GameContext, at: Vec3, r: number, center: Vec3, radius: number): Vec3 {
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < 10; i++) {
     const a = game.rng.range(0, Math.PI * 2);
     const d = Math.sqrt(game.rng.next()) * r;
     const p = { x: at.x + Math.cos(a) * d, y: at.y, z: at.z + Math.sin(a) * d };
-    if (flat(p, center) < radius - 1.5 && game.world.fits({ x: p.x, y: p.y + 0.05, z: p.z })) return p;
+    if (flat(p, center) >= radius - 1.5) continue;
+    const q = standAt(game, p);
+    if (q) return q;
   }
-  return { ...at };
+  return standAt(game, at) ?? { ...at };
 }
 
 // ---------------------------------------------------------------------------------------------
