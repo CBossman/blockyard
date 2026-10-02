@@ -358,6 +358,10 @@
   box-shadow: 0 0 10px rgba(255, 90, 80, 0.5);
   transition: width 260ms ease;
 }
+/* The bosses' phase lines (client/bosses.ts): just under the boss bar as the theme places it. */
+.ab-phase {
+  top: 184px;
+}
 @keyframes ar-boss-in {
   from {
     opacity: 0;

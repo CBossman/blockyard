@@ -1,5 +1,5 @@
 import type { Client, ClientKit, ClientLoop } from '@platform/client';
-import { mapById } from '../../maps';
+import { mapById, type ArenaMap } from '../../maps';
 import { MSG, type CrowdMsg } from '../../hud/messages';
 import { hud } from './store';
 
@@ -8,12 +8,24 @@ const COOL = 0.22;
 /** Cheers come at most this often (seconds): a burst of kills is one swell, not a babble. */
 const CHEER_EVERY = 0.35;
 
+type Point = { x: number; y: number; z: number };
+
+/**
+ * Where a map's crowd sits (`ArenaMap.crowd`, the maps part's: points in its stands), or false for
+ * a map with nobody watching; a map that doesn't say is ringed by stands round its floor.
+ */
+function standsOf(m: ArenaMap): Point[] | 'ring' | false {
+  const c = (m as ArenaMap & { crowd?: { at: Point[] } | false }).crowd;
+  if (c === false) return false;
+  return c?.at.length ? c.at : 'ring';
+}
+
 /**
  * The crowd in the stands, on each screen, while a fight's on: a murmur of thousands (`ar_crowd`)
  * and a roar over it (`ar_roar`) that swells with their excitement, which kills raise a little and
  * the server's word (`crowd`: a boss felled, a multikill, the Crowd's Favour, a wave won) a lot;
  * cheers, gasps and groans from all round the stands; and before a wave, the stands stamping and
- * clapping, quicker as it nears.
+ * clapping, quicker as it nears. On a map with nobody watching (`ArenaMap.crowd: false`), silence.
  */
 export function crowd(): ClientKit {
   let murmur: ClientLoop | null = null;
@@ -37,10 +49,12 @@ export function crowd(): ClientKit {
     murmur = roar = null;
   };
 
-  /** Somewhere in the stands round this map (everywhere, for a map without stands). */
-  const stands = (): { x: number; y: number; z: number } | undefined => {
+  /** Somewhere in this map's stands (everywhere, if it doesn't say where they are). */
+  const stands = (): Point | undefined => {
     const m = hud.run && mapById(hud.run.map);
-    if (!m) return undefined;
+    const s = m && standsOf(m);
+    if (!m || !s) return undefined;
+    if (s !== 'ring') return s[Math.floor(Math.random() * s.length)];
     const a = Math.random() * Math.PI * 2;
     const r = m.radius + 6 + Math.random() * 8;
     return { x: m.center.x + Math.cos(a) * r, y: m.center.y + 6 + Math.random() * 6, z: m.center.z + Math.sin(a) * r };
@@ -70,7 +84,8 @@ export function crowd(): ClientKit {
     },
     frame(client, dt) {
       const r = hud.run;
-      const on = !!r && client.running && !!client.me.id && r.phase !== 'intro' && r.phase !== 'waiting' && !client.replay.playing;
+      const m = r && mapById(r.map);
+      const on = !!r && client.running && !!client.me.id && r.phase !== 'intro' && r.phase !== 'waiting' && !client.replay.playing && !!m && standsOf(m) !== false;
       if (!on) return quiet();
       murmur ??= client.audio.loop('ar_crowd', { volume: 0 });
       roar ??= client.audio.loop('ar_roar', { volume: 0 });

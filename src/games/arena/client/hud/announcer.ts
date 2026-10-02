@@ -33,6 +33,7 @@ const TIER: Record<string, number> = {
   kaboom: 2,
   goblin: 2,
   boss_stagger: 2,
+  boss_crash: 2,
   last_stand: 2,
   forge: 0,
   boss_egg: 0,

@@ -11,6 +11,10 @@
   justify-items: center;
   transition: top 300ms ease;
 }
+/* A boss's bar is up (and its phase lines under it, the bosses' .ab-phase): callouts go under them. */
+body:has(.bossbar:not([style*='none'])) .ar-stage {
+  top: max(23%, 236px);
+}
 /* A wave's card is up (client/hud/cards.ts): callouts go under it. */
 body:has(.ar-card:not(.out)) .ar-stage {
   top: max(23%, 390px);
