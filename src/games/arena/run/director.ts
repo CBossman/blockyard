@@ -193,6 +193,7 @@ export function startWave(game: GameContext, n: number, force?: Twist) {
   state.queue = boss ? [boss.id, ...rest] : rest;
   state.spawnTimer = 1.2;
   storm.next = game.clock.now + 4;
+  still.clear();
   for (const r of runs.values()) r.hurt = false;
 
   // (Its banners are the HUD's, from the bus.)
@@ -239,8 +240,35 @@ export function tick(game: GameContext, dt: number): { left: number; cleared: bo
     state.spawnTimer = state.boss ? 2.5 : frenzy ? SPAWN_EVERY / 2 : SPAWN_EVERY;
   }
   if (state.twist === 'storm') thunder(game);
+  if (!state.queue.length && alive <= STRAGGLERS) stragglers(game);
   const left = alive + state.queue.length;
   return { left, cleared: state.queue.length === 0 && alive === 0 };
+}
+
+/** A wave down to its last few: any that hasn't moved in a long while is stuck where nobody can reach it (wedged in a wall), and comes back in through a gate. */
+const STRAGGLERS = 3;
+const STUCK = 20;
+/** Where each of the last few was, and since when (by id); when they were last looked at. */
+const still = new Map<number, { at: Vec3; since: number }>();
+let lookedAt = 0;
+
+function stragglers(game: GameContext) {
+  const now = game.clock.now;
+  if (now - lookedAt < 2) return;
+  lookedAt = now;
+  for (const e of game.entities.all()) {
+    if (e.data.scenery || bossKind(e.type)) continue;
+    const q = e.position;
+    const was = still.get(e.id);
+    if (!was || Math.hypot(q.x - was.at.x, q.y - was.at.y, q.z - was.at.z) > 1.5) {
+      still.set(e.id, { at: { ...q }, since: now });
+      continue;
+    }
+    if (now - was.since < STUCK) continue;
+    const g = game.rng.pick(map().gates);
+    e.teleport(along(g, 1, game.rng.range(-1, 1)));
+    still.delete(e.id);
+  }
 }
 
 /** The Thunderstorm: when the next bolt's marked, and where the marked one falls (null: none marked). */
@@ -336,4 +364,6 @@ export function directorListen(game: GameContext) {
 export function resetDirector() {
   storm.at = null;
   storm.next = 0;
+  still.clear();
+  lookedAt = 0;
 }

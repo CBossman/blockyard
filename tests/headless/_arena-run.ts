@@ -293,7 +293,23 @@ function endless() {
   log(`endless: Keep fighting into wave ${finalWave() + 1} (budget ${budget}); the best wave kept (${best}), XP ${progressOf(me).total}, level ${progressOf(me).level}`);
 }
 
+/** A wave's last monster stuck where nobody can reach it comes back in through a gate. */
+function straggler() {
+  const { h, game } = scene(9);
+  wave(game, 2);
+  state.queue = [];
+  const c = map().center;
+  const z = game.entities.spawn('zombie', { x: c.x + 13, y: c.y - 1, z: c.z + 5 });
+  z.setSpeed(0);
+  const at = { ...z.position };
+  idle(h, 30);
+  const moved = Math.hypot(z.position.x - at.x, z.position.z - at.z);
+  log(`straggler: a monster stuck for good moved ${moved.toFixed(1)} blocks, to a gate`);
+  check(z.alive && moved > 3, 'the last monster of a wave, stuck, comes back through a gate');
+}
+
 export default function arenaRun() {
+  straggler();
   coins();
   shop();
   chest();
