@@ -492,7 +492,11 @@ game.items.define('bow', { kind: 'bow', name: 'Bow', icon: 'bow', drawIcon: 'bow
 game.items.define('potion', { kind: 'consumable', name: 'Potion', icon: 'health_potion', hold: { model: HeldModels.healthPotion }, stack: 4, use: (g, player) => (player.heal(10), true) });
 game.items.spawnPickup('iron_sword', pos, { beam: '#ffd36b' });
 game.items.spawnPickup('iron_sword', pos, { for: player }); // only they can take it (a reward each)
+game.items.spawnPickup(held.item, eye, { count: held.count, velocity, delay: 1, from: player }); // a drop: nobody for a second, and not back to them till they've stepped away
+player.inventory.set(player.inventory.selected, null);                  // a hotbar slot set (or emptied) directly
 ```
+
+A pickup can be taken once it's half a second old (`delay` says how long), by whoever's in reach (3.2 blocks: it's pulled to them, and theirs at about a block). One thrown by a player (`from`) isn't pulled back to them until they've been out of its reach once, so a drop stays where it lands until they come back for it. `inventory.set(slot, stack)` puts a stack in a slot whatever was there (up to the item's stack size), or empties it: a drop, a swap in place.
 
 **Kinds of item are kits.** What an item does comes from the kit for its `kind`, which the game lists in its server definition, in the order they run each step:
 

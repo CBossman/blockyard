@@ -3,7 +3,8 @@ import type { Headless } from '../../src/platform/host/headless';
 import { bus } from '../../src/games/arena/run/bus';
 import { addGold, gold } from '../../src/games/arena/run/gold';
 import { GOLD_PER_COST, waveBonus } from '../../src/games/arena/run/coins';
-import { FEATHER_PRICE, purchase, REROLL_PRICE, rerollPrice, shopOpen } from '../../src/games/arena/run/shop';
+import { FEATHER_PRICE, purchase, REROLL_PRICE, rerollPrice, sell, shopOpen, showShop } from '../../src/games/arena/run/shop';
+import { sellPrice } from '../../src/games/arena/run/pack';
 import { settle } from '../../src/games/arena/blessings';
 import { ARMOR, armorOf } from '../../src/games/arena/items';
 import { WARES } from '../../src/games/arena/items/catalog';
@@ -360,7 +361,74 @@ function late() {
   check(Math.abs(boss.took - early.took) < 0.05 && Math.abs(boss.hurt - early.hurt) < 0.05, "not in a boss's wave (its fight is tuned as it is)");
 }
 
+/** What they carry: a full hotbar greys out the shop (saying why); the merchant buys; X drops the stack in hand (not straight back); a better weapon of a kind takes the worse one's slot. */
+function pack() {
+  const { h, game, me } = scene(12);
+  wave(game, 1);
+  win(game, me);
+  h.run(0.5);
+  const inv = me.inventory;
+  inv.clear();
+  for (const item of ['gladius', 'bow', 'spear', 'warhammer', 'daggers', 'stone_sword', 'iron_sword']) inv.give(item);
+  inv.give('health_potion', 2);
+  inv.give('bomb', 2);
+  addGold(game, me, 2000 - gold(me));
+  const slotOf = (item: string) => inv.slots.findIndex((x) => x?.item === item);
+  type Entry = { label: string; note?: string; detail?: string; disabled?: boolean };
+  const shown = () => {
+    showShop(game, me);
+    h.step(1 / 60);
+    const m = h.find('hud', 'menu').filter((c) => (c.args[1] as { title: string }).title === 'The Merchant').at(-1)!;
+    return (m.args[1] as { sections: { title?: string; entries: Entry[] }[] }).sections;
+  };
+  // Full, and out of arrows: the arrows greyed out, saying why; but potions and bombs still fit their stacks.
+  let sections = shown();
+  const entry = (label: string) => sections.flatMap((x) => x.entries).find((e) => e.label === label);
+  check(!inv.slots.includes(null) && entry('Arrow ×12')?.disabled && entry('Arrow ×12')?.note?.startsWith('Hotbar full'), `a full hotbar: the arrows say so (${JSON.stringify(entry('Arrow ×12'))})`);
+  check(!purchase(game, me, 'arrow') && purchase(game, me, 'health_potion') && purchase(game, me, 'bomb'), 'no arrows; potions and bombs join their stacks');
+  // Sell the stone sword: 40% of its price, and a slot free.
+  const sales = sections.find((x) => x.title === 'Sell')!.entries;
+  const was = gold(me);
+  check(sales.length === 9 && sell(game, me, slotOf('stone_sword'), 'stone_sword') === sellPrice(game, 'stone_sword') && gold(me) - was === 20 && slotOf('stone_sword') < 0, `sold the stone sword for ${gold(me) - was}`);
+  check(purchase(game, me, 'arrow') && inv.count('arrow') === 12, 'now the arrows fit');
+  // X drops the spear in hand: thrown out, not straight back while they stand there; walk off and back, and it's theirs again.
+  inv.select(slotOf('spear'));
+  h.step(1 / 60, { pressed: ['KeyX'], down: ['KeyX'] });
+  const lying = () => h.sim.items.frame().filter((x) => x.item === 'spear');
+  check(inv.count('spear') === 0 && lying().length === 1, 'X drops the spear');
+  idle(h, 4);
+  check(inv.count('spear') === 0 && lying().length === 1, 'and it stays where it fell while they stand by');
+  const at = { ...me.position };
+  me.teleport({ x: at.x + 12, y: at.y, z: at.z }, 0, 0);
+  idle(h, 0.5);
+  const q = lying()[0];
+  me.teleport({ x: q.x, y: q.y - 0.3, z: q.z }, 0, 0);
+  idle(h, 1);
+  check(inv.count('spear') === 1, 'walk away and back, and it comes to them');
+  // Not the last weapon: with only the gladius to fight with, X keeps it and the merchant won't take it.
+  inv.clear();
+  inv.give('gladius');
+  inv.give('bow');
+  inv.select(slotOf('gladius'));
+  h.step(1 / 60, { pressed: ['KeyX'], down: ['KeyX'] });
+  check(inv.count('gladius') === 1 && sell(game, me, slotOf('gladius')) === 0 && sell(game, me, slotOf('bow')) > 0, 'their last weapon is kept (the bow, needing arrows, goes)');
+  // A better spear takes the common one's slot, which is sold; a worse one is gold.
+  inv.give('spear');
+  const slot = slotOf('spear');
+  let before = gold(me);
+  game.items.spawnPickup('spear_epic', me.position);
+  idle(h, 1);
+  check(inv.slots[slot]?.item === 'spear_epic' && gold(me) - before === sellPrice(game, 'spear'), `an epic spear in the common one's slot, +${gold(me) - before} gold`);
+  before = gold(me);
+  game.items.spawnPickup('spear_rare', me.position);
+  idle(h, 1);
+  const spears = inv.slots.filter((x) => x?.item.startsWith('spear')).length;
+  check(spears === 1 && inv.slots[slot]?.item === 'spear_epic' && gold(me) - before === sellPrice(game, 'spear_rare'), `a rare one after it comes as gold: +${gold(me) - before}`);
+  log(`pack: a full hotbar greys out arrows (sell or drop); sold a stone sword for 20; X drops, not straight back; the last weapon kept; a better spear replaces the worse (+${sellPrice(game, 'spear')}), a worse one is gold (+${sellPrice(game, 'spear_rare')})`);
+}
+
 export default function arenaRun() {
+  pack();
   late();
   straggler();
   coins();

@@ -150,6 +150,15 @@ export class Inventory implements InventoryApi {
     return n;
   }
 
+  set(slot: number, stack: ItemStack | null) {
+    if (!Number.isInteger(slot) || slot < 0 || slot > 8) throw new Error(`inventory.set: no slot ${slot} (0 to 8)`);
+    if (stack && !this.defs.has(stack.item)) throw new Error(`inventory.set: unknown item "${stack.item}"`);
+    const count = stack ? Math.min(this.max(stack.item), Math.floor(stack.count)) : 0;
+    this.slots[slot] = stack && count > 0 ? { item: stack.item, count } : null;
+    this.forget();
+    this.onChange?.();
+  }
+
   select(slot: number) {
     this.selected = ((slot % 9) + 9) % 9;
     this.onChange?.();
@@ -199,6 +208,10 @@ class PickupImpl implements Pickup {
     private onRemove: (p: PickupImpl) => void,
     /** The only player who can take it (their id), if it's theirs. */
     readonly owner: string | null = null,
+    /** Seconds before anyone can take it. */
+    readonly delay = 0.5,
+    /** Who threw it (their id): not pulled back to them until they've been out of its reach. */
+    public from: string | null = null,
   ) {
     this.vel = { x: velocity?.x ?? 0, y: velocity?.y ?? 0, z: velocity?.z ?? 0 };
   }
@@ -249,7 +262,7 @@ export class ItemSim implements ItemApi {
     this.s.content.defineAtlas(name, source);
   }
 
-  spawnPickup(item: string, at: Vec3, opts: { count?: number; velocity?: Vec3; beam?: string; despawn?: number; for?: Player } = {}): Pickup {
+  spawnPickup(item: string, at: Vec3, opts: { count?: number; velocity?: Vec3; beam?: string; despawn?: number; for?: Player; delay?: number; from?: Player } = {}): Pickup {
     if (!this.defs.has(item)) throw new Error(`items.spawnPickup: unknown item "${item}"`);
     const p = new PickupImpl(
       this.nextId++,
@@ -261,6 +274,8 @@ export class ItemSim implements ItemApi {
       opts.velocity,
       (x) => this.pickups.splice(this.pickups.indexOf(x), 1),
       opts.for?.id ?? null,
+      opts.delay ?? 0.5,
+      opts.from?.id ?? null,
     );
     this.pickups.push(p);
     return p;
@@ -307,7 +322,7 @@ export class ItemSim implements ItemApi {
           p.settled = true;
         }
       }
-      if (p.age <= 0.5 || p.collectT >= 0) continue;
+      if (p.age <= p.delay || p.collectT >= 0) continue;
       // Pulled toward the nearest living player in reach (its owner, if it has one here), then
       // collected.
       const owner = p.owner !== null && players.some((pl) => pl.id === p.owner) ? p.owner : null;
@@ -323,6 +338,11 @@ export class ItemSim implements ItemApi {
         const ey = q.y + 0.9 - p.pos.y;
         const ez = q.z - p.pos.z;
         const e = Math.hypot(ex, ey, ez);
+        // Its thrower, until they've stepped out of its reach once.
+        if (pl.id === p.from) {
+          if (e < 3.2) continue;
+          p.from = null;
+        }
         if (e < d) {
           d = e;
           who = pl;

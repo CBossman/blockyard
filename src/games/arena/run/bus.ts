@@ -67,7 +67,7 @@ export interface ArenaEvents {
   /** Gold coins worth `value` scattered at `at` (a boss's loot shower), for the run to drop as it drops monsters' coins. */
   coins: { at: Vec3; value: number; by: Player | null };
   /** A fighter's gold changed (`delta` this time, `total` now), from `at` if it was picked up somewhere, and why. */
-  gold: { player: Player; delta: number; total: number; at?: Vec3; why?: 'coin' | 'wave' | 'goblin' | 'boss' | 'gift' | 'start' | 'spend' };
+  gold: { player: Player; delta: number; total: number; at?: Vec3; why?: 'coin' | 'wave' | 'goblin' | 'boss' | 'gift' | 'start' | 'spend' | 'sold' };
   /** The crowd's hype (0..1); while the Crowd's Favour is on (`favour`), its seconds counting down as a fraction. */
   hype: { value: number; favour: boolean };
   /** Something worth a callout (the announcer, the crowd): a multikill, a parry, a trap kill… */
