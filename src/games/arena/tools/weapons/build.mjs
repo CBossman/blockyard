@@ -419,8 +419,8 @@ function stormWand(rarity) {
 
 /**
  * The crossbow, built like a gun: a wooden stock (a butt, a pistol grip, the tiller running
- * forward), a steel prod across the front, the string drawn back to the nut, a bolt laid in the
- * groove, a rear sight. Hailstorm, the legendary, carries three bolts side by side.
+ * forward), a steel prod across the front, the string drawn back to the nut, the groove empty (the
+ * bolt is shown in it apart, only while it's spanned), a rear sight.
  */
 function crossbow(rarity) {
   const g = model('crossbow', 'Crossbow', rarity, {
@@ -465,15 +465,7 @@ function crossbow(rarity) {
   };
   limb(1);
   limb(-1);
-  // The bolt(s) in the groove (Hailstorm: three abreast).
-  const bolts = rarity === 'legendary' ? [-1.25, 0, 1.25] : [0];
-  for (const x of bolts) {
-    const y = x === 0 ? 2.2 : 2.85;
-    g.pbox([x - 0.3, x + 0.31], [y - 0.3, y + 0.31], [1.9, 15.6], 'shaft');
-    g.pbox([x - 0.3, x + 0.31], [y + 0.3, y + 0.9], [1.9, 3.75], 'fletch');
-    g.pbox([x - 0.6, x + 0.61], [y - 0.3, y + 0.31], [15.6, 16.9], 'head');
-    g.pbox([x - 0.3, x + 0.31], [y - 0.3, y + 0.31], [16.9, 17.5], 'head');
-  }
+  // (The bolt in the groove is drawn on its own, while it's spanned: `client/armory.ts`.)
   // The rear sight: a notched iron post over the grip.
   g.pbox([-0.95, 0.96], [2.5, 3.75], [-1.9, -1.25], (i, j) => (i === 0 && g.c(1, j) > 3.1 ? false : 'iron'));
   return g.mark('grip', [0, 0, 0]).mark('grip2', [0, 0.3, 9.4]).mark('muzzle', [0, 2.2, 17.5]).mark('sight', [0, 3.4, -1.6]).mark('mag', [0, 2.2, 3.1]);
@@ -558,7 +550,76 @@ function potion() {
   return g.mark('grip', [0, 0, -1.4]).mark('muzzle', [0, 0, 9.6]);
 }
 
-/** A crossbow bolt in flight (the props'): a short shaft, a steel head, fletching. */
+/**
+ * The bow, in each rarity, as the bow's sprite is drawn (a 16 px square lying in x-y, centred: the
+ * first-person bow pose places a bow by its sprite's pixels): the limb an arc through the tips at
+ * (1, 2) and (13, 14) and the grip at (11.5, 4.5), sprite pixels from the top left; the string
+ * straight between the tips, or (`drawn`) pulled back to the nock at (4.5, 11.5) with an arrow
+ * along it, its head at the top right. Wood and leather, the rarity's fittings at the grip and
+ * tips; the Sunbow, the legendary, is gilt and burns.
+ */
+function bow(rarity, drawn) {
+  const legend = rarity === 'legendary';
+  const g = model(drawn ? 'bow_drawn' : 'bow', 'Bow', rarity, {
+    wood: legend ? [0xc8902a, 0.3, 0.8] : rarity === 'epic' ? [0x2e2630, 0.6] : [0x8a5e30, 0.68],
+    woodDark: legend ? [0x8e5c12, 0.32, 0.8] : rarity === 'epic' ? [0x1c171e, 0.65] : [0x5e3e1c, 0.72],
+    woodLight: legend ? [0xf2c25a, 0.25, 0.9, 0.25] : rarity === 'epic' ? [0x4a4052, 0.55] : [0xa47a45, 0.65],
+    leather: [0x6b3a22, 0.75], leatherDark: [0x4a2616, 0.8], string: [0xe8e2d0, 0.8], shaft: [0x9a7446, 0.7], flint: [0xb8bec6, 0.25, 0.9], fletch: [0xf4f2ec, 0.8],
+  }, { offset: [-0.5, -0.5, -0.5] });
+  /** Sprite pixels (from the top left) to the model's px (centred, y up). */
+  const P = (sx, sy) => [sx - 8, 8 - sy];
+  const [cx, cy, R] = [5, 11, 9.19];
+  for (let j = -14; j <= 14; j++)
+    for (let i = -14; i <= 14; i++) {
+      const sx = g.c(0, i) + 8, sy = 8 - g.c(1, j);
+      if (sx - sy < -1) continue;
+      const along = Math.min(1.2, Math.abs(sx + sy - 16) / 12);
+      const off = Math.hypot(sx - cx, sy - cy) - R;
+      const thick = 2.0 - 1.0 * along;
+      if (off > 0.6 || off < -thick || along > 1.02) continue;
+      const grip = along < 0.16;
+      const tip = along > 0.9;
+      const half = grip ? 2 : along < 0.6 ? 1 : 0;
+      for (let k = -half; k <= half; k++) {
+        const c = grip ? wrap(j, i, k) : tip ? 'trim' : off > -0.5 ? 'woodLight' : off > -1.2 ? 'wood' : 'woodDark';
+        g.set(i, j, k, c);
+      }
+    }
+  // The rarity's gem in the grip, a band each side of it.
+  const [gx, gy] = P(11.6, 4.4);
+  g.set(g.cell(0, gx), g.cell(1, gy), 2, 'gem');
+  g.set(g.cell(0, gx), g.cell(1, gy), -2, 'gem');
+  for (const a of [0.2, -0.2]) {
+    const ang = Math.atan2(4.5 - cy, 11.5 - cx) + a;
+    const [bx, by] = P(cx + Math.cos(ang) * (R - 0.6), cy + Math.sin(ang) * (R - 0.6));
+    g.pbox([bx - 0.7, bx + 0.7], [by - 0.7, by + 0.7], [-0.95, 0.95], 'fit');
+  }
+  // The string: straight between the tips, or back to the nock with an arrow on it.
+  const t1 = [...P(1.6, 2.4), 0], t2 = [...P(13.6, 14.4), 0];
+  if (!drawn) g.rod(t1, t2, 'string');
+  else {
+    const nock = [...P(4.5, 11.5), 0];
+    g.rod(t1, nock, 'string');
+    g.rod(nock, t2, 'string');
+    const head = [...P(13.6, 2.4), 0];
+    g.rod(nock, head, 'shaft');
+    // The flint head, and the fletching by the nock.
+    for (let n = 0; n < 4; n++) {
+      const t = n / 4;
+      const p = [head[0] - t * 1.6, head[1] + t * 1.6];
+      g.pbox([p[0] - 0.5 * (1 - t), p[0] + 0.5 * (1 - t) + 0.01], [p[1] - 0.5 * (1 - t), p[1] + 0.5 * (1 - t) + 0.01], [-0.6 * (1 - t), 0.6 * (1 - t) + 0.01], 'flint');
+    }
+    for (let n = 1; n < 4; n++) {
+      const p = [nock[0] + n * 0.7, nock[1] - n * 0.7];
+      g.set(g.cell(0, p[0]), g.cell(1, p[1]), 1, 'fletch');
+      g.set(g.cell(0, p[0]), g.cell(1, p[1]), -1, 'fletch');
+    }
+  }
+  const [hx, hy] = P(11.5, 4.5);
+  return g.mark('grip', [hx, hy, 0]).mark('muzzle', [...P(13.6, 2.4), 0]);
+}
+
+/** A crossbow bolt (in flight, and spanned in the crossbow's groove): a short shaft, a steel head, fletching. */
 function bolt() {
   const g = new Model('bolt', 'Bolt').colours({ shaft: [0xb08a5a, 0.7], fletch: [0xe8e2d4, 0.8], fletchRed: [0xa8241c, 0.8], head: [0xc8ced6, 0.2, 1] });
   g.pbox([-0.3, 0.31], [-0.3, 0.31], [-7.5, 2.5], 'shaft');
@@ -607,9 +668,15 @@ function armor(id, name, look) {
 // ---------------------------------------------------------------------------------------------
 // Writing and checking
 
-function glb(g) {
+/**
+ * A model as a GLB. `with`: another model whose faces share its atlas (the bow drawn and at rest:
+ * the first-person view swaps one's geometry for the other's and keeps the first one's textures,
+ * so both must read one atlas).
+ */
+function glb(g, withModel) {
   const { faces: list, before } = faces(g.vox, g.P, { merge: true });
-  const A = atlas(list, g.P);
+  const other = withModel ? faces(withModel.vox, withModel.P, { merge: true }).faces : [];
+  const A = atlas([...list, ...other], g.P);
   const pos = [], nor = [], uv = [], idx = [];
   list.forEach((f, fi) => {
     const base = pos.length / 3;
@@ -701,6 +768,7 @@ function show(g) {
 const MODELS = {
   gladius, gladius_shield: shield, warhammer, spear, daggers, greatsword, fire_staff: fireStaff, frost_staff: frostStaff, storm_wand: stormWand, crossbow,
   battle_axe: battleAxe, pike, diamond_sword: (r) => broadsword('diamond_sword', 'Diamond Sword', r),
+  bow: (r) => bow(r, false), bow_drawn: (r) => bow(r, true),
 };
 const args = process.argv.slice(2);
 const only = args.filter((a) => !a.startsWith('--'));
@@ -718,10 +786,15 @@ const jobs = [
 ];
 const SINGLE = new Set(['bolt', 'leather_armor', 'mail_armor', 'plate_armor', 'wooden_sword', 'stone_sword', 'iron_sword', 'health_potion']);
 let total = 0;
+/** A model's rarity, from its id (`bow_drawn_epic`). */
+const rarityOfId = (id) => RARITIES.find((r) => r !== 'common' && id.endsWith(`_${r}`)) ?? 'common';
+/** Models drawn as one another's other look (their GLBs share one atlas): the bow and the bow drawn. */
+const PAIRED = { bow: 'bow_drawn', bow_drawn: 'bow' };
 for (const [id, make] of jobs) {
   if (only.length && !only.includes(id)) continue;
   const g = make();
-  const { bytes, stats, pos } = glb(g);
+  const twin = PAIRED[id] && Object.entries(MODELS).find(([k]) => k === PAIRED[id])?.[1](rarityOfId(g.id));
+  const { bytes, stats, pos } = glb(g, twin);
   const file = join(OUT, `${g.id}.glb`);
   writeFileSync(file, bytes);
   total += bytes.length;

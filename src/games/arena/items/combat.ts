@@ -80,7 +80,7 @@ export function combatDamage(game: GameContext, hit: DamageEvent) {
     return;
   }
   // A fighter's blow on a frozen monster shatters the ice: half again as hard, and it thaws.
-  if (source && source !== 'world' && source.kind === 'player' && frozen(target) && (hit.cause === 'melee' || hit.cause === 'explosion')) {
+  if (source && source !== 'world' && source.kind === 'player' && frozen(target) && (hit.cause === 'melee' || hit.cause === 'slam' || hit.cause === 'explosion')) {
     hit.amount *= 1.5;
     const q = target.position;
     game.fx.burst({ x: q.x, y: q.y + 1, z: q.z }, { color: '#e6f8ff', count: 30, speed: 4.5, size: 0.14, gravity: 10, glow: 0.5, life: 0.7 });
@@ -113,8 +113,8 @@ function parry(game: GameContext, p: Player, from: Entity, hit: DamageEvent, def
     stagger(game, from, def.guard!.stagger);
     const l = Math.hypot(q.x - p.position.x, q.z - p.position.z) || 1;
     from.impulse(((q.x - p.position.x) / l) * 5, 2.5, ((q.z - p.position.z) / l) * 5);
-    p.hud.pop('Parry!', { color: '#ffd36b' });
   }
+  // (The announcer calls it out, from the feat.)
   bus.emit('feat', { player: p, name: 'parry', text: 'Parry!' });
   guardMods.parried(game, p);
   // Aegis: a parry lets loose a burst that staggers everything about you.
@@ -149,7 +149,11 @@ export interface SlamOpts {
   stagger: number;
 }
 
-/** A blow on the ground at `at`: everything round it (on the ground near it) hit, harder nearer, thrown and staggered. */
+/**
+ * A blow on the ground at `at`: everything round it (on the ground near it) hit, harder nearer,
+ * thrown and staggered. Its cause is `'slam'`: it comes down on them from above, so a shield held
+ * in front (the Knight's) doesn't turn it.
+ */
 export function slamAt(game: GameContext, by: Player, at: Vec3, o: SlamOpts, effects = true): Entity[] {
   const hit: Entity[] = [];
   for (const e of game.entities.near(at, o.radius + 1.5)) {
@@ -158,7 +162,7 @@ export function slamAt(game: GameContext, by: Player, at: Vec3, o: SlamOpts, eff
     const d = Math.hypot(q.x - at.x, q.z - at.z);
     if (d > o.radius + 0.4 || Math.abs(q.y - at.y) > 2.2) continue;
     const f = 1 - 0.5 * Math.min(1, d / (o.radius + 0.4));
-    if (!e.damage(o.damage * f, { source: by, knockback: o.knockback * f, weapon: o.weapon, cause: 'melee', from: at })) continue;
+    if (!e.damage(o.damage * f, { source: by, knockback: o.knockback * f, weapon: o.weapon, cause: 'slam', from: at })) continue;
     if (o.stagger > 0) stagger(game, e, o.stagger * f);
     hit.push(e);
   }

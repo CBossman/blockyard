@@ -1,7 +1,7 @@
 import { math, type Entity, type GameContext, type ItemBody, type ItemHost, type ItemKind, type ItemKit, type ItemUse, type Player } from '@platform';
 import type { MeleeItem, MeleeOwn } from '@platform/items';
 import { bus } from '../run/bus';
-import { meleeMove } from './moves';
+import { downed, meleeMove } from './moves';
 import { afterRoll, frontOf, legendHit, legendSwing, slamAt } from './combat';
 import { throwSpear, spearOut, recallSpear } from './spear';
 import { stagger, stunned } from './status';
@@ -129,7 +129,7 @@ export function melee(): ItemKit<ItemKind<ArmsMelee>> {
         const def = weapon?.def;
         // A spear in the air comes back at the right button, whatever's in hand (but a guard).
         if (c.active && c.buttonPressed(2) && !def?.guard && !def?.throw && spearOut(p)) recallSpear(use.game, p);
-        if (!c.active || (!weapon && use.hand?.holds)) return lower(p, r);
+        if (!c.active || downed(p) || (!weapon && use.hand?.holds)) return lower(p, r);
         if (!def) {
           // A bare fist (or whatever's in hand that isn't a weapon of its own).
           lower(p, r);
@@ -184,6 +184,10 @@ export function melee(): ItemKit<ItemKind<ArmsMelee>> {
       own(v) {
         const r = handOf(v.player);
         return { strength: 1 - r.cooldown / r.max, guard: r.guard, charge: r.charge, aiming: r.aiming } satisfies MeleeOwn & Record<string, unknown>;
+      },
+      // Everyone's screens see a raised guard (their figures bring the shield up: `client/held.ts`).
+      shown(v) {
+        return handOf(v.player).guard ? { g: true } : null;
       },
       reset(p) {
         hands.delete(p);
@@ -339,7 +343,8 @@ function slam(use: ItemUse<ArmsMelee>, r: Hand, def: ArmsMelee, item: string, k:
   const s = def.slam!;
   const me = use.player;
   const game = use.game;
-  r.cooldown = r.max = def.cooldown * 1.2;
+  // (Quick to raise again: the charge is the wait.)
+  r.cooldown = r.max = def.cooldown * 0.7;
   me.viewModel.play('arena_slam');
   use.host.swing(me);
   // Where it lands: a little ahead, on the ground under it.
@@ -363,15 +368,10 @@ function slam(use: ItemUse<ArmsMelee>, r: Hand, def: ArmsMelee, item: string, k:
   if (def.legend) legendHit(game, me, null, def, item, { crit: k >= 1, back: false, amount: 0, slam: at });
 }
 
-/** A swing's arc in the air: a fan of sparks along its edge. */
+/** A swing's arc in the air: a fan of sparks along its edge, drawn by each screen from one word (`client/fx.ts`). */
 function sweepTrail(game: GameContext, me: Player, reach: number, arc: number, color: string) {
   const eye = me.eye;
-  const n = Math.max(4, Math.round(arc / 14));
-  for (let i = 0; i <= n; i++) {
-    const a = me.yaw + (i / n - 0.5) * 2 * arc * DEG;
-    const d = reach * 0.75;
-    game.fx.burst({ x: eye.x - Math.sin(a) * d, y: eye.y - 0.35 + (i / n - 0.5) * 0.2, z: eye.z - Math.cos(a) * d }, { color, count: 2, speed: 0.4, size: 0.1, gravity: 0, glow: 0.8, life: 0.22, drag: 4 });
-  }
+  game.clients.send('all', 'armory.sweep', { x: eye.x, y: eye.y - 0.35, z: eye.z, yaw: me.yaw, reach: reach * 0.75, arc: arc * DEG, color });
 }
 
 function burstAt(game: GameContext, e: Entity, color: string, count: number) {

@@ -1,11 +1,13 @@
 import type { ViewAnimation } from '@platform';
-import type { Client, ClientKit, Node } from '@platform/client';
+import type { Client, ClientKit, HeldItem, Node, ViewArm } from '@platform/client';
 import { firstPerson } from '@platform/client/kits';
 import { Mat4, Quat, Vec3 } from '@platform/client/math';
 import type { CrossbowItem } from '../items/crossbow';
 import type { ArmsMelee } from '../items/melee';
 import { crossbowMove, meleeMove, type CrossbowShown } from '../items/moves';
 import { rarityOf, shieldOf } from '../items/rarity';
+import { armoryFx } from './fx';
+import { boltSpots, heldExtras } from './held';
 import type { ClientPart } from './part';
 
 /**
@@ -186,6 +188,25 @@ function armory(): ClientKit {
   const qTwin = twinTurn();
   const at = new Vec3();
   const q = new Quat();
+  /** The crossbow in hand (its loaded look), and the bolts shown in its groove. */
+  let boltHost: HeldItem | null = null;
+  let bolts: Node[] = [];
+
+  const setBolts = (client: Client, host: HeldItem | null) => {
+    if (host === boltHost) return;
+    for (const b of bolts) client.view.free(b);
+    bolts = [];
+    boltHost = null;
+    if (!host?.def) return;
+    for (const p of boltSpots(host.def as CrossbowItem)) {
+      const node = client.view.item('crossbow_bolt');
+      if (!node) return;
+      node.position.copy(p);
+      host.node.add(node);
+      bolts.push(node);
+    }
+    boltHost = host;
+  };
 
   const setOff = (client: Client, id: string | null) => {
     if (off?.id === id) return;
@@ -196,6 +217,17 @@ function armory(): ClientKit {
     if (!node) return;
     client.view.root.add(node);
     off = { id, node };
+  };
+  /** The twin's hand: a copy of the player's own left arm (or their skin's), made again when their arms change. */
+  let twinArm: TwinArm | null = null;
+  const setTwinArm = (client: Client, on: boolean) => {
+    const version = client.view.arms.version;
+    if (twinArm && (!on || twinArm.version !== version)) {
+      for (const n of twinArm.nodes) n.parent?.remove(n);
+      if (twinArm.skin) client.view.free(twinArm.skin);
+      twinArm = null;
+    }
+    if (on && !twinArm) twinArm = makeTwinArm(client);
   };
 
   return {
@@ -232,10 +264,16 @@ function armory(): ClientKit {
       else if (melee && def.guard && pose === 'arena_guard' && guardFor < def.guard.parry + 0.15) showRing?.(1 - guardFor / (def.guard.parry + 0.15), '#ffe28a');
       else if (span >= 0) showRing?.(span, '#e8e2d4');
       else showRing?.(null);
+      // The crossbow's bolt in its groove while it's spanned (gone as it's loosed, back as it's spanned again).
+      const hand = client.view.held;
+      const xbow = hand?.def?.kind === 'gun' && !!(hand.def as CrossbowItem).ammo ? hand : null;
+      setBolts(client, xbow);
+      const loaded = (me.held?.state as { mag?: number } | undefined)?.mag === 1;
+      for (const b of bolts) b.visible = loaded;
       // The off hand: the gladius's shield (raised behind the guard), the daggers' twin.
       const twin = melee && !!def.backstab && !!id;
       setOff(client, melee && def.guard && id ? shieldOf(rarityOf(id)) : twin ? id : null);
-      if (!off) return;
+      if (!off) return setTwinArm(client, false);
       const bob = me.bob.amount * Math.sin(me.bob.phase) * 0.02;
       off.node.visible = fp.visible;
       if (twin) {
@@ -247,8 +285,11 @@ function armory(): ClientKit {
         off.node.position.y += bob;
         off.node.quaternion.copy(qTwin);
         off.node.scale.setScalar(TWIN_SCALE);
+        setTwinArm(client, true);
+        if (twinArm) placeTwinArm(twinArm, off.node.position, qTwin, fp.visible);
         return;
       }
+      setTwinArm(client, false);
       raised += ((pose === 'arena_guard' ? 1 : 0) - raised) * Math.min(1, dt * 16);
       at.copy(SHIELD_REST).lerp(SHIELD_UP, raised);
       at.y += bob * (1 - raised);
@@ -259,8 +300,76 @@ function armory(): ClientKit {
     dispose() {
       off?.node.parent?.remove(off.node);
       off = null;
+      for (const n of twinArm?.nodes ?? []) n.parent?.remove(n);
+      twinArm = null;
+      for (const b of bolts) b.parent?.remove(b);
+      bolts = [];
     },
   };
+}
+
+/**
+ * The twin's arm: a humanoid player's own left arm (their model's upper arm, forearm and fist,
+ * copied: the first-person view keeps the originals for two-handed holds), or a skin's left arm.
+ */
+interface TwinArm {
+  version: number;
+  arm: ViewArm | null;
+  skin: Node | null;
+  nodes: Node[];
+}
+
+function makeTwinArm(client: Client): TwinArm {
+  const arms = client.view.arms;
+  const version = arms.version;
+  if (arms.humanoid) {
+    const L = arms.humanoid.L;
+    // (A node is a three.js object: copying it shares its meshes' geometry and materials.)
+    const copy = (n: Node) => (n as unknown as { clone(): Node }).clone();
+    const arm: ViewArm = { ...L, upper: copy(L.upper), forearm: copy(L.forearm), fist: copy(L.fist) };
+    const nodes = [arm.upper, arm.forearm, arm.fist];
+    client.view.root.add(...nodes);
+    return { version, arm, skin: null, nodes };
+  }
+  const skin = arms.arm({ mirror: true });
+  if (skin) client.view.root.add(skin);
+  return { version, arm: null, skin, nodes: skin ? [skin] : [] };
+}
+
+/** The arms' size in the view (the first-person kit's, for a sword-sized thing in the fist: its grip's scale over the model's, a little bigger than life). */
+const TWIN_ARM_SCALE = (0.62 / 0.52) * 1.2;
+/** From the twin's fist back toward the elbow, and how far the whole arm runs (off the screen's edge). */
+const TWIN_ELBOW = new Vec3(-0.65, -0.65, 0.6).normalize();
+const TWIN_REACH = 0.55;
+
+/** The twin's arm on its grip: the fist round the handle, the arm straight back from it off the screen. */
+function placeTwinArm(t: TwinArm, grip: Vec3, gripQ: Quat, visible: boolean) {
+  for (const n of t.nodes) n.visible = visible;
+  if (t.skin) {
+    // A skin's arm: a 4 x 12 px box along y, the shoulder end up: from the fist back along the elbow's way.
+    t.skin.quaternion.setFromUnitVectors(new Vec3(0, 1, 0), TWIN_ELBOW);
+    t.skin.position.copy(grip).addScaledVector(TWIN_ELBOW, (6 / 16) * 0.8);
+    t.skin.scale.setScalar(0.8);
+    return;
+  }
+  const h = t.arm!;
+  const k = TWIN_ARM_SCALE;
+  // The fist turned with the dagger, its grip on the handle.
+  h.fist.quaternion.copy(gripQ).multiply(new Quat().copy(h.gripQ).invert());
+  h.fist.position.copy(grip).sub(new Vec3().copy(h.grip).multiplyScalar(k).applyQuaternion(h.fist.quaternion));
+  h.fist.scale.setScalar(k);
+  // The forearm back from the wrist, the upper arm on in line, drawn out to reach off the screen.
+  const y = TWIN_ELBOW;
+  const z = new Vec3(0, 0, 1).applyQuaternion(h.fist.quaternion);
+  z.addScaledVector(y, -z.dot(y)).normalize();
+  h.forearm.quaternion.setFromRotationMatrix(new Mat4().makeBasis(new Vec3().crossVectors(y, z), y, z));
+  h.forearm.position.copy(h.fist.position).addScaledVector(y, h.wrist.length() * k);
+  h.forearm.scale.setScalar(k);
+  const upperLen = h.elbow.length() * k;
+  const stretch = Math.max(1, (TWIN_REACH - h.wrist.length() * k) / Math.max(1e-3, upperLen));
+  h.upper.quaternion.copy(h.forearm.quaternion);
+  h.upper.position.copy(h.forearm.position).addScaledVector(y, upperLen * stretch);
+  h.upper.scale.set(k, k * stretch, k);
 }
 
 /** The twin dagger's turn: its blade (+z) up and in toward the middle, its flat (+y) to the eye. */
@@ -302,7 +411,16 @@ function crossbowScreen(): ClientKit {
   };
 }
 
-/** The melee weapons' screen half: only how they slow their holder (guarding, charging), predicted as the host has it. */
-const meleeScreen: ClientKit = { name: 'arena.melee', kind: 'melee', move: (def, controls) => meleeMove(def as ArmsMelee, controls) };
+/**
+ * The melee weapons' screen half: how they slow their holder (guarding, charging), predicted as the
+ * host has it; and a raised guard, from the host's word, as the figure's `sights` (a melee weapon
+ * has none of its own: `client/held.ts` brings the shield up by it).
+ */
+const meleeScreen: ClientKit = {
+  name: 'arena.melee',
+  kind: 'melee',
+  move: (def, controls) => meleeMove(def as ArmsMelee, controls),
+  figureSignals: (state) => ((state as { g?: boolean } | null)?.g ? { sights: 1 } : { sights: 0 }),
+};
 
-export const armoryClient: ClientPart = { name: 'armoryClient', kits: [armory(), crossbowScreen(), meleeScreen] };
+export const armoryClient: ClientPart = { name: 'armoryClient', kits: [armory(), crossbowScreen(), meleeScreen, heldExtras(), armoryFx()] };

@@ -27,9 +27,20 @@ const usables = new Map<string, Usable>();
 const holding = new Map<string, { id: string; t: number }>();
 /** What each fighter's prompt says now (only changes go out). */
 const shown = new Map<string, string>();
+/** Fighters who can't use anything for now (downed). */
+const barred = new Set<string>();
 
 export const addUsable = (u: Usable) => void usables.set(u.id, u);
 export const removeUsable = (id: string) => void usables.delete(id);
+
+/** Keep a fighter from using anything (on the ground, downed), or let them again. */
+export function bar(p: Player, on: boolean) {
+  if (on) barred.add(p.id);
+  else barred.delete(p.id);
+}
+
+/** What a fighter is holding E on, and for how long so far (a revive under way), or null. */
+export const holdOf = (p: Player): { id: string; t: number } | null => holding.get(p.id) ?? null;
 
 /** The nearest usable a fighter is close to and facing, with its prompt. */
 function nearest(p: Player): { u: Usable; label: string; at: Vec3 } | null {
@@ -59,10 +70,11 @@ export const usePart: ArenaPart = {
   name: 'use',
   start() {
     holding.clear();
+    barred.clear();
   },
   update(game, dt) {
     for (const p of game.players) {
-      const n = p.alive && !p.spectating ? nearest(p) : null;
+      const n = p.alive && !p.spectating && !barred.has(p.id) ? nearest(p) : null;
       const text = n ? `E · ${n.label}` : '';
       if (shown.get(p.id) !== text) {
         shown.set(p.id, text);
@@ -101,4 +113,5 @@ export function resetUsables() {
   usables.clear();
   holding.clear();
   shown.clear();
+  barred.clear();
 }

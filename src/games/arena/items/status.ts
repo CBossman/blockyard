@@ -1,5 +1,6 @@
 import type { Entity, GameContext, Player } from '@platform';
 import { bossKind } from '../bosses';
+import { SHOWS } from './moves';
 
 /**
  * What the arsenal does to a monster over time, kept by monster: burning (the fire staff, the
@@ -19,35 +20,39 @@ interface Status {
   burnDps: number;
   burnBy: Player | null;
   burnWeapon: string;
-  /** Seconds to its next burn tick, and to its next puff of flame. */
+  /** Seconds to its next burn tick. */
   burnTick: number;
-  burnFx: number;
   /** Frost stacks (0..4) and seconds till they thaw. */
   chill: number;
   chillLeft: number;
   frozen: number;
   stun: number;
+  /** The stagger under way is a long one (it shows stars). */
+  reel: boolean;
   /** Bleeding (Nightfang): per second, for how long. */
   bleed: number;
   bleedDps: number;
   bleedBy: Player | null;
   bleedTick: number;
-  /** Seconds to the next stars over its head while it reels. */
-  stunFx: number;
-  /** The speed it was last given, its glow. */
+  /** The speed it was last given, its glow, and what the screens were last told it shows (`SHOWS`). */
   speed: number;
   glow: string | null;
+  shown: number;
 }
 
 /** Each stack of frost takes this much off a monster's speed; this many freeze it. */
 export const CHILL_STEP = 0.16;
 export const FREEZE_AT = 4;
 const CHILL_TIME = 3;
+/** Burning and bleeding hurt this often (seconds: each tick is a hit, its number, its sound). */
+const TICK = 1;
+/** A stagger this long or longer shows stars (a lightning bolt's twitch doesn't). */
+const REEL = 0.6;
 const FREEZE_TIME = 1.8;
 
 const statuses = new Map<number, Status>();
 
-const fresh = (e: Entity): Status => ({ e, burn: 0, burnDps: 0, burnBy: null, burnWeapon: 'fire', burnTick: 0, burnFx: 0, chill: 0, chillLeft: 0, frozen: 0, stun: 0, bleed: 0, bleedDps: 0, bleedBy: null, bleedTick: 0, stunFx: 0, speed: 1, glow: null });
+const fresh = (e: Entity): Status => ({ e, burn: 0, burnDps: 0, burnBy: null, burnWeapon: 'fire', burnTick: 0, chill: 0, chillLeft: 0, frozen: 0, stun: 0, reel: false, bleed: 0, bleedDps: 0, bleedBy: null, bleedTick: 0, speed: 1, glow: null, shown: 0 });
 
 function of(e: Entity): Status {
   let s = statuses.get(e.id);
@@ -76,7 +81,7 @@ export function burn(game: GameContext, e: Entity, by: Player | null, dps: numbe
   s.burnBy = by ?? s.burnBy;
   s.burnWeapon = weapon;
   if (!was) {
-    s.burnTick = 0.5;
+    s.burnTick = TICK;
     game.audio.play('arena_ignite', { at: e.position, volume: 0.7 });
   }
 }
@@ -84,7 +89,7 @@ export function burn(game: GameContext, e: Entity, by: Player | null, dps: numbe
 /** A cut that bleeds (`dps` for `seconds`, from `by`). */
 export function bleed(e: Entity, by: Player, dps: number, seconds: number) {
   const s = of(e);
-  if (s.bleed <= 0) s.bleedTick = 0.5;
+  if (s.bleed <= 0) s.bleedTick = TICK;
   s.bleedDps = Math.max(s.bleed > 0 ? s.bleedDps : 0, dps);
   s.bleed = Math.max(s.bleed, seconds);
   s.bleedBy = by;
@@ -121,9 +126,9 @@ export function stagger(game: GameContext, e: Entity, seconds: number) {
   const s = of(e);
   const t = isBoss(e) ? seconds / 3 : seconds;
   // Dazed: heard when it begins (a long one), not every time it's renewed.
-  if (s.stun <= 0 && t >= 0.6) game.audio.play('arena_daze', { at: e.position });
+  if (s.stun <= 0 && t >= REEL) game.audio.play('arena_daze', { at: e.position });
+  if (t >= REEL) s.reel = true;
   s.stun = Math.max(s.stun, t);
-  s.stunFx = 0;
   hold(e, s.stun);
   e.animate('none');
   settle(e, s);
@@ -170,6 +175,7 @@ export function updateStatuses(game: GameContext, dt: number) {
   for (const [id, s] of statuses) {
     const e = s.e;
     if (!e.alive) {
+      tell(game, s);
       statuses.delete(id);
       continue;
     }
@@ -177,23 +183,17 @@ export function updateStatuses(game: GameContext, dt: number) {
     if (s.burn > 0 && e.alive) {
       s.burn -= dt;
       s.burnTick -= dt;
-      s.burnFx -= dt;
-      if (s.burnFx <= 0) {
-        s.burnFx = 0.18;
-        game.fx.burst({ x: q.x, y: q.y + 1.1, z: q.z }, { color: '#ff8a2a', count: 3, speed: 0.9, size: 0.14, gravity: -3, glow: 1.4, life: 0.45 });
-      }
       if (s.burnTick <= 0) {
-        s.burnTick += 0.5;
-        e.damage(s.burnDps * 0.5, { source: s.burnBy ?? undefined, knockback: 0, weapon: s.burnWeapon, cause: 'fire' });
+        s.burnTick += TICK;
+        e.damage(s.burnDps * TICK, { source: s.burnBy ?? undefined, knockback: 0, weapon: s.burnWeapon, cause: 'fire' });
       }
     }
     if (s.bleed > 0 && e.alive) {
       s.bleed -= dt;
       s.bleedTick -= dt;
       if (s.bleedTick <= 0) {
-        s.bleedTick += 0.5;
-        e.damage(s.bleedDps * 0.5, { source: s.bleedBy ?? undefined, knockback: 0, weapon: 'bleed', cause: 'bleed' });
-        game.fx.burst({ x: q.x, y: q.y + 1, z: q.z }, { color: '#a01818', count: 3, speed: 1, size: 0.1, gravity: 9, life: 0.5 });
+        s.bleedTick += TICK;
+        e.damage(s.bleedDps * TICK, { source: s.bleedBy ?? undefined, knockback: 0, weapon: 'bleed', cause: 'bleed' });
       }
     }
     if (!e.alive) continue;
@@ -216,21 +216,29 @@ export function updateStatuses(game: GameContext, dt: number) {
     }
     if (s.stun > 0) {
       s.stun -= dt;
-      s.stunFx -= dt;
       (e.data as { stunned?: number }).stunned = Math.max(0, s.stun);
       (e.data as { _cd?: number })._cd = Math.max(((e.data as { _cd?: number })._cd ?? 0), s.stun + 0.25);
-      if (s.stunFx <= 0) {
-        s.stunFx = 0.3;
-        game.fx.burst({ x: q.x, y: q.y + 2.1, z: q.z }, { color: '#fff1a0', count: 4, speed: 1.2, size: 0.1, gravity: 0, glow: 1, life: 0.35 });
+      if (s.stun <= 0) {
+        changed = true;
+        s.reel = false;
       }
-      if (s.stun <= 0) changed = true;
     }
     if (changed) settle(e, s);
+    tell(game, s);
     if (s.burn <= 0 && s.bleed <= 0 && s.chill <= 0 && s.frozen <= 0 && s.stun <= 0) {
       (e.data as { stunned?: number }).stunned = 0;
       statuses.delete(id);
     }
   }
+}
+
+/** The screens are told what a monster shows (`SHOWS`) once as it starts and once as it stops, never streamed. */
+function tell(game: GameContext, s: Status) {
+  const alive = s.e.alive;
+  const now = alive ? (s.burn > 0 ? SHOWS.burn : 0) | (s.bleed > 0 ? SHOWS.bleed : 0) | (s.stun > 0 && s.reel ? SHOWS.stun : 0) : 0;
+  if (now === s.shown) return;
+  s.shown = now;
+  game.clients.send('all', 'armory.status', { id: s.e.id, f: now });
 }
 
 /** A fresh fight: no monster is under anything. */

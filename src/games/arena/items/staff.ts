@@ -1,7 +1,8 @@
 import { math, type Entity, type GameContext, type ItemBase, type ItemKind, type ItemKit, type ItemUse, type Player, type Vec3 } from '@platform';
 import { bus } from '../run/bus';
 import { swingTargets } from './melee';
-import { launch, type Missile } from './missiles';
+import { launch } from './missiles';
+import { downed } from './moves';
 import { burn, chill, stagger } from './status';
 
 /**
@@ -56,7 +57,7 @@ export function staffs(): ItemKit<ItemKind<StaffItem>> {
         r.cd = Math.max(0, r.cd - use.dt);
         const held = use.held;
         const c = use.controls;
-        if (!held || !c.active || r.cd > 0) return;
+        if (!held || !c.active || r.cd > 0 || downed(use.player)) return;
         if (!c.buttonPressed(0) && !c.button(0)) return;
         r.cd = r.max = held.def.cooldown * spellMods.pace(use.player);
         cast(use, held.item, held.def);
@@ -129,16 +130,17 @@ function fireball(game: GameContext, p: Player, item: string, def: StaffItem) {
   );
 }
 
-/** Emberheart: the ground where a fireball burst burns for a while, setting alight whatever walks in. */
+/** Emberheart: the ground where a fireball burst burns for a while, setting alight whatever walks in (its flames each screen's: `client/fx.ts`). */
+const POOL = { radius: 2.4, time: 4 };
 function firePool(game: GameContext, p: Player, at: Vec3, item: string) {
   const ground = { x: at.x, y: Math.floor(at.y - 0.5) + 1, z: at.z };
   const hit = game.world.raycast({ x: at.x, y: at.y + 0.2, z: at.z }, { x: 0, y: -1, z: 0 }, 4);
   if (hit) ground.y = hit.point.y;
+  game.clients.send('all', 'armory.pool', { x: ground.x, y: ground.y, z: ground.z, radius: POOL.radius, time: POOL.time });
   let n = 0;
   const tick = () => {
-    if (n++ >= 10) return;
-    game.fx.burst({ x: ground.x, y: ground.y + 0.2, z: ground.z }, { color: '#ff7a1a', count: 10, speed: 1.4, size: 0.18, glow: 1.6, life: 0.6, gravity: -3 });
-    for (const e of game.entities.near(ground, 2.4)) if (e.alive && Math.abs(e.position.y - ground.y) < 1.5) burn(game, e, p, 4, 2, item);
+    if (n++ >= POOL.time / 0.4) return;
+    for (const e of game.entities.near(ground, POOL.radius)) if (e.alive && Math.abs(e.position.y - ground.y) < 1.5) burn(game, e, p, 4, 2, item);
     game.clock.after(0.4, tick);
   };
   tick();
@@ -162,9 +164,8 @@ function shard(game: GameContext, p: Player, item: string, def: StaffItem) {
       damage: def.damage,
       knockback: 0.15,
       weapon: item,
-      trail: { color: '#dff6ff', every: 0.05, size: 0.08 },
+      trail: { color: '#dff6ff', every: 0.05, size: 0.08, end: '#e6f8ff' },
       hit: (g, _m, e) => chill(g, e, 1, spellMods.chillTime(p)),
-      end: (g, _m: Missile, at) => g.fx.burst(at, { color: '#e6f8ff', count: 8, speed: 2.2, size: 0.08, gravity: 6, life: 0.4 }),
     },
     from,
     dir,

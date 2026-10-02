@@ -51,6 +51,14 @@ import diamondSword from './diamond_sword.glb?url';
 import diamondSwordRare from './diamond_sword_rare.glb?url';
 import diamondSwordEpic from './diamond_sword_epic.glb?url';
 import diamondSwordLegendary from './diamond_sword_legendary.glb?url';
+import bow from './bow.glb?url';
+import bowRare from './bow_rare.glb?url';
+import bowEpic from './bow_epic.glb?url';
+import bowLegendary from './bow_legendary.glb?url';
+import bowDrawn from './bow_drawn.glb?url';
+import bowDrawnRare from './bow_drawn_rare.glb?url';
+import bowDrawnEpic from './bow_drawn_epic.glb?url';
+import bowDrawnLegendary from './bow_drawn_legendary.glb?url';
 import bolt from './bolt.glb?url';
 import leatherArmor from './leather_armor.glb?url';
 import mailArmor from './mail_armor.glb?url';
@@ -113,6 +121,14 @@ export const WEAPON_MODELS: Record<string, string> = {
   diamond_sword_rare: diamondSwordRare,
   diamond_sword_epic: diamondSwordEpic,
   diamond_sword_legendary: diamondSwordLegendary,
+  bow: bow,
+  bow_rare: bowRare,
+  bow_epic: bowEpic,
+  bow_legendary: bowLegendary,
+  bow_drawn: bowDrawn,
+  bow_drawn_rare: bowDrawnRare,
+  bow_drawn_epic: bowDrawnEpic,
+  bow_drawn_legendary: bowDrawnLegendary,
   bolt: bolt,
   leather_armor: leatherArmor,
   mail_armor: mailArmor,

@@ -1,10 +1,14 @@
-import type { ItemMove, ItemMoveControls } from '@platform';
+import type { ItemMove, ItemMoveControls, Player } from '@platform';
 
 /**
  * What the arsenal's weapons do to how their holders move, and what the host shows of a crossbow:
  * read alike by the host's kits and the screens' halves (`client/armory.ts`), so each screen
- * predicts its own movement as the host has it.
+ * predicts its own movement as the host has it. Whether a holder is down; what a monster's
+ * statuses show.
  */
+
+/** Down on the sand, bleeding out (the run's co-op revives: a movement ability, `crawl`, that's on): no fighting, no potions. */
+export const downed = (p: Player): boolean => !!(p.abilities.crawl as { on?: boolean } | undefined)?.on;
 
 /** A melee weapon's slowing (`ArmsMelee`'s fields): behind a guard, raising a hammer, drawing back a spear, and its weight. */
 export function meleeMove(def: { guard?: { slow: number }; slam?: unknown; throw?: unknown; weight?: number }, controls: ItemMoveControls): ItemMove | null {
@@ -26,3 +30,6 @@ export interface CrossbowShown {
   l: boolean;
   a: boolean;
 }
+
+/** What the screens draw on a monster for as long as it lasts (flames, dripping blood, stars round its head: `client/fx.ts`), as flags. */
+export const SHOWS = { burn: 1, bleed: 2, stun: 4 } as const;
