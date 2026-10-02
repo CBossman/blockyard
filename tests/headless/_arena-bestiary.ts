@@ -6,6 +6,7 @@ import { makeElite, eliteChance } from '../../src/games/arena/monsters/elites';
 import { spawnMonster } from '../../src/games/arena/run/spawn';
 import { state } from '../../src/games/arena/run/state';
 import { check, launch } from './_harness';
+import { DIFFICULTY } from '../../src/games/arena/run/difficulty';
 
 /**
  * Probe: the bestiary's monsters and elites, one at a time on an emptied floor (the waves' own
@@ -288,7 +289,8 @@ export default function arenaBestiary() {
     k.damage(4, { source: s.me, cause: 'melee', weapon: 'gladius' });
     const slammed = hp - k.health;
     log(`knight vs the armory: a bash from in front ${bash}, the slam ${slam.toFixed(1)}, reeling ${reeling} so a blade does ${open.toFixed(1)}; frozen, ${frozen.toFixed(1)}; a 'slam' then a blade ${slammed.toFixed(1)}`);
-    check(bash === 0 && slam > 0 && reeling && open > 0 && frozen > 0 && slammed >= 8, 'a slam goes under the shield and opens its guard; so does a freeze');
+    // (Monsters are tougher by the run's difficulty: `run/difficulty.ts`.)
+    check(bash === 0 && slam > 0 && reeling && open > 0 && frozen > 0 && slammed >= 8 / DIFFICULTY.monster.tough - 0.01, 'a slam goes under the shield and opens its guard; so does a freeze');
   }
 
   // Frozen or reeling (the armory's `data.stunned`): a knight in reach does nothing, a bat drops.

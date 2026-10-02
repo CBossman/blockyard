@@ -5,6 +5,7 @@ import { bus } from './bus';
 import { addGold } from './gold';
 import { favoured } from './hype';
 import { state } from './state';
+import { DIFFICULTY } from './difficulty';
 
 /**
  * Coins: every monster slain spills its worth in gold where it fell (a coin, or a scatter of piles
@@ -15,7 +16,7 @@ import { state } from './state';
  * bus). Gold Rush and the Crowd's Favour each double it all. Whatever's left lying when a wave's won is raked up and shared out, and each
  * fighter gets the wave's bonus.
  */
-export const GOLD_PER_COST = 4;
+export const GOLD_PER_COST = DIFFICULTY.goldPerCost;
 const ELITE = 3;
 const GOBLIN_GOLD = 100;
 /** A wave's bonus, for each fighter: this, and this much more each wave. */
