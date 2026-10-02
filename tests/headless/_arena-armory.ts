@@ -135,6 +135,29 @@ export default function arenaArmory() {
     check(ring.every((e) => lost(e) > 6) && ring.filter((e) => e.data.stunned !== undefined).length >= 3, 'the slam hits all round');
   }
 
+  // A knight's shield turns a sword from the front, but a slam comes down past it.
+  {
+    const s = scene(14);
+    s.hold('gladius');
+    s.hold('warhammer');
+    const k = s.spawn('knight', -6.0);
+    s.run(1.5);
+    s.me.inventory.select(s.me.inventory.slots.findIndex((x) => x?.item === 'gladius'));
+    s.run(0.6);
+    s.run(0.5, () => ({ ...EAST, clicked: LMB }));
+    const swordFront = lost(k);
+    s.me.inventory.select(s.me.inventory.slots.findIndex((x) => x?.item === 'warhammer'));
+    s.run(0.6);
+    let t = 0;
+    s.run(1.3, () => {
+      t += 1 / 60;
+      return { ...EAST, pitch: -0.5, buttons: t < 0.95 ? LMB : 0 };
+    });
+    const slam = lost(k) - swordFront;
+    log(`knight: a sword from the front took ${swordFront.toFixed(1)}, a slam ${slam.toFixed(1)}`);
+    check(swordFront < 1 && slam > 6, 'the shield turns the sword, not the slam');
+  }
+
   // The spear: thrown through a line of them, then home again into the hand.
   {
     const s = scene(5);

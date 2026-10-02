@@ -274,8 +274,8 @@ function burst(game: GameContext, by: Player, at: Vec3) {
   for (const e of game.entities.near(at, 3)) if (e.alive) e.damage(6, { source: by, knockback: 1.2, weapon: 'volatile', cause: 'explosion' });
 }
 
-/** A melee weapon's blow (not a thorn, a burst or a fist). */
-const meleeBlow = (game: GameContext, hit: DamageEvent) => hit.cause === 'melee' && !!hit.weapon && game.items.get(hit.weapon)?.kind === 'melee';
+/** A melee weapon's blow, or its slam (not a thorn, a burst or a fist). */
+const meleeBlow = (game: GameContext, hit: DamageEvent) => (hit.cause === 'melee' || hit.cause === 'slam') && !!hit.weapon && game.items.get(hit.weapon)?.kind === 'melee';
 /** An arrow or a bolt (a bow's or a crossbow's). */
 const shot = (game: GameContext, hit: DamageEvent) => hit.cause === 'projectile' && !!hit.weapon && ['bow', 'gun'].includes(game.items.get(hit.weapon)?.kind ?? '');
 

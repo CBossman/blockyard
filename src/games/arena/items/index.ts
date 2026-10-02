@@ -6,6 +6,7 @@ import { defineArms } from './arms';
 import { RARITIES, shieldOf } from './rarity';
 import { crossbows } from './crossbow';
 import { melee } from './melee';
+import { downed } from './moves';
 import { staffs } from './staff';
 
 export { ARMS, armName, type Arm } from './arms';
@@ -84,7 +85,8 @@ export function defineItems(game: GameContext) {
     name: 'Health Potion',
     stack: 4,
     use(g, player) {
-      if (player.health >= player.maxHealth) return false;
+      // Not while down (their health is then the time they have left), nor at full health.
+      if (downed(player) || player.health >= player.maxHealth) return false;
       player.heal(10);
       g.audio.play('heal', { at: player.position });
       g.fx.burst(player.eye, { color: '#ff4f6d', count: 16, speed: 2, gravity: -3 });
@@ -120,8 +122,10 @@ export function defineItems(game: GameContext) {
       return true;
     },
   });
-  // The gladius's shield, never carried: an item so each screen can show it in the off hand.
+  // The gladius's shield and the crossbow's spanned bolt, never carried: items so each screen can
+  // show them (in the off hand, in the groove).
   for (const r of RARITIES) it.define(shieldOf(r), { kind: 'misc', name: 'Shield' });
+  it.define('crossbow_bolt', { kind: 'misc', name: 'Bolt' });
   // Armour, put on when it's walked over (or bought).
   for (const id of Object.keys(ARMOR) as ArmorId[]) {
     it.define(id, { kind: 'misc', name: ARMOR[id].name, onPickup: (g, _count, player) => (wearArmor(g, player, id), true) });
