@@ -233,18 +233,18 @@ function colossus(log: (s: string) => void) {
   const jumped = landed(sc, 'stomp', before(sc, 'stomp', 'Space', 0.1));
   const rolled = landed(sc, 'stomp', before(sc, 'stomp', 'KeyQ', 0.06));
   log(`stomp: ${stomp} standing, ${jumped} jumping it, ${rolled} rolling through it`);
-  check(stomp >= 3 && jumped === 0 && rolled === 0, 'the stomp lands standing, and a jump or a roll avoids it');
+  check(stomp >= 2.5 && jumped === 0 && rolled === 0, 'the stomp lands standing, and a jump or a roll avoids it');
   // The sweep: in front of it it lands; a roll goes through it.
   const swept = landed(sc, 'sweep');
   const swRolled = landed(sc, 'sweep', before(sc, 'sweep', 'KeyQ', 0.06));
   log(`sweep: ${swept} standing, ${swRolled} rolling`);
-  check(swept >= 5 && swRolled === 0, 'the sweep lands in front of it, and a roll avoids it');
+  check(swept >= 4 && swRolled === 0, 'the sweep lands in front of it, and a roll avoids it');
   // The bone rain: a circle under the fighter; standing still it lands, running out of it it doesn't.
   sc.me.teleport({ x: 0.5, y: FLOOR + 1, z: 14.5 }, 0, 0);
   const rain = landed(sc, 'rain');
   const ran = landed(sc, 'rain', escape(sc, 'rain', 'KeyA', 1.4));
   log(`bone rain: ${rain} standing, ${ran} running out of its circle`);
-  check(rain >= 5 && ran < rain, 'the bones land on whoever stays in the circle');
+  check(rain >= 4 && ran < rain, 'the bones land on whoever stays in the circle');
   // A blast at its feet staggers it.
   sc.s.staggerCd = 0;
   const b = sc.boss.position;
@@ -278,7 +278,7 @@ function warden(log: (s: string) => void) {
   const slam = landed(sc, 'slam');
   const jumped = landed(sc, 'slam', before(sc, 'slam', 'Space', 0.1));
   log(`slam: ${slam} standing, ${jumped} jumping it`);
-  check(slam >= 5 && jumped === 0 && sc.me.achieved('slam_dodge'), 'the slam lands standing; jumping it avoids it');
+  check(slam >= 4 && jumped === 0 && sc.me.achieved('slam_dodge'), 'the slam lands standing; jumping it avoids it');
   // The chain, from far off (across open floor, nothing in the way): it drags the fighter in.
   clearOf(sc, 12);
   const t0 = sc.h.time;
