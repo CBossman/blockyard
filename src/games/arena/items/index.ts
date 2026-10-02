@@ -8,6 +8,7 @@ import { crossbows } from './crossbow';
 import { melee } from './melee';
 import { ARMOR, wearArmor, type ArmorId } from './armor';
 import { downed } from './moves';
+import { POTION } from './potions';
 import { staffs } from './staff';
 
 export { ARMS, armName, type Arm } from './arms';
@@ -63,7 +64,7 @@ export function defineItems(game: GameContext) {
     use(g, player) {
       // Not while down (their health is then the time they have left), nor at full health.
       if (downed(player) || player.health >= player.maxHealth) return false;
-      player.heal(10);
+      player.heal(POTION.heal);
       g.audio.play('heal', { at: player.position });
       g.fx.burst(player.eye, { color: '#ff4f6d', count: 16, speed: 2, gravity: -3 });
       return true;
