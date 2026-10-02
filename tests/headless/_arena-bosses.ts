@@ -92,6 +92,21 @@ function voices(log: (s: string) => void) {
   check(!missing.length, `sounds the screens don't have: ${missing.join(', ')}`);
 }
 
+/** Put the fighter `d` blocks from the boss where nothing stands between them (no pillar, no step), facing it. */
+function clearOf(sc: Scene, d: number) {
+  const p = sc.boss.position;
+  for (let k = 0; k < 16; k++) {
+    const a = (k / 16) * Math.PI * 2;
+    const at = { x: p.x + Math.cos(a) * d, y: FLOOR + 1, z: p.z + Math.sin(a) * d };
+    let clear = sc.game.world.fits(at);
+    for (let t = 0.1; t < 1 && clear; t += 0.05) clear = sc.game.world.getBlock(Math.floor(p.x + (at.x - p.x) * t), FLOOR + 1, Math.floor(p.z + (at.z - p.z) * t)) === sc.game.world.blockId('air');
+    if (!clear) continue;
+    sc.me.teleport(at, Math.atan2(at.x - p.x, at.z - p.z), 0);
+    return;
+  }
+  throw new Error('no clear spot about the boss');
+}
+
 /** Run until `until` (or `max` seconds), keeping the floor clear, with `pilot` at the controls. */
 function run(sc: Scene, max: number, until?: () => boolean, pilot?: Pilot) {
   return sc.h.run(max, { pilot: (h) => (sc.clear(), pilot?.(h) ?? null), until: until && (() => until()) });
@@ -191,7 +206,7 @@ function colossus(log: (s: string) => void) {
   const jumped = landed(sc, 'stomp', before(sc, 'stomp', 'Space', 0.1));
   const rolled = landed(sc, 'stomp', before(sc, 'stomp', 'KeyQ', 0.06));
   log(`stomp: ${stomp} standing, ${jumped} jumping it, ${rolled} rolling through it`);
-  check(stomp >= 4 && jumped === 0 && rolled === 0, 'the stomp lands standing, and a jump or a roll avoids it');
+  check(stomp >= 3 && jumped === 0 && rolled === 0, 'the stomp lands standing, and a jump or a roll avoids it');
   // The sweep: in front of it it lands; a roll goes through it.
   const swept = landed(sc, 'sweep');
   const swRolled = landed(sc, 'sweep', before(sc, 'sweep', 'KeyQ', 0.06));
@@ -237,8 +252,8 @@ function warden(log: (s: string) => void) {
   const jumped = landed(sc, 'slam', before(sc, 'slam', 'Space', 0.1));
   log(`slam: ${slam} standing, ${jumped} jumping it`);
   check(slam >= 5 && jumped === 0 && sc.me.achieved('slam_dodge'), 'the slam lands standing; jumping it avoids it');
-  // The chain, from far off: it drags the fighter in.
-  facing(sc, 12);
+  // The chain, from far off (across open floor, nothing in the way): it drags the fighter in.
+  clearOf(sc, 12);
   const t0 = sc.h.time;
   run(sc, 8, () => sc.s.move?.name === 'chain' && sc.s.step !== 'windup', (h) => (sc.only('chain'), watch(sc)(h)));
   const far = sc.boss.distanceTo(sc.me);

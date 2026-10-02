@@ -23,13 +23,13 @@ const GLOB: ProjectileSpec = { speed: 16, gravity: 18, damage: 3, knockback: 0.4
 const BITE = 4.9;
 const LEAP = 3.8;
 /** At most this many egg sacs about at once. */
-const EGGS = 5;
+const EGGS = 4;
 
 const bite: Move = {
   name: 'bite',
   can: (c) => c.d < BITE - 0.6,
-  cooldown: [1.5, 2.1],
-  windup: 0.5,
+  cooldown: [2, 2.6],
+  windup: 0.55,
   start(c) {
     const p = c.self.position;
     const a = angle(p, c.target.position);
@@ -43,8 +43,8 @@ const bite: Move = {
     const p = c.self.position;
     const a = c.s.mem.bite as number;
     c.self.animate('bite', { fade: 0.05 });
-    const { hit } = strike(c.game, { source: c.self, at: p, r: BITE, damage: 7, arc: [a - 0.75, a + 0.75], knockback: 6, lift: 2 });
-    for (const f of hit) venom(c.game, f, 4, 3, c.self);
+    const { hit } = strike(c.game, { source: c.self, at: p, r: BITE, damage: 6, arc: [a - 0.75, a + 0.75], knockback: 6, lift: 2 });
+    for (const f of hit) venom(c.game, f, 3, 3, c.self);
     c.game.audio.play('brood_bite', { at: p });
   },
   recover: 0.6,
@@ -148,7 +148,7 @@ const eggs: Move = {
     const { game, self, s } = c;
     self.glow(null);
     const m = map();
-    const n = Math.min(EGGS - eggsOf(c).length, adds(game, s.phase >= 2 ? 3 : 2, 1));
+    const n = Math.min(EGGS - eggsOf(c).length, adds(game, 2, 1));
     const p = self.position;
     const back = angle(c.target.position, p);
     const spots: Vec3[] = [];
@@ -209,7 +209,7 @@ const spray: Move = {
       self.shoot(GLOB, at);
       game.clock.after(0.8, () => {
         if (!self.alive) return;
-        pool(game, self, at, 2.3, 7, VENOM_C, { damage: 1, every: 0.5, chill: [0.75, 0.6], weapon: 'venom' });
+        pool(game, self, at, 2.3, 7, VENOM_C, { damage: 1, every: 0.7, chill: [0.75, 0.8], weapon: 'venom' });
         game.fx.burst({ x: at.x, y: at.y + 0.3, z: at.z }, { color: VENOM_C, count: 24, speed: 3, size: 0.14, gravity: 8 });
         game.audio.play('venom_splash', { at });
       });
@@ -281,7 +281,7 @@ export const broodmother: BossKind = {
     name: 'The Broodmother',
     model: Models.gltf(MODEL.broodmother, { clips: { idle: 'idle', walk: 'walk', run: 'run' }, head: 'head', scale: 2 }),
     hitbox: { width: 4.2, height: 2.8 },
-    health: 2300,
+    health: 2000,
     speed: 4.4,
     jump: 9,
     knockbackResistance: 1,

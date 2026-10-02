@@ -18,7 +18,7 @@ import type { BossKind } from './registry';
 const LOOK: CharacterLook = { build: 'heavy', skin: '#5a4e76', hair: 'long', hairColor: '#1c1326', facialHair: 'beard', face: 'glow', eyes: '#e4c4ff', top: 'tunic', topColor: '#36204f', accent: '#c9a23a', bottom: 'trousers', bottomColor: '#140f1c', shoes: 'boots', shoeColor: '#0e0b12', hat: 'crown', ragged: true };
 const COLOR = '#c9a2ff';
 const SOUL = '#b76bff';
-const FIREBALL: ProjectileSpec = { sprite: Sprite.soul_fireball, speed: 17, gravity: 1.5, damage: 5, knockback: 1.1, glow: '#5fe8ff' };
+const FIREBALL: ProjectileSpec = { sprite: Sprite.soul_fireball, speed: 17, gravity: 1.5, damage: 4, knockback: 1.1, glow: '#5fe8ff' };
 /** His chain: quick, straight, and it drags whoever it catches to him. */
 const CHAIN: ProjectileSpec = { speed: 34, gravity: 0, damage: 2, knockback: 0, glow: SOUL, weapon: 'warden_chain' };
 /** The soul fire his slams send rolling out along the ground. */
@@ -29,8 +29,8 @@ const PRISON = 2.4;
 const swipe: Move = {
   name: 'swipe',
   can: (c) => c.d < 4.2,
-  cooldown: [1.3, 1.7],
-  windup: 0.45,
+  cooldown: [2, 2.6],
+  windup: 0.55,
   start(c) {
     const p = c.self.position;
     const a = angle(p, c.target.position);
@@ -43,7 +43,7 @@ const swipe: Move = {
     const p = c.self.position;
     const a = c.s.mem.swipe as number;
     c.self.animate('attack');
-    strike(c.game, { source: c.self, at: p, r: 4.6, damage: 8, arc: [a - 1, a + 1], knockback: 8, lift: 3 });
+    strike(c.game, { source: c.self, at: p, r: 4.6, damage: 7, arc: [a - 1, a + 1], knockback: 8, lift: 3 });
     c.game.audio.play('warden_swing', { at: p });
     c.game.fx.shake(0.12, 0.25);
   },
@@ -54,7 +54,7 @@ const swipe: Move = {
 const slam: Move = {
   name: 'slam',
   can: (c) => c.d < SLAM - 1.5,
-  cooldown: [6.5, 9],
+  cooldown: [7, 9],
   windup: 0.95,
   start(c) {
     c.self.animate('raise');
@@ -69,7 +69,7 @@ const slam: Move = {
     game.fx.shockwave({ x: p.x, y: p.y, z: p.z }, SLAM, SOUL);
     game.fx.shake(0.35, 0.6);
     game.audio.play('slam', { at: p, volume: 1.3 });
-    const { dodged } = strike(game, { source: self, at: p, r: SLAM, damage: [10, 5], grounded: true, knockback: 9, lift: 3 });
+    const { dodged } = strike(game, { source: self, at: p, r: SLAM, damage: [9, 4], grounded: true, knockback: 9, lift: 3 });
     // In the air as it lands: jumped clean over it.
     for (const f of dodged) if (!f.onGround) f.achieve('slam_dodge');
     // Hurt, his slams send soul fire rolling out along the ground: jump it.
@@ -257,9 +257,9 @@ function dragged(game: GameContext, p: Player) {
   const w = game.entities.all('warden').find((e) => e.alive);
   if (!w) return;
   const q = p.position;
-  // Reeled in to his feet over half a second.
+  // Reeled in to his feet over half a second, and slow to get away for a moment after.
   pull(game, p, () => (w.alive ? w.position : null), 0.5);
-  chill(game, p, 0.6, 1.2);
+  game.clock.after(0.5, () => p.alive && chill(game, p, 0.6, 1));
   tether(game, w, p, 0.55, SOUL);
   game.audio.play('chain_yank', { at: q });
   p.hud.pop('DRAGGED IN', { color: SOUL });
@@ -277,7 +277,7 @@ export const warden: BossKind = {
     name: 'The Warden',
     model: Models.character(LOOK, { scale: 1.95 }),
     hitbox: { width: 1.7, height: 4.2 },
-    health: 1500,
+    health: 1900,
     speed: 2.7,
     knockbackResistance: 0.95,
     boss: true,

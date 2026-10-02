@@ -20,13 +20,13 @@ const ARC = 1.3;
 const STOMP = 7.5;
 const RAIN_R = 2.4;
 /** How many thralls may be up at once. */
-const THRALLS = 5;
+const THRALLS = 4;
 
 const sweepMove: Move = {
   name: 'sweep',
   can: (c) => c.d < REACH - 0.5,
-  cooldown: [2.2, 3],
-  windup: 0.85,
+  cooldown: [3.2, 4.2],
+  windup: 0.9,
   start(c) {
     const p = c.self.position;
     const a = angle(p, c.target.position);
@@ -41,7 +41,7 @@ const sweepMove: Move = {
     const a = c.s.mem.sweep as number;
     c.self.animate('sweep', { fade: 0.06 });
     c.self.glow(null);
-    strike(c.game, { source: c.self, at: p, r: REACH, damage: 7, arc: [a - ARC, a + ARC], knockback: 9, lift: 4.5 });
+    strike(c.game, { source: c.self, at: p, r: REACH, damage: 6, arc: [a - ARC, a + ARC], knockback: 9, lift: 4.5 });
     c.game.audio.play('colossus_sweep', { at: p });
     c.game.fx.shake(0.15, 0.3);
   },
@@ -52,7 +52,7 @@ const sweepMove: Move = {
 const stompMove: Move = {
   name: 'stomp',
   can: (c) => c.d < STOMP - 1.5,
-  cooldown: [5, 7],
+  cooldown: [6.5, 8.5],
   windup: 1,
   start(c) {
     const p = c.self.position;
@@ -64,7 +64,7 @@ const stompMove: Move = {
     const p = c.self.position;
     c.self.animate('stomp', { fade: 0.06 });
     c.self.glow(null);
-    strike(c.game, { source: c.self, at: p, r: STOMP, damage: [8, 4], grounded: true, knockback: 8, lift: 3 });
+    strike(c.game, { source: c.self, at: p, r: STOMP, damage: [6, 3], grounded: true, knockback: 8, lift: 3 });
     c.game.fx.shockwave({ x: p.x, y: p.y + 0.1, z: p.z }, STOMP + 0.5, COLOR);
     c.game.fx.burst({ x: p.x, y: p.y + 0.3, z: p.z }, { color: '#d8c08a', count: 50, speed: 6, size: 0.2, gravity: 6, life: 1 });
     c.game.fx.shake(0.4, 0.6);
@@ -110,7 +110,7 @@ const rainMove: Move = {
         ring(game, at, RAIN_R, t, COLOR);
         game.audio.play('bone_whistle', { at, pitch: game.rng.range(0.9, 1.1) });
         fromSky(game, MODEL.bone, at, t, () => {
-          strike(game, { source: self, at, r: RAIN_R, damage: 6, knockback: 5, lift: 3 });
+          strike(game, { source: self, at, r: RAIN_R, damage: 5, knockback: 5, lift: 3 });
           game.fx.burst({ x: at.x, y: at.y + 0.4, z: at.z }, { color: '#efe4c8', count: 26, speed: 6, size: 0.16, gravity: 16 });
           game.fx.burst({ x: at.x, y: at.y + 0.3, z: at.z }, { color: '#c9b48a', count: 14, speed: 3, size: 0.18, gravity: -0.5, life: 1, drag: 2 });
           game.fx.shockwave({ x: at.x, y: at.y + 0.1, z: at.z }, RAIN_R + 0.4, COLOR);
@@ -129,7 +129,7 @@ const thralls = (c: Ctx) => c.game.entities.all('thrall').filter((t) => t.alive 
 const ribsMove: Move = {
   name: 'ribs',
   can: (c) => c.s.phase >= 2 && thralls(c) < THRALLS - 1,
-  cooldown: [15, 18],
+  cooldown: [16, 20],
   windup: 1.1,
   start(c) {
     c.self.animate('rib_open', { fade: 0.3 });
@@ -236,25 +236,35 @@ function crash(c: Ctx) {
   c.s.vulnerable = 3;
 }
 
-/** Below a quarter of its health: a second sweep follows the first, the other way. */
+/** The low sweep's colour on the ground (jump it, as a shockwave). */
+const LOW = '#ff6a2a';
+
+/**
+ * Below a quarter of its health: after the sweep (roll it), a low sweep back along the ground a
+ * beat later (jump it): a roll won't be ready again in time.
+ */
 const twinMove: Move = {
   ...sweepMove,
   name: 'twin',
   can: (c) => c.s.enraged && c.d < REACH - 0.5,
-  cooldown: [4, 5],
+  cooldown: [5, 6],
   weight: 1.5,
   during(c) {
     const m = c.s.mem as { twinT?: number; twinAt?: number };
     m.twinT = (m.twinT ?? 0) + c.dt;
+    const p = c.self.position;
     if (m.twinAt === undefined) {
-      // The second, aimed anew, a beat after the first.
-      const p = c.self.position;
       m.twinAt = angle(p, c.target.position);
-      sweep(c.game, p, REACH, m.twinAt, ARC, 0.55, '#ff6a2a');
+      sweep(c.game, p, REACH, m.twinAt, ARC, 0.7, LOW);
+      c.self.animate('stomp_wind', { fade: 0.15 });
+      c.game.audio.play('colossus_wind', { at: p, pitch: 1.3 });
     }
-    if (m.twinT < 0.55) return false;
-    c.s.mem.sweep = m.twinAt;
-    sweepMove.act(c);
+    if (m.twinT < 0.7) return false;
+    const a = m.twinAt;
+    c.self.animate('sweep', { fade: 0.06, speed: 1.3 });
+    strike(c.game, { source: c.self, at: p, r: REACH, damage: 5, arc: [a - ARC, a + ARC], grounded: true, knockback: 7, lift: 3 });
+    c.game.fx.shockwave({ x: p.x, y: p.y + 0.2, z: p.z }, REACH, LOW);
+    c.game.audio.play('colossus_sweep', { at: p, pitch: 0.8 });
     m.twinT = undefined;
     m.twinAt = undefined;
     return true;
@@ -263,7 +273,7 @@ const twinMove: Move = {
 
 const colossusAI = brain({
   moves: [sweepMove, twinMove, stompMove, rainMove, ribsMove, chargeMove],
-  tempo: (s) => (s.enraged ? 0.72 : 1),
+  tempo: (s) => (s.enraged ? 0.8 : 1),
   phases: [
     {
       at: 0.6,
@@ -310,7 +320,7 @@ export const colossus: BossKind = {
     name: 'The Bone Colossus',
     model: Models.gltf(MODEL.colossus, { clips: { idle: 'idle', walk: 'walk' }, head: 'skull', scale: 3.5 }),
     hitbox: { width: 3.2, height: 6.4 },
-    health: 760,
+    health: 950,
     speed: 2.3,
     knockbackResistance: 1,
     jump: 9,

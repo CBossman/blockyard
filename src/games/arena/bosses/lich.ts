@@ -10,8 +10,8 @@ import type { BossKind } from './registry';
  * Phase one, he keeps his distance and casts: frost bolts that chill, a frost nova round himself
  * that freezes whoever it catches on the ground (jump it, or be elsewhere), lines of ice spikes
  * erupting along the floor toward you (step aside). Phase two (two thirds): he shields himself
- * behind phylacteries about the arena, each tethered to him, and raises the dead while they
- * stand; shatter them all and his shield breaks, leaving him stunned. Phase three (a third): soul
+ * behind phylacteries about the arena, each tethered to him, and raises the dead about the
+ * fighters while they stand; shatter them all and his shield breaks, leaving him stunned. Phase three (a third): soul
  * storms, orbs of souls raining onto marked circles across the whole arena while he channels,
  * open to blows. Near the end he's enraged.
  */
@@ -19,19 +19,19 @@ import type { BossKind } from './registry';
 const COLOR = '#7fe3ff';
 const FROST_C = '#9fe8ff';
 const SOUL_C = '#9b7bff';
-const FROST: ProjectileSpec = { speed: 24, gravity: 0, damage: 3, knockback: 0.5, glow: FROST_C, weapon: 'frost' };
+const FROST: ProjectileSpec = { speed: 19, gravity: 0, damage: 2.5, knockback: 0.5, glow: FROST_C, weapon: 'frost' };
 const NOVA = 7.5;
 /** Spacing of the ice spikes along their lane, and how wide each one bites. */
 const SPIKE_STEP = 1.35;
 const SPIKE_R = 1.3;
 const STORM_R = 2.3;
 /** How many raised dead may stand at once. */
-const RAISED = 6;
+const RAISED = 4;
 
 const bolts: Move = {
   name: 'bolts',
   can: (c) => c.d > 3.5 && c.self.canSee(c.target),
-  cooldown: [2.2, 3],
+  cooldown: [3.2, 4.2],
   weight: 1.3,
   windup: 0.6,
   start(c) {
@@ -45,7 +45,7 @@ const bolts: Move = {
     self.glow(null);
     self.animate('bolt', { fade: 0.05 });
     const n = s.enraged ? 5 : 3;
-    for (let i = 0; i < n; i++) game.clock.after(i * 0.12, () => self.alive && !bossBusy(self) && self.shoot(FROST, c.target, { lead: 0.7, spread: 0.035 }));
+    for (let i = 0; i < n; i++) game.clock.after(i * 0.14, () => self.alive && !bossBusy(self) && self.shoot(FROST, c.target, { lead: 0.45, spread: 0.05 }));
     game.audio.play('frost_bolt', { at: self.position });
   },
   recover: 0.4,
@@ -58,7 +58,7 @@ const bolts: Move = {
 const nova: Move = {
   name: 'nova',
   can: (c) => c.d < NOVA - 1.5,
-  cooldown: [6, 8],
+  cooldown: [7, 9],
   windup: 1,
   start(c) {
     c.self.animate('nova_wind', { fade: 0.2 });
@@ -70,7 +70,7 @@ const nova: Move = {
     const p = self.position;
     self.glow(null);
     self.animate('nova', { fade: 0.05 });
-    const { hit } = strike(game, { source: self, at: p, r: NOVA, damage: [6, 3], grounded: true, knockback: 6, lift: 2 });
+    const { hit } = strike(game, { source: self, at: p, r: NOVA, damage: [5, 2.5], grounded: true, knockback: 6, lift: 2 });
     for (const f of hit) {
       if (root(game, f, 1.3)) {
         f.hud.pop('FROZEN', { color: FROST_C });
@@ -136,7 +136,7 @@ const spikes: Move = {
           const q = f.position;
           if (struck.has(f.id) || Math.hypot(q.x - at.x, q.z - at.z) > SPIKE_R || Math.abs(q.y - at.y) > 2) continue;
           struck.add(f.id);
-          if (f.damage(6, { source: self, knockback: 0, cause: 'magic', weapon: 'ice_spike' })) {
+          if (f.damage(5, { source: self, knockback: 0, cause: 'magic', weapon: 'ice_spike' })) {
             f.impulse(0, 9, 0);
             chill(game, f, 0.6, 2);
           }
@@ -151,13 +151,13 @@ const spikes: Move = {
   },
 };
 
-const raisedOf = (c: Ctx) => c.game.entities.all().filter((e) => e.alive && e.data.master === c.self.id && (e.type === 'skeleton' || e.type === 'zombie')).length;
+const raisedOf = (c: Ctx) => c.game.entities.all().filter((e) => e.alive && e.data.master === c.self.id && e.type === 'zombie').length;
 
-/** The dead clawing up out of the sand about the fighters. */
+/** The dead clawing up out of the sand about the fighters, while his phylacteries shield him. */
 const raise: Move = {
   name: 'raise',
-  can: (c) => c.s.phase >= 2 && raisedOf(c) < RAISED - 1,
-  cooldown: [8, 10],
+  can: (c) => c.s.shield && raisedOf(c) < RAISED - 1,
+  cooldown: [10, 12],
   windup: 1.1,
   start(c) {
     c.self.animate('summon', { fade: 0.25 });
@@ -171,9 +171,8 @@ const raise: Move = {
     for (let i = 0; i < n; i++) {
       const by = fighters(game)[i % Math.max(1, fighters(game).length)]?.position ?? m.center;
       const at = near(game, by, 6, m.center, m.radius);
-      const type = i % 2 ? 'skeleton' : 'zombie';
-      const z = spawnMonster(game, type, { x: at.x, y: at.y + 0.05, z: at.z }, { data: { master: self.id, risen: true } });
-      z.health = Math.min(z.health, 14);
+      const z = spawnMonster(game, 'zombie', { x: at.x, y: at.y + 0.05, z: at.z }, { data: { master: self.id, risen: true } });
+      z.health = Math.min(z.health, 10);
       game.fx.burst({ x: at.x, y: at.y + 0.2, z: at.z }, { color: '#5fe87f', count: 26, speed: 2.4, gravity: -2, glow: 1 });
       game.fx.burst({ x: at.x, y: at.y + 0.1, z: at.z }, { color: '#c2a878', count: 14, speed: 2, gravity: 6 });
     }
@@ -286,13 +285,15 @@ function hover(c: Ctx) {
     s.side = game.rng.chance(0.5) ? 1 : -1;
     s.flip = game.rng.range(1.5, 3);
   }
-  const away = d < 6 ? 1 : d > 11 ? -1 : 0;
+  // Backing off is a slow drift (a fighter who closes in can stay on him, and his nova answers that).
+  const away = d < 6 ? 0.45 : d > 11 ? -1 : 0;
   const m = map();
   const ox = p.x - m.center.x;
   const oz = p.z - m.center.z;
   const r = Math.hypot(ox, oz) || 1;
   const inward = r > m.radius - 5 ? 1 : 0;
-  self.moveDirection(nx * away - nz * (s.side ?? 1) * 0.6 - (ox / r) * inward, nz * away + nx * (s.side ?? 1) * 0.6 - (oz / r) * inward);
+  const side = (s.side ?? 1) * (d < 6 ? 0.3 : 0.6);
+  self.moveDirection(nx * away - nz * side - (ox / r) * inward, nz * away + nx * side - (oz / r) * inward);
 }
 
 const lichAI = brain({
@@ -317,7 +318,6 @@ const lichAI = brain({
         roar(c.game, c.self);
         announce(c.game, 'The soul storm', 'Keep moving, and strike him while he channels', SOUL_C);
         c.s.cds.storm = 0;
-        c.s.cds.raise = 6;
       },
     },
     {
@@ -385,7 +385,7 @@ export const lich: BossKind = {
     name: 'The Lich King',
     model: Models.gltf(MODEL.lich, { clips: { idle: 'idle', walk: 'walk' }, head: 'skull' }),
     hitbox: { width: 1.6, height: 4.6 },
-    health: 3600,
+    health: 3000,
     speed: 3,
     knockbackResistance: 1,
     boss: true,

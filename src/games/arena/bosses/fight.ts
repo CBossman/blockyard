@@ -235,6 +235,7 @@ export function updateHolds(game: GameContext) {
       continue;
     }
     const speed = Math.min(34, (dist - 2) / Math.max(0.08, d.until - now));
+    // (Whatever's solid in the way stops them: a pillar between is shelter.)
     const v = d.p.velocity;
     d.p.impulse(((at.x - q.x) / dist) * speed - v.x, 0, ((at.z - q.z) / dist) * speed - v.z);
   }
