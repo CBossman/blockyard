@@ -15,7 +15,7 @@ import type { BossKind } from './registry';
  * fighters while they stand; shatter them all and his shield breaks, leaving him stunned (left
  * standing long enough, they crumble on their own, with no stun). Phase three (a third): soul
  * storms, orbs of souls raining onto marked circles across the whole arena while he channels,
- * open to blows. Near the end he's enraged. He floats a block over the floor (higher in the
+ * holding still. Near the end he's enraged. He floats a block over the floor (higher in the
  * storm), and crowd him and he blinks away: a ring marks where he'll be, and where he was a patch
  * of frost lingers.
  */
@@ -37,7 +37,7 @@ const RAISED = 5;
 const HOVER = 1;
 const HOVER_STORM = 2;
 /** Seconds his phylacteries hold out on their own before they crack and fall (without the reel a fighter's shattering wins). */
-const WARD_TIME = 35;
+const WARD_TIME = 25;
 
 /** The floor under him (where his spells strike the ground), his feet's height over it aside. */
 const floorAt = (game: GameContext, p: Vec3): Vec3 => ({ x: p.x, y: game.world.surfaceY(Math.floor(p.x), Math.floor(p.z)) + 1, z: p.z });
@@ -219,7 +219,7 @@ const raise: Move = {
 const blink: Move = {
   name: 'blink',
   can: (c) => ((c.s.mem.pressure as number | undefined) ?? 0) >= 3 || ((c.s.mem.stuckT as number | undefined) ?? 0) > 1.5,
-  cooldown: [10, 13],
+  cooldown: [12, 15],
   weight: 4,
   windup: 0.5,
   start(c) {
@@ -229,7 +229,7 @@ const blink: Move = {
     const p = self.position;
     const q = target.position;
     const a = Math.atan2(p.z - q.z, p.x - q.x) + game.rng.range(-0.8, 0.8);
-    const r = game.rng.range(9, 13);
+    const r = game.rng.range(7, 10);
     let to = near(game, { x: q.x + Math.cos(a) * r, y: floorAt(game, q).y, z: q.z + Math.sin(a) * r }, 2.5, m.center, m.radius);
     if (Math.hypot(to.x - m.center.x, to.z - m.center.z) > m.radius - 3) to = near(game, m.center, m.radius * 0.5, m.center, m.radius);
     c.s.aim = to;
@@ -278,7 +278,6 @@ const storm: Move = {
     const { game, self, s, dt } = c;
     const st = s.mem.storm as { t: number; next: number };
     st.t += dt;
-    s.vulnerable = 0.3;
     if (st.t >= st.next) {
       st.next += s.enraged ? 0.24 : 0.3;
       const m = map();
@@ -371,7 +370,7 @@ function drift(c: Ctx) {
     mem.flip = game.rng.range(1.5, 3);
   }
   // Backing off is a slow drift (a fighter who closes in can stay on him, and his nova answers that).
-  const away = d < 6 ? 0.45 : d > 11 ? -1 : 0;
+  const away = d < 6 ? 0.3 : d > 10 ? -1 : 0;
   const m = map();
   const ox = p.x - m.center.x;
   const oz = p.z - m.center.z;
@@ -488,7 +487,7 @@ export const lich: BossKind = {
     name: 'The Lich King',
     model: Models.gltf(MODEL.lich, { clips: { idle: 'idle', walk: 'walk' }, head: 'skull' }),
     hitbox: { width: 1.6, height: 4.6 },
-    health: 2300,
+    health: 2000,
     speed: 3,
     knockbackResistance: 1,
     boss: true,
