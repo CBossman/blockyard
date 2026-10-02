@@ -107,7 +107,12 @@ const batAI: Behavior = (self, game, dt) => {
   const bob = Math.sin(self.age * 2.3 + self.id) * 0.5;
   flyTo(self, { x: p.x + Math.cos(s._ang) * ORBIT, y: p.y + HOVER + bob, z: p.z + Math.sin(s._ang) * ORBIT });
   self.lookAt(target);
-  if (s._cd <= 0 && divers(game) < 1 + Math.min(1, game.players.length - 1)) {
+  if (s._cd <= 0) {
+    // Its turn to dive, if not too many are diving already (else it looks again in a moment).
+    if (divers(game) >= 1 + Math.min(1, game.players.length - 1)) {
+      s._cd = 0.4;
+      return;
+    }
     s._mode = 'shriek';
     s._t = 0.4;
     self.glow('#ff3030');

@@ -151,7 +151,12 @@ const cultistAI: Behavior = (self, game, dt) => {
   if (!self.canSee(target) && d > 13) self.moveTo(target);
   else self.moveDirection(nx * away - nz * st, nz * away + nx * st);
   self.lookAt(target);
-  if (s._cd <= 0 && flock(game, self).length) {
+  if (s._cd <= 0) {
+    // Nobody near to bless: it looks again in a moment, not every tick.
+    if (!flock(game, self).length) {
+      s._cd = 0.5;
+      return;
+    }
     s._chant = 1;
     self.stop();
     self.animate('raise');
