@@ -95,6 +95,9 @@ class FakeView implements ViewLayer {
     m.visible = false;
     return m;
   }
+  item() {
+    return null;
+  }
   free(n: Node) {
     this.freed++;
     (n as THREE.Object3D).removeFromParent();
@@ -373,7 +376,7 @@ export default async function firstperson() {
   worldCamera.position.set(10, 20, 30);
   worldCamera.updateMatrixWorld();
   const said: ClientEvent[] = [];
-  const layer = new FirstPersonLayer(tex, tex, graphics, worldCamera, new Map(), (ev) => said.push(ev));
+  const layer = new FirstPersonLayer(tex, tex, graphics, worldCamera, new Map(), (ev) => said.push(ev), new Map());
   const client = { view: layer, me: rig().client.me, events: [] as ClientEvent[], camera: { zoom: 1, fov: 75 } } as unknown as Rig['client'];
   const [kit] = firstPerson.standard();
   kit.setup?.(client);

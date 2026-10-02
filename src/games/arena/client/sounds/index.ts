@@ -1,4 +1,5 @@
 import type { Client } from '@platform/client';
+import { defineArmorySounds } from './armory';
 import { defineCreatureSounds } from './creatures';
 
 /**
@@ -7,4 +8,5 @@ import { defineCreatureSounds } from './creatures';
  */
 export function defineSounds(client: Client) {
   defineCreatureSounds(client);
+  defineArmorySounds(client);
 }
