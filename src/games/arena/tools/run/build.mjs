@@ -3,7 +3,7 @@
  * The run's things, as micro-voxel models (`tools/voxel.mjs`, the Arena's monsters' and weapons'
  * style) written as binary glTF to `src/games/arena/models/run/`: the coins monsters spill (one
  * coin, and a heap), the Phoenix Feather, the mystery chest and its lid, the skull the chest
- * sometimes laughs out, and the armour on the shop's shelf. Dependency-free (Node 22+):
+ * sometimes laughs out, the armour on the shop's shelf, and the merchant's stall. Dependency-free (Node 22+):
  * `node src/games/arena/tools/run/build.mjs [ids...]`. Each file is read back and checked.
  *
  * Conventions:
@@ -232,7 +232,72 @@ function armor() {
   return m;
 }
 
-const MODELS = { coin, coin_pile: coinPile, phoenix_feather: feather, chest, chest_lid: lid, chest_skull: skull, armor };
+/**
+ * The merchant's stall, set up between waves: a counter of planks with a round shield hung on its
+ * front, his wares on top (potions, a sword, a heap of gold), corner posts, a striped awning with a
+ * scalloped edge, a big gold coin standing on it for a sign, and a lantern. Its origin is the middle of the counter's
+ * front at the ground; the merchant stands behind it (toward -z).
+ */
+function stall() {
+  const m = new Model('stall', "The Merchant's Stall", { prop: true }).colours({
+    ...WOOD,
+    plank: [0x8a5a32, 0.85],
+    cloth: [0xa31d22, 0.9],
+    cream: [0xefe2c0, 0.9],
+    shield: [0x6b4424, 0.85],
+    glass: [0xc0182a, 0.3, 0, 0.35],
+    cork: [0x9a7a52, 0.9],
+    steel: [0xc8ced6, 0.35, 0.9],
+    lamp: [0xffc45a, 0.5, 0, 1],
+    sack: [0xb8a27a, 0.95],
+  });
+  const W = 20, D = 14, TOP = 16;
+  // The counter: planks, a darker top board overhanging the front.
+  m.shape([-W, 0, -6], [W, TOP, 0], (x, y, z, i, j) => (j === TOP - 1 ? 'woodDark' : i % 6 === 0 ? 'woodDark' : j % 4 === 0 ? 'plank' : 'wood'));
+  m.box([-W - 1, TOP - 1, -7], [W + 1, TOP, 1], 'woodDark');
+  // A round shield on its front, a gold boss in the middle.
+  m.shape([-6, 2, 0], [6, 14, 1], (x, y) => {
+    const r = Math.hypot(x, y - 8);
+    return r < 1.6 ? 'gold' : r < 5.2 ? (r > 4.3 ? 'goldDeep' : 'shield') : null;
+  });
+  // Corner posts up to the awning.
+  for (const x of [-W, W - 2]) for (const z of [-D, -2]) m.box([x, 0, z], [x + 2, 40, z + 2], 'woodDark');
+  // The awning: sloping down to the front, striped, its front edge scalloped.
+  m.shape([-W - 2, 34, -D - 2], [W + 2, 44, 5], (x, y, z, i, j, k) => {
+    const top = 42 - ((k + D + 2) / (D + 7)) * 6;
+    if (j !== Math.floor(top)) return null;
+    return Math.floor((i + W + 2) / 4) % 2 ? 'cloth' : 'cream';
+  });
+  for (let i = -W - 2; i < W + 2; i++) {
+    const stripe = Math.floor((i + W + 2) / 4) % 2 ? 'cloth' : 'cream';
+    const drop = (i + W + 2) % 4 === 1 || (i + W + 2) % 4 === 2 ? 3 : 2;
+    m.box([i, 36 - drop, 4], [i + 1, 36, 5], stripe);
+  }
+  // The sign: a big gold coin standing on the awning's front edge, over his head.
+  m.box([0, 36, 1], [1, 39, 2], 'iron');
+  m.shape([-5, 38, 1], [6, 49, 2], (x, y) => {
+    const r = Math.hypot(x - 0.5, y - 43.5);
+    return r < 1.6 ? 'goldLight' : r < 4.6 ? 'gold' : r < 5.4 ? 'goldDeep' : null;
+  });
+  // His wares on the counter: two potions, a sword, a heap of gold, a sack beside.
+  for (const x of [-16, -12]) {
+    m.box([x, TOP, -4], [x + 3, TOP + 4, -1], 'glass');
+    m.box([x + 1, TOP + 4, -3], [x + 2, TOP + 6, -2], 'cork');
+  }
+  m.box([-6, TOP, -3], [8, TOP + 1, -2], 'steel');
+  m.box([-9, TOP, -4], [-6, TOP + 1, -1], 'gold');
+  m.box([-10, TOP, -3], [-9, TOP + 2, -2], 'woodDark');
+  m.shape([10, TOP, -6], [18, TOP + 4, 0], (x, y, z) => (Math.hypot(x - 14, z + 3) < 3.6 - (y - TOP) * 0.8 ? ((Math.floor(x) + Math.floor(z)) & 1 ? 'gold' : 'goldLight') : null));
+  m.shape([W, 0, -10], [W + 7, 9, -3], (x, y, z) => (Math.hypot((x - W - 3.5) / 3.5, (y - 4) / 5, (z + 6.5) / 3.5) < 1 ? (y > 7.5 ? 'cork' : 'sack') : null));
+  // A lantern hanging at the front corner.
+  m.box([-W, 30, 2], [-W + 1, 34, 3], 'iron');
+  m.box([-W - 1, 26, 1], [-W + 2, 30, 4], 'lamp');
+  m.box([-W - 1, 25, 1], [-W + 2, 26, 4], 'iron');
+  m.box([-W - 1, 30, 1], [-W + 2, 31, 4], 'iron');
+  return m;
+}
+
+const MODELS = { coin, coin_pile: coinPile, phoenix_feather: feather, chest, chest_lid: lid, chest_skull: skull, armor, stall };
 
 // ---------------------------------------------------------------------------------------------
 // Writing and checking

@@ -213,6 +213,17 @@ export function classesListen(game: GameContext) {
   });
 }
 
+/** Someone late who didn't choose in time: their menu goes, and they keep what they have. */
+export function classesUpdate(game: GameContext) {
+  for (const [id, m] of menus) {
+    const p = game.players.find((x) => x.id === id);
+    if (p && !canChoose(game, p)) {
+      menus.delete(id);
+      m.close();
+    }
+  }
+}
+
 /** A fresh run: nobody's chosen yet. */
 export function resetClasses() {
   closeClassMenus();

@@ -1,4 +1,5 @@
-import { Models, type CharacterLook, type Entity, type GameContext, type IconRef, type MenuEntry, type MenuHandle, type Player } from '@platform';
+import { math, Models, type CharacterLook, type Entity, type GameContext, type IconRef, type MenuEntry, type MenuHandle, type Player, type Prop, type PropModel } from '@platform';
+import { RUN_MODELS } from '../models/run';
 import { WARES, type Ware } from '../items/catalog';
 import { bus } from './bus';
 import { FEATHER } from './downed';
@@ -9,7 +10,7 @@ import { addUsable } from './use';
 import { ARMOR_ICON } from './models';
 
 /**
- * The shop: between waves a merchant sets up at the map's `shop` spot, and E in front of him opens
+ * The shop: between waves a merchant sets up his stall at the map's `shop` spot, and E at it opens
  * his wares (a menu on that fighter's screen, paid from their own purse, `gold.ts`): the armory's
  * catalog (`items/catalog.ts`, each on sale from its wave), armour by the tier, a Phoenix Feather,
  * and the forge (a weapon carried, to its next rarity). He packs up when the next wave begins.
@@ -35,6 +36,10 @@ const tiers = new Map<string, number>();
 /** Each fighter's open shop, and what it showed (only changes go out). */
 const open = new Map<string, { menu: MenuHandle; key: string; subtitle: string }>();
 let merchant: Entity | null = null;
+let stall: { model: PropModel; prop: Prop | null } | null = null;
+/** How far behind his counter's front the merchant stands (blocks). */
+const BEHIND = 0.6;
+const UP = new math.Vector3(0, 1, 0);
 
 export const armorTier = (p: Player) => tiers.get(p.id) ?? 0;
 
@@ -228,11 +233,19 @@ export function openShop(game: GameContext) {
   if (shopOpen()) return;
   const m = map();
   const at = m.shop ?? m.center;
-  const yaw = Math.atan2(at.x - m.center.x, at.z - m.center.z);
-  merchant = game.entities.spawn('merchant', { x: at.x, y: at.y + 0.05, z: at.z }, { yaw, data: { scenery: true } });
-  game.fx.burst({ x: at.x, y: at.y + 1, z: at.z }, { color: '#ffd23a', count: 30, speed: 2.5, gravity: -1, glow: 1 });
+  // The stall faces the middle; he stands behind its counter.
+  const dx = m.center.x - at.x;
+  const dz = m.center.z - at.z;
+  const d = Math.hypot(dx, dz) || 1;
+  if (stall) {
+    stall.prop = game.props.spawn(stall.model, { position: { x: at.x, y: at.y, z: at.z } });
+    stall.prop.quaternion.setFromAxisAngle(UP, Math.atan2(dx, dz));
+  }
+  const yaw = Math.atan2(-dx, -dz);
+  merchant = game.entities.spawn('merchant', { x: at.x - (dx / d) * BEHIND, y: at.y + 0.05, z: at.z - (dz / d) * BEHIND }, { yaw, data: { scenery: true } });
+  game.fx.burst({ x: at.x, y: at.y + 1.5, z: at.z }, { color: '#ffd23a', count: 40, speed: 3, gravity: -1, glow: 1 });
   game.audio.play('merchant', { at });
-  game.hud.marker('arena.shop', merchant, { label: 'Shop', color: '#ffd23a', shape: 'diamond', edge: true, offset: { x: 0, y: 2.6, z: 0 } });
+  game.hud.marker('arena.shop', merchant, { label: 'Shop', color: '#ffd23a', shape: 'diamond', edge: true, offset: { x: 0, y: 2.9, z: 0 } });
 }
 
 /** The next wave's begun: he packs up (and every shop closes). */
@@ -240,6 +253,8 @@ export function closeShop(game: GameContext) {
   for (const o of open.values()) o.menu.close();
   open.clear();
   game.hud.marker('arena.shop', null);
+  stall?.prop?.remove();
+  if (stall) stall.prop = null;
   if (!merchant) return;
   const q = merchant.position;
   game.fx.burst({ x: q.x, y: q.y + 1, z: q.z }, { color: '#ffd23a', count: 20, speed: 2, gravity: -1 });
@@ -264,10 +279,11 @@ export function shopSetup(game: GameContext) {
     },
   });
   game.items.define(FEATHER, { kind: 'misc', name: 'Phoenix Feather', stack: 1 });
+  stall = { model: game.props.gltf(RUN_MODELS.stall, { radius: 2 }), prop: null };
   addUsable({
     id: 'shop',
-    at: () => (merchant?.alive ? { x: merchant.position.x, y: merchant.position.y + 1.4, z: merchant.position.z } : null),
-    reach: 3,
+    at: () => (merchant?.alive ? { x: merchant.position.x, y: merchant.position.y + 1.2, z: merchant.position.z } : null),
+    reach: 3.2,
     label: () => 'Shop',
     use: (g, p) => showShop(g, p),
   });
@@ -315,4 +331,6 @@ export function resetShop() {
   open.clear();
   tiers.clear();
   merchant = null;
+  // (The restart took his stall.)
+  if (stall) stall.prop = null;
 }

@@ -170,12 +170,12 @@ function compose(game: GameContext, n: number, w: WaveSpec, twist: Twist | null)
   return counts;
 }
 
-/** Wave `n` begins: what it brings is queued (the boss first, goblins partway), and everyone told. */
-export function startWave(game: GameContext, n: number) {
+/** Wave `n` begins (with a twist of its own, or `force`d): what it brings is queued (the boss first, goblins partway), and everyone told. */
+export function startWave(game: GameContext, n: number, force?: Twist) {
   const w = waveSpec(n);
   state.wave = n;
   state.phase = 'fighting';
-  const twist = rollTwist(game, n, w);
+  const twist = force ?? rollTwist(game, n, w);
   state.twist = twist;
   if (twist) state.lastTwist = twist;
   const boss = w.boss ? bossFor(w.boss) : undefined;
@@ -255,10 +255,12 @@ export function tick(game: GameContext, dt: number): { left: number; cleared: bo
 
 /** The Thunderstorm: when the next bolt's marked, and where the marked one falls (null: none marked). */
 const storm = { next: 0, at: null as Vec3 | null, strikes: 0 };
-/** Seconds between a strike's mark and its bolt: time to see it and get out. */
+/** Seconds between a strike's mark and its bolt: time to see it and get out; how far it reaches a fighter. */
 const STRIKE_WARNING = 1.4;
+const STRIKE_REACH = 2.6;
 const FWD = new math.Vector3(0, 0, -1);
 const DOWN = new math.Vector3(0, -1, 0);
+const UP = new math.Vector3(0, 1, 0);
 
 /** A storm's strikes: a ring marked on the sand near someone (or in a knot of monsters), then the bolt. */
 function thunder(game: GameContext) {
@@ -270,16 +272,31 @@ function thunder(game: GameContext) {
   if (!near) return;
   const at = { x: near.x + game.rng.range(-2.5, 2.5), y: near.y, z: near.z + game.rng.range(-2.5, 2.5) };
   storm.at = at;
+  // The mark: the air crackling in a thin column over the spot, sparks round its edge, a warning on screen.
   const id = `arena.strike:${storm.strikes++}`;
-  game.hud.marker(id, at, { shape: 'ring', color: '#9fd4ff', size: { world: 5 }, pulse: true });
+  const crackle = game.props.bolt({ color: '#9fd4ff', length: 7, width: 0.14, intensity: 1.6, flicker: 0.9 });
+  crackle.position.set(at.x, at.y, at.z);
+  crackle.quaternion.setFromUnitVectors(FWD, UP);
+  sparks(game, at);
+  game.clock.after(STRIKE_WARNING / 2, () => sparks(game, at));
+  game.hud.marker(id, { x: at.x, y: at.y + 0.3, z: at.z }, { shape: 'ring', color: '#9fd4ff', size: { world: 5.2 }, pulse: true });
   game.audio.play('thunder', { at, volume: 0.35, pitch: 1.6 });
   game.clock.after(STRIKE_WARNING, () => {
+    crackle.remove();
     game.hud.marker(id, null);
     storm.at = null;
     storm.next = game.clock.now + game.rng.range(2.2, 4);
     if (state.twist !== 'storm' || state.phase !== 'fighting') return;
     strike(game, at);
   });
+}
+
+/** Sparks round the edge of a strike's mark (blocks across: `STRIKE_REACH` for fighters). */
+function sparks(game: GameContext, at: Vec3) {
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2;
+    game.fx.burst({ x: at.x + Math.cos(a) * STRIKE_REACH, y: at.y + 0.15, z: at.z + Math.sin(a) * STRIKE_REACH }, { color: '#cfe9ff', count: 3, speed: 0.8, gravity: -1, glow: 1, life: 0.7 });
+  }
 }
 
 /** A bolt from the sky: monsters in reach badly burnt, fighters still on the mark hurt. */
@@ -295,7 +312,7 @@ function strike(game: GameContext, at: Vec3) {
   for (const e of game.entities.near(at, 3.2)) if (e.alive && !e.data.scenery) e.damage(14, { source: 'world', knockback: 1, weapon: 'lightning', cause: 'fire' });
   for (const p of game.players) {
     const q = p.position;
-    if (p.alive && Math.hypot(q.x - at.x, q.z - at.z) < 2.6 && Math.abs(q.y - at.y) < 2) p.damage(5, { source: 'world', knockback: 1, from: at });
+    if (p.alive && Math.hypot(q.x - at.x, q.z - at.z) < STRIKE_REACH && Math.abs(q.y - at.y) < 2) p.damage(5, { source: 'world', knockback: 1, from: at });
   }
 }
 

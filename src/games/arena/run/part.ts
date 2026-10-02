@@ -1,6 +1,6 @@
 import type { ArenaPart } from '../part';
 import { chestSetup, chestStart, chestUpdate } from './chest';
-import { classesListen, equip, preferred, resetClasses } from './classes';
+import { classesListen, classesUpdate, equip, preferred, resetClasses } from './classes';
 import { coinsListen, defineCoins, resetCoins } from './coins';
 import { downedListen, downedUpdate, resetDowned } from './downed';
 import { featsListen, resetFeats } from './feats';
@@ -45,6 +45,7 @@ export const runPart: ArenaPart = {
     downedUpdate(game, dt);
     shopUpdate(game);
     chestUpdate(game, dt);
+    classesUpdate(game);
   },
   // Their class's kit: the one they last chose (the menu lets them change it for a while).
   arm(game, p) {

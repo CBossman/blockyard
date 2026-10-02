@@ -95,7 +95,16 @@ function slain(game: GameContext, p: Player, type: string, weapon: string | unde
   if (elite && !bossKind(type)) feat(p, 'elite', 'Champion slain!');
 }
 
+/** Endless waves reached: Into the Abyss, and Legend of the Arena. */
+const DEEP: [number, string][] = [
+  [25, 'abyss'],
+  [30, 'legend'],
+];
+
 export function featsListen(game: GameContext) {
+  bus.on('waveStart', ({ wave }) => {
+    for (const [n, id] of DEEP) if (wave >= n) for (const p of game.players) p.achieve(id);
+  });
   bus.on('slain', ({ entity, type, by, weapon }) => {
     if (by) {
       state.kills++;

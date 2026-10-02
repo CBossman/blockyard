@@ -8,7 +8,7 @@ import { shared } from './shared';
 import { ROLL } from './abilities';
 import { BLESSINGS, grant, listen as blessingsListen, offer, plainBody, reopen, resetBlessings, settle, wave as blessingsWave, type BlessingId } from './blessings';
 import { bus, type RunResult } from './run/bus';
-import { directorListen, dusk, finalWave, resetDirector, startWave, tick, waveName, waveSpec } from './run/director';
+import { directorListen, dusk, finalWave, resetDirector, startWave, tick, TWISTS, waveName, waveSpec, type Twist } from './run/director';
 import { kindHooks } from './run/spawn';
 import { inFight, map, newRun, resetState, runs, state } from './run/state';
 import { PARTS } from './parts';
@@ -18,7 +18,7 @@ import { catchUp, payWave } from './run/coins';
 import { bledOut, standAll, standing } from './run/downed';
 import { closeShop, openShop } from './run/shop';
 import { CLASSES, classOf, closeClassMenus, hasChosen, showClassMenu } from './run/classes';
-import { record, results, waveWords } from './run/progression';
+import { record, results } from './run/progression';
 import { feat } from './run/hype';
 
 /** Seconds between waves (the shop open, a blessing to choose). */
@@ -91,8 +91,6 @@ function waveCleared(game: GameContext) {
   bus.emit('waveCleared', { wave: n, final, endless: state.endless, bonus });
   standAll(game);
   for (const p of game.players) if (!p.alive) rejoin(game, p, !final);
-  if (n >= 25) for (const p of game.players) p.achieve('abyss');
-  if (n >= 30) for (const p of game.players) p.achieve('legend');
   state.twist = null;
   state.boss = null;
   if (final) return victory(game);
@@ -166,22 +164,22 @@ function checkWipe(game: GameContext) {
 
 /** The lines of a fighter's end screen. */
 function statsFor(game: GameContext, r: RunResult | undefined): [string, string][] {
-  const time = fmtTime(game.clock.now - state.startedAt);
   const stats: [string, string][] = [
-    ['Wave reached', waveWords(state.wave)],
-    ['Time', time],
+    ['Wave reached', state.wave > finalWave() ? `${state.wave} (endless)` : `${state.wave} of ${finalWave()}`],
+    ['Time', fmtTime(game.clock.now - state.startedAt)],
   ];
   if (!r) return stats;
   const best = record(game);
+  const party = game.players.length > 1;
   stats.push(
     ['Class', CLASSES[r.cls as keyof typeof CLASSES]?.name ?? r.cls],
-    ['Monsters slain', `${r.kills} (all of you: ${state.kills})`],
+    ['Monsters slain', party ? `${r.kills} of ${state.kills}` : String(r.kills)],
     ['Gold earned', String(r.gold)],
-    ['XP earned', `${r.xp.earned} · level ${r.xp.level}${r.xp.level > r.xp.from ? ` (up from ${r.xp.from})` : ''}`],
-    ['Best wave here', `${r.best}${r.newBest ? ' · a new best!' : ''}`],
+    ['XP', r.xp.level > r.xp.from ? `+${r.xp.earned} · level ${r.xp.from} → ${r.xp.level}` : `+${r.xp.earned} · level ${r.xp.level}`],
+    ['Best wave here', r.newBest ? `${r.best} · new best!` : String(r.best)],
   );
   if (r.revives) stats.push(['Friends revived', String(r.revives)]);
-  if (best) stats.push(['Arena record', `wave ${best.wave} · ${best.names.slice(0, 3).join(', ')}`]);
+  if (best) stats.push(['Arena record', `${best.wave} · ${best.names.slice(0, 3).join(', ')}`]);
   return stats;
 }
 
@@ -355,19 +353,30 @@ export default defineServer(shared, {
       },
     });
     game.commands.register('wave', {
-      usage: '<n>',
-      help: 'Skip to wave n (clears the arena; past the last, the endless waves)',
+      usage: '<n> [twist]',
+      help: 'Skip to wave n (clears the arena; past the last, the endless waves), with a twist if named',
       cheat: true,
-      run: ([n], g) => {
+      complete: () => Object.keys(TWISTS),
+      run: ([n, twist], g) => {
         const w = Math.max(1, Number(n) || 1);
+        if (twist && !(twist in TWISTS)) return `Twists: ${Object.keys(TWISTS).join(', ')}`;
         for (const e of g.entities.all()) if (!e.data.scenery) e.remove();
         closeClassMenus();
         closeScreens();
         closeShop(g);
         state.queue = [];
         state.endless = w > finalWave();
-        startWave(g, w);
-        return `Wave ${w}: ${waveName(w)}`;
+        startWave(g, w, twist as Twist | undefined);
+        return `Wave ${w}: ${waveName(w)}${twist ? ` · ${TWISTS[twist as Twist].name}` : ''}`;
+      },
+    });
+    game.commands.register('win', {
+      help: 'Win this wave (every monster in it slain)',
+      cheat: true,
+      run: (_, g, p) => {
+        if (state.phase !== 'fighting') return 'No wave on';
+        state.queue = [];
+        for (const e of g.entities.all()) if (!e.data.scenery) e.damage(1e6, { source: p });
       },
     });
     game.events.on('playerJoin', ({ player }) => {

@@ -2,7 +2,6 @@ import type { GameContext, Player } from '@platform';
 import { monsterKind } from '../monsters';
 import { bossKind } from '../bosses';
 import { bus, type Gain, type RunResult, type Unlock, type XpState } from './bus';
-import { finalWave } from './director';
 import { map, runs, state } from './state';
 
 /**
@@ -223,6 +222,3 @@ export function results(game: GameContext, won: boolean): RunResult[] {
 
 /** The record on this map: the furthest wave anyone has reached, and who. */
 export const record = (game: GameContext) => game.store.get<{ wave: number; names: string[] }>(`record:${map().id}`) ?? null;
-
-/** How far into the run (or past it) a wave is, as words: "Wave 7 of 20", "Endless wave 24". */
-export const waveWords = (n: number) => (n > finalWave() ? `Endless wave ${n}` : `Wave ${n} of ${finalWave()}`);
