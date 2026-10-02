@@ -176,8 +176,11 @@ function downs() {
   wave(game, 2);
   const c = map().center;
   me.teleport({ x: c.x, y: c.y - 1, z: c.z + 5 }, Math.PI, 0);
+  me.inventory.give('bomb', 3);
+  me.inventory.give('bow');
   me.damage(1000);
   check(isDowned(me) && me.alive && me.abilities.crawl.on, `with Bob standing, a killing blow puts you down (${isDowned(me)}, crawling ${me.abilities.crawl.on})`);
+  check(me.inventory.count('bomb') === 0 && me.inventory.count('bow') === 0, 'bombs and bow put away on the ground');
   idle(h, 2);
   check(me.health < me.maxHealth, `bleeding: ${me.health.toFixed(1)} of ${me.maxHealth}`);
   // Bob comes over and holds E on you.
@@ -187,6 +190,7 @@ function downs() {
   h.run(REVIVE + 0.3, { pilot: () => ({}) });
   bob.controls.release();
   check(!isDowned(me) && Math.abs(me.health - Math.round(me.maxHealth / 3)) < 2, `Bob revived you: ${me.health.toFixed(1)} health`);
+  check(me.inventory.count('bomb') === 3 && me.inventory.count('bow') === 1, 'and back in hand once up');
   check(h.find('hud', 'feed').some((f) => String(f.args[0]) === 'Bob revived Player'), 'and everyone hears');
   // Bob goes down and nobody comes: he bleeds out and falls.
   const fell: string[] = [];

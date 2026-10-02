@@ -15,7 +15,8 @@ import { addUsable, bar, holdOf, removeUsable } from './use';
  * raises its bearer in a burst of flame.
  *
  * Their own screen shows it (`client/run.ts`, the `arena.downed` message): the bleeding, the time
- * left, who's reviving them.
+ * left, who's reviving them. On the ground they can't drink (the armory's potions refuse) or swing
+ * the arsenal; their bombs and bows (the platform's kits, which don't ask) are put away till they're up.
  */
 export const BLEED = 20;
 export const REVIVE = 3;
@@ -29,6 +30,8 @@ export const FEATHER = 'phoenix_feather';
 
 interface Down {
   bleed: number;
+  /** What was put away while they're down (bombs, bows), to give back. */
+  stash: { item: string; count: number }[];
   /** Whoever last hurt them (their killer, if they bleed out). */
   by: Actor | null;
   /** When their markers and screen were last told. */
@@ -56,7 +59,7 @@ function tell(game: GameContext, p: Player, d: Down | null, reviver: Player | nu
 }
 
 function down(game: GameContext, p: Player, by: Actor | null) {
-  const d: Down = { bleed: BLEED, by, told: game.clock.now };
+  const d: Down = { bleed: BLEED, stash: putAway(game, p), by, told: game.clock.now };
   downs.set(p.id, d);
   p.health = p.maxHealth;
   p.abilities.crawl.on = true;
@@ -84,9 +87,30 @@ function down(game: GameContext, p: Player, by: Actor | null) {
   bus.emit('downed', { player: p, bleed: BLEED });
 }
 
+/** Kinds of item that work on the ground unless put away (the platform's kits: they don't ask whether you're down). */
+const STOWED = new Set(['throwable', 'bow']);
+
+/** Their bombs and bows out of their hands while they're down. */
+function putAway(game: GameContext, p: Player): Down['stash'] {
+  const stash: Down['stash'] = [];
+  for (const slot of p.inventory.slots) {
+    if (!slot || !STOWED.has(game.items.get(slot.item)?.kind ?? '')) continue;
+    stash.push({ ...slot });
+  }
+  for (const s of stash) p.inventory.take(s.item, s.count);
+  return stash;
+}
+
+const giveBack = (p: Player, d: Down | undefined) => {
+  for (const s of d?.stash ?? []) p.inventory.give(s.item, s.count);
+};
+
 /** Back on their feet: by a friend's hands, or (`by` null) the wave won. */
 export function revive(game: GameContext, p: Player, by: Player | null) {
-  if (!downs.delete(p.id)) return;
+  const d = downs.get(p.id);
+  if (!d) return;
+  downs.delete(p.id);
+  giveBack(p, d);
   removeUsable(`revive:${p.id}`);
   p.abilities.crawl.on = false;
   bar(p, false);
@@ -112,6 +136,7 @@ export function revive(game: GameContext, p: Player, by: Player | null) {
 function bleedOut(game: GameContext, p: Player) {
   const d = downs.get(p.id);
   downs.delete(p.id);
+  giveBack(p, d);
   removeUsable(`revive:${p.id}`);
   p.abilities.crawl.on = false;
   bar(p, false);
@@ -176,6 +201,7 @@ export function downedUpdate(game: GameContext, dt: number) {
   for (const [id, d] of [...downs]) {
     const p = game.players.find((o) => o.id === id);
     if (!p || !p.alive) {
+      if (p) giveBack(p, d);
       downs.delete(id);
       continue;
     }
