@@ -368,15 +368,10 @@ function slam(use: ItemUse<ArmsMelee>, r: Hand, def: ArmsMelee, item: string, k:
   if (def.legend) legendHit(game, me, null, def, item, { crit: k >= 1, back: false, amount: 0, slam: at });
 }
 
-/** A swing's arc in the air: a fan of sparks along its edge. */
+/** A swing's arc in the air: a fan of sparks along its edge, drawn by each screen from one word (`client/fx.ts`). */
 function sweepTrail(game: GameContext, me: Player, reach: number, arc: number, color: string) {
   const eye = me.eye;
-  const n = Math.max(4, Math.round(arc / 14));
-  for (let i = 0; i <= n; i++) {
-    const a = me.yaw + (i / n - 0.5) * 2 * arc * DEG;
-    const d = reach * 0.75;
-    game.fx.burst({ x: eye.x - Math.sin(a) * d, y: eye.y - 0.35 + (i / n - 0.5) * 0.2, z: eye.z - Math.cos(a) * d }, { color, count: 2, speed: 0.4, size: 0.1, gravity: 0, glow: 0.8, life: 0.22, drag: 4 });
-  }
+  game.clients.send('all', 'armory.sweep', { x: eye.x, y: eye.y - 0.35, z: eye.z, yaw: me.yaw, reach: reach * 0.75, arc: arc * DEG, color });
 }
 
 function burstAt(game: GameContext, e: Entity, color: string, count: number) {

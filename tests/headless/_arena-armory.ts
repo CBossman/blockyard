@@ -4,6 +4,7 @@ import { BLESSINGS, grant, level, offer } from '../../src/games/arena/blessings'
 import { forge, forgePrice } from '../../src/games/arena/items/forge';
 import { rollWeapon } from '../../src/games/arena/items/loot';
 import { baseOf, rarityOf, variant } from '../../src/games/arena/items/rarity';
+import { SHOWS } from '../../src/games/arena/items/moves';
 import { burning, chillOf, frozen, stagger, stunned } from '../../src/games/arena/items/status';
 import { check, launch } from './_harness';
 
@@ -82,6 +83,10 @@ export default function arenaArmory() {
     const s = scene(2);
     s.hold('gladius');
     const z = s.spawn('zombie', -6.8);
+    // What the screens are told (the stars over its head are theirs to draw: told once, not streamed).
+    const told: { name: string; data: unknown }[] = [];
+    const send = s.game.clients.send.bind(s.game.clients);
+    (s.game.clients as { send: typeof send }).send = (to, name, data) => (told.push({ name, data }), send(to, name, data));
     let parried = false;
     let blockedTook = -1;
     let t = 0;
@@ -101,8 +106,11 @@ export default function arenaArmory() {
       return { ...EAST, buttons: RMB };
     });
     const reels = stunned(z) || (z.data.stunned as number) > 0;
-    log(`gladius: parried, the zombie ${reels ? 'reels' : 'stands'}; a blow on the shield later took ${blockedTook.toFixed(2)} of 4`);
+    s.run(1);
+    const stars = told.filter((m) => m.name === 'armory.status' && (m.data as { id: number }).id === z.id).map((m) => (m.data as { f: number }).f);
+    log(`gladius: parried, the zombie ${reels ? 'reels' : 'stands'} (the screens told ${stars.join(' then ')}); a blow on the shield later took ${blockedTook.toFixed(2)} of 4`);
     check(z.data.stunned !== undefined && blockedTook > 0 && blockedTook < 1.5, 'parry staggers, the block takes most of a blow');
+    check(stars.length === 2 && stars[0] & SHOWS.stun && stars[1] === 0, 'the stars told once as it reels, once as it stops');
   }
 
   // …and an arrow parried flies back at the archer.
