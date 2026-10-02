@@ -37,6 +37,8 @@ interface Aura {
   color: RGB;
   tick: number;
   ring: number;
+  /** When it was last drawn (its figure can come a moment after the word of it). */
+  seen: number;
 }
 
 /** Each affix's aura: particles about the figure, how often, and how (besides the ring at every elite's feet). */
@@ -110,7 +112,7 @@ function bestiaryKit(): ClientKit {
       });
       client.on('bestiary.elite', (d) => {
         const e = d as { id: number; affix: string; color: string };
-        auras.set(e.id, { affix: e.affix, color: rgb(e.color, 1.6), tick: Math.random() * 0.1, ring: 0 });
+        auras.set(e.id, { affix: e.affix, color: rgb(e.color, 1.6), tick: Math.random() * 0.1, ring: 0, seen: clock });
       });
       client.on('bestiary.guard', (d) => {
         const g = d as { id: number; up: boolean };
@@ -191,6 +193,7 @@ function bestiaryKit(): ClientKit {
         }
         // Elites' auras.
         const a = auras.get(f.id);
+        if (a) a.seen = clock;
         if (a && f.state.dying === 0) {
           const spec = AURAS[a.affix];
           a.tick -= dt;
@@ -215,7 +218,7 @@ function bestiaryKit(): ClientKit {
         }
       }
       // Forget what's gone.
-      for (const id of auras.keys()) if (!shown.has(id)) auras.delete(id);
+      for (const [id, a] of auras) if (clock - a.seen > 3) auras.delete(id);
       for (const id of raised.keys()) if (!shown.has(id)) (raised.delete(id), guards.delete(id));
       for (const id of rites.keys()) if (!shown.has(id)) rites.delete(id);
       for (const id of dazed.keys()) if (!shown.has(id)) dazed.delete(id);
