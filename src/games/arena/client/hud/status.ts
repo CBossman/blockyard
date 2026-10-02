@@ -285,7 +285,7 @@ const ROMAN = ['', 'I', 'II', 'III', 'IV', 'V'];
 const RARE = /_(rare|epic|legendary)$/;
 
 /** What a gold bonus was for, by the run's word (`gold`'s `why`). */
-const WHY: Record<string, string> = { wave: 'wave bonus', boss: 'boss bounty', goblin: "goblin's loot", gift: "emperor's gift", start: 'purse' };
+const WHY: Record<string, string> = { wave: 'wave bonus', boss: 'boss bounty', goblin: "goblin's loot", gift: "emperor's gift", start: 'purse', sold: 'sold' };
 
 function chip(text: string, color: string): HTMLElement {
   const c = el('span.ar-chip', text);

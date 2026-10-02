@@ -27,6 +27,11 @@ export function defineRunSounds(client: Client) {
     },
     { reverb: 0.2 },
   );
+  // Something tossed from the hand: a quick swish, and a soft knock where it lands.
+  a.define('item_drop', (s) => {
+    s.noise({ duration: 0.14, filter: 'bandpass', from: 1400, to: 600, q: 1.5, volume: 0.2 });
+    s.tone({ from: 160 * s.pitch, to: 90, duration: 0.12, volume: 0.25, delay: 0.32 });
+  });
   // The merchant's hand bell.
   a.define('merchant', (s) => {
     for (let i = 0; i < 3; i++) s.tone({ wave: 'sine', from: 1320 * s.pitch, duration: 0.5, volume: 0.18, delay: i * 0.16, fm: { ratio: 2.76, depth: 0.9, to: 0.2 } });

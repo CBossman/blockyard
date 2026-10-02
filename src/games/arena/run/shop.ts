@@ -3,9 +3,10 @@ import { RUN_MODELS } from '../models/run';
 import { offered, reroll } from '../blessings';
 import { ARMOR, armorOf, type ArmorId } from '../items';
 import { bus } from './bus';
-import { FEATHER } from './downed';
+import { FEATHER, FEATHER_PRICE } from './downed';
 import { addGold, gold, spend } from './gold';
 import { deliver, forgeNext, forgeWeapon, RARITY, rarityOf, WARES, type Ware } from './loot';
+import { canPart, carriesAsGood, fits, sellPrice, sellSlot } from './pack';
 import { map, runs, state } from './state';
 import { addUsable } from './use';
 
@@ -14,10 +15,12 @@ import { addUsable } from './use';
  * his wares (a menu on that fighter's screen, paid from their own purse, `gold.ts`): the armory's
  * catalog (`items/catalog.ts`, each on sale from its wave: weapons, armour, supplies), a Phoenix
  * Feather, the forge (a weapon carried, to its next rarity), all handed over through `loot.ts`,
- * and three other blessings to choose from (dearer each time). He packs up when the next wave begins.
+ * and three other blessings to choose from (dearer each time); and he buys what they carry
+ * (`pack.ts`), to make room. What won't fit their hotbar is greyed out, saying so. He packs up
+ * when the next wave begins.
  */
 
-export const FEATHER_PRICE = 350;
+export { FEATHER_PRICE } from './downed';
 /** Three other blessings: this much, and this much more each time in a run. */
 export const REROLL_PRICE = 150;
 const REROLL_MORE = 75;
@@ -46,6 +49,8 @@ interface Offer {
   owned?: boolean;
   /** Not yet: why. */
   locked?: string;
+  /** Room for it in their hotbar (default yes: armour's worn, the forge works in place). */
+  fits?: boolean;
   /** Hand it over: false if it couldn't be (a full hotbar). */
   buy(): boolean;
   /** What the bus is told was bought. */
@@ -74,7 +79,7 @@ function wareOffer(game: GameContext, p: Player, w: Ware): Offer {
   const name = def?.name ?? w.item;
   const weapon = w.kind === 'weapon';
   // (Armour's worn, not carried: theirs once they wear it or better.)
-  const owned = weapon ? p.inventory.count(w.item) > 0 : w.kind === 'armor' && armorOf(p) >= (ARMOR[w.item as ArmorId]?.points ?? Infinity);
+  const owned = weapon ? p.inventory.count(w.item) > 0 || carriesAsGood(p, w.item) : w.kind === 'armor' && armorOf(p) >= (ARMOR[w.item as ArmorId]?.points ?? Infinity);
   return {
     id: w.item,
     icon: { item: w.item },
@@ -83,6 +88,7 @@ function wareOffer(game: GameContext, p: Player, w: Ware): Offer {
     price: w.price,
     owned,
     locked: (w.from ?? 0) > cleared() ? `After wave ${w.from}` : undefined,
+    fits: w.kind === 'armor' || fits(game, p, w.item, count),
     buy: () => deliver(game, p, w),
   };
 }
@@ -105,6 +111,7 @@ function offers(game: GameContext, p: Player): { title: string; offers: Offer[] 
     note: 'Carried, it takes a killing blow once and raises you in flame',
     price: FEATHER_PRICE,
     owned: p.inventory.count(FEATHER) > 0,
+    fits: fits(game, p, FEATHER),
     buy: () => give(p, FEATHER, 1),
   };
   const forge = weaponsHeld(game, p).flatMap((item): Offer[] => {
@@ -146,26 +153,60 @@ function offers(game: GameContext, p: Player): { title: string; offers: Offer[] 
   ].filter((s) => s.offers.length);
 }
 
+/** What a ware that won't fit says. */
+const FULL = 'Hotbar full · drop (X) or sell';
+
 function contents(game: GameContext, p: Player) {
   const purse = gold(p);
   return {
     title: 'The Merchant',
     subtitle: subtitle(game, p),
-    sections: offers(game, p).map(({ title, offers: list }) => ({
-      title,
-      entries: list.map(
-        (o): MenuEntry => ({
-          icon: o.icon,
-          label: o.label,
-          note: o.locked ?? o.note,
-          detail: o.owned ? 'Owned' : o.locked ? 'Soon' : `${o.price} gold`,
-          active: o.owned,
-          disabled: !!o.owned || !!o.locked || purse < o.price,
-          onSelect: () => purchase(game, p, o.id),
+    sections: [
+      ...offers(game, p).map(({ title, offers: list }) => ({
+        title,
+        entries: list.map((o): MenuEntry => {
+          const full = !o.owned && !o.locked && o.fits === false;
+          return {
+            icon: o.icon,
+            label: o.label,
+            note: o.locked ?? (full ? FULL : o.note),
+            detail: o.owned ? 'Owned' : o.locked ? 'Soon' : `${o.price} gold`,
+            active: o.owned,
+            disabled: !!o.owned || !!o.locked || full || purse < o.price,
+            onSelect: () => purchase(game, p, o.id),
+          };
         }),
-      ),
-    })),
+      })),
+      { title: 'Sell', entries: sales(game, p) },
+    ].filter((s) => s.entries.length),
   };
+}
+
+/** What they carry, each stack for what the merchant pays (their last weapon kept back). */
+function sales(game: GameContext, p: Player): MenuEntry[] {
+  return p.inventory.slots.flatMap((s, i): MenuEntry[] => {
+    if (!s) return [];
+    const name = game.items.get(s.item)?.name ?? s.item;
+    const keep = !canPart(game, p, i);
+    return [
+      {
+        icon: { item: s.item },
+        label: s.count > 1 ? `${name} ×${s.count}` : name,
+        note: keep ? 'Your last weapon: keep something to fight with' : undefined,
+        detail: `+${sellPrice(game, s.item, s.count)} gold`,
+        disabled: keep,
+        onSelect: () => sell(game, p, i, s.item),
+      },
+    ];
+  });
+}
+
+/** Sell the stack in `slot` to the merchant (if it's still `item`): the gold, or 0. */
+export function sell(game: GameContext, p: Player, slot: number, item?: string): number {
+  if (!shopOpen() || !p.alive) return 0;
+  const g = sellSlot(game, p, slot, item);
+  if (g) refresh(game, p);
+  return g;
 }
 
 function subtitle(game: GameContext, p: Player) {
@@ -183,6 +224,10 @@ export function purchase(game: GameContext, p: Player, id: string): boolean {
     .flatMap((s) => s.offers)
     .find((x) => x.id === id);
   if (!o || o.owned || o.locked) return false;
+  if (o.fits === false) {
+    p.hud.toast(FULL);
+    return false;
+  }
   if (gold(p) < o.price) {
     p.hud.toast('Not enough gold');
     return false;

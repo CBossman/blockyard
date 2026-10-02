@@ -47,9 +47,10 @@ export default defineMeta({
     ['E', 'shop · mystery chest · hold to revive'],
     ['B', 'choose your blessing'],
     ['N', 'ready for the next wave'],
+    ['X', 'drop the item in hand'],
     ['1-9', 'weapons'],
   ],
-  gamepad: { LB: ['KeyQ', 'dodge roll'], RB: ['KeyG', 'throw a bomb'], Up: ['KeyE', 'use · revive'], Down: ['KeyB', 'blessing'], R3: ['KeyN', 'ready'] },
+  gamepad: { LB: ['KeyQ', 'dodge roll'], RB: ['KeyG', 'throw a bomb'], Up: ['KeyE', 'use · revive'], Down: ['KeyX', 'drop'], Y: ['KeyB', 'blessing'], R3: ['KeyN', 'ready'] },
   achievements: {
     first_blood: { title: 'First Blood', description: 'Slay your first monster in the arena' },
     first_wave: { title: 'Warmed Up', description: 'Clear the first wave' },

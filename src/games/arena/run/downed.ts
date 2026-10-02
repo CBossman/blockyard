@@ -27,6 +27,8 @@ const REVIVED = 1 / 3;
 /** Guardian Angel: revives in one fight. */
 const ANGEL = 5;
 export const FEATHER = 'phoenix_feather';
+/** What the merchant asks for one. */
+export const FEATHER_PRICE = 350;
 
 interface Down {
   bleed: number;
