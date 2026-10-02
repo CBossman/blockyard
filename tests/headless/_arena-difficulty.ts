@@ -1,9 +1,10 @@
 import type { Pilot } from '../../src/platform/host/headless';
-import { launch, lastScreen } from './_harness';
+import { state } from '../../src/games/arena/run/state';
+import { launch } from './_harness';
 
 /**
  * Probe: how far a plain bot gets in the Arena with three times the health (it walks at the nearest monster,
- * swings its best blade, and never dodges, blocks or throws), over a few seeds.
+ * swings its best blade, and never dodges, blocks, throws or shops), over a few seeds.
  * `node scripts/headless.mjs tests/headless/_arena-difficulty.ts`
  */
 export default function arenaDifficulty() {
@@ -15,6 +16,10 @@ export default function arenaDifficulty() {
     // Three times the health: a stand-in for a player who dodges and blocks.
     me.maxHealth = 60;
     me.health = 60;
+    // Monsters it can't reach for long (kiting necromancers, an archer on the far side) wear down, so a wave can't stall on them.
+    game.clock.every(1, () => {
+      for (const e of game.entities.all()) if (!e.data.scenery && e.age > 45 && e.distanceTo(me) > 6) e.damage(3, { source: me, knockback: 0 });
+    });
     let taken = 0;
     const by: Record<string, number> = {};
     game.events.on('playerDamage', ({ amount, source }) => {
@@ -76,11 +81,12 @@ export default function arenaDifficulty() {
       return { ...last, clicked: fighting ? 1 : 0 };
     };
 
-    const t = h.run(3600, { pilot, until: () => lastScreen(h) !== undefined });
-    const wave = h.find('hud', 'banner').filter((c) => /^(Wave \d|Final|Endless)/.test(String(c.args[0]))).length;
+    const over = () => state.phase === 'victory' || state.phase === 'defeat';
+    const t = h.run(3600, { pilot, until: over });
+    const wave = state.wave;
     const left = game.entities.all().map((e) => `${e.type}@${Math.hypot(e.position.x, e.position.z).toFixed(0)}/${e.position.y.toFixed(0)}`).join(' ');
     const top = Object.entries(by).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${v.toFixed(0)}`).join(', ');
-    rows.push(`seed ${seed}: ${lastScreen(h) ?? 'no result'} at wave ${wave} after ${t.toFixed(0)} s; took ${taken.toFixed(0)} (${top})${left ? `; left: ${left}` : ''}`);
+    rows.push(`seed ${seed}: ${over() ? state.phase : 'no result'} at wave ${wave} after ${t.toFixed(0)} s; took ${taken.toFixed(0)} (${top})${left ? `; left: ${left}` : ''}`);
   }
   console.log(rows.map((r) => `  ${r}`).join('\n'));
 }
