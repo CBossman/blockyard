@@ -1,5 +1,6 @@
 import { math, type DamageEvent, type Entity, type GameContext, type IconRef, type MenuHandle, type Player, type Vec3 } from '@platform';
 import { combatDamage, frontOf, guardMods } from './items/combat';
+import { bus } from './run/bus';
 import { crossbowMods } from './items/crossbow';
 import { meleeMods } from './items/melee';
 import { baseOf } from './items/rarity';
@@ -13,9 +14,10 @@ import { burn, burning, chill, chillOf, frozen, stunned } from './items/status';
  * often), some can be taken again for more (Berserker II), and many are made for a weapon: a
  * blessing for what you carry is offered more often (Riposte with the gladius, Wildfire with fire,
  * Tremor with the warhammer). They're written here against the damage and death events and the
- * arsenal's hooks (`guardMods`, `spellMods`, …); the server calls `offer` when a wave is won,
- * `settle` when the next begins (anyone who didn't choose is given one of theirs), and `wave` to
- * refresh what lasts a wave.
+ * arsenal's hooks (`guardMods`, `spellMods`, …); the server calls `offer` when a wave is won (the
+ * menu comes up a moment later, or on B), `settle` when the next begins (anyone who didn't choose
+ * is given one of theirs), and `wave` to refresh what lasts a wave. Each one taken is told on the
+ * bus (`blessed`) for the HUD to show.
  */
 interface Blessing {
   name: string;
@@ -88,6 +90,10 @@ const ALL = Object.keys(BLESSINGS) as BlessingId[];
 
 /** How often each rarity is offered, against the others. */
 const WEIGHT = { common: 6, rare: 3, epic: 1.2 };
+/** Each rarity's colour (the HUD frames a blessing's icon in it). */
+export const BLESSING_COLOR = { common: '#ffd36b', rare: '#7cc4ff', epic: '#c98bff' } as const;
+/** Seconds after a wave's cleared that the blessings come up (the wave's card has its moment first; B brings them sooner). */
+const OFFER_AFTER = 3.5;
 /** A blessing made for a weapon they carry: this many times as likely. */
 const AFFINITY = 2.5;
 const ROMAN = ['', '', ' II', ' III', ' IV'];
@@ -130,7 +136,6 @@ export function plainBody(p: Player) {
   const o = offers.get(p.id);
   offers.delete(p.id);
   o?.menu?.close();
-  for (const id of ALL) p.hud.stat(`bless:${id}`, 'Blessing', null);
   p.armor = 0;
   p.maxHealth = 20;
   p.health = 20;
@@ -155,15 +160,11 @@ export function grant(game: GameContext, p: Player, id: BlessingId, chosen: bool
   const o = offers.get(p.id);
   offers.delete(p.id);
   o?.menu?.close();
-  const color = b.rarity === 'epic' ? '#c98bff' : b.rarity === 'rare' ? '#7cc4ff' : '#ffd36b';
-  p.hud.banner(titled(id, n), b.text, { duration: 2.4, color });
-  p.audio.play('heal', { pitch: 1.3 });
+  // (The HUD shows it, from the bus: a callout, its icon joining their blessings.)
+  bus.emit('blessed', { player: p, id, name: titled(id, n), text: b.text, chosen });
   p.audio.play(`arena_bless_${b.rarity}`);
-  if (!chosen) p.hud.toast(`The arena chose for you: ${titled(id, n)}`);
   const q = p.position;
-  game.fx.burst({ x: q.x, y: q.y + 1, z: q.z }, { color, count: b.rarity === 'epic' ? 50 : 30, speed: 3, gravity: -2, glow: 1 });
-  // One line each on their HUD, under the kills and the time.
-  p.hud.stat(`bless:${id}`, 'Blessing', titled(id, n));
+  game.fx.burst({ x: q.x, y: q.y + 1, z: q.z }, { color: BLESSING_COLOR[b.rarity], count: b.rarity === 'epic' ? 50 : 30, speed: 3, gravity: -2, glow: 1 });
 }
 
 /** The key that brings the blessings back up, closed without choosing. */
@@ -192,7 +193,7 @@ export function offer(game: GameContext, p: Player) {
   if (!choices.length) return;
   const o: Offer = { choices, menu: null };
   offers.set(p.id, o);
-  if (!p.bot) show(game, p, o);
+  if (!p.bot) game.clock.after(OFFER_AFTER, () => offers.get(p.id) === o && !o.menu && game.players.includes(p) && show(game, p, o));
 }
 
 interface Offer {
@@ -345,7 +346,7 @@ export function listen(game: GameContext) {
         hit.cancel();
         p.health = 4;
         p.protect(1.5);
-        p.hud.banner('SECOND WIND', undefined, { duration: 1.4, color: '#ffe38a' });
+        bus.emit('feat', { player: p, name: 'second_wind', text: 'Second wind' });
         p.audio.play('heal', { pitch: 0.8 });
         const q = p.position;
         game.fx.shockwave({ x: q.x, y: q.y + 0.1, z: q.z }, 4, '#ffe38a');

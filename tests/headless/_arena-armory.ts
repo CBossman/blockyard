@@ -268,7 +268,8 @@ export default function arenaArmory() {
     });
     const healed = s.me.health > 600;
     offer(s.game, s.me);
-    s.run(0.05);
+    // (It comes up a moment after the wave's cleared.)
+    s.run(3.7);
     const shown = s.h.find('hud', 'menu').at(-1)?.args.find((a) => typeof a === 'object' && a && 'sections' in a) as { sections: { entries: { label: string }[] }[] } | undefined;
     const labels = shown?.sections[0].entries.map((e) => e.label) ?? [];
     log(`blessings: ${Object.keys(BLESSINGS).length} in all; riposte ${healed ? 'mended' : 'did nothing'}, berserker level ${level(s.me, 'berserk')}; offered ${labels.join(', ')}`);
