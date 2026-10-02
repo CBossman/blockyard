@@ -47,6 +47,10 @@ export function setupChoice(game: GameContext) {
       g.restart();
     },
   });
+  // In a room of one's own, each arrival is told (once the fly-over's done) that M picks the map.
+  game.events.on('playerReady', ({ player }) => {
+    if (own(game) && !player.bot) game.clock.after(8, () => game.players.includes(player) && player.hud.toast('Your own arena · M picks the map'));
+  });
   game.events.on('playerLeave', ({ player }) => {
     votes.delete(player.id);
     menus.delete(player.id);
