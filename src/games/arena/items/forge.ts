@@ -20,6 +20,13 @@ export function forgePrice(id: string): number | null {
   return Math.round((ARMS[baseOf(id) as RareBase].price * STEP[next]) / 5) * 5;
 }
 
+/** The forge's offer for `id`: what it becomes and the gold, or null (no rarities, or legendary already). */
+export function forgeNext(id: string): { item: string; price: number } | null {
+  const item = forged(id);
+  const price = forgePrice(id);
+  return item && price !== null ? { item, price } : null;
+}
+
 /** What `id` becomes at the forge (null: nothing). */
 export function forged(id: string): string | null {
   const next = hasRarities(id) ? nextRarity(rarityOf(id)) : null;
@@ -48,7 +55,7 @@ export function forge(game: GameContext, p: Player, id: string): string | null {
   game.fx.burst({ x: q.x, y: q.y + 1.2, z: q.z }, { color: '#ffb347', count: 20, speed: 6, size: 0.06, glow: 2, gravity: 14, life: 0.5 });
   game.audio.play('arena_forge', { at: q });
   const name = game.items.get(next)?.name ?? next;
-  p.hud.banner(name, `Forged · ${r.name}`, { duration: 2.2, color: r.color });
+  // (The announcer has it from the bus.)
   bus.emit('feat', { player: p, name: 'forge', text: `Forged ${name}` });
   return next;
 }
