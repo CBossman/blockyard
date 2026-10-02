@@ -1,6 +1,7 @@
 import type { GameContext, Player } from '@platform';
 import { ARMS } from './arms';
 import { ARMOR, wearArmor, type ArmorId } from './armor';
+import { POTION } from './potions';
 import { RARE_BASES } from './rarity';
 
 /**
@@ -25,7 +26,15 @@ export interface Ware {
 const ARSENAL: Ware[] = RARE_BASES.map((b): Ware => ({ item: b, price: ARMS[b].price, kind: 'weapon', from: ARMS[b].from, note: ARMS[b].text })).sort((a, b) => a.price - b.price);
 
 export const WARES: Ware[] = [
-  { item: 'health_potion', price: 40, kind: 'consumable', note: 'Mends five hearts. R drinks one' },
+  {
+    item: 'health_potion',
+    price: 40,
+    kind: 'consumable',
+    // (Read as the shop shows it: the run's difficulty may change what a potion mends.)
+    get note() {
+      return `Mends ${POTION.heal / 2} hearts. R drinks one`;
+    },
+  },
   { item: 'bomb', price: 30, kind: 'consumable', count: 2, note: 'G throws one' },
   { item: 'arrow', price: 15, kind: 'ammo', count: 12, note: 'For the bow and the crossbow' },
   { item: 'stone_sword', price: 50, kind: 'weapon', note: 'A little better than wood' },
