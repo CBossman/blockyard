@@ -145,6 +145,19 @@ export function defineMapSounds(client: Client) {
     s.noise({ duration: 0.5, filter: 'highpass', from: 3500, to: 5000, volume: 0.35 });
     for (let i = 0; i < 5; i++) s.noise({ duration: 0.012, filter: 'bandpass', from: 2400, to: 2000, q: 3, volume: 0.3, delay: rnd(0, 0.4) });
   });
+  // Lava spitting a fighter out: a deep whoomp as it heaves, a hiss, a bubble or two bursting.
+  a.define('hazard_spit', (s) => {
+    s.noise({ duration: 0.4, filter: 'lowpass', from: 180, to: 1400, attack: 0.02, volume: 0.9 });
+    s.tone({ wave: 'sine', from: 70 * s.pitch, to: 150 * s.pitch, duration: 0.25, volume: 0.55 });
+    s.noise({ duration: 0.7, filter: 'highpass', from: 2600, to: 4800, attack: 0.08, volume: 0.32, delay: 0.1 });
+    for (let i = 0; i < 3; i++) s.tone({ wave: 'sine', from: rnd(180, 300) * s.pitch, to: 70, duration: 0.1, volume: 0.3, delay: 0.15 + i * rnd(0.07, 0.12) });
+  });
+  // The frozen pool throwing a fighter out: a cold splash, ice tinkling.
+  a.define('hazard_splash', (s) => {
+    s.noise({ duration: 0.35, filter: 'bandpass', from: 900, to: 2600, q: 0.8, attack: 0.01, volume: 0.7 });
+    s.noise({ duration: 0.6, filter: 'highpass', from: 4000, to: 6000, volume: 0.25, delay: 0.08 });
+    for (let i = 0; i < 4; i++) s.tone({ wave: 'triangle', from: rnd(2600, 4200) * s.pitch, duration: 0.18, volume: 0.05, delay: 0.1 + rnd(0, 0.2) });
+  });
   a.define('hazard_chill', (s) => {
     s.noise({ duration: 0.25, filter: 'highpass', from: 6000, to: 4000, volume: 0.25 });
     s.tone({ wave: 'triangle', from: 3200 * s.pitch, duration: 0.2, volume: 0.05 });
