@@ -98,11 +98,14 @@ export const sapper: MonsterKind = {
     sounds: { ambient: 'sapper', hurt: 'sapper' },
     bloodColor: '#8a7a4e',
   }),
-  // Slain first, it drops its keg, and it goes off a moment later where it fell (credited to its killer).
+  // Slain first, it drops its keg, and it goes off a moment later where it fell: a fighter's kill
+  // is a blast of theirs (hard on the monsters, never on them); a Sapper caught in another's blast,
+  // or anything else's, goes off as its own keg would (a few hearts for whoever's beside it), not
+  // as the full dropped keg (18 at its heart, in a chain nobody saw coming).
   slain(game, e, by) {
     const q = { ...e.position };
     game.audio.play('fuse', { at: q, pitch: 1.4 });
-    game.clock.after(0.45, () => kegBlast(game, q, by ?? 'world', true));
+    game.clock.after(0.45, () => (by ? kegBlast(game, q, by, true) : kegBlast(game, q, e)));
   },
 };
 
