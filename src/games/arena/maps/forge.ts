@@ -301,12 +301,13 @@ function forgeHall(set: Set) {
       for (let y = FLOOR + 3; y < h.roof; y++) set(x, y, z, z === h.back + 1 || Math.abs(x) === 5 ? (hash(x, y + z, 30) < 0.5 ? 'magma' : 'bricks') : 'air');
     }
   }
-  // The furnace mouth: an arch over the sill, iron round it.
+  // The furnace mouth: an arch over the sill, iron round it, an iron grate across it (the fire
+  // shows through; nobody climbs in, where the lava's too deep to climb back out of).
   for (let x = -5; x <= 5; x++)
     for (let y = FLOOR + 3; y <= FLOOR + 11; y++) {
       const open = Math.abs(x) <= 4 && y >= FLOOR + 4 && (y <= FLOOR + 8 || (y === FLOOR + 9 && Math.abs(x) <= 3) || (y === FLOOR + 10 && Math.abs(x) <= 1));
       const frame = !open && (Math.abs(x) === 5 || y === FLOOR + 3 || y >= FLOOR + 9);
-      if (open) set(x, y, h.front, 'air');
+      if (open) set(x, y, h.front, 'arena_grate');
       else if (frame && y <= FLOOR + 11) set(x, y, h.front, y === FLOOR + 3 ? 'basalt_bricks' : 'bronze');
     }
   // The doors, and the pens behind them: floors at the terrace's height, torch-lit.
@@ -602,21 +603,29 @@ const PORTCULLISES: Portcullis[] = [
 /** Bosses come in the open: before the terrace, west, east, and in the slag field. */
 const bossGate = (x: number, z: number): Gate => ({ at: at(x + 0.5, FLOOR + 1.05, z + 0.5), yaw: yawTo(OX + x + 0.5, OZ + z + 0.5, C.x, C.z) });
 
-/** Lava that burns: the river (by column), its cave, the slag field's pockets, the lavafalls' pools. */
-const HAZARDS: Hazard[] = [
-  {
-    kind: 'lava',
-    zone: [
-      ...Array.from({ length: 93 }, (_, i) => {
-        const x = i - 46;
-        const { z0, z1 } = riverCells(x);
-        return box(at(x, FLOOR - 2, z0), at(x, FLOOR, z1));
-      }),
-      ...POCKETS.map((p) => box(at(p.x0, FLOOR - 2, p.z0), at(p.x1, FLOOR, p.z1))),
-      ...FALL_POOL.map((c) => box({ ...c, y: FLOOR - 2 }, { ...c, y: FLOOR })),
-    ],
-  },
-];
+/** The caldera, built once (the world's structure, and where its lava is). */
+const BUILT = build();
+
+/**
+ * Lava that burns: every lava block the caldera has (the river and its cave, the slag field's
+ * pockets, the lavafalls and their pools, the furnace behind its grate), a box to each column of
+ * it, so there's nowhere lava can be waded into or fallen into that doesn't burn.
+ */
+const HAZARDS: Hazard[] = [{ kind: 'lava', zone: lavaColumns(BUILT) }];
+
+function lavaColumns(bp: Blueprint): Box[] {
+  const span = new Map<string, { x: number; z: number; lo: number; hi: number }>();
+  bp.forEach((x, y, z, b) => {
+    if (b !== 'lava') return;
+    const k = `${x},${z}`;
+    const s = span.get(k);
+    if (s) {
+      s.lo = Math.min(s.lo, y);
+      s.hi = Math.max(s.hi, y);
+    } else span.set(k, { x, z, lo: y, hi: y });
+  });
+  return [...span.values()].map((s) => box({ x: s.x, y: s.lo, z: s.z }, { x: s.x, y: s.hi, z: s.z }));
+}
 
 const TRAPS: TrapSpec[] = [
   {
@@ -784,7 +793,7 @@ export const FORGE: ArenaMap = {
   color: '#ff7a1a',
   icon: 'magma',
   origin: C,
-  build: () => [build(), ground()],
+  build: () => [BUILT, ground()],
   center: { x: C.x, y: FLOOR + 1, z: C.z },
   radius: 22,
   gates: GATES,
