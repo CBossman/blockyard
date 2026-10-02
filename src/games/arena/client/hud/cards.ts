@@ -20,13 +20,13 @@ export function cards(): ClientKit {
 
   const show = (client: Client, c: WaveCard) => {
     card?.el.remove();
-    const cell = (k: string, cls = '') => {
+    const cell = (k: string, cls = '', note = '') => {
       const v = el(`span.v${cls}`, '0');
-      return { cell: el('div.ar-card-cell', v, el('span.k', k)), v };
+      return { cell: el('div.ar-card-cell', v, el('span.k', k), note ? el('span.n', note) : null), v };
     };
     const time = cell('Time');
     const kills = cell('Kills');
-    const gold = cell(c.bonus > 0 ? `Gold · +${num(c.bonus)} bonus` : 'Gold', '.gold');
+    const gold = cell('Gold', '.gold', c.bonus > 0 ? `+${num(c.bonus)} bonus` : '');
     const dmg = cell('Damage');
     const e = el(
       'div.ar-card',
@@ -121,6 +121,7 @@ const CSS = `
 .ar-card-cell .v { font: 500 26px/1 var(--ar-label, sans-serif); font-variant-numeric: tabular-nums; color: var(--ar-fg, #f5efe4); }
 .ar-card-cell .v.gold { color: var(--ar-gold-hi, #ffe3a1); }
 .ar-card-cell .k { font: 500 10px/1 var(--ar-label, sans-serif); letter-spacing: 0.28em; text-transform: uppercase; color: var(--ar-fg3, rgba(245, 239, 228, 0.44)); }
+.ar-card-cell .n { font: 500 10px/1 var(--ar-label, sans-serif); letter-spacing: 0.14em; text-transform: uppercase; color: var(--ar-gold, #f0c060); }
 .ar-card-mvp, .ar-card-next { margin-top: 12px; display: flex; align-items: center; gap: 9px; font: 500 12px/1 var(--ar-label, sans-serif); letter-spacing: 0.2em; text-transform: uppercase; color: var(--ar-fg2, rgba(245, 239, 228, 0.7)); animation: ar-card-fade 500ms ease both 1.4s; }
 .ar-card-mvp b, .ar-card-next b { font: 700 14px/1 var(--ar-title, Georgia, serif); letter-spacing: 0.1em; color: var(--ar-fg, #f5efe4); }
 .ar-card-mvp.you b { color: var(--ar-gold-hi, #ffe3a1); }

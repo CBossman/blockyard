@@ -171,11 +171,11 @@ body:has(.ar-card:not(.out)) .ar-stage {
   }
 }
 
-/* ---------- Feats and friends: under the crosshair ---------- */
+/* ---------- Feats and friends: under the crosshair (below the platform's pops: a status, a stun) ---------- */
 .ar-feats {
   position: absolute;
   left: 50%;
-  top: calc(50% + 74px);
+  top: calc(50% + 112px);
   transform: translateX(-50%);
   display: flex;
   flex-direction: column;
