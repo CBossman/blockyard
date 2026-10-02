@@ -2080,6 +2080,19 @@ export interface Entity {
   /** Walk in a world-space direction (x, z), e.g. strafing. */
   moveDirection(x: number, z: number): void;
   stop(): void;
+  /**
+   * Fly in a world direction (x, y, z; a length under 1 is that share of its speed): weightless,
+   * rising or sinking as it says, colliding with blocks. Call it every tick while it flies (a bat,
+   * a wisp); `moveTo`, `moveDirection` or `stop` lands it, and it falls.
+   */
+  fly(x: number, y: number, z: number): void;
+  /** Put it somewhere at once (a blink), standing still. */
+  teleport(at: Vec3): void;
+  /**
+   * How big it is, times its type's: its hitbox (for walking, shots and blades) and its figure
+   * grow together. Default 1 (a champion's 1.4).
+   */
+  size: number;
   jump(): void;
   /** Turn to face a point (otherwise entities face their movement). */
   lookAt(target: Player | Entity | Vec3 | null): void;

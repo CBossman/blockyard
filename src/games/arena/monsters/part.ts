@@ -1,4 +1,96 @@
 import type { ArenaPart } from '../part';
+import { bus } from '../run/bus';
+import { spawnMonster } from '../run/spawn';
+import { knightGuard } from './knight';
+import { golemCracks } from './golem';
+import { empoweredHits } from './cultist';
+import { impFire } from './imp';
+import { minotaurDazed } from './minotaur';
+import { AFFIXES, eliteHits, eliteLanded, eliteList, eliteNight, elitesTick, eliteSlain, makeElite, resetElites, rollElite, type Affix } from './elites';
+import { MONSTERS, monsterKind } from './index';
 
-/** The bestiary's own business: elite monsters and their affixes. (A stub for now: the part's owner fills it in.) */
-export const bestiaryPart: ArenaPart = { name: 'bestiaryPart' };
+/** The kinds that have come in this run (each one's tip is shown once), and the tips waiting their turn. */
+const seen = new Set<string>();
+let tips: { name: string; tip: string; color?: string }[] = [];
+let nextTip = 0;
+
+/**
+ * The bestiary's own business on the server: the hits its monsters change (a knight's shield, a
+ * golem's armour, a dazed minotaur, a cultist's blessing, an imp's fire); a tip the first time
+ * each kind comes in; and elites: rolled as monsters come in (the bus's `spawned`), their affixes
+ * at work every tick, their last words when they die. `/summon` brings any in (a cheat).
+ */
+export const bestiaryPart: ArenaPart = {
+  name: 'bestiaryPart',
+  setup(game) {
+    resetElites();
+    seen.clear();
+    tips = [];
+    nextTip = 0;
+    game.events.on('damage', (hit) => {
+      knightGuard(game, hit);
+      if (hit.cancelled) return;
+      golemCracks(hit);
+      minotaurDazed(hit);
+      empoweredHits(game, hit);
+      eliteHits(game, hit);
+    });
+    game.events.on('playerDamage', ({ player, amount, source, weapon }) => {
+      if (weapon === 'imp_fire') impFire(game, player);
+      eliteLanded(game, player, amount, source);
+    });
+    bus.on('spawned', ({ entity, type }) => {
+      rollElite(game, entity, type);
+      // The first of a kind each run: what it is, and how to beat it.
+      const kind = monsterKind(type);
+      if (kind?.tip && !seen.has(type)) {
+        seen.add(type);
+        tips.push({ name: kind.define(game).name, tip: kind.tip, color: kind.color });
+      }
+    });
+    bus.on('runStart', () => {
+      seen.clear();
+      tips = [];
+    });
+    bus.on('slain', ({ entity, by }) => eliteSlain(game, entity, by));
+    bus.on('waveStart', ({ twist }) => eliteNight(twist === 'elite_night'));
+    // A screen that's just arrived sees the elites already in.
+    game.events.on('playerReady', ({ player }) => {
+      for (const x of eliteList()) game.clients.send(player, 'bestiary.elite', x);
+    });
+    game.commands.register('summon', {
+      usage: '<monster> [count] [affix]',
+      help: 'Bring monsters in a few blocks ahead of you (an affix makes them elites)',
+      cheat: true,
+      complete: () => [...MONSTERS.map((m) => m.id), ...Object.keys(AFFIXES)],
+      run: ([type, count, affix], g, p) => {
+        if (!MONSTERS.some((m) => m.id === type)) return `Monsters: ${MONSTERS.map((m) => m.id).join(', ')}`;
+        if (affix && !(affix in AFFIXES)) return `Affixes: ${Object.keys(AFFIXES).join(', ')}`;
+        const n = Math.max(1, Math.min(12, Number(count) || 1));
+        const q = p.position;
+        const l = Math.hypot(p.look.x, p.look.z) || 1;
+        for (let i = 0; i < n; i++) {
+          const at = { x: q.x + (p.look.x / l) * 5 + (i - (n - 1) / 2) * 1.2, y: q.y + 0.1, z: q.z + (p.look.z / l) * 5 };
+          const e = spawnMonster(g, type, g.world.fits(at) ? at : q, { data: { summoned: true } });
+          if (affix) makeElite(g, e, affix as Affix);
+        }
+        return `${n} ${type}`;
+      },
+    });
+  },
+  start() {
+    resetElites();
+    seen.clear();
+    tips = [];
+    nextTip = 0;
+  },
+  update(game) {
+    elitesTick(game);
+    // One tip at a time, a few seconds each, when several new kinds come in together.
+    if (tips.length && game.clock.now >= nextTip) {
+      const t = tips.shift()!;
+      game.hud.pop(t.name, { color: t.color, sub: t.tip });
+      nextTip = game.clock.now + 3.5;
+    }
+  },
+};

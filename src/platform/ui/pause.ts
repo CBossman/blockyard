@@ -32,7 +32,7 @@ export interface PausePlayer {
 }
 
 type Pane = 'help' | 'settings';
-type Tab = 'graphics' | 'controls' | 'controller' | 'world';
+type Tab = 'graphics' | 'controls' | 'controller' | 'sound' | 'world';
 
 /**
  * The pause menu (Escape, or a controller's Menu button): the game's name and room down the left
@@ -220,6 +220,15 @@ export class PauseMenu {
           h('div.toggles', {}, toggle('Invert look', 'invertY'), toggle('Vibration', 'vibration'), toggle('Aim assist', 'aimAssist', 'With guns')),
         ),
       ),
+      sound: h(
+        'div.tab-body',
+        {},
+        group(
+          'Sound',
+          slider('Volume', 'volume', 0, 1, 0.05, (v) => `${Math.round(v * 100)}%`),
+          slider('Music', 'music', 0, 1, 0.05, (v) => (v > 0 ? `${Math.round(v * 100)}%` : 'Off')),
+        ),
+      ),
       world: game.clock
         ? h(
             'div.tab-body',
@@ -228,9 +237,9 @@ export class PauseMenu {
           )
         : null,
     };
-    const labels: Record<Tab, string> = { graphics: 'Graphics', controls: 'Mouse & keys', controller: 'Controller', world: 'World' };
+    const labels: Record<Tab, string> = { graphics: 'Graphics', controls: 'Mouse & keys', controller: 'Controller', sound: 'Sound', world: 'World' };
     const tabBar = h('div.pause-tabs', { role: 'tablist' });
-    this.tabs = { graphics: null, controls: null, controller: null, world: null };
+    this.tabs = { graphics: null, controls: null, controller: null, sound: null, world: null };
     for (const t of Object.keys(labels) as Tab[]) {
       const body = tabBodies[t];
       if (!body) continue;
