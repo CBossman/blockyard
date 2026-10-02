@@ -41,7 +41,7 @@ const sweepMove: Move = {
     const p = c.self.position;
     const a = c.s.mem.sweep as number;
     c.self.animate('sweep', { fade: 0.06 });
-    strike(c.game, { source: c.self, at: p, r: REACH, damage: 4.5, arc: [a - ARC, a + ARC], knockback: 9, lift: 4.5 });
+    strike(c.game, { source: c.self, at: p, r: REACH, damage: 3.8, arc: [a - ARC, a + ARC], knockback: 9, lift: 4.5 });
     c.game.audio.play('colossus_sweep', { at: p });
     c.game.fx.shake(0.15, 0.3);
   },
@@ -134,7 +134,8 @@ const ribsMove: Move = {
   },
   act(c) {
     const { game, self } = c;
-    const n = Math.min(THRALLS - thralls(c), adds(game, 2));
+    // (One fewer for a lone fighter: the first boss is a wall, not a grind.)
+    const n = Math.min(THRALLS - thralls(c), fighters(game).length > 1 ? adds(game, 2) : 1);
     for (let i = 0; i < n; i++) {
       game.clock.after(i * 0.35, () => {
         if (!self.alive) return;
