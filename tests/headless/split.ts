@@ -13,7 +13,7 @@ const GAMES = resolve('src/games');
  * stays true), and never from its shared code, its client code or its meta.
  */
 const SERVER_ONLY: Record<string, string[]> = {
-  arena: ['run/director.ts', 'monsters/index.ts'],
+  arena: ['run/director.ts', 'monsters/index.ts', 'bosses/index.ts'],
   bedwars: ['bots.ts', 'fireballs.ts', 'items.ts', 'nav.ts', 'shop.ts', 'state.ts'],
   callofblocky: ['bots.ts', 'briefcase.ts', 'hud.ts', 'match.ts', 'progression.ts', 'weapons.ts'],
   highnoon: ['bots.ts', 'hud.ts', 'weapons.ts'],
