@@ -130,9 +130,9 @@ const SLIMES = {
 export function slime(size) {
   const o = SLIMES[size];
   const P = new Palette();
-  P.add('jelly', 0x6fd64a, { rough: 0.12, vary: 0.04, glow: 0.12 });
-  P.add('jellyLight', 0xa6f07a, { rough: 0.1, glow: 0.2 });
-  P.add('jellyDark', 0x3f9a2e, { rough: 0.15, glow: 0.08 });
+  P.add('jelly', 0x6fd64a, { rough: 0.12, vary: 0.04, glow: 0.3 });
+  P.add('jellyLight', 0xa6f07a, { rough: 0.1, glow: 0.4 });
+  P.add('jellyDark', 0x3f9a2e, { rough: 0.15, glow: 0.2 });
   P.add('eye', 0x101410, { rough: 0.2 });
   P.add('glint', 0xffffff, { rough: 0.1, glow: 0.6 });
   P.add('mouth', 0x24581c, { rough: 0.3 });

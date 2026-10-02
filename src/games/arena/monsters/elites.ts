@@ -51,19 +51,18 @@ export function resetElites() {
   elites.clear();
   fires = [];
   chilled.clear();
+  fireTick = 0;
   night = false;
 }
 
-export const eliteOf = (e: Entity): Affix | undefined => elites.get(e.id)?.affix;
-
-/** The chance a monster of wave `n` comes as an elite. */
+/** The chance a monster of wave `n` comes as an elite: from 6% at the sixth wave to 30% at the twentieth, and on up in the endless waves. */
 export function eliteChance(n: number): number {
   if (n < 6) return 0;
   const base = n <= 20 ? 0.06 + (n - 6) * 0.017 : Math.min(0.45, 0.3 + (n - 20) * 0.01);
   return Math.min(0.6, base * (night ? 3 : 1));
 }
 
-/** How much a juggernaut grows: half again, but never past the gates' height (2.8). */
+/** How much a juggernaut grows: two fifths again, but never past the gates' height (2.8). */
 const growth = (game: GameContext, type: string) => Math.min(1.4, 2.8 / about(game, type).height);
 
 /** Which affixes a kind can take (a slime splits anyway; a bat's no juggernaut, nor anything near the gates' height already). */
@@ -197,7 +196,15 @@ export function eliteSlain(game: GameContext, e: Entity, by: Player | null) {
     ring(game, at, 3.4, 0.9, AFFIXES.explosive.color);
     game.audio.play('fuse', { at, pitch: 1.3 });
     game.clock.after(0.9, () => {
-      game.world.explode({ x: at.x, y: at.y + 0.8, z: at.z }, 2.5, { damage: [8, 2], reach: 3.4, knockback: 1.6, by: e, weapon: 'elite_blast', filter: () => false });
+      // The blast is its killer's (the monsters it takes are theirs), and it hurts fighters near it too.
+      const c = { x: at.x, y: at.y + 0.8, z: at.z };
+      game.world.explode(c, 2.5, { damage: [8, 2], reach: 3.4, knockback: 1.6, by: by ?? e, weapon: 'elite_blast', filter: () => false });
+      if (by) {
+        for (const p of game.players) {
+          const d = Math.hypot(p.position.x - c.x, p.position.y + 0.9 - c.y, p.position.z - c.z);
+          if (p.alive && d < 3.4 && game.world.lineOfSight(c, p.eye)) p.damage(8 - 6 * (d / 3.4), { source: e, from: c, knockback: 1.6, cause: 'explosion' });
+        }
+      }
       shakeNear(game, at, 0.3, 0.4);
     });
   } else if (x.affix === 'splitting') {

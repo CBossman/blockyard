@@ -24,8 +24,9 @@ interface KnightState {
 
 /** How far either side of straight ahead the shield covers (radians). */
 const COVER = 1.25;
-/** Turning, a second: on guard, and closing in. */
+/** How fast it turns (radians a second): slow enough to be circled. */
 const TURN = 1.7;
+/** How far its sword reaches. */
 const REACH = 2.3;
 
 /** Its guard: up (true) or down, as every screen should pose its shield arm. */

@@ -293,11 +293,20 @@ function bestiaryKit(): ClientKit {
         l.tick = 0.05;
         const reach = l.length * Math.min(1, 0.35 + l.age / l.time);
         const sx = Math.sin(l.dir), sz = Math.cos(l.dir);
-        for (let d = 1; d < reach; d += 0.7)
+        for (let d = 1; d < reach; d += 0.45)
           for (const side of [-1, 1]) {
             const w = (l.width / 2) * side;
-            fx.particles({ x: l.x + sx * d + sz * w, y: l.y + 0.12, z: l.z + sz * d - sx * w }, l.color, { count: 1, speed: 0, size: 0.12, glow: 2.4, gravity: 0, life: 0.1, spread: 0 });
+            fx.particles({ x: l.x + sx * d + sz * w, y: l.y + 0.12, z: l.z + sz * d - sx * w }, l.color, { count: 1, speed: 0, size: 0.15, glow: 2.8, gravity: 0, life: 0.1, spread: 0 });
           }
+        // Chevrons down the middle, pointing the way it will come.
+        const step = 1.6;
+        for (let d = 1.5 + ((l.age * 4) % step); d < reach; d += step)
+          for (const side of [-1, 1])
+            for (const t of [0.25, 0.5]) {
+              const w = (l.width / 2) * side * t;
+              const back = t * 0.6;
+              fx.particles({ x: l.x + sx * (d - back) + sz * w, y: l.y + 0.12, z: l.z + sz * (d - back) - sx * w }, l.color, { count: 1, speed: 0, size: 0.13, glow: 2.2, gravity: 0, life: 0.1, spread: 0 });
+            }
       }
       // Fire left burning on the sand.
       for (let i = fires.length - 1; i >= 0; i--) {

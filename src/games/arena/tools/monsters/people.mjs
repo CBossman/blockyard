@@ -415,8 +415,8 @@ export function minotaur() {
 export function wraith() {
   const look = { build: 'slim', skin: '#d6e2d8', hair: 'bald', face: 'skull', eyes: '#8affd8', top: 'tunic', topColor: '#24303a', bottom: 'trousers', bottomColor: '#1a2028', shoes: 'flats', shoeColor: '#1a2028' };
   const { vox, palette: P, joints: J, skeleton, wear } = person(look);
-  P.add('shroud', 0x5a706c, { rough: 0.95, vary: 0.06, glow: 0.12 });
-  P.add('shroudShade', 0x3a4a48, { rough: 0.95, glow: 0.06 });
+  P.add('shroud', 0x5a706c, { rough: 0.95, vary: 0.06, glow: 0.22 });
+  P.add('shroudShade', 0x3a4a48, { rough: 0.95, glow: 0.12 });
   P.add('shadow', 0x060a0c, { rough: 0.9 });
   P.add('wisp', 0x6affc8, { rough: 0.6, glow: 0.85 });
   P.add('wispDim', 0x3aa888, { rough: 0.6, glow: 0.5 });
