@@ -1,5 +1,5 @@
 import type { Pilot } from '../../src/platform/host/headless';
-import { check, launch, lastScreen } from './_harness';
+import { check, launch } from './_harness';
 
 /**
  * A bot plays the Arena from the first wave to the Warden: it walks at the nearest monster (or
@@ -70,17 +70,19 @@ export default function arena() {
     return { ...last, clicked: fighting ? 1 : 0 };
   };
 
-  const simulated = h.run(900, { pilot, until: () => lastScreen(h) !== undefined });
-  const result = lastScreen(h);
+  // The end screen (the HUD's `arena-end` widget), once it's up.
+  const end = () => h.find('hud', 'widget').find((c) => c.args[0] === 'arena-end')?.args[1] as { word: string; kills: string } | undefined;
+  const simulated = h.run(900, { pilot, until: () => end() !== undefined });
+  const result = end()?.word;
   const wall = (performance.now() - t0) / 1000;
   console.log(`  ${result ?? 'no result'} after ${simulated.toFixed(0)} s of game time, ${wall.toFixed(1)} s wall clock (${(simulated / wall).toFixed(0)}× real time)`);
-  check(result === 'Victory!', `expected Victory!, got ${result ?? 'nothing'} (objective calls: ${h.find('hud', 'objective').length})`);
+  check(result === 'Victory', `expected Victory, got ${result ?? 'nothing'}`);
   // Achievements along the way: the first kill, the first wave, the win, and (never down) the win unbroken.
   const missing = ['first_blood', 'first_wave', 'champion', 'unbroken'].filter((a) => !me.achieved(a));
   check(!missing.length, `achievements not earned: ${missing.join(', ')}`);
   const popped = h.find('hud', 'achievement').map((c) => (c.args[0] as { title: string }).title);
   check(popped.includes('Champion') && popped.includes('Warmed Up'), `achievements popped up: ${popped.join(', ')}`);
-  const slain = (h.find('hud', 'screen').at(-1)?.args[1] as { stats: [string, string][] }).stats.find(([k]) => k === 'Monsters slain')?.[1];
+  const slain = end()?.kills.replace(/,/g, '');
   check(String(me.store.get<number>('kills')) === slain, `kills kept all-time: ${me.store.get('kills')} of ${slain}`);
   console.log(`  achievements: ${popped.join(', ')}`);
 }

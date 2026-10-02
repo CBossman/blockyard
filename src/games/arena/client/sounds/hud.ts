@@ -155,9 +155,12 @@ export function defineHudSounds(client: Client) {
   const dry = { reverb: 0 };
 
   // ---------- The music ----------
-  a.define('ar_music', (s) => {
-    for (const n of score) INSTRUMENTS[n.i](s, n);
-  }, { reverb: 0.3 });
+  // A beat of it, as the music kit has filled `score` (twice over: the beats take turns).
+  for (const name of ['ar_music', 'ar_music_b']) {
+    a.define(name, (s) => {
+      for (const n of score) INSTRUMENTS[n.i](s, n);
+    }, { reverb: 0.3 });
+  }
   // The drone under it all: D, low, with its fifth, darkly filtered.
   a.defineLoop('ar_drone', (l) => {
     l.tone({ wave: 'sawtooth', freq: 73.42, volume: 0.32, lowpass: 320 });

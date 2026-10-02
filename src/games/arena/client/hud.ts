@@ -1,7 +1,12 @@
 import type { ClientPart } from './part';
 import { announcer } from './hud/announcer';
+import { cards } from './hud/cards';
+import { crowd } from './hud/crowd';
+import { hits } from './hud/hits';
+import { music } from './hud/music';
 import { status } from './hud/status';
 import { hudState } from './hud/store';
+import { vitals } from './hud/vitals';
 
 /**
  * The HUD on each screen: the Arena's look over the platform's pieces is the theme's
@@ -10,4 +15,4 @@ import { hudState } from './hud/store';
  * party, blessings), the announcer, the wave-cleared card, hits (markers, hit-stop, gore), the
  * fighter's vitals, the music and the crowd in the stands. Its voices are `sounds/hud.ts`.
  */
-export const hudClient: ClientPart = { name: 'hudClient', kits: [hudState(), status(), announcer()] };
+export const hudClient: ClientPart = { name: 'hudClient', kits: [hudState(), status(), announcer(), cards(), hits(), vitals(), music(), crowd()] };
