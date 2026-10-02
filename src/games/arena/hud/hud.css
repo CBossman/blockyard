@@ -302,7 +302,8 @@
   background: rgba(20, 6, 6, 0.72);
   border: 1px solid rgba(224, 168, 96, 0.55);
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6), 0 0 24px rgba(216, 52, 60, 0.28);
-  overflow: hidden;
+  /* (Its bronze caps stand out past its ends.) */
+  overflow: visible;
 }
 /* Bronze caps at either end. */
 .boss-track::before,
@@ -323,12 +324,12 @@
   right: -5px;
 }
 .boss-fill {
-  background: linear-gradient(180deg, #ff6a5e, var(--ar-blood) 50%, #8e1820) !important;
+  /* Marks at the thirds, where the bosses turn to their next phase: drawn the track's width wide, so they stay put as it drains. */
+  background:
+    linear-gradient(90deg, transparent calc(33.33% - 1px), rgba(30, 4, 4, 0.85) calc(33.33% - 1px) calc(33.33% + 1px), transparent calc(33.33% + 1px) calc(66.67% - 1px), rgba(30, 4, 4, 0.85) calc(66.67% - 1px) calc(66.67% + 1px), transparent calc(66.67% + 1px)) 0 0 / min(638px, calc(72vw - 2px)) 100% no-repeat,
+    linear-gradient(180deg, #ff6a5e, var(--ar-blood) 50%, #8e1820) !important;
   box-shadow: 0 0 10px rgba(255, 90, 80, 0.5);
   transition: width 260ms ease;
-  /* Marks at the thirds, where the bosses turn to their next phase. */
-  -webkit-mask: linear-gradient(90deg, #000 calc(33.33% - 1px), transparent calc(33.33% - 1px) calc(33.33% + 1px), #000 calc(33.33% + 1px) calc(66.67% - 1px), transparent calc(66.67% - 1px) calc(66.67% + 1px), #000 calc(66.67% + 1px));
-  mask: linear-gradient(90deg, #000 calc(33.33% - 1px), transparent calc(33.33% - 1px) calc(33.33% + 1px), #000 calc(33.33% + 1px) calc(66.67% - 1px), transparent calc(66.67% - 1px) calc(66.67% + 1px), #000 calc(66.67% + 1px));
 }
 @keyframes ar-boss-in {
   from {
