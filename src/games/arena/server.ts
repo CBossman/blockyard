@@ -6,62 +6,101 @@ import { shared } from './shared';
 import { ROLL } from './abilities';
 import { BLESSINGS, grant, listen as blessingsListen, offer, plainBody, reopen, resetBlessings, settle, wave as blessingsWave, type BlessingId } from './blessings';
 import { bus } from './run/bus';
-import { directorListen, dusk, finalWave, startWave, tick, WAVES } from './run/director';
+import { directorListen, dusk, finalWave, resetDirector, startWave, tick, TWISTS, waveName, waveSpec, type Twist } from './run/director';
 import { kindHooks } from './run/spawn';
-import { inFight, map, resetState, runs, state } from './run/state';
+import { inFight, map, newRun, resetState, runs, state } from './run/state';
 import { PARTS } from './parts';
 import { resetGold } from './run/gold';
 import { resetUsables } from './run/use';
+import { catchUp, payWave } from './run/coins';
+import { bledOut, standAll, standing } from './run/downed';
+import { closeShop, openShop } from './run/shop';
+import { CLASSES, classOf, closeClassMenus, hasChosen, showClassMenu } from './run/classes';
+import { results } from './run/progression';
+import { feat } from './run/hype';
 
-const INTERMISSION = 15;
+/** Seconds between waves (the shop open, a blessing to choose). */
+const INTERMISSION = 20;
+/** Seconds to choose a class before the first wave; once everyone has (or between waves, is ready), it's down to the last few. */
+const CHOOSING = 14;
+const LAST_SECONDS = 3.5;
+/** Ready for the next wave (between waves). */
+const READY_KEY = 'KeyN';
+/** Who's ready for the next wave, by player id. */
+const ready = new Set<string>();
+/** A boss's wave won: a beat for its fall (its death cam) before the wave's done, and when that ends. */
+const BOSS_BEAT = 1.2;
+let wonAt: number | null = null;
 
-/** The weapons Master of Arms asks for, by the item a monster was slain with. */
-const ARMS: Record<string, string> = { bow: 'bow', wooden_sword: 'sword', stone_sword: 'sword', iron_sword: 'sword', diamond_sword: 'sword', pike: 'pike', battle_axe: 'axe' };
-const ALL_ARMS = new Set(Object.values(ARMS)).size;
-/** Monsters slain, all time, for Arena Veteran. */
-const VETERAN_KILLS = 250;
-/** What counts as a blast for Kaboom, and each fighter's run of blast kills (when the last was, how many). */
-const BLASTS = new Set(['bomb', 'powder_keg', 'volatile', 'lightning']);
-const blastKills = new Map<string, { at: number; n: number }>();
+/** Each fighter's place round the middle of the map as a fight begins (or they arrive), facing in. */
+function stand(p: Player, i: number, n: number) {
+  const c = map().center;
+  const a = (i / Math.max(1, n)) * Math.PI * 2;
+  const r = n > 1 ? 2 : 0;
+  const at = { x: c.x + Math.cos(a) * r, y: c.y, z: c.z + Math.sin(a) * r };
+  p.teleport(at, n > 1 ? Math.atan2(Math.cos(a), Math.sin(a)) : 0, 0);
+}
 
-/** The countdown to the first wave. */
+/**
+ * The countdown to the first wave (`state.nextWaveAt`), everyone choosing a class meanwhile. (What
+ * the screens show of all this is the HUD's, from the bus and the state: `hud/`.)
+ */
 function begin(game: GameContext) {
   state.phase = 'countdown';
   state.startedAt = game.clock.now;
+  state.nextWaveAt = game.clock.now + CHOOSING;
   bus.emit('runStart', { map: map() });
-  let n = 3;
-  const tickDown = () => {
-    if (state.phase !== 'countdown') return;
-    // (The HUD counts it down: `hud/part.ts`.)
-    if (n > 0) {
-      n--;
-      game.clock.after(1, tickDown);
-    } else {
-      startWave(game, 1);
-    }
-  };
-  game.clock.after(1.5, tickDown);
+  for (const p of game.players) showClassMenu(game, p);
+}
+
+/** The countdown's ticking: down to the last seconds once everyone's chosen, then the first wave. */
+function countdown(game: GameContext) {
+  const now = game.clock.now;
+  if (game.players.every(hasChosen) && state.nextWaveAt - now > LAST_SECONDS) state.nextWaveAt = now + LAST_SECONDS;
+  if (now >= state.nextWaveAt) {
+    closeClassMenus();
+    startWave(game, 1);
+  }
 }
 
 function waveCleared(game: GameContext) {
-  const w = WAVES[state.wave - 1];
-  const last = state.wave >= finalWave();
+  const n = state.wave;
+  const final = n === finalWave() && !state.endless;
+  const up = game.players.filter(standing);
   for (const p of game.players) {
-    if (p.alive && runs.get(p.id)?.hurt === false) p.achieve('untouched');
-    if (state.wave === 1) p.achieve('first_wave');
+    if (standing(p) && runs.get(p.id)?.hurt === false) {
+      p.achieve('untouched');
+      feat(p, 'untouched', `${p.name}: not a scratch`);
+    }
+    if (n === 1) p.achieve('first_wave');
   }
-  for (const p of game.players) if (!p.alive) rejoin(game, p, !last);
-  bus.emit('waveCleared', { wave: state.wave, final: last, endless: false, bonus: 0 });
-  if (last) return victory(game);
+  // The rest of the party down, and one left standing to win it.
+  if (game.players.length > 1 && up.length === 1) {
+    feat(up[0], 'last_stand', `${up[0].name} won it alone!`);
+    up[0].achieve('last_stand');
+  }
+  const bonus = payWave(game, n);
+  bus.emit('waveCleared', { wave: n, final, endless: state.endless, bonus });
+  standAll(game);
+  for (const p of game.players) if (!p.alive) rejoin(game, p);
+  state.twist = null;
+  state.boss = null;
+  if (final) return victory(game);
+  intermission(game);
+}
+
+/** Between waves: a breather, a blessing to choose, the reward on the dais, the shop open. */
+function intermission(game: GameContext) {
   state.phase = 'intermission';
+  ready.clear();
   state.nextWaveAt = game.clock.now + INTERMISSION;
   for (const p of game.players) p.heal(6);
   // A blessing each, chosen from three.
   for (const p of game.players) offer(game, p);
-  state.twist = null;
-  state.boss = null;
   game.env.time = dusk(state.wave);
+  openShop(game);
   // A reward for each fighter, in a ring on the dais: each can take only their own.
+  const w = waveSpec(state.wave);
   const c = map().center;
   const rewards = game.players.flatMap((p) => (w.reward ?? []).map((r) => ({ ...r, p })));
   const radius = 1.2 + 0.4 * (game.players.length - 1);
@@ -72,50 +111,34 @@ function waveCleared(game: GameContext) {
   });
 }
 
-/** A starting sword, and (arriving late) the weapons and arrows the waves so far gave out; then the parts'. */
+/** Between waves, N says they're ready: once all the people fighting are, the next wave comes in a few seconds. */
+function readyUp(game: GameContext) {
+  const people = game.players.filter((p) => !p.bot);
+  for (const p of people) {
+    if (ready.has(p.id) || !p.input.pressed(READY_KEY)) continue;
+    ready.add(p.id);
+    const n = people.filter((q) => ready.has(q.id)).length;
+    bus.emit('ready', { player: p, ready: n, of: people.length });
+    if (people.length > 1) game.hud.feed(`${p.name} is ready (${n}/${people.length})`, { color: '#9dff8a' });
+    p.hud.toast(n < people.length ? 'Ready: waiting for the others' : 'Ready: here they come');
+  }
+  if (people.length && people.every((p) => ready.has(p.id))) state.nextWaveAt = Math.min(state.nextWaveAt, game.clock.now + LAST_SECONDS);
+}
+
+/** Armed for the fight: their class's kit (`run/`), and gold to catch up if they're late; then the parts'. */
 function arm(game: GameContext, p: Player) {
   plainBody(p);
-  p.inventory.give('wooden_sword');
-  runs.set(p.id, { from: state.wave, fell: false, hurt: state.phase === 'fighting', arms: new Set() });
+  p.inventory.clear();
+  runs.set(p.id, newRun(state.wave, game.clock.now, ''));
   const cleared = state.phase === 'fighting' ? state.wave - 1 : state.phase === 'intermission' || state.phase === 'victory' ? state.wave : 0;
-  for (const w of WAVES.slice(0, cleared)) {
-    for (const r of w.reward ?? []) {
-      if (r.item === 'arrow_bundle') p.inventory.give('arrow', 6 * (r.count ?? 1));
-      else if (r.item === 'bomb_bundle') p.inventory.give('bomb', r.count ?? 1);
-      else if (r.item !== 'health_potion') p.inventory.give(r.item);
-    }
-  }
-  p.inventory.select(0);
+  catchUp(game, p, cleared);
   for (const part of PARTS) part.arm?.(game, p);
+  p.inventory.select(0);
 }
 
-/** A monster slain by a fighter: what it earns them. */
-function slain(game: GameContext, p: Player, type: string, weapon?: string) {
-  p.achieve('first_blood');
-  const all = (p.store.get<number>('kills') ?? 0) + 1;
-  p.store.set('kills', all);
-  if (all >= VETERAN_KILLS) p.achieve('veteran');
-  const r = runs.get(p.id);
-  const kind = weapon && ARMS[weapon];
-  if (r && kind) {
-    r.arms.add(kind);
-    if (r.arms.size === ALL_ARMS) p.achieve('master_of_arms');
-  }
-  if (type === 'warden' && weapon === 'wooden_sword') p.achieve('splinters');
-  if (type === 'goblin') p.achieve('pickpocket');
-  // One blast (and what it sets off) felling four.
-  if (weapon && BLASTS.has(weapon)) {
-    const now = game.clock.now;
-    const b = blastKills.get(p.id);
-    const n = b && now - b.at < 0.4 ? b.n + 1 : 1;
-    blastKills.set(p.id, { at: now, n });
-    if (n >= 4) p.achieve('kaboom');
-  }
-}
-
-/** Someone fell with others still fighting: they watch from the stands until the wave's won. */
+/** Someone's out of the wave (bled out, or the last on their feet fell): they watch from the stands until it's won. */
 function fall(game: GameContext, p: Player) {
-  game.hud.feed(`${p.name} is down`, { color: '#ff8a4c' });
+  game.hud.feed(`${p.name} has fallen`, { color: '#ff8a4c' });
   bus.emit('fell', { player: p });
   game.clock.after(1.5, () => {
     if (p.alive || !game.players.includes(p)) return;
@@ -128,50 +151,70 @@ function fall(game: GameContext, p: Player) {
 }
 
 /** Back on the arena floor after sitting a wave out. */
-function rejoin(game: GameContext, p: Player, announce: boolean) {
+function rejoin(game: GameContext, p: Player) {
   p.revive();
   p.freeze(false);
   p.teleport(map().center, game.rng.range(0, Math.PI * 2), 0);
   bus.emit('rejoined', { player: p });
-  if (!announce) return;
-  p.audio.play('heal');
 }
 
-/** Everyone's down: the arena wins. */
+/** Nobody's left on their feet: the arena wins. */
 function checkWipe(game: GameContext) {
-  if (game.players.length && game.players.every((p) => !p.alive)) defeat();
+  if (game.players.length && !game.players.some(standing)) defeat(game);
 }
+
+let fireworks: (() => void) | null = null;
 
 function victory(game: GameContext) {
   state.phase = 'victory';
-  bus.emit('runEnd', { won: true, wave: state.wave, endless: false, map: map(), time: game.clock.now - state.startedAt, results: [] });
+  bus.emit('runEnd', { won: true, wave: state.wave, endless: false, map: map(), time: game.clock.now - state.startedAt, results: results(game, true) });
   for (const p of game.players) {
     p.achieve('champion');
     const r = runs.get(p.id);
     if (r && r.from === 0 && !r.fell) p.achieve('unbroken');
+    if (!p.bot) {
+      const won = new Set(p.store.get<string[]>('classWins') ?? []);
+      won.add(classOf(p));
+      p.store.set('classWins', [...won]);
+      if (won.size >= Object.keys(CLASSES).length) p.achieve('class_act');
+    }
   }
-  // (The HUD announces it and puts up the end screen: `hud/part.ts`.)
+  // Fireworks over the arena until they fight on (or start again).
   const c = map().center;
   const burst = () => game.fx.fireworks({ x: c.x, y: c.y, z: c.z }, 6);
   burst();
-  game.clock.every(1.1, burst);
+  fireworks = game.clock.every(1.1, burst);
 }
 
-function defeat() {
+/** On past the run's last wave (someone chose to keep fighting): the endless waves, for a best. */
+function endless(game: GameContext) {
+  if (state.phase !== 'victory') return;
+  fireworks?.();
+  fireworks = null;
+  state.endless = true;
+  intermission(game);
+}
+
+function defeat(game: GameContext) {
   if (state.phase === 'defeat' || state.phase === 'victory') return;
   state.phase = 'defeat';
-  bus.emit('runEnd', { won: false, wave: state.wave, endless: false, map: map(), time: 0, results: [] });
+  closeShop(game);
+  bus.emit('runEnd', { won: false, wave: state.wave, endless: state.endless, map: map(), time: game.clock.now - state.startedAt, results: results(game, false) });
 }
 
 /**
- * Arena: survive the waves in a colosseum, collect better weapons and choose a blessing between
- * waves, and defeat the bosses. Alone or together: more fighters bring more monsters, anyone who
- * falls sits out the rest of the wave, and the fight is lost when everyone's down. Built entirely
- * on the public platform API.
+ * Arena: survive twenty waves in an arena, four bosses among them, then on into the endless waves
+ * for a best. Earn gold from what you slay and spend it at the merchant's between waves or on the
+ * mystery chest, choose a blessing after each wave, pick a class, win the crowd. Alone or together:
+ * more fighters bring more monsters, a fighter at the end of their health goes down for a friend
+ * to revive, and the fight is lost when nobody's left standing. Built entirely on the public
+ * platform API.
  *
- * Its parts: `maps/` (where), `monsters/` and `bosses/` (who), `run/director.ts` (the waves),
- * `run/state.ts` (the fight as it stands), `run/bus.ts` (the Arena's own events, which the parts
- * listen to rather than calling each other), `items/`, `blessings.ts`, and the screens' `client/`.
+ * This file is the flow: the countdown, the waves and the time between them, falling and coming
+ * back, victory, the endless waves and defeat. Its parts: `maps/` (where), `monsters/` and
+ * `bosses/` (who), `run/` (the waves, `director.ts`; gold, the shop, the chest, the crowd, revives,
+ * classes and levels, `part.ts`), `items/` and `blessings.ts`, `hud/`, and the screens' `client/`.
+ * They talk on `run/bus.ts`.
  */
 export default defineServer(shared, {
   // Its kinds of item: bombs, bows, the arsenal's blades, crossbows and staffs (and the bare fist), potions (`items/`).
@@ -181,21 +224,24 @@ export default defineServer(shared, {
     resetUsables();
     resetGold();
     resetState();
+    resetDirector();
     runs.clear();
-    blastKills.clear();
     resetBlessings();
     // (Its voices and its items' looks are each screen's, `client/`: played and named here.)
+    // No replays to show, so none kept: recording would cost a sixth of every step.
+    game.replay.keep(0);
     defineArt(game);
     defineItems(game);
     defineMonsters(game);
     defineBosses(game);
-    directorListen(game);
-    blessingsListen(game);
-    for (const part of PARTS) part.setup?.(game);
-    // Fighters never hurt each other (nor themselves): a bomb at your feet only throws monsters about.
+    // Fighters never hurt each other (nor themselves): a bomb at your feet only throws monsters
+    // about. First, so nothing after it takes a friend's blow for a real one.
     game.events.on('damage', (hit) => {
       if (hit.target.kind === 'player' && hit.source && hit.source !== 'world' && hit.source.kind === 'player') hit.cancel();
     });
+    directorListen(game);
+    blessingsListen(game);
+    for (const part of PARTS) part.setup?.(game);
     // The dodge roll: untouchable for most of it, and a puff of sand.
     game.events.on('ability', ({ player, name }) => {
       if (name !== 'roll') return;
@@ -205,15 +251,16 @@ export default defineServer(shared, {
       game.audio.play('whoosh', { at: q, volume: 0.6 });
     });
     game.events.on('entityDeath', ({ entity, killer, weapon }) => {
+      if (entity.data.scenery) return;
       const by = killer && killer !== 'world' && killer.kind === 'player' ? killer : null;
       kindHooks(entity.type)?.slain?.(game, entity, by);
       bus.emit('slain', { entity, type: entity.type, by, weapon, at: { ...entity.position } });
-      if (!by) return;
-      state.kills++;
-      slain(game, by, entity.type, weapon);
     });
     game.events.on('entityDamage', ({ amount, source }) => {
-      if (source !== 'world' && source?.kind === 'player') state.damageDealt += amount;
+      if (source === 'world' || source?.kind !== 'player') return;
+      state.damageDealt += amount;
+      const r = runs.get(source.id);
+      if (r) r.damage += amount;
     });
     game.events.on('playerDamage', ({ player, amount }) => {
       state.damageTaken += amount;
@@ -223,10 +270,14 @@ export default defineServer(shared, {
     game.events.on('playerDeath', ({ player }) => {
       if (!inFight()) return;
       const r = runs.get(player.id);
-      if (r) r.fell = true;
-      if (game.players.some((p) => p.alive)) fall(game, player);
-      else defeat();
+      if (r) {
+        r.fell = true;
+        if (!bledOut(player)) r.downs++;
+      }
+      if (game.players.some(standing)) fall(game, player);
+      else defeat(game);
     });
+    bus.on('keepFighting', () => endless(game));
     game.commands.register('bless', {
       usage: '<blessing>',
       help: 'Give yourself a blessing',
@@ -238,24 +289,39 @@ export default defineServer(shared, {
       },
     });
     game.commands.register('wave', {
-      usage: '<n>',
-      help: 'Skip to wave n (clears the arena)',
+      usage: '<n> [twist]',
+      help: 'Skip to wave n (clears the arena; past the last, the endless waves), with a twist if named',
       cheat: true,
-      run: ([n], g) => {
-        const w = Math.max(1, Math.min(finalWave(), Number(n) || 1));
-        for (const e of g.entities.all()) e.remove();
+      complete: () => Object.keys(TWISTS),
+      run: ([n, twist], g) => {
+        const w = Math.max(1, Number(n) || 1);
+        if (twist && !(twist in TWISTS)) return `Twists: ${Object.keys(TWISTS).join(', ')}`;
+        for (const e of g.entities.all()) if (!e.data.scenery) e.remove();
+        closeClassMenus();
+        closeShop(g);
         state.queue = [];
-        startWave(g, w);
-        return `Wave ${w}: ${WAVES[w - 1].name}`;
+        state.endless = w > finalWave();
+        startWave(g, w, twist as Twist | undefined);
+        return `Wave ${w}: ${waveName(w)}${twist ? ` · ${TWISTS[twist as Twist].name}` : ''}`;
+      },
+    });
+    game.commands.register('win', {
+      help: 'Win this wave (every monster in it slain)',
+      cheat: true,
+      run: (_, g, p) => {
+        if (state.phase !== 'fighting') return 'No wave on';
+        state.queue = [];
+        for (const e of g.entities.all()) if (!e.data.scenery) e.damage(1e6, { source: p });
       },
     });
     game.events.on('playerJoin', ({ player }) => {
       // Before the fight, `start` arms everyone; after everyone left, the next one starts it.
       if (state.phase === 'intro') return;
       arm(game, player);
+      stand(player, 0, 1);
       if (state.phase === 'waiting') return begin(game);
-      player.hud.banner('ARENA', state.phase === 'fighting' ? `Joining wave ${state.wave}` : `Survive ${finalWave()} waves`, { duration: 2.4, color: '#ffb36b' });
       game.hud.feed(`${player.name} joins the fight`, { color: '#ffb36b' });
+      if (inFight()) showClassMenu(game, player);
     });
     game.events.on('playerLeave', () => {
       // The last one out: the arena resets for whoever comes next.
@@ -270,31 +336,47 @@ export default defineServer(shared, {
   start(game) {
     resetState();
     resetGold();
+    resetDirector();
     state.startedAt = game.clock.now;
     runs.clear();
-    blastKills.clear();
     resetBlessings();
-    game.env.time = map().time;
+    fireworks = null;
+    wonAt = null;
+    // The parts first: the maps' choose where this fight is.
     for (const part of PARTS) part.start?.(game);
+    const c = map().center;
+    game.world.spawn = { x: c.x, y: c.y + 0.05, z: c.z, yaw: 0 };
+    game.env.time = map().time;
     if (!game.players.length) {
       state.phase = 'waiting';
       return;
     }
-    for (const p of game.players) arm(game, p);
+    game.players.forEach((p, i) => {
+      arm(game, p);
+      stand(p, i, game.players.length);
+    });
     begin(game);
   },
 
   update(game, dt) {
     for (const part of PARTS) part.update?.(game, dt);
-    // (The HUD shows the wave, the enemies left and the time to the next: `hud/part.ts`.)
-    if (state.phase === 'fighting') {
-      if (tick(game, dt).cleared) waveCleared(game);
+    if (state.phase === 'countdown') countdown(game);
+    else if (state.phase === 'fighting') {
+      if (tick(game, dt).cleared) {
+        wonAt ??= game.clock.now + (state.boss ? BOSS_BEAT : 0);
+        if (game.clock.now >= wonAt) {
+          wonAt = null;
+          waveCleared(game);
+        }
+      }
     } else if (state.phase === 'intermission') {
       reopen(game);
+      readyUp(game);
       if (game.clock.now >= state.nextWaveAt) {
         // Anyone who didn't choose a blessing is given one; Second Wind's back, the Bombardier's bombs.
         settle(game);
         blessingsWave(game);
+        closeShop(game);
         startWave(game, state.wave + 1);
       }
     }

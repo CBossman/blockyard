@@ -64,6 +64,8 @@ export interface ArenaEvents {
   rejoined: { player: Player };
   /** The fight is over: won (the last wave of the run cleared) or lost, how far it got, and each fighter's run. */
   runEnd: { won: boolean; wave: number; endless: boolean; map: ArenaMap; time: number; results: RunResult[] };
+  /** Gold coins worth `value` scattered at `at` (a boss's loot shower), for the run to drop as it drops monsters' coins. */
+  coins: { at: Vec3; value: number; by: Player | null };
   /** A fighter's gold changed (`delta` this time, `total` now), from `at` if it was picked up somewhere, and why. */
   gold: { player: Player; delta: number; total: number; at?: Vec3; why?: 'coin' | 'wave' | 'goblin' | 'boss' | 'gift' | 'start' | 'spend' };
   /** The crowd's hype (0..1); while the Crowd's Favour is on (`favour`), its seconds counting down as a fraction. */
@@ -76,10 +78,12 @@ export interface ArenaEvents {
   levelUp: { player: Player; level: number; unlocks: Unlock[] };
   /** A fighter took up a class (`run/classes.ts`). */
   classPicked: { player: Player; cls: string };
-  /** Something bought at the shop (an item id, or `armor:<tier>`), and what it cost. */
+  /** Something bought at the shop (a ware's item id, `forge:<item>` at the forge), and what it cost. */
   bought: { player: Player; item: string; price: number };
   /** The mystery chest gave a fighter a weapon (or, `item` null, flew off). */
   chest: { player: Player; item: string | null };
+  /** Between waves, a fighter's ready for the next (`ready` of the `of` people fighting are): all ready, it comes sooner. */
+  ready: { player: Player; ready: number; of: number };
   /** A fighter chose to keep fighting past a victory, into the endless waves (the end screen's button). */
   keepFighting: { player: Player };
   /** A fighter took a blessing (`id`; `name` with its level: Berserker II), chosen or (`chosen` false) given them as the wave began. */
