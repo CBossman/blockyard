@@ -100,7 +100,7 @@ function chestShow(): ClientKit {
       // Rising out of the chest as it spins, then hanging there turning slowly.
       const rise = Math.min(1, t / (roll.time * 0.8));
       const ease = 1 - (1 - rise) * (1 - rise);
-      group.position.set(roll.at[0], roll.at[1] + 0.2 + ease * 0.9 + Math.sin(t * 3) * 0.04, roll.at[2]);
+      group.position.set(roll.at[0], roll.at[1] + 0.35 + ease * 1.15 + Math.sin(t * 3) * 0.04, roll.at[2]);
       const turn = roll.yaw + (t < roll.time * 0.8 ? t * 9 : roll.time * 7.2 + (t - roll.time * 0.8) * 1.5);
       group.quaternion.setFromAxisAngle(Y, turn);
       if (skull && t > roll.time * 0.8) group.scale.setScalar(1 + Math.max(0, t - roll.time) * 1.5);

@@ -44,22 +44,22 @@ export const WAVES: WaveSpec[] = [
   { name: 'Rattling Bones', roster: { zombie: 4, skeleton: 3 }, budget: 2, reward: [arrows(2), bombs(1)] },
   { name: 'Powder and Bone', roster: { sapper: 3, zombie: 3, skeleton: 2 }, budget: 3, reward: [POTION, bombs(2)] },
   { name: 'Crawlers', roster: { spider: 6, zombie: 3, sapper: 1 }, budget: 4, reward: [arrows(2), POTION] },
-  { boss: 'colossus', roster: { skeleton: 3, zombie: 2 }, reward: [POTION, bombs(2), arrows(2)] },
+  { boss: 'colossus', name: 'Bone Colossus', roster: { skeleton: 3, zombie: 2 }, reward: [POTION, bombs(2), arrows(2)] },
   { name: 'Dark Rites', roster: { necromancer: 2, zombie: 4, skeleton: 3 }, budget: 7, reward: [POTION, bombs(2)] },
   { name: 'The Iron Line', roster: { knight: 3, skeleton: 3, sapper: 2 }, budget: 8, reward: [arrows(3), POTION] },
   { name: 'Hellfire', roster: { imp: 5, spider: 3, sapper: 2 }, budget: 9, reward: [bombs(3), POTION] },
   { name: 'The Brutes', roster: { brute: 2, zombie: 6, sapper: 2 }, budget: 9, reward: [POTION, arrows(2)] },
-  { boss: 'warden', roster: { skeleton: 2, sapper: 2, knight: 2 }, reward: [{ item: 'health_potion', count: 2 }, bombs(3)] },
-  { name: 'Wraiths', roster: { wraith: 4, necromancer: 1, skeleton: 3 }, budget: 13, reward: [POTION, arrows(3)] },
-  { name: 'Slime Time', roster: { slime: 5, imp: 3, spider: 3 }, budget: 13, reward: [bombs(3), POTION] },
-  { name: 'The Cult', roster: { cultist: 3, knight: 2, zombie: 6 }, budget: 15, reward: [POTION, arrows(3)] },
-  { name: 'Stone and Fire', roster: { golem: 1, imp: 4, brute: 1 }, budget: 16, reward: [{ item: 'health_potion', count: 2 }, bombs(2)] },
-  { boss: 'broodmother', roster: { spider: 5, sapper: 2 }, reward: [{ item: 'health_potion', count: 2 }, bombs(3), arrows(3)] },
-  { name: 'The Horde', roster: { zombie: 14, spider: 6, skeleton: 4, sapper: 3 }, budget: 12, reward: [POTION, bombs(3)] },
-  { name: 'Night Terrors', roster: { wraith: 4, imp: 4, necromancer: 2 }, budget: 19, reward: [POTION, arrows(3)] },
-  { name: 'The Siege', roster: { golem: 2, knight: 4, sapper: 4 }, budget: 19, reward: [{ item: 'health_potion', count: 2 }, bombs(3)] },
-  { name: 'The Gauntlet', roster: { brute: 2, cultist: 2, wraith: 2, golem: 1, slime: 2 }, budget: 22, reward: [{ item: 'health_potion', count: 2 }, bombs(3), arrows(3)] },
-  { boss: 'lich', roster: { skeleton: 4, wraith: 2, necromancer: 1 } },
+  { boss: 'warden', name: 'The Warden', roster: { skeleton: 2, sapper: 2, knight: 2 }, reward: [{ item: 'health_potion', count: 2 }, bombs(3)] },
+  { name: 'Wraiths', roster: { wraith: 4, necromancer: 1, skeleton: 3 }, budget: 16, reward: [POTION, arrows(3)] },
+  { name: 'Slime Time', roster: { slime: 5, imp: 3, spider: 3 }, budget: 16, reward: [bombs(3), POTION] },
+  { name: 'The Cult', roster: { cultist: 3, knight: 2, zombie: 6 }, budget: 19, reward: [POTION, arrows(3)] },
+  { name: 'Stone and Fire', roster: { golem: 1, imp: 4, brute: 1 }, budget: 20, reward: [{ item: 'health_potion', count: 2 }, bombs(2)] },
+  { boss: 'broodmother', name: 'The Broodmother', roster: { spider: 5, sapper: 2 }, reward: [{ item: 'health_potion', count: 2 }, bombs(3), arrows(3)] },
+  { name: 'The Horde', roster: { zombie: 14, spider: 6, skeleton: 4, sapper: 3 }, budget: 16, reward: [POTION, bombs(3)] },
+  { name: 'Night Terrors', roster: { wraith: 4, imp: 4, necromancer: 2 }, budget: 24, reward: [POTION, arrows(3)] },
+  { name: 'The Siege', roster: { golem: 2, knight: 4, sapper: 4 }, budget: 24, reward: [{ item: 'health_potion', count: 2 }, bombs(3)] },
+  { name: 'The Gauntlet', roster: { brute: 2, cultist: 2, wraith: 2, golem: 1, slime: 2 }, budget: 28, reward: [{ item: 'health_potion', count: 2 }, bombs(3), arrows(3)] },
+  { boss: 'lich', name: 'The Lich King', roster: { skeleton: 4, wraith: 2, necromancer: 1 } },
 ];
 
 /** The run's last wave: win it and the arena is yours (then the endless waves, for a best). */
@@ -76,16 +76,22 @@ export function waveSpec(n: number): WaveSpec {
   const k = n - WAVES.length;
   const reward = [POTION, bombs(2), arrows(2)];
   if (n % 5 === 0) return { boss: BOSS_ROUND[(n / 5 - 1) % BOSS_ROUND.length], roster: { brute: 1, wraith: 2, knight: 2 }, budget: 14 + 3 * k, reward };
-  return { name: ENDLESS_NAMES[(k - 1) % ENDLESS_NAMES.length], budget: 40 + 4 * k, reward };
+  return { name: ENDLESS_NAMES[(k - 1) % ENDLESS_NAMES.length], budget: 48 + 5 * k, reward };
 }
 
-/** A boss that's in the game for the one asked (another stands in until it's made). */
-const bossFor = (id: string) => bossKind(id) ?? BOSSES[0];
+/**
+ * The boss that comes for `id`: that one, once it's in the game. Until then the finale's is the
+ * first there is, and any other boss wave is fought without one, a crowd standing in (`STAND_IN`).
+ */
+const bossFor = (id: string) => bossKind(id) ?? (id === 'lich' ? BOSSES[0] : undefined);
+/** A boss wave without its boss: this much more budget, and a brute. */
+const BOSS_STAND_IN = 14;
 
-/** Wave `n`'s name, for banners and the end screen. */
+/** Wave `n`'s name, for banners and the end screen (a boss wave's is its boss's). */
 export const waveName = (n: number) => {
   const w = waveSpec(n);
-  return w.boss ? bossFor(w.boss).name : (w.name ?? `Wave ${n}`);
+  const boss = w.boss ? bossFor(w.boss) : undefined;
+  return boss?.name ?? w.name ?? `Wave ${n}`;
 };
 
 /** A wave's twist: from the second wave on, most waves roll one, never the same twice running. */
@@ -105,9 +111,8 @@ const TWIST_CHANCE = 0.6;
 /** Otherwise, a lone Treasure Goblin turns up this often in a wave. */
 const GOBLIN_CHANCE = 0.35;
 
-/** At most this many monsters in the arena at once (more in a Frenzy); the rest wait their turn. */
-export const MAX_ALIVE = 12;
-const FRENZY_ALIVE = 16;
+/** At most this many monsters in the arena at once (more as the run goes on, more in a Frenzy); the rest wait their turn. */
+export const maxAlive = (n: number) => Math.min(14, 10 + Math.floor(n / 4)) + (state.twist === 'frenzy' ? 4 : 0);
 /** Seconds between monsters coming in (a boss's escort, and a Frenzy, keep other paces). */
 const SPAWN_EVERY = 0.9;
 
@@ -146,8 +151,9 @@ function fill(game: GameContext, n: number, budget: number, counts: Record<strin
  */
 function compose(game: GameContext, n: number, w: WaveSpec, twist: Twist | null): Record<string, number> {
   const counts: Record<string, number> = {};
-  let budget = w.budget ?? 0;
-  const roster = { ...w.roster, ...(w.boss ? bossFor(w.boss)?.escort : {}) };
+  const boss = w.boss ? bossFor(w.boss) : undefined;
+  let budget = (w.budget ?? 0) + (w.boss && !boss ? BOSS_STAND_IN : 0);
+  const roster = { ...w.roster, ...boss?.escort, ...(w.boss && !boss ? { brute: 1 } : {}) };
   for (const [type, count] of Object.entries(roster)) {
     if (monsterKind(type)) counts[type] = (counts[type] ?? 0) + count;
     else budget += STAND_IN * count;
@@ -235,11 +241,11 @@ export function monstersAlive(game: GameContext): number {
 
 /** Bring them in while there's room, one every so often; the twist's weather. Whether the wave's all down. */
 export function tick(game: GameContext, dt: number): { left: number; cleared: boolean } {
-  const alive = monstersAlive(game);
+  let alive = monstersAlive(game);
   const frenzy = state.twist === 'frenzy';
   state.spawnTimer -= dt;
-  if (state.queue.length > 0 && alive < (frenzy ? FRENZY_ALIVE : MAX_ALIVE) && state.spawnTimer <= 0) {
-    spawnNext(game);
+  if (state.queue.length > 0 && alive < maxAlive(state.wave) && state.spawnTimer <= 0) {
+    if (spawnNext(game)) alive++;
     state.spawnTimer = state.boss ? 2.5 : frenzy ? SPAWN_EVERY / 2 : SPAWN_EVERY;
   }
   if (state.twist === 'storm') thunder(game);

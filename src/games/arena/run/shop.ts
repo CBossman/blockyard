@@ -2,7 +2,7 @@ import { Models, type CharacterLook, type Entity, type GameContext, type IconRef
 import { WARES, type Ware } from '../items/catalog';
 import { bus } from './bus';
 import { FEATHER } from './downed';
-import { gold, spend } from './gold';
+import { addGold, gold, spend } from './gold';
 import { forgeNext, RARITY, rarityOf } from './loot';
 import { map, runs, state } from './state';
 import { addUsable } from './use';
@@ -270,6 +270,18 @@ export function shopSetup(game: GameContext) {
     reach: 3,
     label: () => 'Shop',
     use: (g, p) => showShop(g, p),
+  });
+  // For trying the shop and the chest (development, or a server with cheats).
+  game.commands.register('gold', {
+    usage: '<amount>',
+    help: 'Give yourself gold',
+    cheat: true,
+    run: ([n], g, p) => {
+      const amount = Math.round(Number(n));
+      if (!amount) throw new Error('How much?');
+      addGold(g, p, amount, undefined, 'gift');
+      return `${gold(p)} gold`;
+    },
   });
   bus.on('gold', ({ player, total }) => {
     if (total >= MIDAS) player.achieve('midas');

@@ -34,6 +34,7 @@ export default function arenaDifficulty() {
       let best = Infinity;
       let height = 1.3;
       for (const e of game.entities.all()) {
+        if (e.data.scenery) continue;
         const d = Math.hypot(e.position.x - eye.x, e.position.z - eye.z);
         if (d < best) {
           best = d;
@@ -75,8 +76,8 @@ export default function arenaDifficulty() {
       return { ...last, clicked: fighting ? 1 : 0 };
     };
 
-    const t = h.run(900, { pilot, until: () => lastScreen(h) !== undefined });
-    const wave = h.find('hud', 'banner').filter((c) => /^(Wave \d|Final)/.test(String(c.args[0]))).length;
+    const t = h.run(3600, { pilot, until: () => lastScreen(h) !== undefined });
+    const wave = h.find('hud', 'banner').filter((c) => /^(Wave \d|Final|Endless)/.test(String(c.args[0]))).length;
     const left = game.entities.all().map((e) => `${e.type}@${Math.hypot(e.position.x, e.position.z).toFixed(0)}/${e.position.y.toFixed(0)}`).join(' ');
     const top = Object.entries(by).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${v.toFixed(0)}`).join(', ');
     rows.push(`seed ${seed}: ${lastScreen(h) ?? 'no result'} at wave ${wave} after ${t.toFixed(0)} s; took ${taken.toFixed(0)} (${top})${left ? `; left: ${left}` : ''}`);

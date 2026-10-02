@@ -64,9 +64,9 @@ function down(game: GameContext, p: Player, by: Actor | null) {
   const r = runs.get(p.id);
   if (r) {
     r.fell = true;
+    r.hurt = true;
     r.downs++;
   }
-  p.hud.banner('DOWNED', 'Crawl to a friend: they hold E to revive you', { duration: 2.6, color: '#ff4d4d' });
   game.hud.feed(`${p.name} is down!`, { color: '#ff6b6b' });
   game.audio.play('downed', { at: p.position });
   p.fx.flash('#a00000', 0.5, 0.6);

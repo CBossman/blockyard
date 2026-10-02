@@ -7,8 +7,10 @@
  * `node src/games/arena/tools/run/build.mjs [ids...]`. Each file is read back and checked.
  *
  * Conventions:
- * - A voxel is `V` blocks (1/16: a pixel of a block); 1 glTF unit is 1 block. Vertices are written as
- *   whole voxels in bytes (KHR_mesh_quantization, meshopt-compressed), the mesh's node scaling them.
+ * - A voxel is `V` blocks (1/16: a pixel of a block); 1 glTF unit is 1 block. Everything is
+ *   meshopt-compressed; the props' vertices are whole voxels in bytes (KHR_mesh_quantization, the
+ *   mesh's node scaling them), while items keep plain floats (an item's mesh is baked from its
+ *   nodes into one, which byte positions wouldn't survive).
  * - Shapes are written standing up (+y up, the front toward +z). Things that are picked up or held
  *   (`held: true`: the coins, the feather, the skull) are written out as the platform holds items:
  *   along +z, so a pickup on the ground (stood up again by the platform) and a held one stand as
@@ -29,10 +31,11 @@ const OUT = join(HERE, '../../models/run');
 const V = 1 / 16;
 
 class Model {
-  constructor(id, name, { held = false } = {}) {
+  constructor(id, name, { held = false, prop = false } = {}) {
     this.id = id;
     this.name = name;
     this.held = held;
+    this.prop = prop;
     this.vox = new Voxels();
     this.P = new Palette();
   }
@@ -64,7 +67,7 @@ class Model {
 // ---------------------------------------------------------------------------------------------
 // The models
 
-const GOLD = { gold: [0xe8b923, 0.32, 1], goldDeep: [0xb07a12, 0.4, 1], goldLight: [0xffe48a, 0.25, 1] };
+const GOLD = { gold: [0xf0a51c, 0.38, 0.4, 0.1], goldDeep: [0xa8640c, 0.45, 0.4, 0.04], goldLight: [0xffd04a, 0.32, 0.35, 0.18] };
 
 /** A coin: a disc on edge, its rim and an emperor's laurel raised on both faces. */
 function coin() {
@@ -146,7 +149,7 @@ export const LID_HINGE = [0, CH * V, -CD * V];
 
 /** The mystery chest's body: banded planks, gold corners, a rune-lit lock, a glowing hold. */
 function chest() {
-  const m = new Model('chest', 'Mystery Chest').colours(WOOD);
+  const m = new Model('chest', 'Mystery Chest', { prop: true }).colours(WOOD);
   m.shape([-CW, 0, -CD], [CW, CH, CD], (x, y, z, i, j, k) => {
     const edgeX = i === -CW || i === CW - 1;
     const edgeZ = k === -CD || k === CD - 1;
@@ -160,11 +163,9 @@ function chest() {
     // Planks with their seams.
     return j % 3 === 0 ? 'woodDark' : (i + 40) % 7 === 0 ? 'woodLight' : 'wood';
   });
-  // The lock plate on the front, a rune glowing in it.
-  m.shape([-3, 3, CD], [3, 9, CD + 1], (x, y) => {
-    const rune = Math.abs(x) < 1 && y > 4 && y < 8 && !(y > 6 && y < 7 && x > 0);
-    return rune ? 'rune' : 'gold';
-  });
+  // The lock plate on the front, a question mark glowing in it.
+  const MARK = ['.##.', '#..#', '...#', '..#.', '....', '..#.'];
+  m.shape([-3, 3, CD], [3, 9, CD + 1], (x, y, z, i, j) => (MARK[8 - j]?.[i + 2] === '#' ? 'rune' : 'gold'));
   // Runes along the sides.
   for (const s of [-1, 1]) m.shape([s < 0 ? -CW - 1 : CW, 4, -2], [s < 0 ? -CW : CW + 1, 7, 2], (x, y, z) => (Math.abs(z) < 1.5 && (y < 5 || Math.abs(z) < 0.6) ? 'rune' : null));
   // Feet.
@@ -174,7 +175,7 @@ function chest() {
 
 /** Its lid, made from the hinge: arched, banded, a gold handle on the front. */
 function lid() {
-  const m = new Model('chest_lid', 'Mystery Chest Lid').colours(WOOD);
+  const m = new Model('chest_lid', 'Mystery Chest Lid', { prop: true }).colours(WOOD);
   const D = 2 * CD;
   m.shape([-CW, 0, 0], [CW, 6, D], (x, y, z, i, j, k) => {
     // The arch across its depth.
@@ -244,30 +245,30 @@ function glb(g) {
     const base = pos.length / 3;
     const n = DIRS[f.dir].n;
     quadCorners(f).forEach((c, ci) => {
-      pos.push(...c);
-      nor.push(n[0] * 127, n[1] * 127, n[2] * 127);
+      pos.push(...(g.prop ? c : c.map((v) => v * V)));
+      nor.push(...(g.prop ? n.map((v) => v * 127) : n));
       uv.push(Math.round(A.uvs[fi][ci][0] * 65535), Math.round(A.uvs[fi][ci][1] * 65535));
     });
     idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
   });
-  for (const p of pos) if (p < -128 || p > 127) throw new Error(`${g.id}: a voxel beyond a byte's reach (${p})`);
+  if (g.prop) for (const p of pos) if (p < -128 || p > 127) throw new Error(`${g.id}: a voxel beyond a byte's reach (${p})`);
   const glows = [...g.P.colours.values()].some((c) => c.glow > 0);
   const bytes = writeGlb({
     generator: 'Arena src/games/arena/tools/run/build.mjs',
-    // (Its vertices are whole voxels, as bytes: the mesh's node scales them to blocks.)
-    nodes: [{ name: g.id, children: [1], extras: { title: g.name } }, { name: `${g.id}_body`, scale: [V, V, V] }],
+    // (A prop's vertices are whole voxels, as bytes: the mesh's node scales them to blocks.)
+    nodes: [{ name: g.id, children: [1], extras: { title: g.name } }, { name: `${g.id}_body`, ...(g.prop ? { scale: [V, V, V] } : {}) }],
     sceneName: g.id,
     meshName: `${g.id}_body`,
     meshNode: 1,
     attributes: {
-      POSITION: { values: pos, componentType: 5120, type: 'VEC3', minmax: true },
-      NORMAL: { values: nor, componentType: 5120, type: 'VEC3', normalized: true },
+      POSITION: { values: pos, componentType: g.prop ? 5120 : 5126, type: 'VEC3', minmax: true },
+      NORMAL: { values: nor, componentType: g.prop ? 5120 : 5126, type: 'VEC3', normalized: g.prop },
       TEXCOORD_0: { values: uv, componentType: 5123, type: 'VEC2', normalized: true },
     },
     indices: idx,
     material: { name: `${g.id}_atlas`, albedo: png(A.albedo), mr: png(A.mr), glow: glows ? png(A.glow, { grey: true }) : null },
     compress: true,
-    quantized: true,
+    quantized: g.prop,
   });
   return { bytes, voxels: g.vox.count, faces: before, quads: list.length, tris: idx.length / 3 };
 }
@@ -284,6 +285,6 @@ for (const [id, make] of Object.entries(MODELS)) {
   const back = readGlb(readFileSync(file));
   const pa = back.json.accessors[back.json.meshes[0].primitives[0].attributes.POSITION];
   if (!pa?.min || !pa?.max || !out.tris) throw new Error(`${id}: no mesh written`);
-  const size = pa.max.map((v, a) => ((v - pa.min[a]) * V).toFixed(2)).join(' x ');
+  const size = pa.max.map((v, a) => ((v - pa.min[a]) * (g.prop ? V : 1)).toFixed(2)).join(' x ');
   console.log(`${id.padEnd(16)} ${String(out.voxels).padStart(5)} voxels ${String(out.tris).padStart(6)} triangles  ${(out.bytes.length / 1024).toFixed(1).padStart(6)} KB  ${size} blocks`);
 }
