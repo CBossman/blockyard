@@ -122,8 +122,10 @@ export function defineItems(game: GameContext) {
       return true;
     },
   });
-  // The gladius's shield, never carried: an item so each screen can show it in the off hand.
+  // The gladius's shield and the crossbow's spanned bolt, never carried: items so each screen can
+  // show them (in the off hand, in the groove).
   for (const r of RARITIES) it.define(shieldOf(r), { kind: 'misc', name: 'Shield' });
+  it.define('crossbow_bolt', { kind: 'misc', name: 'Bolt' });
   // Armour, put on when it's walked over (or bought).
   for (const id of Object.keys(ARMOR) as ArmorId[]) {
     it.define(id, { kind: 'misc', name: ARMOR[id].name, onPickup: (g, _count, player) => (wearArmor(g, player, id), true) });

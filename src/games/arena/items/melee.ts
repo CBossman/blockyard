@@ -185,6 +185,10 @@ export function melee(): ItemKit<ItemKind<ArmsMelee>> {
         const r = handOf(v.player);
         return { strength: 1 - r.cooldown / r.max, guard: r.guard, charge: r.charge, aiming: r.aiming } satisfies MeleeOwn & Record<string, unknown>;
       },
+      // Everyone's screens see a raised guard (their figures bring the shield up: `client/held.ts`).
+      shown(v) {
+        return handOf(v.player).guard ? { g: true } : null;
+      },
       reset(p) {
         hands.delete(p);
       },
