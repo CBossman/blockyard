@@ -1,6 +1,6 @@
 import type { Entity, GameContext, Player, Vec3 } from '@platform';
-import { FLOOR, along, inBox, introSeconds, MAPS, type ArenaMap, type Gate, type TrapSpec } from '../../src/games/arena/maps';
-import { INTRO_DONE_MSG, INTRO_MSG } from '../../src/games/arena/maps/messages';
+import { FLOOR, along, inBox, MAPS, type ArenaMap, type Gate, type TrapSpec } from '../../src/games/arena/maps';
+import { INTRO_MSG, type IntroMessage } from '../../src/games/arena/maps/messages';
 import { bus } from '../../src/games/arena/run/bus';
 import { addGold, gold } from '../../src/games/arena/run/gold';
 import { map } from '../../src/games/arena/run/state';
@@ -16,8 +16,8 @@ import { check, launch } from './_harness';
  * for its entrance's camera). Then each trap: a fighter with gold
  * walks up to its lever and presses E, pays, and zombies held where it works are hurt and slain
  * by it, the kills theirs. The waves' own monsters are cleared as they come. Last, the run's start
- * and end as the maps see them: a fight's fly-over is sent and `introOver` follows when the screen
- * says it's done (or its time's up), and a won run carried on (`keepFighting`) stands the vote down.
+ * and end as the maps see them: every fight's start sends the whole fly-over (a restart right after
+ * another too), and a won run carried on (`keepFighting`) stands the vote down till it ends.
  * `node scripts/headless.mjs tests/headless/_arena-maps.ts` (MAP=id for one map).
  */
 
@@ -46,28 +46,21 @@ export default function arenaMaps() {
   return rows.join(' · ');
 }
 
-/** The run's start and end, as the maps see them: the fly-over and `introOver`; the vote and `keepFighting`. */
+/** The run's start and end, as the maps see them: the fly-over; the vote and `keepFighting`. */
 function flow(failed: string[]): string {
-  // A fight begins (a restart): the fly-over is sent, and its end heard when the screen says so.
+  // A fight begins, and begins again straight after (a restart): the whole fly-over each time.
   const h = launch('arena', { seed: 5 });
   const game = h.ctx as GameContext;
   const me = game.player as Player;
-  const over: number[] = [];
-  bus.on('introOver', ({ player }) => player === me && over.push(game.clock.now));
-  const sent = h.find('message', INTRO_MSG).length;
+  const fullOnes = () => h.find('message', INTRO_MSG).filter((c) => (c.args[0] as IntroMessage | undefined)?.full).length;
+  h.run(0.2, { pilot: () => ({}) });
+  const first = fullOnes();
   game.restart();
   h.run(1, { pilot: () => ({}) });
-  if (h.find('message', INTRO_MSG).length <= sent) failed.push('the fly-over isn’t sent as a fight begins');
-  if (over.length) failed.push(`introOver came before the screen said the fly-over was done (${over[0].toFixed(1)} s)`);
-  h.send({ t: 'game', player: me.id, name: INTRO_DONE_MSG, data: {} });
-  h.run(0.2, { pilot: () => ({}) });
-  const early = over.length === 1;
-  if (!early) failed.push(`introOver didn't follow the screen's word (${over.length} heard)`);
-  // A screen that never says so: given up on once its time's up.
   game.restart();
-  h.run(introSeconds(true) + 2, { pilot: () => ({}) });
-  const late = over.length === 2 && over[1] >= introSeconds(true) - 0.1;
-  if (!late) failed.push(`introOver didn't come when the fly-over's time was up (${over.map((t) => t.toFixed(1)).join(', ')})`);
+  h.run(1, { pilot: () => ({}) });
+  const sent = fullOnes() - first;
+  if (sent !== 2) failed.push(`a fight's start (twice running) sent ${sent} fly-overs, not 2`);
   // A run ends: the vote goes up; carried on into the endless waves, it's stood down.
   const vote = (method: string) => h.find('hud', method).filter((c) => c.args[0] === 'arena-vote').length;
   bus.emit('runEnd', { won: true, wave: 20, endless: false, map: MAPS[0], time: 600, results: [] });
@@ -85,7 +78,7 @@ function flow(failed: string[]): string {
   if (!down) failed.push('the vote stays up past keepFighting');
   if (!again) failed.push('the vote isn’t put up again as the endless run ends');
   const yes = (b: boolean) => (b ? 'yes' : 'NO');
-  return `flow: introOver on the screen's word ${yes(early)}, at its time ${yes(late)}; vote up ${yes(up)}, down on keepFighting ${yes(down)}, up again after the endless waves ${yes(again)}`;
+  return `flow: a fly-over at each fight's start ${yes(sent === 2)}; vote up ${yes(up)}, down on keepFighting ${yes(down)}, up again after the endless waves ${yes(again)}`;
 }
 
 function probe(m: ArenaMap): { row: string; failed: string[] } {
