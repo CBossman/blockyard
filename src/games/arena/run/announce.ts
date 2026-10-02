@@ -138,6 +138,10 @@ export const announcePart: ArenaPart = {
         for (const p of game.players) screens.push(result(game, p, { ...e, name }));
       });
     });
+    bus.on('ready', ({ player, ready, of }) => {
+      if (of > 1) game.hud.feed(`${player.name} is ready (${ready}/${of})`, { color: '#9dff8a' });
+      if (ready === of) game.hud.banner('Ready', 'Here they come', { duration: 1.4, color: '#9dff8a' });
+    });
     bus.on('keepFighting', () => {
       closeScreens();
       game.hud.banner('ENDLESS', 'How far can you go?', { duration: 2.6, color: '#c9a2ff' });
@@ -158,7 +162,7 @@ export const announcePart: ArenaPart = {
     if (state.phase === 'countdown' || state.phase === 'intermission') {
       const t = Math.ceil(state.nextWaveAt - now);
       if (state.phase === 'countdown') game.hud.objective(t > 3 ? `Choose your class · the first wave in ${t}s` : `The first wave in ${t}…`);
-      else game.hud.objective(`Next wave in ${t}s · the merchant's open · B for your blessing`);
+      else game.hud.objective(`Next wave in ${t}s · the merchant's open · B: your blessing · N: ready`);
       if (t <= 3 && t > 0 && t !== state.lastBeep) {
         state.lastBeep = t;
         game.audio.play('countdown');

@@ -22,9 +22,13 @@ import { feat } from './run/hype';
 
 /** Seconds between waves (the shop open, a blessing to choose). */
 const INTERMISSION = 20;
-/** Seconds to choose a class before the first wave; once everyone has, it's down to the last few. */
+/** Seconds to choose a class before the first wave; once everyone has (or between waves, is ready), it's down to the last few. */
 const CHOOSING = 14;
 const LAST_SECONDS = 3.5;
+/** Ready for the next wave (between waves). */
+const READY_KEY = 'KeyN';
+/** Who's ready for the next wave, by player id. */
+const ready = new Set<string>();
 
 /** Each fighter's place round the middle of the map as a fight begins (or they arrive), facing in. */
 function stand(p: Player, i: number, n: number) {
@@ -86,6 +90,7 @@ function waveCleared(game: GameContext) {
 /** Between waves: a breather, a blessing to choose, the reward on the dais, the shop open. */
 function intermission(game: GameContext) {
   state.phase = 'intermission';
+  ready.clear();
   state.nextWaveAt = game.clock.now + INTERMISSION;
   for (const p of game.players) p.heal(6);
   // A blessing each, chosen from three.
@@ -102,6 +107,17 @@ function intermission(game: GameContext) {
     const at = { x: c.x + Math.cos(a) * radius, y: c.y + 0.5, z: c.z + Math.sin(a) * radius };
     game.items.spawnPickup(r.item, at, { count: r.count ?? 1, beam: '#ffd36b', despawn: 600, for: game.players.length > 1 ? r.p : undefined });
   });
+}
+
+/** Between waves, N says they're ready: once all the people fighting are, the next wave comes in a few seconds. */
+function readyUp(game: GameContext) {
+  const people = game.players.filter((p) => !p.bot);
+  for (const p of people) {
+    if (ready.has(p.id) || !p.input.pressed(READY_KEY)) continue;
+    ready.add(p.id);
+    bus.emit('ready', { player: p, ready: people.filter((q) => ready.has(q.id)).length, of: people.length });
+  }
+  if (people.length && people.every((p) => ready.has(p.id))) state.nextWaveAt = Math.min(state.nextWaveAt, game.clock.now + LAST_SECONDS);
 }
 
 /** Armed for the fight: their class's kit (`run/`), and gold to catch up if they're late; then the parts'. */
@@ -339,6 +355,7 @@ export default defineServer(shared, {
       if (tick(game, dt).cleared) waveCleared(game);
     } else if (state.phase === 'intermission') {
       reopen(game);
+      readyUp(game);
       if (game.clock.now >= state.nextWaveAt) {
         // Anyone who didn't choose a blessing is given one; Second Wind's back, the Bombardier's bombs.
         settle(game);

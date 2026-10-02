@@ -116,9 +116,13 @@ function shop() {
   check(purchase(game, me, FEATHER) && me.inventory.count(FEATHER) === 1 && !purchase(game, me, FEATHER), 'one Phoenix Feather at a time');
   const spent = 2000 - gold(me);
   check(spent === ARMOR[0].price + ARMOR[1].price + 60 + FEATHER_PRICE, `paid for: ${spent}`);
-  h.run(21);
+  // Ready (N): the next wave comes in a few seconds rather than the rest of the break.
+  const left = state.nextWaveAt - game.clock.now;
+  h.step(1 / 60, { pressed: ['KeyN'], down: ['KeyN'] });
+  check(state.nextWaveAt - game.clock.now < 4 && left > 10, `ready: the next wave in ${(state.nextWaveAt - game.clock.now).toFixed(1)} s, not ${left.toFixed(1)}`);
+  h.run(5);
   check((state.phase as string) === 'fighting' && !shopOpen() && !game.entities.all().some((e) => e.type === 'merchant'), 'he packs up when the next wave begins');
-  log(`shop: armour to ${me.armor} points, a bow and a feather for ${spent} gold; open between waves only`);
+  log(`shop: armour to ${me.armor} points, a bow and a feather for ${spent} gold; open between waves only; N for ready cuts the break short`);
 }
 
 function chest() {

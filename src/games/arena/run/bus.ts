@@ -80,6 +80,8 @@ export interface ArenaEvents {
   bought: { player: Player; item: string; price: number };
   /** The mystery chest gave a fighter a weapon (or, `item` null, flew off). */
   chest: { player: Player; item: string | null };
+  /** Between waves, a fighter's ready for the next (`ready` of the `of` people fighting are): all ready, it comes sooner. */
+  ready: { player: Player; ready: number; of: number };
   /** A fighter chose to keep fighting past a victory, into the endless waves (the end screen's button). */
   keepFighting: { player: Player };
   /** A fighter took a blessing (`id`; `name` with its level: Berserker II), chosen or (`chosen` false) given them as the wave began. */
