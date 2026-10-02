@@ -1,6 +1,6 @@
 import { math, type ItemBase, type ItemKind, type ItemKit, type Player, type PropModel } from '@platform';
 import { launch, type Missile } from './missiles';
-import { crossbowMove, type CrossbowShown } from './moves';
+import { crossbowMove, downed, type CrossbowShown } from './moves';
 
 /**
  * The crossbow: a click looses a bolt (an arrow from the quiver) that flies flat and fast and goes
@@ -73,7 +73,7 @@ export function crossbows(): ItemKit<ItemKind<CrossbowItem, Span>> {
           s.reload = 0;
           use.game.audio.play('arena_xbow_crank', { at: p.eye, item: { id: held.item, sound: 'reload' } });
         }
-        if (!c.active || !c.buttonPressed(0)) return;
+        if (!c.active || !c.buttonPressed(0) || downed(p)) return;
         if (!s.loaded) {
           if (s.reload < 0) p.hud.toast('No arrows');
           return;

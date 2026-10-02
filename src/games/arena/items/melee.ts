@@ -1,7 +1,7 @@
 import { math, type Entity, type GameContext, type ItemBody, type ItemHost, type ItemKind, type ItemKit, type ItemUse, type Player } from '@platform';
 import type { MeleeItem, MeleeOwn } from '@platform/items';
 import { bus } from '../run/bus';
-import { meleeMove } from './moves';
+import { downed, meleeMove } from './moves';
 import { afterRoll, frontOf, legendHit, legendSwing, slamAt } from './combat';
 import { throwSpear, spearOut, recallSpear } from './spear';
 import { stagger, stunned } from './status';
@@ -129,7 +129,7 @@ export function melee(): ItemKit<ItemKind<ArmsMelee>> {
         const def = weapon?.def;
         // A spear in the air comes back at the right button, whatever's in hand (but a guard).
         if (c.active && c.buttonPressed(2) && !def?.guard && !def?.throw && spearOut(p)) recallSpear(use.game, p);
-        if (!c.active || (!weapon && use.hand?.holds)) return lower(p, r);
+        if (!c.active || downed(p) || (!weapon && use.hand?.holds)) return lower(p, r);
         if (!def) {
           // A bare fist (or whatever's in hand that isn't a weapon of its own).
           lower(p, r);

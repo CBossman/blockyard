@@ -2,6 +2,7 @@ import { math, type Entity, type GameContext, type ItemBase, type ItemKind, type
 import { bus } from '../run/bus';
 import { swingTargets } from './melee';
 import { launch, type Missile } from './missiles';
+import { downed } from './moves';
 import { burn, chill, stagger } from './status';
 
 /**
@@ -56,7 +57,7 @@ export function staffs(): ItemKit<ItemKind<StaffItem>> {
         r.cd = Math.max(0, r.cd - use.dt);
         const held = use.held;
         const c = use.controls;
-        if (!held || !c.active || r.cd > 0) return;
+        if (!held || !c.active || r.cd > 0 || downed(use.player)) return;
         if (!c.buttonPressed(0) && !c.button(0)) return;
         r.cd = r.max = held.def.cooldown * spellMods.pace(use.player);
         cast(use, held.item, held.def);
