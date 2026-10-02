@@ -205,7 +205,7 @@ impl FlowField {
         self.queue.clear();
         // Target cell: the player's feet, or the ground below if airborne.
         let (lx, lz) = (FR, FR);
-        let mut ly = cy - self.oy;
+        let mut ly = self.feet_cell(lx, cy - self.oy, lz);
         let mut found = false;
         for _ in 0..8 {
             if self.walkable(lx, ly, lz) {
@@ -256,11 +256,23 @@ impl FlowField {
         self.valid = true;
     }
 
+    /// The cell a body whose feet are in local cell `y` stands in: that one, or the one above it
+    /// when the feet are inside a block whose collision fills only part of its cell (standing on a
+    /// bottom slab or a stair's lower step, the field's walkable cell is the one over the block).
+    #[inline(always)]
+    fn feet_cell(&self, x: i32, y: i32, z: i32) -> i32 {
+        if self.solid(x, y, z) {
+            y + 1
+        } else {
+            y
+        }
+    }
+
     /// Local walkable cell at or just below a world position, with its distance.
     fn locate(&self, p: [f64; 3]) -> Option<((i32, i32, i32), u16)> {
         let x = p[0].floor() as i32 - self.ox;
         let z = p[2].floor() as i32 - self.oz;
-        let y0 = (p[1] + 0.01).floor() as i32 - self.oy;
+        let y0 = self.feet_cell(x, (p[1] + 0.01).floor() as i32 - self.oy, z);
         for k in 0..4 {
             let y = y0 - k;
             if self.walkable(x, y, z) {
@@ -946,6 +958,35 @@ mod tests {
             e.step_bodies(&w, 1.0 / 30.0, &players);
         }
         assert!(e.flows.is_empty() && e.pool.len() <= 2);
+    }
+
+    #[test]
+    fn bodies_find_a_player_standing_on_a_slab_or_a_stair() {
+        let mut w = flat_world();
+        // A bottom slab and a stair's lower step: a body stands half a block up, inside the cell.
+        w.set(6, 64, 0, slab_id(0, false));
+        w.set(-6, 64, 6, stairs_id(0, 1, false));
+        let mut f = FlowField::new();
+        for feet in [[6.5, 64.5, 0.5], [-5.5, 64.5, 6.5], [0.5, 64.0, 0.5]] {
+            f.rebuild(&w, feet[0], feet[1], feet[2]);
+            assert!(f.valid, "a field toward a player at {feet:?}");
+            let (_, d) = f.locate([0.5, 64.0, -10.5]).unwrap();
+            assert!(d != UNREACHED && d > 0, "a body a way off is on the field toward {feet:?}");
+        }
+        // A body standing on the slab is placed on the field too.
+        f.rebuild(&w, 0.5, 64.0, -10.5);
+        let (_, d) = f.locate([6.5, 64.5, 0.5]).expect("a body on the slab is on the field");
+        assert!(d != UNREACHED);
+        // And one goes and gets the player on the slab.
+        let mut e = Entities::new(4, 4);
+        spawn(&mut e, 0, 0.5, -10.0);
+        let player = [6.5, 64.5, 0.5];
+        for _ in 0..(60 * 8) {
+            e.step_bodies(&w, 1.0 / 60.0, &[target(player, 0)]);
+        }
+        let b = &e.bodies[0..body::STRIDE];
+        let d = ((b[body::X] - player[0]).powi(2) + (b[body::Z] - player[2]).powi(2)).sqrt();
+        assert!(d < 1.6, "the body should reach the player on the slab, ended {d:.2} away at ({:.1},{:.1})", b[body::X], b[body::Z]);
     }
 
     #[test]
