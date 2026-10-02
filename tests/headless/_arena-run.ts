@@ -3,7 +3,8 @@ import type { Headless } from '../../src/platform/host/headless';
 import { bus } from '../../src/games/arena/run/bus';
 import { addGold, gold } from '../../src/games/arena/run/gold';
 import { GOLD_PER_COST, waveBonus } from '../../src/games/arena/run/coins';
-import { FEATHER_PRICE, purchase, shopOpen } from '../../src/games/arena/run/shop';
+import { FEATHER_PRICE, purchase, REROLL_PRICE, rerollPrice, shopOpen } from '../../src/games/arena/run/shop';
+import { settle } from '../../src/games/arena/blessings';
 import { ARMOR, armorOf } from '../../src/games/arena/items';
 import { WARES } from '../../src/games/arena/items/catalog';
 import { PRICE, ROLL_TIME, rollChest } from '../../src/games/arena/run/chest';
@@ -13,6 +14,7 @@ import { choose, classOf } from '../../src/games/arena/run/classes';
 import { award, levelOf, progressOf, savedXp, xpForLevel } from '../../src/games/arena/run/progression';
 import { map, state } from '../../src/games/arena/run/state';
 import { finalWave, waveSpec } from '../../src/games/arena/run/director';
+import { spawnMonster } from '../../src/games/arena/run/spawn';
 import { check, launch } from './_harness';
 
 /** The end screen's word (the HUD's `arena-end` widget, its newest): Victory, Defeated, The arena claims you. */
@@ -129,6 +131,23 @@ function shop() {
   check(spent === price('leather_armor') + price('bow') + FEATHER_PRICE, `paid for: ${spent}`);
   // The forge: the bow up a rarity.
   check(purchase(game, me, 'forge:bow') && me.inventory.count('bow_rare') === 1 && me.inventory.count('bow') === 0, 'the bow forged to a rare one');
+  // Other blessings: three others, put up at once, dearer each time; none once one's chosen.
+  const blessings = () =>
+    h
+      .find('hud', 'menu')
+      .filter((m) => (m.args[1] as { title: string }).title === 'Choose a blessing')
+      .map((m) => (m.args[1] as { sections: { entries: { label: string }[] }[] }).sections[0].entries.map((e) => e.label));
+  h.run(3.6);
+  const first = blessings().at(-1) ?? [];
+  let purse = gold(me);
+  check(first.length === 3 && purchase(game, me, 'reroll') && purse - gold(me) === REROLL_PRICE, `other blessings for ${purse - gold(me)} gold`);
+  h.run(0.1);
+  const second = blessings().at(-1) ?? [];
+  check(blessings().length === 2 && second.every((b) => !first.includes(b)), `three others: ${first.join(', ')} then ${second.join(', ')}`);
+  purse = gold(me);
+  check(rerollPrice(me) > REROLL_PRICE && purchase(game, me, 'reroll') && purse - gold(me) === REROLL_PRICE + 75, 'dearer the second time');
+  settle(game);
+  check(!purchase(game, me, 'reroll'), "none once this wave's blessing is chosen");
   // Ready (N): the next wave comes in a few seconds rather than the rest of the break.
   const left = state.nextWaveAt - game.clock.now;
   h.step(1 / 60, { pressed: ['KeyN'], down: ['KeyN'] });
@@ -259,7 +278,7 @@ function classes() {
   h.run(0.2);
   check(offered(), 'then the classes, offered in the countdown');
   choose(game, me, 'hunter');
-  check(classOf(me) === 'hunter' && me.inventory.count('bow') === 1 && me.inventory.count('arrow') >= 32 && me.speed > 1, `a Hunter: ${me.inventory.slots.filter(Boolean).map((s) => `${s!.item}x${s!.count}`).join(' ')}`);
+  check(classOf(me) === 'hunter' && me.inventory.count('bow') === 1 && me.inventory.count('arrow') >= 32 && me.inventory.count('bomb') === 2 && me.speed > 1, `a Hunter: ${me.inventory.slots.filter(Boolean).map((s) => `${s!.item}x${s!.count}`).join(' ')}`);
   choose(game, me, 'berserker');
   check(classOf(me) === 'hunter', 'the Berserker is locked at level 1');
   const levels: number[] = [];
@@ -317,7 +336,32 @@ function straggler() {
   check(z.alive && moved > 3, 'the last monster of a wave, stuck, comes back through a gate');
 }
 
+/** Late in the run the monsters are tougher and hit harder (past wave 8; bosses aside). */
+function late() {
+  const { h, game, me } = scene(10);
+  const c = map().center;
+  const blows = (n: number) => {
+    wave(game, n);
+    state.twist = null;
+    const z = spawnMonster(game, 'zombie', { x: c.x + 4, y: c.y + 0.05, z: c.z }, { data: { summoned: true } });
+    z.setSpeed(0);
+    h.run(1);
+    const hp = z.health;
+    z.damage(10, { source: me, cause: 'melee' });
+    const life = me.health;
+    me.damage(4, { source: z });
+    return { took: hp - z.health, hurt: life - me.health };
+  };
+  const early = blows(6);
+  const later = blows(18);
+  const boss = blows(20);
+  log(`late: a zombie on wave 6 takes ${early.took.toFixed(1)} of a blow and deals ${early.hurt.toFixed(2)}; on wave 18, ${later.took.toFixed(1)} and ${later.hurt.toFixed(2)}; in the Lich's wave, ${boss.took.toFixed(1)} and ${boss.hurt.toFixed(2)}`);
+  check(Math.abs(later.took * 1.4 - early.took) < 0.05 && Math.abs(later.hurt - early.hurt * 1.3) < 0.05, 'ten waves past the eighth: 40% tougher, 30% harder hitting');
+  check(Math.abs(boss.took - early.took) < 0.05 && Math.abs(boss.hurt - early.hurt) < 0.05, "not in a boss's wave (its fight is tuned as it is)");
+}
+
 export default function arenaRun() {
+  late();
   straggler();
   coins();
   shop();

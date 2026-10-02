@@ -178,10 +178,12 @@ function carried(p: Player): Set<string> {
   return out;
 }
 
-/** Three blessings they can still take, weighted by rarity and what they carry (in a menu, until the next wave). */
-export function offer(game: GameContext, p: Player) {
+/** Three blessings they can still take (others than `not`, if there are three), weighted by rarity and what they carry (in a menu, `after` seconds, until the next wave). */
+export function offer(game: GameContext, p: Player, not: readonly BlessingId[] = [], after = OFFER_AFTER) {
   const arms = carried(p);
-  const pool = ALL.filter((id) => level(p, id) < ((BLESSINGS[id] as Blessing).stacks ?? 1)).map((id) => {
+  const open = ALL.filter((id) => level(p, id) < ((BLESSINGS[id] as Blessing).stacks ?? 1));
+  const fresh = open.filter((id) => !not.includes(id));
+  const pool = (fresh.length >= 3 ? fresh : open).map((id) => {
     const b: Blessing = BLESSINGS[id];
     return { id, w: WEIGHT[b.rarity] * (b.for?.some((w) => arms.has(w)) ? AFFINITY : 1) };
   });
@@ -194,7 +196,21 @@ export function offer(game: GameContext, p: Player) {
   if (!choices.length) return;
   const o: Offer = { choices, menu: null };
   offers.set(p.id, o);
-  if (!p.bot) game.clock.after(OFFER_AFTER, () => offers.get(p.id) === o && !o.menu && game.players.includes(p) && show(game, p, o));
+  if (!p.bot) game.clock.after(after, () => offers.get(p.id) === o && !o.menu && game.players.includes(p) && show(game, p, o));
+}
+
+/** They've a blessing still to choose. */
+export const offered = (p: Player) => offers.has(p.id);
+
+/** Their three drawn again (bought at the shop) and put up at once: false if they've none to choose. */
+export function reroll(game: GameContext, p: Player): boolean {
+  const o = offers.get(p.id);
+  if (!o) return false;
+  offers.delete(p.id);
+  o.menu?.close();
+  offer(game, p, o.choices, 0);
+  if (!offers.has(p.id)) offers.set(p.id, o);
+  return true;
 }
 
 interface Offer {

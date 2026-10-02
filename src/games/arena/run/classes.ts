@@ -36,10 +36,10 @@ export const CLASSES = {
   },
   hunter: {
     name: 'Hunter',
-    text: 'Bow and daggers: strike from afar, finish up close',
+    text: 'Bow, daggers and two bombs: strike from afar, finish up close',
     perk: 'Quarry: quicker on your feet; a bow kill gives an arrow back',
     level: 1,
-    kit: [{ item: 'daggers', or: 'wooden_sword' }, { item: 'bow' }, { item: 'arrow', count: 32 }],
+    kit: [{ item: 'daggers', or: 'wooden_sword' }, { item: 'bow' }, { item: 'arrow', count: 32 }, { item: 'bomb', count: 2 }],
     speed: 1.1,
   },
   berserker: {

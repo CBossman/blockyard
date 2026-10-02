@@ -15,11 +15,11 @@ import { state } from './state';
  * bus). Gold Rush and the Crowd's Favour each double it all. Whatever's left lying when a wave's won is raked up and shared out, and each
  * fighter gets the wave's bonus.
  */
-export const GOLD_PER_COST = 6;
+export const GOLD_PER_COST = 4;
 const ELITE = 3;
 const GOBLIN_GOLD = 100;
 /** A wave's bonus, for each fighter: this, and this much more each wave. */
-export const waveBonus = (n: number) => 15 + 5 * n;
+export const waveBonus = (n: number) => 10 + 3 * n;
 /** Up to this much is one coin; more is piles. */
 const ONE_COIN = 40;
 

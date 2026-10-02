@@ -1,5 +1,6 @@
 import { math, Models, type CharacterLook, type Entity, type GameContext, type IconRef, type MenuEntry, type MenuHandle, type Player, type Prop, type PropModel } from '@platform';
 import { RUN_MODELS } from '../models/run';
+import { offered, reroll } from '../blessings';
 import { ARMOR, armorOf, type ArmorId } from '../items';
 import { bus } from './bus';
 import { FEATHER } from './downed';
@@ -12,11 +13,15 @@ import { addUsable } from './use';
  * The shop: between waves a merchant sets up his stall at the map's `shop` spot, and E at it opens
  * his wares (a menu on that fighter's screen, paid from their own purse, `gold.ts`): the armory's
  * catalog (`items/catalog.ts`, each on sale from its wave: weapons, armour, supplies), a Phoenix
- * Feather, and the forge (a weapon carried, to its next rarity), all handed over through
- * `loot.ts`. He packs up when the next wave begins.
+ * Feather, the forge (a weapon carried, to its next rarity), all handed over through `loot.ts`,
+ * and three other blessings to choose from (dearer each time). He packs up when the next wave begins.
  */
 
 export const FEATHER_PRICE = 350;
+/** Three other blessings: this much, and this much more each time in a run. */
+export const REROLL_PRICE = 150;
+const REROLL_MORE = 75;
+export const rerollPrice = (p: Player) => REROLL_PRICE + REROLL_MORE * (runs.get(p.id)?.rerolls ?? 0);
 /** Big Spender: this much spent in one run. */
 const BIG_SPENDER = 1000;
 /** Midas: this much held at once. */
@@ -116,10 +121,27 @@ function offers(game: GameContext, p: Player): { title: string; offers: Offer[] 
       },
     ];
   });
+  const blessings: Offer = {
+    id: 'reroll',
+    icon: { block: 'glowstone' },
+    label: 'Other blessings',
+    note: offered(p) ? 'Three others to choose from instead' : 'Once a wave is won, before you choose its blessing',
+    price: rerollPrice(p),
+    locked: offered(p) ? undefined : 'Chosen this wave',
+    buy: () => {
+      const r = runs.get(p.id);
+      if (!reroll(game, p)) return false;
+      if (r) r.rerolls++;
+      // (The shop makes way for them.)
+      closeShopFor(p);
+      return true;
+    },
+  };
   return [
     { title: 'Weapons', offers: wares.filter((w) => w.kind === 'weapon').map((w) => wareOffer(game, p, w)) },
     { title: 'Armour', offers: wares.filter((w) => w.kind === 'armor').map((w) => wareOffer(game, p, w)) },
     { title: 'Supplies', offers: [...wares.filter((w) => w.kind === 'consumable' || w.kind === 'ammo').map((w) => wareOffer(game, p, w)), feather] },
+    { title: 'Blessings', offers: [blessings] },
     ...(forge.length ? [{ title: 'The Forge', offers: forge }] : []),
   ].filter((s) => s.offers.length);
 }
@@ -185,6 +207,13 @@ export function showShop(game: GameContext, p: Player) {
   const menu = p.hud.menu({ ...contents(game, p), onClose: () => open.get(p.id)?.menu === menu && open.delete(p.id) });
   open.set(p.id, { menu, key: shownKey(p), subtitle: subtitle(game, p) });
   game.audio.play('merchant', { at: merchant?.position, volume: 0.8 });
+}
+
+/** Their shop closed (another menu's coming up). */
+function closeShopFor(p: Player) {
+  const o = open.get(p.id);
+  open.delete(p.id);
+  o?.menu.close();
 }
 
 function refresh(game: GameContext, p: Player) {
