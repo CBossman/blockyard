@@ -352,10 +352,12 @@ function late() {
     me.damage(4, { source: z });
     return { took: hp - z.health, hurt: life - me.health };
   };
-  const early = blows(5);
+  const early = blows(6);
   const later = blows(18);
-  log(`late: a zombie on wave 5 takes ${early.took.toFixed(1)} of a blow and deals ${early.hurt.toFixed(2)}; on wave 18, ${later.took.toFixed(1)} and ${later.hurt.toFixed(2)}`);
+  const boss = blows(20);
+  log(`late: a zombie on wave 6 takes ${early.took.toFixed(1)} of a blow and deals ${early.hurt.toFixed(2)}; on wave 18, ${later.took.toFixed(1)} and ${later.hurt.toFixed(2)}; in the Lich's wave, ${boss.took.toFixed(1)} and ${boss.hurt.toFixed(2)}`);
   check(Math.abs(later.took * 1.4 - early.took) < 0.05 && Math.abs(later.hurt - early.hurt * 1.3) < 0.05, 'ten waves past the eighth: 40% tougher, 30% harder hitting');
+  check(Math.abs(boss.took - early.took) < 0.05 && Math.abs(boss.hurt - early.hurt) < 0.05, "not in a boss's wave (its fight is tuned as it is)");
 }
 
 export default function arenaRun() {

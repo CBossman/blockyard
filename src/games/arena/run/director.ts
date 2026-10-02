@@ -115,7 +115,7 @@ const GOBLIN_CHANCE = 0.35;
 /** At most this many monsters in the arena at once (more as the run goes on, more in a Frenzy, up to `MOST`); the rest wait their turn. */
 export const maxAlive = (n: number) => Math.min(MOST, (n >= 12 ? 16 : 10 + Math.floor(n / 4)) + (state.twist === 'frenzy' ? 4 : 0));
 const MOST = 18;
-/** Past wave `GROW_FROM` the monsters come tougher each wave (bosses aside: theirs is `might`): this much more health, and this much harder blows. */
+/** Past wave `GROW_FROM` the monsters come tougher each wave (bosses and their waves aside: theirs is `might`): this much more health, and this much harder blows. */
 const GROW_FROM = 8;
 const GROW_HEALTH = 0.04;
 const GROW_HITS = 0.03;
@@ -343,9 +343,10 @@ function strike(game: GameContext, at: Vec3) {
 export function directorListen(game: GameContext) {
   bus.on('spawned', ({ entity, type }) => {
     if (bossKind(type) || type === 'goblin') return;
-    // Late in the run, every ordinary monster (and what they bring in) is tougher and hits harder (below).
+    // Late in the run, every ordinary monster (and what they bring in) is tougher and hits harder
+    // (below); not in a boss's wave, whose fight is tuned as it is (its escort, what it raises).
     const past = Math.max(0, state.wave - GROW_FROM);
-    if (past > 0 && monsterKind(type) && !entity.data.scenery) {
+    if (past > 0 && !state.boss && monsterKind(type) && !entity.data.scenery) {
       entity.data.tough = 1 + GROW_HEALTH * past;
       entity.data.hits = 1 + GROW_HITS * past;
     }
