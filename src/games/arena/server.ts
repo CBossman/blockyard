@@ -43,7 +43,7 @@ function stand(p: Player, i: number, n: number) {
 
 /**
  * The countdown to the first wave (`state.nextWaveAt`), everyone choosing a class meanwhile. (What
- * the screens show of all this is the HUD's, from the bus: `run/announce.ts`, `hud/`.)
+ * the screens show of all this is the HUD's, from the bus and the state: `hud/`.)
  */
 function begin(game: GameContext) {
   state.phase = 'countdown';
@@ -117,7 +117,10 @@ function readyUp(game: GameContext) {
   for (const p of people) {
     if (ready.has(p.id) || !p.input.pressed(READY_KEY)) continue;
     ready.add(p.id);
-    bus.emit('ready', { player: p, ready: people.filter((q) => ready.has(q.id)).length, of: people.length });
+    const n = people.filter((q) => ready.has(q.id)).length;
+    bus.emit('ready', { player: p, ready: n, of: people.length });
+    if (people.length > 1) game.hud.feed(`${p.name} is ready (${n}/${people.length})`, { color: '#9dff8a' });
+    p.hud.toast(n < people.length ? 'Ready: waiting for the others' : 'Ready: here they come');
   }
   if (people.length && people.every((p) => ready.has(p.id))) state.nextWaveAt = Math.min(state.nextWaveAt, game.clock.now + LAST_SECONDS);
 }
@@ -135,6 +138,7 @@ function arm(game: GameContext, p: Player) {
 
 /** Someone's out of the wave (bled out, or the last on their feet fell): they watch from the stands until it's won. */
 function fall(game: GameContext, p: Player) {
+  game.hud.feed(`${p.name} has fallen`, { color: '#ff8a4c' });
   bus.emit('fell', { player: p });
   game.clock.after(1.5, () => {
     if (p.alive || !game.players.includes(p)) return;
@@ -316,6 +320,7 @@ export default defineServer(shared, {
       arm(game, player);
       stand(player, 0, 1);
       if (state.phase === 'waiting') return begin(game);
+      game.hud.feed(`${player.name} joins the fight`, { color: '#ffb36b' });
       if (inFight()) showClassMenu(game, player);
     });
     game.events.on('playerLeave', () => {

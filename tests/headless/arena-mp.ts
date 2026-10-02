@@ -34,6 +34,9 @@ export default function arenaMultiplayer() {
   };
   const calls = (id: string, method: string) => (events.get(id) ?? []).flatMap((e) => (e.t === 'call' && e.call.method === method ? [e.call.args.map(String)] : []));
   const menus = (id: string) => (events.get(id) ?? []).flatMap((e) => (e.t === 'call' && e.call.method === 'menu' ? [(e.call.args[1] as { title: string }).title] : []));
+  /** The game's messages to someone's screen (the HUD's: `hud/messages.ts`), and the end screen (`arena-end`) put up there. */
+  const msgs = <T>(id: string, name: string) => (events.get(id) ?? []).flatMap((e) => (e.t === 'call' && e.call.target === 'message' && e.call.method === name ? [e.call.args[0] as T] : []));
+  const ends = (id: string) => (events.get(id) ?? []).flatMap((e) => (e.t === 'call' && e.call.method === 'widget' && e.call.args[0] === 'arena-end' ? [e.call.args[1] as { word?: string; headline?: string }] : []));
   const player = (name: string) => game.players.find((p) => p.name === name)!;
   const pickups = () => (host.sim as unknown as { items: { pickups: unknown[] } }).items.pickups.length;
   const join = (name: string) => {
@@ -71,11 +74,11 @@ export default function arenaMultiplayer() {
       player('Bob').damage(1000);
       downed = isDowned(player('Bob'));
     }
-    if (calls(ann, 'banner').some((a) => a[0] === 'Wave cleared!')) cleared = pickups();
+    if (msgs(ann, 'ar.wave').length) cleared = pickups();
   }
   check(zombies === 12, `wave 1 for three: ${zombies} zombies`);
-  check(downed && calls(ann, 'feed').some((a) => a[0] === 'Bob is down!') && !calls(bob, 'banner').some((a) => a[0] === 'YOU FELL'), 'Bob went down (not out); the others hear');
-  check(!calls(ann, 'screen').length, 'one down is not the end');
+  check(downed && !msgs<{ k: string }>(bob, 'ar.call').some((c) => c.k === 'out'), 'Bob went down (not out)');
+  check(!ends(ann).length, 'one down is not the end');
   check(player('Bob').alive && !isDowned(player('Bob')) && Math.hypot(player('Bob').position.x, player('Bob').position.z) < 3, `Bob back on his feet when the wave is won: ${JSON.stringify(player('Bob').position)}`);
   check(cleared === 3, `a reward each: ${cleared} pickups`);
   // The first wave is everyone's; not a scratch on Ann or Cat, but Bob fell.
@@ -117,11 +120,11 @@ export default function arenaMultiplayer() {
   clear();
   for (const n of ['Ann', 'Bob']) player(n).damage(1000);
   step(10);
-  check(isDowned(player('Ann')) && isDowned(player('Bob')) && !calls(ann, 'screen').length, `Cat still standing (${['Ann', 'Bob', 'Cat'].map((n) => `${n}: ${player(n).alive} ${player(n).health} ${isDowned(player(n))} ${blessingsOf(player(n))}`).join('; ')})`);
+  check(isDowned(player('Ann')) && isDowned(player('Bob')) && !ends(ann).length, `Cat still standing (${['Ann', 'Bob', 'Cat'].map((n) => `${n}: ${player(n).alive} ${player(n).health} ${isDowned(player(n))} ${blessingsOf(player(n))}`).join('; ')})`);
   player('Cat').damage(1000);
-  step(60);
-  const screen = (events.get(ann) ?? []).flatMap((e) => (e.t === 'call' && e.call.method === 'screen' ? [e.call.args[1] as { title: string; subtitle: string }] : [])).at(-1);
-  check(screen?.title === 'Defeated' && screen.subtitle.startsWith('Your party fell on wave 2'), `lost with everyone down: ${JSON.stringify(screen)?.slice(0, 120)}`);
+  step(90);
+  const screen = ends(ann)[0];
+  check(screen?.word === 'Defeated' && screen.headline?.startsWith('Your party fell on wave 2'), `lost with everyone down: ${JSON.stringify(screen)?.slice(0, 120)}`);
 
   // Everyone leaves; the next person begins a fresh fight.
   for (const id of [ann, bob, cat]) host.disconnect(id);
@@ -129,7 +132,7 @@ export default function arenaMultiplayer() {
   const eve = join('Eve');
   step(30 * 2);
   check(player('Eve').alive && armed('Eve') && gold(player('Eve')) === 0, 'a fresh start for the next arrival');
-  check(calls(eve, 'objective').some((a) => a[0].startsWith('Choose your class')), 'the countdown begins again');
+  check(msgs<{ phase: string }>(eve, 'ar.run').some((r) => r.phase === 'countdown'), 'the countdown begins again');
   host.dispose();
   return `3 armed (1 in the countdown) · wave 1 for three: ${zombies} zombies · Bob went down and got up · ${cleared} rewards, one each · Dan caught up · lost with nobody standing · fresh for Eve · ${looked}`;
 }
@@ -152,7 +155,7 @@ function looks(seen: HostEvent[]): string {
   for (const d of content) screen.apply(d);
   const voices = new Map<string, SynthVoice>();
   const client = {
-    audio: { play() {}, define: (n: string, v: SynthVoice) => voices.set(n, v) },
+    audio: { play() {}, define: (n: string, v: SynthVoice) => voices.set(n, v), defineLoop() {} },
     items: { look: (id: string, l: ItemLook) => screen.lookItem(id, l), get: (id: string) => screen.items.get(id) },
   } as unknown as Client;
   for (const k of sounds.standard()) k.setup?.(client);
@@ -161,7 +164,7 @@ function looks(seen: HostEvent[]): string {
   const bare = served.filter((d) => item(d.name)?.icon === PLACEHOLDER_ICON);
   check(!bare.length, `items with no look on the screen: ${bare.map((d) => d.name).join(', ')}`);
   check(item('pike')?.hold?.style === 'polearm' && !!item('pike')?.hold?.model?.gltf && item('battle_axe')?.hold?.style === 'axe', 'the pike and the axe held two-handed, as their models');
-  check((item('bow') as { drawIcon?: string }).drawIcon === 'bow_pulling', 'the bow draws');
+  check(!!(item('bow') as { drawIcon?: { gltf?: string } }).drawIcon?.gltf, 'the bow draws (its drawn model)');
 
   // Every sound asked for, and every monster's, is one the screen has.
   const asked = seen.flatMap((e) => (e.t === 'call' && e.call.target === 'audio' && e.call.method === 'play' ? [e.call] : []));

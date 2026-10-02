@@ -13,7 +13,10 @@ import { choose, classOf } from '../../src/games/arena/run/classes';
 import { award, levelOf, progressOf, savedXp, xpForLevel } from '../../src/games/arena/run/progression';
 import { map, state } from '../../src/games/arena/run/state';
 import { finalWave, waveSpec } from '../../src/games/arena/run/director';
-import { check, launch, lastScreen } from './_harness';
+import { check, launch } from './_harness';
+
+/** The end screen's word (the HUD's `arena-end` widget, its newest): Victory, Defeated, The arena claims you. */
+const ended = (h: Headless) => (h.find('hud', 'widget').filter((c) => c.args[0] === 'arena-end').at(-1)?.args[1] as { word?: string } | undefined)?.word;
 
 /**
  * Probe: the run's pieces one at a time. Gold (coins spilled and picked up, champions and goblins
@@ -195,7 +198,7 @@ function downs() {
   // Alone on your feet, a killing blow is the end (no feather): the fight's lost.
   me.damage(10000);
   idle(h, 3);
-  check(!me.alive && lastScreen(h) === 'Defeated', `the last one standing falls: ${lastScreen(h)}`);
+  check(!me.alive && ended(h) === 'Defeated', `the last one standing falls: ${ended(h)}`);
   log(`downs: down with a friend standing, revived in ${REVIVE} s to a third of your health; bled out after ${BLEED} s; the last one standing can't go down`);
 
   // Alone, the Phoenix Feather.
@@ -225,7 +228,7 @@ function hype() {
     slay(game, me, 'zombie', at);
     h.run(0.3, { pilot: () => ({}) });
   }
-  check(favour && h.find('hud', 'banner').some((b) => b.args[0] === "THE CROWD'S FAVOUR"), `the crowd boils over after ${kills} kills`);
+  check(favour, `the crowd boils over after ${kills} kills`);
   // The emperor's gifts: whatever's thrown down while it lasts.
   const thrown: string[] = [];
   const spawnPickup = game.items.spawnPickup.bind(game.items);
@@ -250,9 +253,11 @@ function classes() {
   check(classOf(me) === 'hunter' && me.inventory.count('bow') === 1 && me.inventory.count('arrow') >= 32 && me.speed > 1, `a Hunter: ${me.inventory.slots.filter(Boolean).map((s) => `${s!.item}x${s!.count}`).join(' ')}`);
   choose(game, me, 'berserker');
   check(classOf(me) === 'hunter', 'the Berserker is locked at level 1');
+  const levels: number[] = [];
+  bus.on('levelUp', ({ level }) => levels.push(level));
   award(game, me, [[xpForLevel(4) - savedXp(me), 'TEST']]);
   h.run(0.1);
-  check(levelOf(savedXp(me)) === 4 && h.find('hud', 'pop').some((p) => String(p.args[0]) === 'LEVEL 4'), `level 4: ${progressOf(me).level} (${h.find('hud', 'pop').map((p) => JSON.stringify(p.args)).join(' ')})`);
+  check(levelOf(savedXp(me)) === 4 && levels.includes(4), `level 4: ${progressOf(me).level}`);
   const hearts = me.maxHealth;
   choose(game, me, 'berserker');
   check(classOf(me) === 'berserker' && me.inventory.count('battle_axe') === 1 && me.inventory.count('bow') === 0 && me.maxHealth === hearts + 6, `a Berserker now: max health ${me.maxHealth}, ${me.inventory.slots.filter(Boolean).map((s) => s!.item).join(' ')}`);
@@ -271,20 +276,18 @@ function endless() {
     h.step(1 / 60, {});
   }
   h.run(4);
-  check(lastScreen(h) === 'Victory!', `the last wave won: ${lastScreen(h)}`);
-  type Screen = { buttons: { label: string; onClick: { $cb: number } }[] };
-  const screen = h.find('hud', 'screen').at(-1)!.args[1] as Screen;
-  const keep = screen.buttons.find((b) => b.label === 'Keep fighting')!;
-  h.send({ t: 'callback', player: me.id, id: keep.onClick.$cb });
+  check(ended(h) === 'Victory', `the last wave won: ${ended(h)}`);
+  // The end screen's Keep fighting.
+  h.send({ t: 'widgetAction', player: me.id, widget: 'arena-end', action: 'keep', value: '' });
   h.run(1);
   check(state.endless && state.phase === 'intermission' && shopOpen(), `on into the endless waves (${state.phase})`);
   h.run(20);
-  check(state.wave === finalWave() + 1 && h.find('hud', 'banner').some((b) => String(b.args[0]) === `Endless · Wave ${finalWave() + 1}`), `wave ${state.wave}`);
+  check(state.wave === finalWave() + 1 && (state.phase as string) === 'fighting', `wave ${state.wave}`);
   const budget = waveSpec(finalWave() + 1).budget ?? 0;
   check(budget > (waveSpec(finalWave() - 1).budget ?? 0), `a bigger budget: ${budget}`);
   me.damage(1e6);
   h.run(3);
-  check(lastScreen(h) === 'The Arena Claims You', `lost in the endless waves: ${lastScreen(h)}`);
+  check(ended(h) === 'The arena claims you', `lost in the endless waves: ${ended(h)}`);
   const best = (me.store.get<{ best: Record<string, number> }>('arena')?.best ?? {})[map().id];
   check(best === finalWave() + 1, `the best wave kept: ${best}`);
   log(`endless: Keep fighting into wave ${finalWave() + 1} (budget ${budget}); the best wave kept (${best}), XP ${progressOf(me).total}, level ${progressOf(me).level}`);

@@ -1,6 +1,6 @@
 import { math, type ItemBase, type ItemKind, type ItemKit, type Player, type PropModel } from '@platform';
 import { launch, type Missile } from './missiles';
-import { crossbowMove, type CrossbowShown } from './moves';
+import { crossbowMove, downed, type CrossbowShown } from './moves';
 
 /**
  * The crossbow: a click looses a bolt (an arrow from the quiver) that flies flat and fast and goes
@@ -73,7 +73,7 @@ export function crossbows(): ItemKit<ItemKind<CrossbowItem, Span>> {
           s.reload = 0;
           use.game.audio.play('arena_xbow_crank', { at: p.eye, item: { id: held.item, sound: 'reload' } });
         }
-        if (!c.active || !c.buttonPressed(0)) return;
+        if (!c.active || !c.buttonPressed(0) || downed(p)) return;
         if (!s.loaded) {
           if (s.reload < 0) p.hud.toast('No arrows');
           return;
@@ -105,7 +105,7 @@ function loose(p: Player, item: string, def: CrossbowItem, game: Parameters<type
   const look = new math.Vector3(p.look.x, p.look.y, p.look.z);
   const up = new math.Vector3(0, 1, 0);
   for (let i = 0; i < n; i++) {
-    const turn = n > 1 ? (i - (n - 1) / 2) * 4 * DEG : 0;
+    const turn = n > 1 ? (i - (n - 1) / 2) * 7 * DEG : 0;
     const dir = look.clone().applyAxisAngle(up, turn);
     const from = { x: eye.x + dir.x * 0.6 + Math.cos(p.yaw) * 0.1, y: eye.y - 0.12 + dir.y * 0.6, z: eye.z + dir.z * 0.6 - Math.sin(p.yaw) * 0.1 };
     launch(

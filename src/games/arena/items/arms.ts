@@ -57,7 +57,7 @@ export const ARMS: Record<RareBase, Arm> = {
     from: 3,
     def: melee({ damage: 8, cooldown: 0.9, reach: 3.3, knockback: 1.8, rank: 4, heft: 'heavy', weight: 0.92 }, 'earthshaker', (rarity) => {
       const k = RARITY[rarity].damage;
-      return { slam: { charge: 0.95, min: 0.28, damage: [9 * k, 20 * k], radius: [2.6, 4.4 + 0.6 * step(rarity)], knockback: 1.8, stagger: 1.4 } };
+      return { slam: { charge: 0.8, min: 0.25, damage: [10 * k, 24 * k], radius: [2.6, 4.4 + 0.6 * step(rarity)], knockback: 1.8, stagger: 1.4 } };
     }),
   },
   spear: {
@@ -77,7 +77,7 @@ export const ARMS: Record<RareBase, Arm> = {
     price: 200,
     from: 2,
     def: (r, rarity) =>
-      ({ kind: 'gun', ammo: 'arrow', damage: 12 * r.damage, reload: 1.3 * r.pace, speed: 60, pierce: 3, zoom: 1.6, rank: 3 + r.rank, ...(rarity === 'legendary' && { bolts: 3 }) }) satisfies Omit<CrossbowItem, 'name'>,
+      ({ kind: 'gun', ammo: 'arrow', damage: 14 * r.damage, reload: 1.2 * r.pace, speed: 60, pierce: 3, zoom: 1.6, rank: 3 + r.rank, ...(rarity === 'legendary' && { bolts: 3 }) }) satisfies Omit<CrossbowItem, 'name'>,
   },
   daggers: {
     name: 'Twin Daggers',
@@ -110,7 +110,7 @@ export const ARMS: Record<RareBase, Arm> = {
     legend: { id: 'winters_heart', name: "Winter's Heart", text: 'The frozen shatter when slain, freezing those about them' },
     price: 220,
     from: 2,
-    def: (r, rarity) => ({ kind: 'staff', spell: 'frost', damage: 2.2 * r.damage, cooldown: 0.24 * r.pace, rank: 3.5 + r.rank, ...(rarity === 'legendary' && { legend: 'winters_heart' }) }) satisfies Omit<StaffItem, 'name'>,
+    def: (r, rarity) => ({ kind: 'staff', spell: 'frost', damage: 2.6 * r.damage, cooldown: 0.24 * r.pace, rank: 3.5 + r.rank, ...(rarity === 'legendary' && { legend: 'winters_heart' }) }) satisfies Omit<StaffItem, 'name'>,
   },
   storm_wand: {
     name: 'Storm Wand',
@@ -143,7 +143,7 @@ export const ARMS: Record<RareBase, Arm> = {
     legend: { id: 'starfall', name: 'Starfall', text: 'A jump attack calls a falling star down on what it hits' },
     price: 400,
     from: 6,
-    def: melee({ damage: 9, cooldown: 0.4, reach: 3.7, knockback: 1.2, sweep: true, rank: 5, heft: 'blade' }, 'starfall'),
+    def: melee({ damage: 8, cooldown: 0.4, reach: 3.7, knockback: 1.2, sweep: true, rank: 5, heft: 'blade' }, 'starfall'),
   },
   bow: {
     name: 'Bow',
@@ -152,7 +152,7 @@ export const ARMS: Record<RareBase, Arm> = {
     price: 60,
     from: 0,
     // What it shoots is drawn by the server, as an arrow (the bow's own look is each screen's).
-    def: (r) => ({ kind: 'bow', ammo: 'arrow', projectile: 'arrow', damage: [2 * r.damage, 9 * r.damage], drawTime: 0.9 * r.pace, speed: 42, rank: r.rank * 0.5 }) satisfies Omit<BowItem, 'name'>,
+    def: (r) => ({ kind: 'bow', ammo: 'arrow', projectile: 'arrow', damage: [3 * r.damage, 11 * r.damage], drawTime: 0.9 * r.pace, speed: 42, rank: r.rank * 0.5 }) satisfies Omit<BowItem, 'name'>,
   },
 };
 

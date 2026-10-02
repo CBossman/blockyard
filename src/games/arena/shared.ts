@@ -3,10 +3,11 @@ import meta from './meta';
 import { FLOOR, MAPS } from './maps';
 import { roll } from './abilities';
 import { crawl } from './run/crawl';
+import { HUD } from './hud/theme';
 
 const first = MAPS[0];
 
-/** Every map's blocks (every screen builds them too) and the player, who can dodge-roll (Q), and crawls when downed. */
+/** Every map's blocks (every screen builds them too), the player, who can dodge-roll (Q) and crawls when downed, and the HUD's look (`hud/theme.ts`). */
 export const shared = defineShared({
   ...meta,
   world: {
@@ -22,4 +23,5 @@ export const shared = defineShared({
     freezeTime: true,
   },
   player: { health: 20, regen: { delay: 4, perSecond: 0.6 }, fallDamage: true, hotbar: 'items', movement: { abilities: { crawl, roll } } },
+  hud: HUD,
 });

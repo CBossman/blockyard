@@ -26,6 +26,9 @@ export interface Settings {
   keys: KeyBindings;
   /** Graphics lowered a notch at a time while frames are slow (these settings are the most it shows). */
   autoQuality: boolean;
+  /** How loud everything is, and a game's music (`client.audio.music`), 0..1. */
+  volume: number;
+  music: number;
 }
 
 const KEY = 'voxel.settings.v1';
@@ -52,6 +55,8 @@ export function defaultSettings(): Settings {
     occlusion: true,
     keys: {},
     autoQuality: true,
+    volume: 1,
+    music: 0.7,
   };
 }
 

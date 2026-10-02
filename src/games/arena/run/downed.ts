@@ -61,6 +61,7 @@ function down(game: GameContext, p: Player, by: Actor | null) {
   p.health = p.maxHealth;
   p.abilities.crawl.on = true;
   bar(p, true);
+  game.hud.feed(`${p.name} is down!`, { color: '#ff6b6b' });
   const r = runs.get(p.id);
   if (r) {
     r.fell = true;
@@ -96,6 +97,7 @@ export function revive(game: GameContext, p: Player, by: Player | null) {
   game.fx.burst({ x: q.x, y: q.y + 1, z: q.z }, { color: '#9dff8a', count: 30, speed: 3, gravity: -2, glow: 1 });
   game.audio.play('revive', { at: q });
   if (by) {
+    game.hud.feed(`${by.name} revived ${p.name}`, { color: '#9dff8a' });
     const r = runs.get(by.id);
     if (r) {
       r.revives++;

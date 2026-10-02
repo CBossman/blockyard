@@ -4,7 +4,9 @@ import { ARMOR, armorOf } from '../../src/games/arena/items';
 import { gold } from '../../src/games/arena/run/gold';
 import { WARES } from '../../src/games/arena/items/catalog';
 import { progressOf } from '../../src/games/arena/run/progression';
-import { check, launch, lastScreen } from './_harness';
+import { map, state } from '../../src/games/arena/run/state';
+import { bus } from '../../src/games/arena/run/bus';
+import { check, launch } from './_harness';
 
 /**
  * A bot plays the Arena's whole run, twenty waves and four bosses: it walks at the nearest monster
@@ -33,7 +35,10 @@ export default function arena() {
     for (const w of blades) if (gold(me) >= w.price && buy(w.item)) break;
     if (me.inventory.count('health_potion') < 2 && gold(me) >= 40) buy('health_potion');
   };
-  let shopped = -1;
+  // (Each wave won, a trip to the merchant's.)
+  let cleared = 0;
+  let shopped = 0;
+  bus.on('waveCleared', () => cleared++);
 
   let hop = 0;
   let think = 0;
@@ -42,9 +47,8 @@ export default function arena() {
     // Decide every 80 ms, like a person's reactions; hold the controls in between.
     if ((think += 1 / 60) < 0.08) return { ...last, clicked: 0, pressed: [] };
     think = 0;
-    const wave = h.find('hud', 'banner').filter((c) => /cleared/.test(String(c.args[0]))).length;
-    if (wave !== shopped) {
-      shopped = wave;
+    if (cleared !== shopped) {
+      shopped = cleared;
       shop();
     }
     const eye = me.eye;
@@ -94,25 +98,28 @@ export default function arena() {
     return { ...last, clicked: fighting ? 1 : 0 };
   };
 
-  const simulated = h.run(3600, { pilot, until: () => lastScreen(h) !== undefined });
-  const result = lastScreen(h);
+  // The end screen (the HUD's `arena-end` widget), once it's up.
+  type End = { word: string; kills: string; reached: string; newBest: boolean };
+  const end = () => h.find('hud', 'widget').find((c) => c.args[0] === 'arena-end')?.args[1] as End | undefined;
+  const simulated = h.run(3600, { pilot, until: () => state.phase === 'victory' && end() !== undefined });
+  const result = end()?.word;
   const wall = (performance.now() - t0) / 1000;
   console.log(`  ${result ?? 'no result'} after ${simulated.toFixed(0)} s of game time (${(simulated / 60).toFixed(1)} min), ${wall.toFixed(1)} s wall clock (${(simulated / wall).toFixed(0)}× real time)`);
-  check(result === 'Victory!', `expected Victory!, got ${result ?? 'nothing'} (${h.find('hud', 'objective').at(-1)?.args[0]}; ${me.inventory.held?.item} ${me.inventory.slots.map((x) => x?.item).join('/')} | ${game.entities.all().map((e) => `${e.type} ${e.health}/${e.maxHealth} ${JSON.stringify(e.data)} at ${e.position.x.toFixed(0)},${e.position.y.toFixed(0)},${e.position.z.toFixed(0)}`).join(', ')}; me at ${JSON.stringify(me.position)})`);
+  check(result === 'Victory', `expected Victory, got ${result ?? 'nothing'} (${game.entities.all().map((e) => `${e.type} ${e.health}/${e.maxHealth} at ${e.position.x.toFixed(0)},${e.position.y.toFixed(0)},${e.position.z.toFixed(0)}`).join(', ')}; me at ${JSON.stringify(me.position)})`);
   // Achievements along the way: the first kill, the first wave, the win, and (never down) the win unbroken.
   const missing = ['first_blood', 'first_wave', 'champion', 'unbroken'].filter((a) => !me.achieved(a));
   check(!missing.length, `achievements not earned: ${missing.join(', ')}`);
   const popped = h.find('hud', 'achievement').map((c) => (c.args[0] as { title: string }).title);
   check(popped.includes('Champion') && popped.includes('Warmed Up'), `achievements popped up: ${popped.join(', ')}`);
-  const stats = new Map((h.find('hud', 'screen').at(-1)?.args[1] as { stats: [string, string][] }).stats);
-  const slain = stats.get('Monsters slain')?.split(' ')[0];
-  check(String(me.store.get<number>('kills')) === slain, `kills kept all-time: ${me.store.get('kills')} of ${slain} (${stats.get('Monsters slain')})`);
+  const slain = end()?.kills.replace(/,/g, '');
+  check(String(me.store.get<number>('kills')) === slain, `kills kept all-time: ${me.store.get('kills')} of ${slain}`);
   // The economy: gold earned and spent at the merchant's, the best armour by the end.
   check(bought.length >= 6 && armorOf(me) === ARMOR.plate_armor.points, `shopping: ${bought.join(', ')} (armour ${armorOf(me)})`);
   // Levels: XP earned for the run, the best wave kept.
   const xp = progressOf(me);
-  check(xp.level >= 4 && stats.get('Best wave here')?.startsWith('20'), `progression: level ${xp.level} (${xp.total} XP), best ${stats.get('Best wave here')}`);
+  const best = (me.store.get<{ best: Record<string, number> }>('arena')?.best ?? {})[map().id];
+  check(xp.level >= 4 && end()?.newBest && best === 20, `progression: level ${xp.level} (${xp.total} XP), best ${best}`);
   console.log(`  bought: ${bought.join(', ')}`);
-  console.log(`  ${[...stats].map(([k, v]) => `${k}: ${v}`).join(' · ')}`);
+  console.log(`  ${end()?.reached}, ${slain} slain, level ${xp.level}`);
   console.log(`  achievements: ${popped.join(', ')}`);
 }

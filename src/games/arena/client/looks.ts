@@ -46,8 +46,8 @@ const ARSENAL: Record<string, (r: Rarity, id: string) => ItemLook> = {
   battle_axe: (_r, id) => voxel(id, { style: 'axe', use: 'hew', scale: 0.95 }, HEAVY),
   pike: (r, id) => voxel(id, { style: 'polearm', scale: 0.85, blade: edge(r, 0.8) }, THRUST),
   diamond_sword: (r, id) => voxel(id, { style: 'sword', use: 'arena_slash', blade: edge(r, 0.22) }, BLADE),
-  // The bow keeps its sprites (drawn, it shows the drawn one).
-  bow: () => ({ icon: 'bow', drawIcon: 'bow_pulling' }),
+  // The bow, drawn, shows its other model (its string back, an arrow on it); both share one atlas.
+  bow: (r, id) => voxel(id, { style: 'bow' }, {}, { drawIcon: { gltf: WEAPON_MODELS[variant('bow_drawn', r)] } }),
 };
 
 export const LOOKS: Record<string, ItemLook> = {
@@ -57,6 +57,7 @@ export const LOOKS: Record<string, ItemLook> = {
   ...Object.fromEntries(Object.entries(ARSENAL).flatMap(([base, look]) => RARITIES.map((r) => [variant(base, r), look(r, variant(base, r))]))),
   // The gladius's shield (never carried: the first-person view holds it with the gladius).
   ...Object.fromEntries(RARITIES.map((r) => [shieldOf(r), { icon: { gltf: WEAPON_MODELS[shieldOf(r)] }, hold: { model: HeldModels.gltf(WEAPON_MODELS[shieldOf(r)]) } }])),
+  crossbow_bolt: { icon: { gltf: WEAPON_MODELS.bolt }, hold: { model: HeldModels.gltf(WEAPON_MODELS.bolt) } },
   arrow: { icon: 'arrow' },
   health_potion: voxel('health_potion', { style: 'item' }, {}),
   heart: { icon: 'heart' },

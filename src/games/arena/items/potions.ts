@@ -1,4 +1,5 @@
 import type { GameContext, Player } from '@platform';
+import { downed } from './moves';
 
 /**
  * R drinks a health potion wherever it's carried: the potion comes up in hand, a sip, five hearts
@@ -37,6 +38,10 @@ function start(game: GameContext, p: Player) {
     p.audio.play('click', { pitch: 0.7 });
     return;
   }
+  if (downed(p)) {
+    p.hud.toast("Can't drink while you're down");
+    return;
+  }
   if (p.health >= p.maxHealth) {
     p.hud.toast('Already at full health');
     return;
@@ -49,8 +54,8 @@ function start(game: GameContext, p: Player) {
 function step(game: GameContext, p: Player, q: Quaff, dt: number) {
   const inv = p.inventory;
   q.t += dt;
-  // Put away, or down: nothing more.
-  if (!p.alive || (!q.drunk && inv.selected !== q.slot)) {
+  // Put away, fallen or down: nothing more.
+  if (!p.alive || downed(p) || (!q.drunk && inv.selected !== q.slot)) {
     quaffs.delete(p);
     return;
   }
