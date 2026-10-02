@@ -22,6 +22,8 @@ export interface ArenaEvents {
   rejoined: { player: Player };
   /** The fight is over. */
   runEnd: { won: boolean; wave: number };
+  /** Gold coins worth `value` scattered at `at` (a boss's loot shower), for the run to drop as it drops monsters' coins. */
+  coins: { at: Vec3; value: number; by: Player | null };
   /** A fighter's gold changed (`delta` this time, `total` now), from `at` if it was picked up somewhere. */
   gold: { player: Player; delta: number; total: number; at?: Vec3 };
   /** The crowd's hype (0..1), and whether it just boiled over into the Crowd's Favour. */
