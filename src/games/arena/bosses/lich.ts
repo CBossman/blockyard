@@ -70,7 +70,7 @@ const nova: Move = {
     const p = self.position;
     self.glow(null);
     self.animate('nova', { fade: 0.05 });
-    const { hit } = strike(game, { source: self, at: p, r: NOVA, damage: [5, 2.5], grounded: true, knockback: 6, lift: 2 });
+    const { hit } = strike(game, { source: self, at: p, r: NOVA, damage: [5, 2.5], grounded: true, cover: true, knockback: 6, lift: 2 });
     for (const f of hit) {
       if (root(game, f, 1.3)) {
         f.hud.pop('FROZEN', { color: FROST_C });

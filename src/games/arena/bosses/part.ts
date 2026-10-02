@@ -3,7 +3,7 @@ import type { ArenaPart } from '../part';
 import { bus } from '../run/bus';
 import { spawnMonster } from '../run/spawn';
 import { map, state } from '../run/state';
-import { BOSSES, bossKind, type BossKind } from './index';
+import { BOSSES, bossKind, bossWidth, type BossKind } from './index';
 import { bossState, clearHazards, fighters, resetHolds, resetProps, roofed, root, stagger, toughness, updateHazards, updateHolds, v3 } from './fight';
 import { CAM_MSG, FALL_MSG, INTRO_MSG, type CamMessage, type FallMessage, type IntroMessage } from './messages';
 
@@ -50,7 +50,7 @@ function entrance(game: GameContext, e: Entity, kind: BossKind) {
   if (e.data.quick) return;
   s.held = true;
   // Come in under a gate's arch: it strides out into the open as the camera finds it.
-  if (roofed(game, p, kind.height)) s.emerge = { yaw, height: kind.height, back: kind.define(game).hitbox.width / 2 + 0.6 };
+  if (roofed(game, p, kind.height)) s.emerge = { yaw, height: kind.height, back: bossWidth(kind.id) / 2 + 0.6 };
   // The rest of the wave waits at the gates (once the director's done bringing this one in).
   game.clock.after(0, () => (state.spawnTimer = Math.max(state.spawnTimer, INTRO)));
   for (const f of fighters(game)) {
@@ -149,7 +149,7 @@ function deflect(game: GameContext, e: Entity, color: string) {
   game.audio.play('boss_deflect', { at: q });
 }
 
-/** The fight's rules for bosses (added once per game, after every other part's, so they see each blow's final amount). */
+/** The fight's rules for bosses (added once per game, after every other part's listeners, so they see each blow's final amount). */
 function rules(game: GameContext) {
   game.events.on('damage', (hit) => {
     const t = hit.target;
@@ -274,15 +274,16 @@ export const bossesPart: ArenaPart = {
     });
   },
   start(game) {
-    if (!ruled.has(game)) {
-      ruled.add(game);
-      rules(game);
-    }
     resetHolds();
     resetProps();
     clearHazards(game);
   },
   update(game) {
+    // (The rules go in at the first tick, after every part's setup and start: theirs come first.)
+    if (!ruled.has(game)) {
+      ruled.add(game);
+      rules(game);
+    }
     updateHolds(game);
     updateHazards(game);
   },

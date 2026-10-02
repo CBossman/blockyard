@@ -69,7 +69,7 @@ const slam: Move = {
     game.fx.shockwave({ x: p.x, y: p.y, z: p.z }, SLAM, SOUL);
     game.fx.shake(0.35, 0.6);
     game.audio.play('slam', { at: p, volume: 1.3 });
-    const { dodged } = strike(game, { source: self, at: p, r: SLAM, damage: [9, 4], grounded: true, knockback: 9, lift: 3 });
+    const { dodged } = strike(game, { source: self, at: p, r: SLAM, damage: [9, 4], grounded: true, cover: true, knockback: 9, lift: 3 });
     // In the air as it lands: jumped clean over it.
     for (const f of dodged) if (!f.onGround) f.achieve('slam_dodge');
     // Hurt, his slams send soul fire rolling out along the ground: jump it.

@@ -41,13 +41,11 @@ const sweepMove: Move = {
     const p = c.self.position;
     const a = c.s.mem.sweep as number;
     c.self.animate('sweep', { fade: 0.06 });
-    c.self.glow(null);
     strike(c.game, { source: c.self, at: p, r: REACH, damage: 6, arc: [a - ARC, a + ARC], knockback: 9, lift: 4.5 });
     c.game.audio.play('colossus_sweep', { at: p });
     c.game.fx.shake(0.15, 0.3);
   },
   recover: 0.9,
-  end: (c) => c.self.glow(null),
 };
 
 const stompMove: Move = {
@@ -64,15 +62,13 @@ const stompMove: Move = {
   act(c) {
     const p = c.self.position;
     c.self.animate('stomp', { fade: 0.06 });
-    c.self.glow(null);
-    strike(c.game, { source: c.self, at: p, r: STOMP, damage: [6, 3], grounded: true, knockback: 8, lift: 3 });
+    strike(c.game, { source: c.self, at: p, r: STOMP, damage: [6, 3], grounded: true, cover: true, knockback: 8, lift: 3 });
     c.game.fx.shockwave({ x: p.x, y: p.y + 0.1, z: p.z }, STOMP + 0.5, COLOR);
     c.game.fx.burst({ x: p.x, y: p.y + 0.3, z: p.z }, { color: '#d8c08a', count: 50, speed: 6, size: 0.2, gravity: 6, life: 1 });
     c.game.fx.shake(0.4, 0.6);
     c.game.audio.play('colossus_stomp', { at: p, volume: 1.4 });
   },
   recover: 1.1,
-  end: (c) => c.self.glow(null),
 };
 
 /** Bones out of the sky: a circle under each fighter (where they're going), and more about them. */
@@ -116,7 +112,7 @@ const rainMove: Move = {
           game.fx.burst({ x: at.x, y: at.y + 0.3, z: at.z }, { color: '#c9b48a', count: 14, speed: 3, size: 0.18, gravity: -0.5, life: 1, drag: 2 });
           game.fx.shockwave({ x: at.x, y: at.y + 0.1, z: at.z }, RAIN_R + 0.4, COLOR);
           game.audio.play('bone_crash', { at });
-        });
+        }, { scale: 1.8 });
       });
     });
     self.animate('none', { fade: 0.4 });
@@ -138,7 +134,6 @@ const ribsMove: Move = {
   },
   act(c) {
     const { game, self } = c;
-    self.glow(null);
     const n = Math.min(THRALLS - thralls(c), adds(game, 2));
     for (let i = 0; i < n; i++) {
       game.clock.after(i * 0.35, () => {
@@ -155,10 +150,7 @@ const ribsMove: Move = {
     }
   },
   recover: 1.2,
-  end: (c) => {
-    c.self.glow(null);
-    c.self.animate('none', { fade: 0.4 });
-  },
+  end: (c) => c.self.animate('none', { fade: 0.4 }),
 };
 
 /** Head down, it charges along a lane at its target: whoever's in the way is thrown, and a wall at the end stuns it. */

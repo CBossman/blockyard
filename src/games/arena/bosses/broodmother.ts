@@ -99,7 +99,6 @@ const leap: Move = {
   },
   act(c) {
     const { self, s } = c;
-    self.glow(null);
     self.animate('leap', { fade: 0.08 });
     const l = s.mem.leap as { t: number; flight: number };
     // High enough to clear a pillar in the way.
@@ -126,10 +125,7 @@ const leap: Move = {
     return true;
   },
   recover: 0.7,
-  end: (c) => {
-    c.self.glow(null);
-    c.self.animate('none', { fade: 0.3 });
-  },
+  end: (c) => c.self.animate('none', { fade: 0.3 }),
 };
 
 const eggsOf = (c: Ctx) => c.game.entities.all('egg_sac').filter((e) => e.alive && e.data.master === c.self.id);
@@ -146,7 +142,6 @@ const eggs: Move = {
   },
   act(c) {
     const { game, self, s } = c;
-    self.glow(null);
     const m = map();
     const n = Math.min(EGGS - eggsOf(c).length, adds(game, 2, 1));
     const p = self.position;
@@ -175,10 +170,7 @@ const eggs: Move = {
     }
   },
   recover: 0.8,
-  end: (c) => {
-    c.self.glow(null);
-    c.self.animate('none', { fade: 0.3 });
-  },
+  end: (c) => c.self.animate('none', { fade: 0.3 }),
 };
 
 /** Venom sprayed onto marked spots about her target, where it pools for a while. */

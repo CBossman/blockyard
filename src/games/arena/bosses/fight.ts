@@ -129,7 +129,7 @@ export interface Strike {
   grounded?: boolean;
   /** Only within this arc (angles round y from +x toward +z), as `sweep` draws it. */
   arc?: [number, number];
-  /** A wall between `at` and them shelters them. */
+  /** A wall between `at` and them shelters them (a shockwave breaks on a pillar). */
   cover?: boolean;
   /** How hard it throws them back from `at`, and up. */
   knockback?: number;
@@ -202,8 +202,6 @@ export function root(game: GameContext, p: Player, seconds: number, weapons = fa
   return true;
 }
 
-export const rooted = (p: Player) => roots.has(p.id);
-
 /** Each fighter's venom: damage a tick until it's spent. */
 const venoms = new Map<string, { p: Player; ticks: number; per: number; next: number; source: Entity }>();
 const VENOM_TICK = 0.5;
@@ -263,7 +261,7 @@ export function updateHolds(game: GameContext) {
   }
 }
 
-/** A fresh fight: every chill and root off. */
+/** A fresh fight: every chill, root, venom and drag off. */
 export function resetHolds() {
   for (const c of chills.values()) c.p.speed /= c.factor;
   for (const r of roots.values()) if (r.p.alive) r.p.freeze(false);
@@ -334,7 +332,7 @@ export function clearHazards(game: GameContext, source?: Entity) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Props the bosses put in the arena (falling bones, cages, tethers): gone with the fight
+// Props the bosses put in the arena (falling bones and souls, cages, ice spikes): gone with the fight
 
 const props = new Set<Prop>();
 const models = new WeakMap<GameContext, Map<string, PropModel>>();
@@ -453,8 +451,6 @@ export interface Move {
   /** Its tell: seconds of wind-up, and what's shown as it begins (a glow, a ring, a raised arm). */
   windup: number;
   start?(c: Ctx): void;
-  /** Walks on during the wind-up rather than standing (a run-up). */
-  moving?: boolean;
   /** The blow. */
   act(c: Ctx): void;
   /** A move that goes on (a charge, a channel): each tick after `act`, until it says it's done. */
@@ -550,7 +546,7 @@ export function brain(b: Brain): Behavior {
     if (m && s.step) {
       if (s.step === 'windup') {
         s.t -= dt;
-        if (!m.moving) self.stop();
+        self.stop();
         if (s.t > 0) return;
         s.step = 'act';
         m.act(c);
@@ -585,7 +581,7 @@ export function brain(b: Brain): Behavior {
       s.t = mv.windup * tempo;
       s.cds[mv.name] = cooldownOf(game, mv) * tempo + mv.windup * tempo;
       mv.start?.(c);
-      if (!mv.moving) self.stop();
+      self.stop();
       return;
     }
     if (b.chase) b.chase(c);
