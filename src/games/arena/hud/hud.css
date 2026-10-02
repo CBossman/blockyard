@@ -628,3 +628,46 @@
 .stat-value {
   font: 600 15px var(--ar-label);
 }
+
+/* ---------- Achievements (top right, sliding in) and the end screen's veil ---------- */
+.achievement {
+  top: 22px;
+  left: auto;
+  right: 24px;
+  border-radius: 2px;
+  background: radial-gradient(ellipse at 0% 50%, rgba(240, 192, 96, 0.12), transparent 60%), var(--ar-glass2);
+  border: 1px solid var(--ar-line2);
+  box-shadow: inset 0 1px 0 rgba(240, 192, 96, 0.5), 0 16px 40px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(10px);
+  transform: translateX(18px);
+}
+.achievement.show {
+  transform: none;
+}
+.achievement-icon {
+  border-radius: 2px;
+  background: linear-gradient(180deg, #ffe3a1, var(--ar-gold) 60%, #b9802c);
+}
+.achievement-kicker {
+  font: 500 10px var(--ar-label);
+  letter-spacing: 0.3em;
+  color: var(--ar-gold);
+}
+.achievement-title {
+  font: 700 17px var(--ar-title);
+  letter-spacing: 0.06em;
+  color: var(--ar-fg);
+}
+.achievement-desc {
+  color: var(--ar-fg2);
+}
+.achievement-note {
+  color: var(--ar-fg3);
+}
+.widget-screen:has(.gw-arena-end) {
+  background:
+    radial-gradient(ellipse 70% 60% at 50% 42%, rgba(12, 7, 4, 0.5), rgba(6, 3, 2, 0.88)),
+    linear-gradient(180deg, rgba(6, 3, 2, 0.5), transparent 25%, transparent 75%, rgba(6, 3, 2, 0.6));
+  backdrop-filter: blur(5px) saturate(0.7);
+  animation: ar-fade 700ms ease both;
+}

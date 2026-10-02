@@ -87,8 +87,8 @@ export function hits(): ClientKit {
     const big = g.b ? 3 : 1;
     const size = Math.max(0.8, Math.min(2.4, g.s / 1.9));
     // Chunks: tumbling up and out, falling and landing.
-    client.fx.particles(at, c, { count: Math.round(16 * big * size), speed: 4.2 * Math.sqrt(size), size: 0.15 * size, gravity: 18, life: 1.8, spread: 0.35 * size, up: 3.2, drag: 0.4, collide: true });
-    client.fx.particles(at, dark, { count: Math.round(8 * big * size), speed: 3.2 * Math.sqrt(size), size: 0.22 * size, gravity: 20, life: 2.2, spread: 0.3 * size, up: 2.4, drag: 0.4, collide: true });
+    client.fx.particles(at, c, { count: Math.round(20 * big * size), speed: 4.6 * Math.sqrt(size), size: 0.2 * size, gravity: 18, life: 2.4, spread: 0.4 * size, up: 3.4, drag: 0.35, collide: true });
+    client.fx.particles(at, dark, { count: Math.round(10 * big * size), speed: 3.4 * Math.sqrt(size), size: 0.28 * size, gravity: 20, life: 2.8, spread: 0.3 * size, up: 2.6, drag: 0.35, collide: true });
     // A spray of mist, quickly gone.
     client.fx.particles(at, c, { count: Math.round(18 * big), speed: 2.6, size: 0.06, gravity: 4, life: 0.5, spread: 0.25 * size, drag: 2.5 });
     client.audio.play('ar_gore', { at, volume: 0.9, pitch: 1.15 - Math.min(0.5, size * 0.15) });

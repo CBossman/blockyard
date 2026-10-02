@@ -62,7 +62,8 @@ function build(client: Client, layer: HTMLElement): (dt: number) => void {
   const party = el('div.ar-party');
   const bless = el('div.ar-bless');
   const world = el('div.ar-world');
-  layer.append(wave, purse, party, bless, world);
+  const shade = el('div.ar-shade');
+  layer.append(shade, wave, purse, party, bless, world);
 
   let runKey = '';
   let partyKey = '';
@@ -113,6 +114,7 @@ function build(client: Client, layer: HTMLElement): (dt: number) => void {
     runKey = key;
     const on = r.phase === 'countdown' || r.phase === 'fighting' || r.phase === 'intermission';
     wave.classList.toggle('on', on);
+    shade.classList.toggle('on', on);
     wave.dataset.phase = r.phase;
     if (!on) return;
     const endless = r.wave > r.of;

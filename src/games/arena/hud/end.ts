@@ -117,9 +117,9 @@ export const END: { name: string; def: WidgetDefinition } = {
     }
     .es-defeat .word { background: linear-gradient(180deg, #ffd9d2 5%, #e0505a 50%, #8e1820 92%); -webkit-background-clip: text; background-clip: text; filter: drop-shadow(0 0 26px rgba(216, 52, 60, 0.35)) drop-shadow(0 3px 2px rgba(0, 0, 0, 0.6)); }
     .headline { margin-top: 12px; font: 500 16px/1.3 var(--sans); letter-spacing: 0.02em; color: var(--fg2); text-shadow: var(--shadow); text-align: center; }
-    .track { margin-top: 20px; display: flex; align-items: center; gap: 6px; animation: fade 600ms ease both 500ms; }
-    .pip { width: 9px; height: 9px; transform: rotate(45deg); background: rgba(255, 255, 255, 0.1); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16); }
-    .pip.boss { width: 14px; height: 14px; margin: 0 2px; }
+    .track { margin-top: 20px; display: flex; align-items: center; gap: 8px; animation: fade 600ms ease both 500ms; }
+    .pip { width: 11px; height: 11px; transform: rotate(45deg); background: rgba(255, 255, 255, 0.1); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.2); }
+    .pip.boss { width: 17px; height: 17px; margin: 0 3px; }
     .pip.won { background: var(--gold); box-shadow: 0 0 8px rgba(240, 192, 96, 0.55); }
     .pip.lost { background: var(--blood); box-shadow: 0 0 10px rgba(216, 52, 60, 0.8); animation: breathe 1.4s ease-in-out infinite; }
     .pip.more { width: auto; height: auto; transform: none; background: none; box-shadow: none; font: 600 12px/1 var(--label); letter-spacing: 0.1em; color: var(--gold); }
@@ -127,8 +127,8 @@ export const END: { name: string; def: WidgetDefinition } = {
     .wv { color: var(--fg); }
     .best { padding: 4px 9px 3px; border-radius: 2px; background: var(--gold); color: #1a120a; font-weight: 600; letter-spacing: 0.24em; animation: glint 2.4s ease-in-out infinite 1.2s; }
     .prev { color: var(--fg3); }
-    .cols { margin-top: 22px; width: 100%; display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
-    .panel { display: flex; flex-direction: column; gap: 12px; padding: 14px 18px 16px; border-radius: 2px; background: var(--glass2); backdrop-filter: blur(12px); box-shadow: inset 0 1px 0 color-mix(in srgb, var(--c) 60%, transparent), inset 0 0 0 1px var(--line); animation: rise 700ms cubic-bezier(0.2, 0.8, 0.2, 1) both 650ms; }
+    .cols { margin-top: 22px; width: 100%; display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; }
+    .panel { flex: 1 1 300px; max-width: 560px; display: flex; flex-direction: column; gap: 12px; padding: 14px 18px 16px; border-radius: 2px; background: var(--glass2); backdrop-filter: blur(12px); box-shadow: inset 0 1px 0 color-mix(in srgb, var(--c) 60%, transparent), inset 0 0 0 1px var(--line); animation: rise 700ms cubic-bezier(0.2, 0.8, 0.2, 1) both 650ms; }
     .panel.xp { animation-delay: 800ms; }
     .panel.crew { animation-delay: 950ms; }
     .ph { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; font: 500 11px/1 var(--label); letter-spacing: 0.36em; text-transform: uppercase; color: var(--bronze); }
@@ -218,7 +218,7 @@ export function endScreen(p: Player, run: EndRun, tallies: Tallies) {
   const headline = run.won
     ? endless
       ? `${who} held the arena to wave ${run.wave} in ${fmtTime(run.time)}`
-      : `${who} conquered the ${run.map} in ${fmtTime(run.time)}`
+      : `${who} conquered ${run.map} in ${fmtTime(run.time)}`
     : `${who} fell on wave ${run.wave}: ${run.name}`;
   const xp = xps.get(p.id) ?? null;
   const data = {

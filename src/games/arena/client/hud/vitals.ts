@@ -73,7 +73,7 @@ const CSS = `
 .ar-hurt {
   position: absolute; inset: 0; pointer-events: none; --low: 0; opacity: 0; transition: opacity 400ms ease;
   background:
-    radial-gradient(ellipse 70% 65% at center, transparent 45%, rgba(120, 6, 10, calc(0.22 + var(--low) * 0.35)) 80%, rgba(50, 0, 2, calc(0.5 + var(--low) * 0.4)) 100%);
+    radial-gradient(ellipse 72% 68% at center, transparent calc(52% - var(--low) * 14%), rgba(150, 6, 12, calc(0.3 + var(--low) * 0.35)) 82%, rgba(70, 0, 4, calc(0.62 + var(--low) * 0.33)) 100%);
 }
 .ar-hurt.on { opacity: 1; }
 .ar-hurt.beat { animation: ar-hurt-beat 600ms ease-out; }
