@@ -51,15 +51,15 @@ export const WAVES: WaveSpec[] = [
   { name: 'Hellfire', roster: { imp: 5, spider: 3, sapper: 2, bat: 1 }, budget: 8, reward: [bombs(3), POTION] },
   { name: 'Horns and Hide', roster: { minotaur: 1, brute: 1, zombie: 6, sapper: 2 }, budget: 8, reward: [POTION, arrows(2)] },
   { boss: 'warden', name: 'The Warden', roster: { skeleton: 2, sapper: 2, knight: 2 }, reward: [{ item: 'health_potion', count: 2 }, bombs(3)] },
-  { name: 'Wraiths', roster: { wraith: 3, necromancer: 1, skeleton: 3 }, budget: 14, reward: [POTION, arrows(3)] },
-  { name: 'Slime Time', roster: { slime: 3, imp: 3, spider: 3 }, budget: 13, reward: [bombs(3), POTION] },
-  { name: 'The Cult', roster: { cultist: 2, knight: 2, zombie: 6 }, budget: 17, reward: [POTION, arrows(3)] },
-  { name: 'Stone and Fire', roster: { golem: 1, imp: 4, brute: 1, bat: 1 }, budget: 16, reward: [{ item: 'health_potion', count: 2 }, bombs(2)] },
+  { name: 'Wraiths', roster: { wraith: 3, necromancer: 1, skeleton: 3 }, budget: 20, reward: [POTION, arrows(3)] },
+  { name: 'Slime Time', roster: { slime: 3, imp: 3, spider: 3 }, budget: 18, reward: [bombs(3), POTION] },
+  { name: 'The Cult', roster: { cultist: 2, knight: 2, zombie: 6 }, budget: 24, reward: [POTION, arrows(3)] },
+  { name: 'Stone and Fire', roster: { golem: 1, imp: 4, brute: 1, bat: 1 }, budget: 22, reward: [{ item: 'health_potion', count: 2 }, bombs(2)] },
   { boss: 'broodmother', name: 'The Broodmother', roster: { spider: 5, sapper: 2 }, reward: [{ item: 'health_potion', count: 2 }, bombs(3), arrows(3)] },
-  { name: 'The Horde', roster: { zombie: 14, spider: 6, skeleton: 4, sapper: 3 }, budget: 14, reward: [POTION, bombs(3)] },
-  { name: 'Night Terrors', roster: { wraith: 3, imp: 4, necromancer: 2, bat: 2 }, budget: 20, reward: [POTION, arrows(3)] },
-  { name: 'The Siege', roster: { golem: 2, knight: 4, sapper: 4, minotaur: 1 }, budget: 18, reward: [{ item: 'health_potion', count: 2 }, bombs(3)] },
-  { name: 'The Gauntlet', roster: { brute: 2, cultist: 2, wraith: 2, golem: 1, slime: 2, minotaur: 1 }, budget: 22, reward: [{ item: 'health_potion', count: 2 }, bombs(3), arrows(3)] },
+  { name: 'The Horde', roster: { zombie: 14, spider: 6, skeleton: 4, sapper: 3 }, budget: 20, reward: [POTION, bombs(3)] },
+  { name: 'Night Terrors', roster: { wraith: 3, imp: 4, necromancer: 2, bat: 2 }, budget: 28, reward: [POTION, arrows(3)] },
+  { name: 'The Siege', roster: { golem: 2, knight: 4, sapper: 4, minotaur: 1 }, budget: 25, reward: [{ item: 'health_potion', count: 2 }, bombs(3)] },
+  { name: 'The Gauntlet', roster: { brute: 2, cultist: 2, wraith: 2, golem: 1, slime: 2, minotaur: 1 }, budget: 31, reward: [{ item: 'health_potion', count: 2 }, bombs(3), arrows(3)] },
   { boss: 'lich', name: 'The Lich King', roster: { skeleton: 4, wraith: 2, necromancer: 1 } },
 ];
 
@@ -112,8 +112,13 @@ const TWIST_CHANCE = 0.6;
 /** Otherwise, a lone Treasure Goblin turns up this often in a wave. */
 const GOBLIN_CHANCE = 0.35;
 
-/** At most this many monsters in the arena at once (more as the run goes on, more in a Frenzy); the rest wait their turn. */
-export const maxAlive = (n: number) => Math.min(14, 10 + Math.floor(n / 4)) + (state.twist === 'frenzy' ? 4 : 0);
+/** At most this many monsters in the arena at once (more as the run goes on, more in a Frenzy, up to `MOST`); the rest wait their turn. */
+export const maxAlive = (n: number) => Math.min(MOST, (n >= 12 ? 16 : 10 + Math.floor(n / 4)) + (state.twist === 'frenzy' ? 4 : 0));
+const MOST = 18;
+/** Past wave `GROW_FROM` the monsters come tougher each wave (bosses aside: theirs is `might`): this much more health, and this much harder blows. */
+const GROW_FROM = 8;
+const GROW_HEALTH = 0.04;
+const GROW_HITS = 0.03;
 /** Seconds between monsters coming in (a boss's escort, and a Frenzy, keep other paces). */
 const SPAWN_EVERY = 0.9;
 
@@ -338,6 +343,12 @@ function strike(game: GameContext, at: Vec3) {
 export function directorListen(game: GameContext) {
   bus.on('spawned', ({ entity, type }) => {
     if (bossKind(type) || type === 'goblin') return;
+    // Late in the run, every ordinary monster (and what they bring in) is tougher and hits harder (below).
+    const past = Math.max(0, state.wave - GROW_FROM);
+    if (past > 0 && monsterKind(type) && !entity.data.scenery) {
+      entity.data.tough = 1 + GROW_HEALTH * past;
+      entity.data.hits = 1 + GROW_HITS * past;
+    }
     if (state.twist === 'blood_moon') {
       entity.data.speed = 1.25;
       entity.setSpeed(1.25);
@@ -350,6 +361,13 @@ export function directorListen(game: GameContext) {
     if (state.twist === 'blood_moon' && by && type !== 'goblin' && game.rng.chance(0.15)) {
       game.items.spawnPickup('heart', { x: at.x, y: at.y + 0.5, z: at.z }, { despawn: 30 });
     }
+  });
+  // A late monster: blows land on it as if it had more health, and its own (its shots, its blasts) land harder.
+  game.events.on('damage', (hit) => {
+    const t = hit.target;
+    const s = hit.source;
+    if (t.kind === 'entity' && typeof t.data.tough === 'number') hit.amount /= t.data.tough;
+    if (t.kind === 'player' && s && s !== 'world' && s.kind === 'entity' && typeof s.data.hits === 'number') hit.amount *= s.data.hits;
   });
   // Glass Cannon: every blow between fighters and monsters lands twice as hard.
   game.events.on('damage', (hit) => {

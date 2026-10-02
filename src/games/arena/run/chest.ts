@@ -9,11 +9,12 @@ import { addUsable } from './use';
 /**
  * The mystery chest: it stands at one of the map's `chests` spots, any time, and for `PRICE` gold
  * E opens it. Light pours out and weapons spin above it (each screen's show, `client/run.ts`, the
- * `arena.chest` message) until it settles on one, of some rarity (`loot.ts`), left floating in a
+ * `arena.chest` message) until it settles on one, of some rarity (`loot.ts`: rarer later, never a
+ * plain one from wave 10), left floating in a
  * beam of its colour for whoever paid. After a few rolls at one spot it may laugh a skull out
  * instead: the gold back, and the chest flies off to another spot.
  */
-export const PRICE = 120;
+export const PRICE = 200;
 /** The show, and how long the weapon waits there for them. */
 export const ROLL_TIME = 4.2;
 const TAKE_TIME = 12;

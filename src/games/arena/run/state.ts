@@ -64,10 +64,12 @@ export interface Run {
   damage: number;
   revives: number;
   downs: number;
+  /** Blessings drawn again at the shop (each dearer). */
+  rerolls: number;
 }
 export const runs = new Map<string, Run>();
 
-export const newRun = (from: number, now: number, cls: string): Run => ({ from, fell: false, hurt: false, arms: new Set(), cls, armedAt: now, kills: 0, gold: 0, spent: 0, damage: 0, revives: 0, downs: 0 });
+export const newRun = (from: number, now: number, cls: string): Run => ({ from, fell: false, hurt: false, arms: new Set(), cls, armedAt: now, kills: 0, gold: 0, spent: 0, damage: 0, revives: 0, downs: 0, rerolls: 0 });
 
 /** Fighting, or between waves: a fight's in progress. */
 export const inFight = () => state.phase === 'countdown' || state.phase === 'fighting' || state.phase === 'intermission';

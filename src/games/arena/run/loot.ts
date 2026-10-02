@@ -1,5 +1,5 @@
 import type { GameContext, Player } from '@platform';
-import { RARE_BASES, RARITY, rarityOf, variant } from '../items/rarity';
+import { baseOf, RARE_BASES, RARITY, rarityOf, variant } from '../items/rarity';
 import { rollChest } from '../items/loot';
 import { forge, forgeNext } from '../items/forge';
 
@@ -18,8 +18,14 @@ export { forgeNext } from '../items/forge';
 /** Forge one of theirs, paid for already: taken up a rarity (with the anvil's sparks). Whether it was. */
 export const forgeWeapon = (game: GameContext, p: Player, item: string): boolean => forgeNext(item) !== null && forge(game, p, item) !== null;
 
+/** From this wave on, the mystery chest gives nothing plainer than a rare. */
+const RARE_FROM = 10;
+
 /** A roll of the mystery chest on wave `n`: a weapon, of some rarity. */
-export const rollWeapon = (game: GameContext, n: number): string => rollChest(() => game.rng.next(), n);
+export function rollWeapon(game: GameContext, n: number): string {
+  const item = rollChest(() => game.rng.next(), n);
+  return n >= RARE_FROM && rarityOf(item) === 'common' ? variant(baseOf(item), 'rare') : item;
+}
 
 /** What spins above the chest while it rolls: the arsenal, each of some rarity. */
 export const chestSpin = (game: GameContext, n: number): string[] =>
