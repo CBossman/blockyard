@@ -2,7 +2,7 @@ import { math, type GameContext, type Pickup, type Player, type Prop, type PropM
 import { LID_HINGE, RUN_MODELS } from '../models/run';
 import { bus } from './bus';
 import { addGold, spend } from './gold';
-import { chestPool, RARITY, rollWeapon } from './loot';
+import { chestPool, RARITY, rarityOf, rollWeapon } from './loot';
 import { map, state } from './state';
 import { addUsable } from './use';
 
@@ -107,8 +107,8 @@ export function rollChest(game: GameContext, p: Player): boolean {
   chest.rolls++;
   const cleared = state.phase === 'fighting' ? state.wave - 1 : state.wave;
   const flies = chest.rolls > STAYS && spots().length > 1 && game.rng.chance(FLY_CHANCE);
-  const { item, rarity } = rollWeapon(game, Math.max(1, cleared));
-  const color = flies ? '#ff4d4d' : RARITY[rarity].color;
+  const item = rollWeapon(game, Math.max(1, cleared));
+  const color = flies ? '#ff4d4d' : RARITY[rarityOf(item)].color;
   chest.roll = { by: p, at: game.clock.now + ROLL_TIME, item: flies ? null : item, color, price: PRICE };
   chest.to = 1;
   beam(game, '#ffe9a8');

@@ -4,7 +4,7 @@ import { WARES, type Ware } from '../items/catalog';
 import { bus } from './bus';
 import { FEATHER } from './downed';
 import { addGold, gold, spend } from './gold';
-import { forgeNext, RARITY, rarityOf } from './loot';
+import { deliver, forgeNext, forgeWeapon, RARITY, rarityOf } from './loot';
 import { map, runs, state } from './state';
 import { addUsable } from './use';
 import { ARMOR_ICON } from './models';
@@ -16,7 +16,7 @@ import { ARMOR_ICON } from './models';
  * and the forge (a weapon carried, to its next rarity). He packs up when the next wave begins.
  */
 
-/** Armour, tier by tier: each replaces the last (points: 4% of every blow each). */
+/** The run's own armour, tier by tier, each replacing the last (points: 4% of every blow each), while the catalog sells none. */
 export const ARMOR = [
   { name: 'Leather Armour', points: 4, price: 90 },
   { name: 'Bronze Cuirass', points: 8, price: 200 },
@@ -87,37 +87,41 @@ function wareOffer(game: GameContext, p: Player, w: Ware): Offer {
     price: w.price,
     owned: weapon && p.inventory.count(w.item) > 0,
     locked: (w.from ?? 0) > cleared() ? `After wave ${w.from}` : undefined,
-    buy: () => give(p, w.item, count),
+    buy: () => deliver(game, p, w),
   };
 }
 
 /** A line about a weapon (damage, its kind), from its definition. */
 function weaponNote(game: GameContext, item: string): string | undefined {
-  const d = game.items.get(item) as { kind?: string; damage?: number | [number, number]; cooldown?: number; reach?: number } | undefined;
+  const d = game.items.get(item) as { kind?: string; damage?: number | [number, number]; cooldown?: number } | undefined;
   if (!d) return undefined;
   const dmg = Array.isArray(d.damage) ? `${d.damage[0]}-${d.damage[1]}` : d.damage;
   if (d.kind === 'bow') return `Ranged · ${dmg} damage drawn · needs arrows`;
   return dmg !== undefined ? `${dmg} damage${d.cooldown ? ` · ${(1 / d.cooldown).toFixed(1)} swings a second` : ''}` : undefined;
 }
 
-function offers(game: GameContext, p: Player): { title: string; offers: Offer[] }[] {
-  const wares = WARES.filter((w) => game.items.get(w.item));
+/** The run's own armour, tier by tier, while the catalog sells none of its own. */
+function armorOffer(p: Player): Offer {
   const tier = armorTier(p);
   const next = ARMOR[tier];
-  const armor: Offer = next
-    ? {
-        id: `armor:${tier + 1}`,
-        icon: ARMOR_ICON,
-        label: next.name,
-        note: `Blocks ${next.points * 4}% of every blow${tier ? ` (up from ${ARMOR[tier - 1].points * 4}%)` : ''} · for the run`,
-        price: next.price,
-        buy: () => {
-          p.armor += next.points - (tier ? ARMOR[tier - 1].points : 0);
-          tiers.set(p.id, tier + 1);
-          return true;
-        },
-      }
-    : { id: 'armor', icon: ARMOR_ICON, label: ARMOR[ARMOR.length - 1].name, note: 'The best armour there is', price: 0, owned: true, buy: () => false };
+  if (!next) return { id: 'armor', icon: ARMOR_ICON, label: ARMOR[ARMOR.length - 1].name, note: 'The best armour there is', price: 0, owned: true, buy: () => false };
+  return {
+    id: `armor:${tier + 1}`,
+    icon: ARMOR_ICON,
+    label: next.name,
+    note: `Blocks ${next.points * 4}% of every blow${tier ? ` (up from ${ARMOR[tier - 1].points * 4}%)` : ''} · for the run`,
+    price: next.price,
+    buy: () => {
+      p.armor += next.points - (tier ? ARMOR[tier - 1].points : 0);
+      tiers.set(p.id, tier + 1);
+      return true;
+    },
+  };
+}
+
+function offers(game: GameContext, p: Player): { title: string; offers: Offer[] }[] {
+  const wares = WARES.filter((w) => game.items.get(w.item) || w.kind === 'armor');
+  const armor = wares.filter((w) => w.kind === 'armor');
   const feather: Offer = {
     id: FEATHER,
     icon: { item: FEATHER },
@@ -130,25 +134,21 @@ function offers(game: GameContext, p: Player): { title: string; offers: Offer[] 
   const forge = weaponsHeld(game, p).flatMap((item): Offer[] => {
     const f = forgeNext(item);
     if (!f) return [];
-    const to = RARITY[rarityOf(f.item)];
     return [
       {
-        id: `forge:${f.item}`,
-        icon: { item: item },
+        id: `forge:${item}`,
+        icon: { item: f.item },
         label: `Forge ${game.items.get(item)?.name ?? item}`,
-        note: `To ${to.name}: ${game.items.get(f.item)?.name ?? f.item}`,
+        note: `Into ${game.items.get(f.item)?.name ?? f.item} (${RARITY[rarityOf(f.item)].name})`,
         price: f.price,
-        buy: () => {
-          if (!p.inventory.take(item, 1)) return false;
-          return give(p, f.item, 1);
-        },
+        buy: () => forgeWeapon(game, p, item),
       },
     ];
   });
   return [
     { title: 'Weapons', offers: wares.filter((w) => w.kind === 'weapon').map((w) => wareOffer(game, p, w)) },
-    { title: 'Armour', offers: [armor] },
-    { title: 'Supplies', offers: [...wares.filter((w) => w.kind !== 'weapon' && w.kind !== 'upgrade').map((w) => wareOffer(game, p, w)), feather] },
+    { title: 'Armour', offers: armor.length ? armor.map((w) => wareOffer(game, p, w)) : [armorOffer(p)] },
+    { title: 'Supplies', offers: [...wares.filter((w) => w.kind === 'consumable' || w.kind === 'ammo').map((w) => wareOffer(game, p, w)), feather] },
     ...(forge.length ? [{ title: 'The Forge', offers: forge }] : []),
   ].filter((s) => s.offers.length);
 }
