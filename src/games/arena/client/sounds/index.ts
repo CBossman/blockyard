@@ -1,5 +1,8 @@
 import type { Client } from '@platform/client';
+import { defineArmorySounds } from './armory';
 import { defineCreatureSounds } from './creatures';
+import { defineBestiarySounds } from './bestiary';
+import { defineHudSounds } from './hud';
 import { defineMapSounds } from './maps';
 
 /**
@@ -8,5 +11,8 @@ import { defineMapSounds } from './maps';
  */
 export function defineSounds(client: Client) {
   defineCreatureSounds(client);
+  defineArmorySounds(client);
+  defineBestiarySounds(client);
+  defineHudSounds(client);
   defineMapSounds(client);
 }

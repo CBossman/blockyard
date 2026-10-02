@@ -241,8 +241,8 @@ export const necromancerAI: Behavior = (self, game, dt) => {
   self.moveDirection(nx * away - nz * st - (ox / (r || 1)) * inward, nz * away + nx * st - (oz / (r || 1)) * inward);
   self.lookAt(target);
 
-  const risen = game.entities.all('zombie').filter((z) => z.data.master === self.id).length;
-  if (s._cd <= 0 && risen < MAX_RAISED && self.canSee(target)) {
+  // (Its risen counted only when it could raise more: not a scan of every zombie every tick.)
+  if (s._cd <= 0 && self.canSee(target) && game.entities.all('zombie').filter((z) => z.data.master === self.id).length < MAX_RAISED) {
     s._cast = 1.1;
     self.stop();
     self.animate('raise');

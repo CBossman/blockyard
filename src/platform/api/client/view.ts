@@ -44,6 +44,13 @@ export interface ViewLayer {
    * with spikes, white to orange) or an image's address. Hidden until you show it.
    */
   sprite(image: 'flash' | string, opts?: ViewSpriteOptions): Node;
+  /**
+   * An item's look as a node of the layer's, lit and drawn as what's in hand is (an off-hand
+   * shield, a second dagger): its model, or its sprite extruded, in its own space (as `HeldItem`'s).
+   * Null while its model's file is still coming (ask again). A kit adds it under `root` and places
+   * it; `free` takes it out again.
+   */
+  item(id: string): Node | null;
   /** Take a node out of the layer and free what the engine made for it (a sprite, an arm, a box). */
   free(node: Node): void;
   /**

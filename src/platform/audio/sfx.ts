@@ -40,10 +40,18 @@ export class Sfx {
   /** Rendering offline (`Sfx.offline`): no autoplay rules, no clean-up timers. */
   private offline = false;
   volume = 0.7;
+  /** The player's volume setting (0..1), over `volume`. */
+  private level = 1;
 
   /** The live context (not an offline one), for suspending and closing. */
   private get live(): AudioContext | null {
     return this.ctx && !this.offline ? (this.ctx as AudioContext) : null;
+  }
+
+  /** The player's volume setting (0..1): everything's loudness. */
+  setLevel(level: number) {
+    this.level = Math.max(0, Math.min(1, level));
+    if (this.master) this.master.gain.value = this.volume * this.level;
   }
 
   /** Done (switching games): release the audio device. */
@@ -73,7 +81,7 @@ export class Sfx {
     comp.threshold.value = -14;
     comp.ratio.value = 4;
     this.master = ctx.createGain();
-    this.master.gain.value = this.volume;
+    this.master.gain.value = this.volume * this.level;
     this.master.connect(comp).connect(ctx.destination);
     const len = ctx.sampleRate;
     this.noise = ctx.createBuffer(1, len, ctx.sampleRate);

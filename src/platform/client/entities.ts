@@ -233,6 +233,8 @@ export class EntityView {
   private draw(v: Shown, f: FigureFrame, dt: number, running: boolean, still = false) {
     const root = v.model.root;
     root.position.set(f.x, f.y, f.z);
+    const size = f.size ?? 1;
+    root.scale.setScalar(size);
     const hs = Math.hypot(f.vx, f.vz);
     // Facing: where it looks, else where it walks.
     let target = v.yaw;
@@ -258,7 +260,7 @@ export class EntityView {
       a.time += dt;
       a.attackT += dt;
       a.shotT = (a.shotT ?? 9) + dt;
-      a.walkPhase += hs * dt * (4.2 / Math.max(0.6, v.scale));
+      a.walkPhase += hs * dt * (4.2 / Math.max(0.6, v.scale * size));
     }
     // Its speed and which way it's going, in its own space (it faces +z): a humanoid steps that way.
     a.speed = hs;
@@ -275,7 +277,7 @@ export class EntityView {
     a.walkAmount += (Math.min(1, hs / Math.max(1.2, v.speed * 0.7)) - a.walkAmount) * (still ? 1 : Math.min(1, dt * 8));
     a.pace = hs / Math.max(0.1, v.speed);
     if (f.look) {
-      const eyeY = f.y + v.height * 0.85;
+      const eyeY = f.y + v.height * size * 0.85;
       const dist = Math.hypot(f.look.x - f.x, f.look.z - f.z) || 1;
       a.headPitch = Math.max(-0.6, Math.min(0.6, -Math.atan2(f.look.y - eyeY, dist)));
     } else {
