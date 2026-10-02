@@ -4,6 +4,7 @@ import { defineCreatureSounds } from './creatures';
 import { defineBestiarySounds } from './bestiary';
 import { defineHudSounds } from './hud';
 import { defineMapSounds } from './maps';
+import { defineBossSounds } from './bosses';
 
 /**
  * The Arena's voices, synthesised on each screen (`client.audio.define`: nothing is recorded or
@@ -15,4 +16,5 @@ export function defineSounds(client: Client) {
   defineBestiarySounds(client);
   defineHudSounds(client);
   defineMapSounds(client);
+  defineBossSounds(client);
 }
