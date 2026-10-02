@@ -43,8 +43,8 @@ const bite: Move = {
     const p = c.self.position;
     const a = c.s.mem.bite as number;
     c.self.animate('bite', { fade: 0.05 });
-    const { hit } = strike(c.game, { source: c.self, at: p, r: BITE, damage: 5, arc: [a - 0.75, a + 0.75], knockback: 6, lift: 2 });
-    for (const f of hit) venom(c.game, f, 3, 3, c.self);
+    const { hit } = strike(c.game, { source: c.self, at: p, r: BITE, damage: 5.8, arc: [a - 0.75, a + 0.75], knockback: 6, lift: 2 });
+    for (const f of hit) venom(c.game, f, 3.5, 3, c.self);
     c.game.audio.play('brood_bite', { at: p });
   },
   recover: 0.6,
@@ -201,7 +201,7 @@ const spray: Move = {
       self.shoot(GLOB, at);
       game.clock.after(0.8, () => {
         if (!self.alive) return;
-        pool(game, self, at, 2.3, 7, VENOM_C, { damage: 1, every: 0.7, chill: [0.75, 0.8], weapon: 'venom' });
+        pool(game, self, at, 2.3, 7, VENOM_C, { damage: 1.15, every: 0.7, chill: [0.75, 0.8], weapon: 'venom' });
         game.fx.burst({ x: at.x, y: at.y + 0.3, z: at.z }, { color: VENOM_C, count: 24, speed: 3, size: 0.14, gravity: 8 });
         game.audio.play('venom_splash', { at });
       });

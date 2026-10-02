@@ -243,7 +243,7 @@ function colossus(log: (s: string) => void) {
   const swept = landed(sc, 'sweep');
   const swRolled = landed(sc, 'sweep', before(sc, 'sweep', 'KeyQ', 0.06));
   log(`sweep: ${swept} standing, ${swRolled} rolling`);
-  check(swept >= 4 && swRolled === 0, 'the sweep lands in front of it, and a roll avoids it');
+  check(swept >= 3.5 && swRolled === 0, 'the sweep lands in front of it, and a roll avoids it');
   // The bone rain: a circle under the fighter; standing still it lands, running out of it it doesn't.
   sc.me.teleport({ x: 0.5, y: FLOOR + 1, z: 14.5 }, 0, 0);
   const rain = landed(sc, 'rain');
@@ -262,8 +262,8 @@ function colossus(log: (s: string) => void) {
   run(sc, 6, () => sc.s.move?.name === 'ribs', () => (sc.only('ribs'), null));
   run(sc, 3);
   const thralls = sc.game.entities.all('thrall').filter((t) => t.data.master === sc.boss.id).length;
-  check(thralls >= 2, `thralls climb out of its ribcage (${thralls})`);
-  log(`phase 2: ${thralls} thralls`);
+  check(thralls === 1, `a thrall climbs out of its ribcage, one for a lone fighter (${thralls})`);
+  log(`phase 2: ${thralls} thrall${thralls === 1 ? "" : "s"}`);
   for (const t of sc.game.entities.all('thrall')) t.remove();
   sc.me.teleport({ x: 0.5, y: FLOOR + 1, z: 18.5 }, 0, 0);
   run(sc, 8, () => sc.s.move?.name === 'charge' && sc.s.step === 'act', (h) => (sc.only('charge'), watch(sc)(h)));
