@@ -81,12 +81,14 @@ body:has(.ar-card:not(.out)) .ar-stage {
   text-shadow: var(--ar-shadow);
   animation: ar-call-fade 600ms ease both 260ms;
 }
-/* A twist, a return: smaller. */
+/* A twist, a return, a blessing: smaller. */
 .ar-call.k-twist .ar-call-t,
-.ar-call.k-back .ar-call-t {
+.ar-call.k-back .ar-call-t,
+.ar-call.k-blessing .ar-call-t {
   font-size: 58px;
 }
-.ar-call.k-twist .ar-call-s {
+.ar-call.k-twist .ar-call-s,
+.ar-call.k-blessing .ar-call-s {
   font: 500 16px/1.3 var(--sans);
   letter-spacing: 0.04em;
   margin-right: 0;

@@ -117,6 +117,10 @@ function upcoming(): RunMsg['upcoming'] {
   return w ? { wave: n, name: w.name, boss: !!w.boss } : null;
 }
 
+/** Each rarity of blessing's colour (as the armory's `BLESSING_COLOR`): its icon's frame, its callout. */
+const RARITY_COLOR: Record<string, string> = { common: '#ffd36b', rare: '#7cc4ff', epic: '#c98bff' };
+const blessingColor = (id: string) => RARITY_COLOR[(BLESSINGS as unknown as Record<string, { rarity?: string } | undefined>)[id]?.rarity ?? 'common'] ?? RARITY_COLOR.common;
+
 const fighterState = (p: Player): FighterState => (downs.has(p.id) ? 'down' : p.alive ? 'up' : 'out');
 const bleedOf = (game: GameContext, p: Player) => Math.max(0, Math.ceil((downs.get(p.id) ?? 0) - game.clock.now));
 
@@ -124,8 +128,8 @@ function meMsg(game: GameContext, p: Player): MeMsg {
   return {
     gold: gold(p),
     bless: blessingsOf(p).map((id) => {
-      const b: { name: string; text: string; icon: MeMsg['bless'][number]['icon']; color?: string } = BLESSINGS[id];
-      return { name: b.name, text: b.text, icon: b.icon, color: b.color ?? '#f0c060' };
+      const b = BLESSINGS[id];
+      return { name: b.name, text: b.text, icon: b.icon, color: blessingColor(id) };
     }),
     state: fighterState(p),
     bleed: bleedOf(game, p),
@@ -312,6 +316,10 @@ export const hudPart: ArenaPart = {
     });
 
     bus.on('classPicked', ({ player, cls }) => void classes.set(player.id, cls));
+
+    bus.on('blessed', ({ player, id, name, text, chosen }) => {
+      call(game, player, { k: 'blessing', q: chosen ? 'Blessing' : 'The arena chose for you', t: name, s: text, c: blessingColor(id) });
+    });
 
     bus.on('levelUp', ({ player, level, unlocks: got }) => {
       unlocks.set(player.id, [...(unlocks.get(player.id) ?? []), ...got]);

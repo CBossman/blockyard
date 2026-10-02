@@ -10,6 +10,8 @@ const KINDS: Record<CallMsg['k'], { time: number; sting: string; big: boolean }>
   boss: { time: 2.6, sting: 'ar_sting_boss', big: true },
   endless: { time: 3, sting: 'ar_sting_final', big: true },
   slain: { time: 3.2, sting: 'ar_sting_slain', big: true },
+  // (A blessing's own chime is the armory's, played by the server.)
+  blessing: { time: 2.4, sting: '', big: true },
   twist: { time: 2.6, sting: 'ar_sting_twist', big: true },
   favour: { time: 2.8, sting: 'ar_sting_favour', big: true },
   out: { time: 3.2, sting: 'ar_sting_out', big: true },
@@ -54,7 +56,7 @@ export function announcer(): ClientKit {
     e.style.setProperty('--life', `${k.time}s`);
     stage.append(e);
     showing = { el: e, until: client.time + k.time };
-    client.audio.play(k.sting, { volume: 0.9 });
+    if (k.sting) client.audio.play(k.sting, { volume: 0.9 });
   };
 
   const feat = (client: Client, c: CallMsg) => {

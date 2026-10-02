@@ -425,16 +425,27 @@
   will-change: transform, opacity;
 }
 
-/* ---------- The party (bottom left, over the blessings, in co-op) ---------- */
-.ar-party {
+/* ---------- Bottom left, over the health: the party (in co-op) over the blessings ---------- */
+.ar-left {
   position: absolute;
-  left: 28px;
-  bottom: 112px;
+  left: 26px;
+  bottom: 60px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 14px;
+}
+.ar-party {
   display: flex;
   flex-direction: column;
   gap: 10px;
   width: 190px;
+  margin-left: 2px;
   filter: var(--ar-halo);
+}
+.ar-party:empty,
+.ar-bless:empty {
+  display: none;
 }
 .ar-mate {
   display: flex;
@@ -511,11 +522,8 @@
   }
 }
 
-/* ---------- Blessings (bottom left, over the health) ---------- */
+/* ---------- Blessings ---------- */
 .ar-bless {
-  position: absolute;
-  left: 26px;
-  bottom: 60px;
   display: flex;
   gap: 5px;
   max-width: 360px;
@@ -540,39 +548,12 @@
 .ar-blessing.new {
   animation: ar-bless-in 900ms cubic-bezier(0.3, 1.6, 0.5, 1);
 }
-.ar-bless-name {
-  position: absolute;
-  left: 0;
-  bottom: calc(100% + 6px);
-  white-space: nowrap;
-  font: 600 12px/1 var(--ar-title);
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--ar-gold-hi, #ffe3a1);
-  text-shadow: 0 0 10px rgba(240, 192, 96, 0.5), 0 1px 3px rgba(0, 0, 0, 0.9);
-  animation: ar-bless-name 3.5s ease forwards;
-}
 @keyframes ar-bless-in {
   0% {
     transform: scale(2);
     box-shadow: 0 0 30px var(--c);
   }
 }
-@keyframes ar-bless-name {
-  0% {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-  10%,
-  80% {
-    opacity: 1;
-    transform: none;
-  }
-  100% {
-    opacity: 0;
-  }
-}
-
 /* A smaller screen: tighter. */
 @media (max-width: 1100px) {
   .ar-wave-big {

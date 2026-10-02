@@ -66,7 +66,8 @@ function build(client: Client, layer: HTMLElement): (dt: number) => void {
   const bless = el('div.ar-bless');
   const world = el('div.ar-world');
   const shade = el('div.ar-shade');
-  layer.append(shade, wave, purse, party, bless, world);
+  // The party over the blessings, bottom left, over the health.
+  layer.append(shade, wave, purse, el('div.ar-left', party, bless), world);
 
   let runKey = '';
   let partyKey = '';
@@ -185,10 +186,8 @@ function build(client: Client, layer: HTMLElement): (dt: number) => void {
         const tile = el('div.ar-blessing', client.hud.icon(b.icon));
         tile.style.setProperty('--c', b.color);
         tile.title = `${b.name}: ${b.text}`;
-        if (fresh && i === m.bless.length - 1) {
-          tile.classList.add('new');
-          tile.append(el('span.ar-bless-name', b.name));
-        }
+        // (The newest arrives with a flash; the announcer names it.)
+        if (fresh && i === m.bless.length - 1) tile.classList.add('new');
         return tile;
       }),
     );
