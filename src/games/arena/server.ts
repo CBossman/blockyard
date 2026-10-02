@@ -2,7 +2,6 @@ import { defineServer, type GameContext, type Player } from '@platform';
 import { ARMORY_KITS, defineArt, defineItems } from './items';
 import { defineMonsters } from './monsters';
 import { defineBosses } from './bosses';
-import { Sprite } from './art';
 import { shared } from './shared';
 import { ROLL } from './abilities';
 import { BLESSINGS, grant, listen as blessingsListen, offer, plainBody, reopen, resetBlessings, settle, wave as blessingsWave, type BlessingId } from './blessings';
@@ -25,23 +24,16 @@ const VETERAN_KILLS = 250;
 const BLASTS = new Set(['bomb', 'powder_keg', 'volatile', 'lightning']);
 const blastKills = new Map<string, { at: number; n: number }>();
 
-function fmtTime(s: number) {
-  const m = Math.floor(s / 60);
-  return `${m}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
-}
-
-/** The banner and countdown to the first wave. */
+/** The countdown to the first wave. */
 function begin(game: GameContext) {
   state.phase = 'countdown';
   state.startedAt = game.clock.now;
-  game.hud.banner('ARENA', `Survive ${finalWave()} waves`, { duration: 2.8, color: '#ffb36b' });
   bus.emit('runStart', { map: map() });
   let n = 3;
   const tickDown = () => {
     if (state.phase !== 'countdown') return;
+    // (The HUD counts it down: `hud/part.ts`.)
     if (n > 0) {
-      game.hud.objective(`First wave in ${n}…`);
-      game.audio.play('countdown');
       n--;
       game.clock.after(1, tickDown);
     } else {
@@ -59,12 +51,10 @@ function waveCleared(game: GameContext) {
     if (state.wave === 1) p.achieve('first_wave');
   }
   for (const p of game.players) if (!p.alive) rejoin(game, p, !last);
-  bus.emit('waveCleared', { wave: state.wave, final: last });
+  bus.emit('waveCleared', { wave: state.wave, final: last, endless: false, bonus: 0 });
   if (last) return victory(game);
   state.phase = 'intermission';
   state.nextWaveAt = game.clock.now + INTERMISSION;
-  game.hud.banner('Wave cleared!', w.reward ? 'A reward awaits on the dais' : undefined, { duration: 2.4, color: '#9dff8a' });
-  game.audio.play('victory', { volume: 0.5 });
   for (const p of game.players) p.heal(6);
   // A blessing each, chosen from three.
   for (const p of game.players) offer(game, p);
@@ -125,7 +115,6 @@ function slain(game: GameContext, p: Player, type: string, weapon?: string) {
 
 /** Someone fell with others still fighting: they watch from the stands until the wave's won. */
 function fall(game: GameContext, p: Player) {
-  p.hud.banner('YOU FELL', "You'll be back when this wave is cleared", { duration: 3, color: '#ff6b6b' });
   game.hud.feed(`${p.name} is down`, { color: '#ff8a4c' });
   bus.emit('fell', { player: p });
   game.clock.after(1.5, () => {
@@ -145,72 +134,33 @@ function rejoin(game: GameContext, p: Player, announce: boolean) {
   p.teleport(map().center, game.rng.range(0, Math.PI * 2), 0);
   bus.emit('rejoined', { player: p });
   if (!announce) return;
-  p.hud.banner('BACK IN THE FIGHT', undefined, { duration: 1.6, color: '#9dff8a' });
   p.audio.play('heal');
 }
 
 /** Everyone's down: the arena wins. */
 function checkWipe(game: GameContext) {
-  if (game.players.length && game.players.every((p) => !p.alive)) defeat(game);
+  if (game.players.length && game.players.every((p) => !p.alive)) defeat();
 }
 
 function victory(game: GameContext) {
   state.phase = 'victory';
-  bus.emit('runEnd', { won: true, wave: state.wave });
+  bus.emit('runEnd', { won: true, wave: state.wave, endless: false, map: map(), time: game.clock.now - state.startedAt, results: [] });
   for (const p of game.players) {
     p.achieve('champion');
     const r = runs.get(p.id);
     if (r && r.from === 0 && !r.fell) p.achieve('unbroken');
   }
-  const time = game.clock.now - state.startedAt;
-  game.hud.banner('VICTORY', 'The arena is yours', { duration: 3.5, color: '#ffd36b' });
-  game.audio.play('victory');
+  // (The HUD announces it and puts up the end screen: `hud/part.ts`.)
   const c = map().center;
   const burst = () => game.fx.fireworks({ x: c.x, y: c.y, z: c.z }, 6);
   burst();
   game.clock.every(1.1, burst);
-  game.clock.after(3.2, () =>
-    game.hud.screen({
-      title: 'Victory!',
-      subtitle: 'You defeated the Warden and conquered the arena.',
-      tone: 'victory',
-      icon: Sprite.golden_trophy,
-      stats: [
-        ['Time', fmtTime(time)],
-        ['Monsters slain', String(state.kills)],
-        ['Damage dealt', String(Math.round(state.damageDealt))],
-        ['Damage taken', String(Math.round(state.damageTaken))],
-      ],
-      buttons: [
-        { label: 'Play again', primary: true, onClick: () => game.restart() },
-        { label: 'Switch game', onClick: () => game.exit() },
-      ],
-    }),
-  );
 }
 
-function defeat(game: GameContext) {
+function defeat() {
   if (state.phase === 'defeat' || state.phase === 'victory') return;
   state.phase = 'defeat';
-  bus.emit('runEnd', { won: false, wave: state.wave });
-  game.audio.play('defeat');
-  const who = game.players.length > 1 ? 'Your party' : 'You';
-  game.clock.after(1.6, () =>
-    game.hud.screen({
-      title: 'Defeated',
-      subtitle: `${who} fell on wave ${state.wave}: ${WAVES[Math.max(0, state.wave - 1)].name}.`,
-      tone: 'defeat',
-      stats: [
-        ['Wave reached', `${state.wave} / ${finalWave()}`],
-        ['Monsters slain', String(state.kills)],
-        ['Time survived', fmtTime(game.clock.now - state.startedAt)],
-      ],
-      buttons: [
-        { label: 'Try again', primary: true, onClick: () => game.restart() },
-        { label: 'Switch game', onClick: () => game.exit() },
-      ],
-    }),
-  );
+  bus.emit('runEnd', { won: false, wave: state.wave, endless: false, map: map(), time: 0, results: [] });
 }
 
 /**
@@ -275,7 +225,7 @@ export default defineServer(shared, {
       const r = runs.get(player.id);
       if (r) r.fell = true;
       if (game.players.some((p) => p.alive)) fall(game, player);
-      else defeat(game);
+      else defeat();
     });
     game.commands.register('bless', {
       usage: '<blessing>',
@@ -336,28 +286,17 @@ export default defineServer(shared, {
 
   update(game, dt) {
     for (const part of PARTS) part.update?.(game, dt);
+    // (The HUD shows the wave, the enemies left and the time to the next: `hud/part.ts`.)
     if (state.phase === 'fighting') {
-      const { left, cleared } = tick(game, dt);
-      if (cleared) waveCleared(game);
-      else game.hud.objective(`Wave ${state.wave}/${finalWave()} · ${left} ${left === 1 ? 'enemy' : 'enemies'} left`);
+      if (tick(game, dt).cleared) waveCleared(game);
     } else if (state.phase === 'intermission') {
-      const t = Math.ceil(state.nextWaveAt - game.clock.now);
-      game.hud.objective(`Next wave in ${t}s — choose a blessing, grab the reward on the dais`);
       reopen(game);
-      if (t <= 3 && t > 0 && t !== state.lastBeep) {
-        state.lastBeep = t;
-        game.audio.play('countdown');
-      }
       if (game.clock.now >= state.nextWaveAt) {
         // Anyone who didn't choose a blessing is given one; Second Wind's back, the Bombardier's bombs.
         settle(game);
         blessingsWave(game);
         startWave(game, state.wave + 1);
       }
-    } else if (state.phase === 'victory') {
-      game.hud.objective(null);
     }
-    game.hud.stat('kills', 'Kills', state.kills);
-    game.hud.stat('time', 'Time', fmtTime(Math.max(0, game.clock.now - state.startedAt)));
   },
 });

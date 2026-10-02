@@ -2,10 +2,11 @@ import { defineShared } from '@platform';
 import meta from './meta';
 import { FLOOR, MAPS } from './maps';
 import { roll } from './abilities';
+import { HUD } from './hud/theme';
 
 const first = MAPS[0];
 
-/** Every map's blocks (every screen builds them too) and the player, who can dodge-roll (Q). */
+/** Every map's blocks (every screen builds them too), the player, who can dodge-roll (Q), and the HUD's look (`hud/theme.ts`). */
 export const shared = defineShared({
   ...meta,
   world: {
@@ -21,4 +22,5 @@ export const shared = defineShared({
     freezeTime: true,
   },
   player: { health: 20, regen: { delay: 4, perSecond: 0.6 }, fallDamage: true, hotbar: 'items', movement: { abilities: { roll } } },
+  hud: HUD,
 });

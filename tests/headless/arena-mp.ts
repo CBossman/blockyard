@@ -29,6 +29,9 @@ export default function arenaMultiplayer() {
     for (let i = 0; i < n; i++) for (const [id, b] of host.step(1 / 30)) events.set(id, [...(events.get(id) ?? []), ...b.events]);
   };
   const calls = (id: string, method: string) => (events.get(id) ?? []).flatMap((e) => (e.t === 'call' && e.call.method === method ? [e.call.args.map(String)] : []));
+  /** The game's messages to someone's screen (the HUD's: `hud/messages.ts`), and the end screen (`arena-end`) put up there. */
+  const msgs = <T>(id: string, name: string) => (events.get(id) ?? []).flatMap((e) => (e.t === 'call' && e.call.target === 'message' && e.call.method === name ? [e.call.args[0] as T] : []));
+  const ends = (id: string) => (events.get(id) ?? []).flatMap((e) => (e.t === 'call' && e.call.method === 'widget' && e.call.args[0] === 'arena-end' ? [e.call.args[1] as { word?: string; headline?: string }] : []));
   const player = (name: string) => game.players.find((p) => p.name === name)!;
   const pickups = () => (host.sim as unknown as { items: { pickups: unknown[] } }).items.pickups.length;
   const join = (name: string) => {
@@ -59,11 +62,11 @@ export default function arenaMultiplayer() {
     }
     // Bob falls partway through.
     if (zombies >= 3 && player('Bob').alive) player('Bob').damage(1000);
-    if (calls(ann, 'banner').some((a) => a[0] === 'Wave cleared!')) cleared = pickups();
+    if (msgs(ann, 'ar.wave').length) cleared = pickups();
   }
   check(zombies === 10, `wave 1 for three: ${zombies} zombies`);
-  check(calls(bob, 'banner').some((a) => a[0] === 'YOU FELL') && calls(ann, 'feed').some((a) => a[0] === 'Bob is down'), 'Bob fell; the others hear');
-  check(!calls(ann, 'screen').length, 'one down is not the end');
+  check(msgs<{ k: string }>(bob, 'ar.call').some((c) => c.k === 'out') && calls(ann, 'feed').some((a) => a[0] === 'Bob is down'), 'Bob fell; the others hear');
+  check(!ends(ann).length, 'one down is not the end');
   check(player('Bob').alive && Math.hypot(player('Bob').position.x, player('Bob').position.z) < 3, `Bob back on the floor when the wave is won: ${JSON.stringify(player('Bob').position)}`);
   check(cleared === 6, `a reward set each: ${cleared} pickups`);
   // The first wave is everyone's; not a scratch on Ann or Cat, but Bob fell.
@@ -93,11 +96,11 @@ export default function arenaMultiplayer() {
   host.disconnect(dan);
   for (const n of ['Ann', 'Bob']) player(n).damage(1000);
   step(10);
-  check(!calls(ann, 'screen').length, 'Cat still standing');
+  check(!ends(ann).length, 'Cat still standing');
   player('Cat').damage(1000);
-  step(60);
-  const screen = (events.get(ann) ?? []).flatMap((e) => (e.t === 'call' && e.call.method === 'screen' ? [e.call.args[1] as { title: string; subtitle: string }] : [])).at(-1);
-  check(screen?.title === 'Defeated' && screen.subtitle.startsWith('Your party fell on wave 2'), `lost with everyone down: ${JSON.stringify(screen)?.slice(0, 120)}`);
+  step(90);
+  const screen = ends(ann)[0];
+  check(screen?.word === 'Defeated' && screen.headline?.startsWith('Your party fell on wave 2'), `lost with everyone down: ${JSON.stringify(screen)?.slice(0, 120)}`);
 
   // Everyone leaves; the next person begins a fresh fight.
   for (const id of [ann, bob, cat]) host.disconnect(id);
@@ -105,7 +108,7 @@ export default function arenaMultiplayer() {
   const eve = join('Eve');
   step(30 * 2);
   check(player('Eve').alive && player('Eve').inventory.count('wooden_sword') === 1 && player('Eve').inventory.count('bow') === 0, 'a fresh start for the next arrival');
-  check(calls(eve, 'objective').some((a) => a[0].startsWith('First wave in')), 'the countdown begins again');
+  check(msgs<{ phase: string }>(eve, 'ar.run').some((r) => r.phase === 'countdown'), 'the countdown begins again');
   host.dispose();
   return `3 armed (1 in the countdown) · wave 1 for three: ${zombies} zombies · Bob fell and came back · ${cleared} rewards, one set each · Dan caught up · lost when all were down · fresh for Eve · ${looked}`;
 }
@@ -128,7 +131,7 @@ function looks(seen: HostEvent[]): string {
   for (const d of content) screen.apply(d);
   const voices = new Map<string, SynthVoice>();
   const client = {
-    audio: { play() {}, define: (n: string, v: SynthVoice) => voices.set(n, v) },
+    audio: { play() {}, define: (n: string, v: SynthVoice) => voices.set(n, v), defineLoop() {} },
     items: { look: (id: string, l: ItemLook) => screen.lookItem(id, l), get: (id: string) => screen.items.get(id) },
   } as unknown as Client;
   for (const k of sounds.standard()) k.setup?.(client);
