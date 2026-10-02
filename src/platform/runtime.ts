@@ -572,7 +572,7 @@ export class Runtime {
       damage: (data) => this.debris.fromDamage(data),
       fillMe: (base, p) => this.fillMe(base, p),
     });
-    this.held = new FirstPersonLayer(this.textures.albedo, this.textures.material, this.graphics, this.camera, this.content.animations, (e) => this.client?.emit(e));
+    this.held = new FirstPersonLayer(this.textures.albedo, this.textures.material, this.graphics, this.camera, this.content.animations, (e) => this.client?.emit(e), this.content.items);
     this.renderer.overlay = { scene: this.held.view.scene, camera: this.held.view.camera };
     this.renderer.opaqueScene.add(this.highlight.object);
 

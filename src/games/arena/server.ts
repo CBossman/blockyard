@@ -1,6 +1,5 @@
 import { defineServer, type GameContext, type Player } from '@platform';
-import { bows, consumables, melee, throwables } from '@platform/kits';
-import { defineArt, defineItems } from './items';
+import { ARMORY_KITS, defineArt, defineItems } from './items';
 import { defineMonsters } from './monsters';
 import { defineBosses } from './bosses';
 import { shared } from './shared';
@@ -175,8 +174,8 @@ function defeat() {
  * listen to rather than calling each other), `items/`, `blessings.ts`, and the screens' `client/`.
  */
 export default defineServer(shared, {
-  // Its kinds of item: bows, swords and axes (and the bare fist), potions, bombs.
-  items: [bows(), melee(), consumables(), throwables()],
+  // Its kinds of item: bombs, bows, the arsenal's blades, crossbows and staffs (and the bare fist), potions (`items/`).
+  items: ARMORY_KITS,
   setup(game) {
     bus.clear();
     resetUsables();
