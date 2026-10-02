@@ -9,19 +9,24 @@ import { minotaurDazed } from './minotaur';
 import { AFFIXES, eliteHits, eliteLanded, eliteList, eliteNight, elitesTick, eliteSlain, makeElite, resetElites, rollElite, type Affix } from './elites';
 import { MONSTERS, monsterKind } from './index';
 
-/** The kinds that have come in this run (each one's tip is shown once). */
+/** The kinds that have come in this run (each one's tip is shown once), and the tips waiting their turn. */
 const seen = new Set<string>();
+let tips: { name: string; tip: string; color?: string }[] = [];
+let nextTip = 0;
 
 /**
  * The bestiary's own business on the server: the hits its monsters change (a knight's shield, a
- * golem's armour, a cultist's blessing, an imp's fire), and elites: rolled as monsters come in
- * (the bus's `spawned`), their affixes at work every tick, their last words when they die.
+ * golem's armour, a dazed minotaur, a cultist's blessing, an imp's fire); a tip the first time
+ * each kind comes in; and elites: rolled as monsters come in (the bus's `spawned`), their affixes
+ * at work every tick, their last words when they die. `/summon` brings any in (a cheat).
  */
 export const bestiaryPart: ArenaPart = {
   name: 'bestiaryPart',
   setup(game) {
     resetElites();
     seen.clear();
+    tips = [];
+    nextTip = 0;
     game.events.on('damage', (hit) => {
       knightGuard(game, hit);
       if (hit.cancelled) return;
@@ -40,10 +45,13 @@ export const bestiaryPart: ArenaPart = {
       const kind = monsterKind(type);
       if (kind?.tip && !seen.has(type)) {
         seen.add(type);
-        game.hud.pop(kind.define(game).name, { color: kind.color, sub: kind.tip });
+        tips.push({ name: kind.define(game).name, tip: kind.tip, color: kind.color });
       }
     });
-    bus.on('runStart', () => seen.clear());
+    bus.on('runStart', () => {
+      seen.clear();
+      tips = [];
+    });
     bus.on('slain', ({ entity, by }) => eliteSlain(game, entity, by));
     bus.on('waveStart', ({ twist }) => eliteNight(twist === 'elite_night'));
     // A screen that's just arrived sees the elites already in.
@@ -73,8 +81,16 @@ export const bestiaryPart: ArenaPart = {
   start() {
     resetElites();
     seen.clear();
+    tips = [];
+    nextTip = 0;
   },
   update(game) {
     elitesTick(game);
+    // One tip at a time, a few seconds each, when several new kinds come in together.
+    if (tips.length && game.clock.now >= nextTip) {
+      const t = tips.shift()!;
+      game.hud.pop(t.name, { color: t.color, sub: t.tip });
+      nextTip = game.clock.now + 3.5;
+    }
   },
 };
