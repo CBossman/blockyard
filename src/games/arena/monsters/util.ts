@@ -81,3 +81,17 @@ export function grounded(game: GameContext, at: Vec3, radius: number, rise = 1.2
 export function near(game: GameContext, at: Vec3, radius: number, self?: Entity): Entity[] {
   return game.entities.near(at, radius).filter((e) => e !== self && e.alive);
 }
+
+/**
+ * A push back toward the middle for one keeping its distance near the arena's edge (to add to its
+ * way): nothing well inside it, more the nearer the edge (`map().radius`), so it turns along the
+ * wall rather than backing out through a gate.
+ */
+export function inward(at: Vec3): [number, number] {
+  const m = map();
+  const ox = at.x - m.center.x;
+  const oz = at.z - m.center.z;
+  const r = Math.hypot(ox, oz) || 1;
+  const k = r > m.radius - 4 ? 0.8 : 0;
+  return [(-ox / r) * k, (-oz / r) * k];
+}

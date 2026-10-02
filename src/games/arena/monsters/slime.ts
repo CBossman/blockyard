@@ -36,6 +36,10 @@ interface SlimeState {
   _crouch?: number;
   _air?: boolean;
   _hit?: number;
+  /** The way its next hop goes when it's finding its way round something (x, z), not at them. */
+  _way?: [number, number];
+  /** Seconds it's been going nowhere, finding its way round. */
+  _stuck?: number;
 }
 
 function slimeAI(o: SlimeSize): Behavior {
@@ -66,15 +70,39 @@ function slimeAI(o: SlimeSize): Behavior {
       game.audio.play('slime', { at: e, pitch: o.pitch * game.rng.range(0.9, 1.1), volume: 0.7 });
       if (s._hit === 0 && flat(e, p) < o.width * 0.5 + 0.9 && Math.abs(p.y - e.y) < 1.2) land(game, e, target, o, s, self);
     }
+    // Out of sight of them (a wall, a gate between): it oozes along the way round, and hops along
+    // it now and then (a hop straight at them would only hit the wall, for good).
+    if (s._crouch === undefined && !self.canSee(target)) {
+      self.moveTo(target);
+      const v = self.velocity;
+      const sp = Math.hypot(v.x, v.z);
+      s._stuck = sp < 0.3 ? (s._stuck ?? 0) + dt : 0;
+      if (s._rest <= 0 && (sp > 0.4 || s._stuck > 0.5)) {
+        if (sp > 0.4) s._way = [v.x / sp, v.z / sp];
+        else {
+          // Caught on a corner (it's wider than a block): a hop off to one side of the way to them.
+          const l = Math.hypot(p.x - e.x, p.z - e.z) || 1;
+          const side = game.rng.chance(0.5) ? 1 : -1;
+          s._way = [((p.x - e.x) / l) * 0.5 - ((p.z - e.z) / l) * side, ((p.z - e.z) / l) * 0.5 + ((p.x - e.x) / l) * side];
+        }
+        s._stuck = 0;
+        s._crouch = 0.22;
+        self.animate('hop', { fade: 0.05 });
+      }
+      return;
+    }
     self.stop();
-    // Squashing down to hop (the tell), then off toward them.
+    // Squashing down to hop (the tell), then off toward them (or along its way round).
     if (s._crouch !== undefined) {
       s._crouch -= dt;
       if (s._crouch > 0) return;
       s._crouch = undefined;
       const l = Math.hypot(p.x - e.x, p.z - e.z) || 1;
       const far = Math.min(1, l / 6);
-      self.impulse(((p.x - e.x) / l) * o.hop[0] * (0.55 + 0.45 * far), o.hop[1], ((p.z - e.z) / l) * o.hop[0] * (0.55 + 0.45 * far));
+      const [wx, wz] = s._way ?? [(p.x - e.x) / l, (p.z - e.z) / l];
+      const k = s._way ? 0.7 : 0.55 + 0.45 * far;
+      s._way = undefined;
+      self.impulse(wx * o.hop[0] * k, o.hop[1], wz * o.hop[0] * k);
       s._rest = game.rng.range(o.rest[0], o.rest[1]);
       return;
     }

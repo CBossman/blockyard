@@ -108,6 +108,20 @@ export default function arenaBestiary() {
     check(s.hurt() > 0, 'slimes land on you');
   }
 
+  // A slime with a wall between: it oozes round the end of it (a hop at us would only hit the wall).
+  {
+    const s = scene(22);
+    for (let z = 0; z <= 9; z++) for (let y = FLOOR + 1; y <= FLOOR + 3; y++) s.game.world.setBlock(-4, y, z, 'stone');
+    const sl = s.spawn('slime', 0.5, 0.5);
+    let hopped = 0;
+    s.run(16, () => {
+      if (sl.alive && sl.position.x < -4.5) hopped++;
+      return {};
+    });
+    log(`slime behind a wall: came round it ${hopped > 0}, ${s.hurt().toFixed(1)} damage`);
+    check(hopped > 0 && s.hurt() > 0, 'a slime finds its way round a wall');
+  }
+
   // The wraith blinks in from far off, then drains.
   {
     const s = scene(13);
