@@ -30,9 +30,10 @@ function scene(seed: number) {
   me.maxHealth = 800;
   me.health = 800;
   const mine = new Set<Entity>();
-  // Everything happens along z = 8.5, off the raised dais in the middle.
+  // Everything happens along z = 0.5, across the Colosseum's open middle (its statues and columns
+  // stand off it, at z ±8).
   const spawn = (type: string, x: number, z = 0.5, still = true) => {
-    const e = game.entities.spawn(type, { x, y: FLOOR + 1.05, z: z + 8 });
+    const e = game.entities.spawn(type, { x, y: FLOOR + 1.05, z });
     if (still) e.setSpeed(0);
     mine.add(e);
     return e;
@@ -47,7 +48,7 @@ function scene(seed: number) {
     me.inventory.give(id);
     me.inventory.select(me.inventory.slots.findIndex((s) => s?.item === id));
   };
-  me.teleport({ x: -8.5, y: FLOOR + 1, z: 8.5 }, EAST.yaw, 0);
+  me.teleport({ x: -8.5, y: FLOOR + 1, z: 0.5 }, EAST.yaw, 0);
   // Past the countdown, the floor cleared.
   h.run(0.3, { pilot: () => (clear(), {}) });
   const run = (seconds: number, pilot: Pilot = () => ({ ...EAST })) => h.run(seconds, { pilot: (x) => (clear(), pilot(x)) });

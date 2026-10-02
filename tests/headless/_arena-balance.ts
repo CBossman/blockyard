@@ -44,13 +44,14 @@ function measure(base: RareBase, rarity: Rarity, crowd: boolean): number {
   me.inventory.give('arrow', 64);
   me.inventory.give('arrow', 64);
   me.inventory.select(0);
-  me.teleport({ x: -8.5, y: FLOOR + 1, z: 8.5 }, -Math.PI / 2, 0);
+  // Across the Colosseum's open middle (its statues and columns stand off it, at z ±8).
+  me.teleport({ x: -8.5, y: FLOOR + 1, z: 0.5 }, -Math.PI / 2, 0);
   const ranged = def.kind === 'bow' || def.kind === 'gun' || def.kind === 'staff';
   // In front, at a weapon's reach (a little inside it), or eight blocks off for what shoots.
   const d = ranged ? 8 : Math.min(2.6, (def.reach ?? 3) - 0.4);
   const spots = crowd
-    ? [0, -0.6, 0.6, -1.1, 1.1].map((a, i) => ({ x: -8.5 + Math.cos(a * (ranged ? 0.25 : 0.6)) * (d + (i > 2 ? 0.4 : 0)), z: 8.5 + Math.sin(a * (ranged ? 0.25 : 0.6)) * (d + (i > 2 ? 0.4 : 0)) }))
-    : [{ x: -8.5 + d, z: 8.5 }];
+    ? [0, -0.6, 0.6, -1.1, 1.1].map((a, i) => ({ x: -8.5 + Math.cos(a * (ranged ? 0.25 : 0.6)) * (d + (i > 2 ? 0.4 : 0)), z: 0.5 + Math.sin(a * (ranged ? 0.25 : 0.6)) * (d + (i > 2 ? 0.4 : 0)) }))
+    : [{ x: -8.5 + d, z: 0.5 }];
   const dummies: Entity[] = [];
   const pin = () => {
     for (const e of game.entities.all()) if (!dummies.includes(e)) e.remove();
