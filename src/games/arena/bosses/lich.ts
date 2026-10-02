@@ -57,7 +57,7 @@ const bolts: Move = {
 
 const nova: Move = {
   name: 'nova',
-  can: (c) => c.d < NOVA,
+  can: (c) => c.d < NOVA - 1.5,
   cooldown: [6, 8],
   windup: 1,
   start(c) {
@@ -118,13 +118,16 @@ const spikes: Move = {
     const { a, len } = c.s.mem.spikes as { a: number; len: number };
     const p = { ...self.position };
     const struck = new Set<string>();
-    const n = Math.floor((len - 1.5) / SPIKE_STEP);
-    for (let i = 0; i <= n; i++) {
+    // Along the lane until a wall stops it (up a step, it rises from the step).
+    const spots: Vec3[] = [];
+    for (let d = 1.5; d <= len; d += SPIKE_STEP) {
+      const x = p.x + Math.cos(a) * d;
+      const z = p.z + Math.sin(a) * d;
+      if (game.world.collisionHeight(Math.floor(x), Math.floor(p.y + 1.3), Math.floor(z)) > 0) break;
+      spots.push({ x, y: p.y + game.world.collisionHeight(Math.floor(x), Math.floor(p.y + 0.2), Math.floor(z)), z });
+    }
+    spots.forEach((at, i) => {
       game.clock.after(i * 0.05, () => {
-        const d = 1.5 + i * SPIKE_STEP;
-        const at = { x: p.x + Math.cos(a) * d, y: p.y, z: p.z + Math.sin(a) * d };
-        // Stopped by a wall.
-        if (!game.world.lineOfSight({ x: p.x, y: p.y + 0.6, z: p.z }, { x: at.x, y: at.y + 0.6, z: at.z })) return;
         const spike = own(game.props.spawn(propModel(game, MODEL.ice_spike), { position: at }));
         spike.quaternion.setFromEuler(new math.Euler(game.rng.range(-0.15, 0.15), game.rng.range(0, Math.PI * 2), game.rng.range(-0.15, 0.15)));
         spike.play('rise');
@@ -141,7 +144,7 @@ const spikes: Move = {
           }
         }
       });
-    }
+    });
   },
   recover: 0.6,
   end: (c) => {
@@ -202,7 +205,6 @@ const storm: Move = {
   act(c) {
     c.self.glow(null);
     c.game.audio.play('soul_storm', { volume: 1.2 });
-    announce(c.game, 'SOUL STORM', 'Keep moving, and strike him while he channels', SOUL_C);
   },
   during(c) {
     const { game, self, s, dt } = c;
@@ -317,6 +319,7 @@ const lichAI = brain({
       pause: 2,
       enter(c) {
         roar(c.game, c.self);
+        announce(c.game, 'The soul storm', 'Keep moving, and strike him while he channels', SOUL_C);
         c.s.cds.storm = 0;
         c.s.cds.raise = 6;
       },
@@ -384,7 +387,7 @@ export const lich: BossKind = {
   escort: { skeleton: 2 },
   define: () => ({
     name: 'The Lich King',
-    model: Models.gltf(MODEL.lich, { clips: { idle: 'idle', walk: 'walk', cast: 'cast' }, head: 'skull' }),
+    model: Models.gltf(MODEL.lich, { clips: { idle: 'idle', walk: 'walk' }, head: 'skull' }),
     hitbox: { width: 1.6, height: 4.6 },
     health: 3600,
     speed: 3,

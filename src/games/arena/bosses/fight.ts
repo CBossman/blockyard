@@ -30,6 +30,13 @@ export function furthest(game: GameContext, from: Vec3): Player | null {
   return best;
 }
 
+/** Where to throw at a fighter: their middle (not their eyes: a lob that's high misses), where they'll be when it gets there (`lead`, 0..1). */
+export function chest(self: Entity, p: Player, speed: number, lead = 0.6): Vec3 {
+  const q = p.position;
+  const t = self.distanceTo(p) / speed;
+  return { x: q.x + p.velocity.x * t * lead, y: q.y + 0.9, z: q.z + p.velocity.z * t * lead };
+}
+
 /** A spot on the floor near `at` (within `r`), kept inside the map's fighting floor. */
 export function near(game: GameContext, at: Vec3, r: number, center: Vec3, radius: number): Vec3 {
   for (let i = 0; i < 8; i++) {
@@ -554,11 +561,37 @@ export function brain(b: Brain): Behavior {
       return;
     }
     if (b.chase) b.chase(c);
-    else {
-      self.moveTo(target);
-      self.lookAt(target);
-    }
+    else chase(c);
   };
+}
+
+/**
+ * Walk at its target; a big body wedged on a pillar or a corner (going nowhere for a second with
+ * its target still away) hops and sidesteps round it for a moment.
+ */
+function chase(c: Ctx) {
+  const { self, s, target, dt } = c;
+  const m = s.mem as { stuckT?: number; last?: Vec3; side?: number; sideT?: number };
+  const p = self.position;
+  const moved = m.last ? Math.hypot(p.x - m.last.x, p.z - m.last.z) : 1;
+  m.last = { ...p };
+  m.stuckT = moved < 0.4 * dt && c.d > 4 ? (m.stuckT ?? 0) + dt : 0;
+  if (m.stuckT > 1) {
+    m.stuckT = 0;
+    m.side = c.game.rng.chance(0.5) ? 1 : -1;
+    m.sideT = 0.8;
+    self.jump();
+  }
+  self.lookAt(target);
+  if ((m.sideT ?? 0) > 0) {
+    m.sideT! -= dt;
+    const q = target.position;
+    const l = Math.hypot(q.x - p.x, q.z - p.z) || 1;
+    const fx = (q.x - p.x) / l, fz = (q.z - p.z) / l;
+    self.moveDirection(fx * 0.4 - fz * m.side!, fz * 0.4 + fx * m.side!);
+    return;
+  }
+  self.moveTo(target);
 }
 
 /** Staggered: it reels for `seconds`, its move cut short, taking more damage meanwhile (`part.ts`). */

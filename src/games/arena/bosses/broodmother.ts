@@ -1,7 +1,7 @@
 import { Models, type Entity, type GameContext, type Player, type ProjectileSpec, type Vec3 } from '@platform';
 import { map } from '../run/state';
 import { spawnMonster } from '../run/spawn';
-import { adds, angle, announce, brain, chill, fighters, lob, near, pool, ring, steer, strike, sweep, venom, type Ctx, type Move } from './fight';
+import { adds, angle, announce, brain, chest, chill, fighters, lob, near, pool, ring, steer, strike, sweep, venom, type Ctx, type Move } from './fight';
 import { HATCH } from './minions';
 import { MODEL } from './models';
 import type { BossKind } from './registry';
@@ -66,7 +66,7 @@ const web: Move = {
     c.self.glow(null);
     c.self.animate('spit', { fade: 0.05 });
     const n = c.s.enraged ? 3 : 1;
-    for (let i = 0; i < n; i++) c.self.shoot(WEB, c.target, { lead: 0.6, spread: i ? 0.09 : 0.02 });
+    for (let i = 0; i < n; i++) c.self.shoot(WEB, chest(c.self, c.target, WEB.speed), { spread: i ? 0.09 : 0.015 });
     c.game.audio.play('web_spit', { at: c.self.position });
   },
   recover: 0.45,
@@ -95,7 +95,7 @@ const leap: Move = {
     self.animate('leap_wind', { fade: 0.2 });
     self.glow(COLOR);
     // The ring fills until she lands (the wind-up and the flight).
-    ring(game, to, LEAP, c.s.t + 0.95, COLOR);
+    ring(game, to, LEAP, c.s.t + 1.1, COLOR);
     game.audio.play('brood_hiss', { at: self.position, pitch: 0.8 });
   },
   act(c) {
@@ -103,7 +103,8 @@ const leap: Move = {
     self.glow(null);
     self.animate('leap', { fade: 0.08 });
     const l = s.mem.leap as { t: number; flight: number };
-    l.flight = lob(self, s.aim!, 14);
+    // High enough to clear a pillar in the way.
+    l.flight = lob(self, s.aim!, 17);
     c.game.audio.play('brood_leap', { at: self.position });
   },
   during(c) {
@@ -120,7 +121,7 @@ const leap: Move = {
     self.animate('land', { fade: 0.05 });
     strike(game, { source: self, at: p, r: LEAP, damage: [9, 5], knockback: 10, lift: 4 });
     game.fx.shockwave({ x: p.x, y: p.y + 0.1, z: p.z }, LEAP + 0.5, COLOR);
-    game.fx.burst({ x: p.x, y: p.y + 0.3, z: p.z }, { color: '#d8c08a', count: 50, speed: 6, size: 0.24, gravity: 5, life: 1, drag: 1.5 });
+    game.fx.burst({ x: p.x, y: p.y + 0.3, z: p.z }, { color: '#d8c08a', count: 40, speed: 6, size: 0.17, gravity: 5, life: 1, drag: 1.5 });
     game.fx.shake(0.35, 0.5);
     game.audio.play('brood_land', { at: p, volume: 1.3 });
     return true;
@@ -280,7 +281,7 @@ export const broodmother: BossKind = {
   escort: { spider: 3 },
   define: () => ({
     name: 'The Broodmother',
-    model: Models.gltf(MODEL.broodmother, { clips: { idle: 'idle', walk: 'walk', run: 'run' }, head: 'head' }),
+    model: Models.gltf(MODEL.broodmother, { clips: { idle: 'idle', walk: 'walk', run: 'run' }, head: 'head', scale: 2 }),
     hitbox: { width: 4.2, height: 2.8 },
     health: 2300,
     speed: 4.4,

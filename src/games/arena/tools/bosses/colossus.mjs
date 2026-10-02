@@ -50,9 +50,9 @@ export function colossus() {
   // Bone with a little life in it: darker toward its ends and in seams, lighter on its crown.
   const boneAt = (i, j, k, t = 0.5) => {
     const h = hash(i, j, k, 3);
-    if (h < 0.05) return 'boneShade';
-    if (h > 0.93) return 'boneLight';
-    return t < 0.12 || t > 0.88 ? 'boneDark' : 'bone';
+    if (h < 0.015) return 'boneShade';
+    if (h > 0.96) return 'boneLight';
+    return t < 0.1 || t > 0.9 ? 'boneDark' : 'bone';
   };
 
   // --- Pelvis: a broad bowl, its wings flared up at the sides.
@@ -317,5 +317,5 @@ function clips(f) {
     { t: 1.1, turn: { chest: [-0.2, 0.1, 0], skull: [-0.3, 0.2, 0], jaw: [0.6, 0, 0], armL: [-0.2, 0, 0.8], armR: [-0.3, 0, -0.9], thighL: [-1.25, 0, 0.05], shinL: [1.9, 0, 0], footL: [-0.6, 0, 0], thighR: [-1.25, 0, -0.05], shinR: [1.9, 0, 0], footR: [-0.6, 0, 0], ribL: [0, 0.5, 0], ribR: [0, -0.5, 0] }, move: { pelvis: [0, -9, 2] } },
     { t: 1.9, turn: { chest: [0.7, 0, 0.05], skull: [0.5, 0, 0], jaw: [0.5, 0, 0], armL: [-0.9, 0, 0.25], armR: [-0.9, 0, -0.25], foreL: [-0.3, 0, 0], foreR: [-0.3, 0, 0], thighL: [-1.35, 0, 0.05], shinL: [2.05, 0, 0], footL: [-0.6, 0, 0], thighR: [-1.35, 0, -0.05], shinR: [2.05, 0, 0], footR: [-0.6, 0, 0], ribL: [0, 0.6, 0], ribR: [0, -0.6, 0] }, move: { pelvis: [0, -10.5, 3] } },
     { t: 2.8, turn: { chest: [1.05, 0.1, 0.1], skull: [0.7, 0.3, 0.2], jaw: [0.7, 0, 0], armL: [-1.3, 0, 0.35], armR: [-1.2, 0, -0.4], foreL: [-0.2, 0, 0], foreR: [-0.2, 0, 0], thighL: [-1.45, 0, 0.05], shinL: [2.15, 0, 0], footL: [-0.6, 0, 0], thighR: [-1.45, 0, -0.05], shinR: [2.15, 0, 0], footR: [-0.6, 0, 0], ribL: [0, 0.9, 0], ribR: [0, -0.9, 0] }, move: { pelvis: [0, -11.5, 4] } },
-  ]);
+  ], { hold: 2 });
 }

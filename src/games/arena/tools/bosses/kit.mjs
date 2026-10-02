@@ -134,10 +134,12 @@ export class Figure {
 
   /**
    * A clip: `keys` [{ t, turn: { bone: [x, y, z] }, move: { bone: [x, y, z] } }], moves in voxels.
-   * `scale` keys ({ bone: [x, y, z] }) grow or shrink a bone.
+   * `scale` keys ({ bone: [x, y, z] }) grow or shrink a bone. `hold`: seconds its last pose is held
+   * after its last key (a clip played once fades out as it ends: a death holds until the blow).
    */
-  clip(name, keys) {
-    this.clips.push({ name, keys });
+  clip(name, keys, { hold = 0 } = {}) {
+    const last = keys[keys.length - 1];
+    this.clips.push({ name, keys: hold ? [...keys, { ...last, t: last.t + hold }] : keys });
   }
 
   /** Write the GLB and check it: the budgets, every vertex on one bone. Returns a line about it. */

@@ -53,7 +53,7 @@ const swipe: Move = {
 
 const slam: Move = {
   name: 'slam',
-  can: (c) => c.d < SLAM + 2,
+  can: (c) => c.d < SLAM - 1.5,
   cooldown: [6.5, 9],
   windup: 0.95,
   start(c) {

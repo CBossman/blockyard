@@ -52,7 +52,7 @@ const sweepMove: Move = {
 
 const stompMove: Move = {
   name: 'stomp',
-  can: (c) => c.d < STOMP + 1,
+  can: (c) => c.d < STOMP - 1.5,
   cooldown: [5, 7],
   windup: 1,
   start(c) {
@@ -96,10 +96,14 @@ const rainMove: Move = {
       const q = p.position;
       spots.push({ x: q.x + p.velocity.x * 0.6, y: q.y, z: q.z + p.velocity.z * 0.6 });
     }
+    // More about the arena: some a few strides from the fighters (where they'll run), the rest anywhere.
+    const own = spots.length;
     const extra = 2 + s.phase + (s.enraged ? 2 : 0);
     for (let i = 0; i < extra; i++) {
-      const by = spots[i % Math.max(1, spots.length)] ?? self.position;
-      spots.push(near(game, by, 7, m.center, m.radius));
+      const by = i % 2 === 0 && own ? spots[i % own] : m.center;
+      let at = near(game, by, by === m.center ? m.radius - 3 : 9, m.center, m.radius);
+      for (let k = 0; k < 5 && spots.slice(0, own).some((o) => Math.hypot(o.x - at.x, o.z - at.z) < 4.5); k++) at = near(game, by, 9, m.center, m.radius);
+      spots.push(at);
     }
     spots.forEach((at, i) => {
       const delay = i < fighters(game).length ? 0 : game.rng.range(0, 0.6);
@@ -110,7 +114,7 @@ const rainMove: Move = {
         fromSky(game, MODEL.bone, at, t, () => {
           strike(game, { source: self, at, r: RAIN_R, damage: 6, knockback: 5, lift: 3 });
           game.fx.burst({ x: at.x, y: at.y + 0.4, z: at.z }, { color: '#efe4c8', count: 26, speed: 6, size: 0.16, gravity: 16 });
-          game.fx.burst({ x: at.x, y: at.y + 0.3, z: at.z }, { color: '#c9b48a', count: 18, speed: 3, size: 0.3, gravity: -0.5, life: 1.2, drag: 2 });
+          game.fx.burst({ x: at.x, y: at.y + 0.3, z: at.z }, { color: '#c9b48a', count: 14, speed: 3, size: 0.18, gravity: -0.5, life: 1, drag: 2 });
           game.fx.shockwave({ x: at.x, y: at.y + 0.1, z: at.z }, RAIN_R + 0.4, COLOR);
           game.audio.play('bone_crash', { at });
         });
@@ -199,14 +203,18 @@ const chargeMove: Move = {
       ch.hit.push(f.id);
       if (f.damage(8, { source: self, knockback: 0, cause: 'melee' })) f.impulse(ch.dir.x * 12 - ch.dir.z * 6, 7, ch.dir.z * 12 + ch.dir.x * 6);
     }
-    if (Math.floor(ch.t * 8) !== Math.floor((ch.t - c.dt) * 8)) game.fx.burst({ x: p.x, y: p.y + 0.2, z: p.z }, { color: '#d8c08a', count: 8, speed: 2, size: 0.25, gravity: -0.5, life: 0.8, drag: 2 });
+    if (Math.floor(ch.t * 8) !== Math.floor((ch.t - c.dt) * 8)) game.fx.burst({ x: p.x, y: p.y + 0.2, z: p.z }, { color: '#d8c08a', count: 8, speed: 2, size: 0.18, gravity: -0.5, life: 0.8, drag: 2 });
     const gone = Math.hypot(p.x - ch.from.x, p.z - ch.from.z);
-    // Stopped dead against something (after getting going): a wall, a pillar.
+    // Stopped dead against something (after getting going): a wall or a pillar stuns it; a step it climbs.
     const moved = ch.last ? Math.hypot(p.x - ch.last.x, p.z - ch.last.z) : 1;
     ch.last = { ...p };
     if (ch.t > 0.35 && moved < 0.02) {
-      crash(c);
-      return true;
+      const wall = game.world.raycast({ x: p.x, y: p.y + 1.7, z: p.z }, ch.dir, 2.8);
+      if (wall) {
+        crash(c);
+        return true;
+      }
+      if (self.onGround) self.jump();
     }
     return gone >= ch.len || ch.t > 2.6;
   },
@@ -223,7 +231,7 @@ function crash(c: Ctx) {
   const p = self.position;
   self.setSpeed(c.s.enraged ? 1.25 : 1);
   game.fx.shake(0.5, 0.8);
-  game.fx.burst({ x: p.x, y: p.y + 2.5, z: p.z }, { color: '#9a9a9a', count: 40, speed: 6, size: 0.25, gravity: 14 });
+  game.fx.burst({ x: p.x, y: p.y + 2.5, z: p.z }, { color: '#9a9a9a', count: 40, speed: 6, size: 0.18, gravity: 14 });
   game.fx.burst({ x: p.x, y: p.y + 4.5, z: p.z }, { color: '#fff1a8', count: 16, speed: 2, size: 0.12, gravity: -2, glow: 1.5, life: 1.5 });
   game.audio.play('colossus_crash', { at: p, volume: 1.4 });
   game.hud.pop('STUNNED!', { color: COLOR, sub: 'It ran into the wall: hit it now' });
@@ -289,7 +297,7 @@ function roar(game: GameContext, e: Entity) {
   game.audio.play('colossus_roar', { at: p, volume: 1.6 });
   game.fx.shake(0.35, 1.4);
   game.fx.shockwave({ x: p.x, y: p.y + 0.1, z: p.z }, 9, COLOR);
-  game.fx.burst({ x: p.x, y: p.y + 0.4, z: p.z }, { color: '#d8c08a', count: 60, speed: 7, size: 0.3, gravity: -0.3, life: 1.4, drag: 2 });
+  game.fx.burst({ x: p.x, y: p.y + 0.4, z: p.z }, { color: '#d8c08a', count: 60, speed: 7, size: 0.2, gravity: -0.3, life: 1.4, drag: 2 });
   strike(game, { source: e, at: p, r: 6, damage: 0.5, knockback: 11, lift: 4 });
 }
 
@@ -309,6 +317,7 @@ export const colossus: BossKind = {
     health: 760,
     speed: 2.3,
     knockbackResistance: 1,
+    jump: 9,
     boss: true,
     ai: colossusAI,
     sounds: { ambient: 'colossus_groan', hurt: 'colossus_hurt' },
@@ -317,7 +326,7 @@ export const colossus: BossKind = {
   spawned(game, e) {
     // It heaves itself up out of the sand.
     const p = e.position;
-    game.fx.burst({ x: p.x, y: p.y + 0.5, z: p.z }, { color: '#d8c08a', count: 90, speed: 8, size: 0.3, gravity: 4, life: 1.6, drag: 1.5 });
+    game.fx.burst({ x: p.x, y: p.y + 0.5, z: p.z }, { color: '#d8c08a', count: 90, speed: 8, size: 0.2, gravity: 4, life: 1.6, drag: 1.5 });
     game.fx.burst({ x: p.x, y: p.y + 1, z: p.z }, { color: '#efe4c8', count: 40, speed: 7, size: 0.16, gravity: 14 });
     game.audio.play('colossus_rise', { at: p, volume: 1.4 });
   },
