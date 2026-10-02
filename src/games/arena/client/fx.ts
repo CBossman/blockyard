@@ -35,6 +35,8 @@ interface Trail {
   tick: number;
   color: RGB;
   size: number;
+  /** A puff where it stops, if it makes one. */
+  end: RGB | null;
 }
 
 /** How tall a figure stands (its humanoid head's height, else a beast's), blocks. */
@@ -69,10 +71,15 @@ export function armoryFx(): ClientKit {
         else shows.set(id, { f, flame: 0, drop: 0, star: 0 });
       });
       client.on('armory.trail', (d) => {
-        const t = d as { n: number; x: number; y: number; z: number; vx: number; vy: number; vz: number; life: number; color: string; every: number; size: number };
-        trails.set(t.n, { x: t.x, y: t.y, z: t.z, vx: t.vx, vy: t.vy, vz: t.vz, left: t.life, every: t.every, tick: 0, color: rgb(t.color, 1.4), size: t.size });
+        const t = d as { n: number; x: number; y: number; z: number; vx: number; vy: number; vz: number; life: number; color: string; every: number; size: number; end: string | null };
+        trails.set(t.n, { x: t.x, y: t.y, z: t.z, vx: t.vx, vy: t.vy, vz: t.vz, left: t.life, every: t.every, tick: 0, color: rgb(t.color, 1.4), size: t.size, end: t.end ? rgb(t.end, 1.2) : null });
       });
-      client.on('armory.land', (d) => void trails.delete((d as { n: number }).n));
+      client.on('armory.land', (d) => {
+        const l = d as { n: number; x: number; y: number; z: number };
+        const t = trails.get(l.n);
+        trails.delete(l.n);
+        if (t?.end) client.fx.particles({ x: l.x, y: l.y, z: l.z }, t.end, { count: 8, speed: 2.2, size: 0.08, gravity: 6, life: 0.4, spread: 0.05 });
+      });
       client.on('armory.sweep', (d) => sweep(client, d as { x: number; y: number; z: number; yaw: number; reach: number; arc: number; color: string }));
       client.on('armory.pool', (d) => {
         const p = d as { x: number; y: number; z: number; radius: number; time: number };

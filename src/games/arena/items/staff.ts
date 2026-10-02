@@ -1,7 +1,7 @@
 import { math, type Entity, type GameContext, type ItemBase, type ItemKind, type ItemKit, type ItemUse, type Player, type Vec3 } from '@platform';
 import { bus } from '../run/bus';
 import { swingTargets } from './melee';
-import { launch, type Missile } from './missiles';
+import { launch } from './missiles';
 import { downed } from './moves';
 import { burn, chill, stagger } from './status';
 
@@ -164,9 +164,8 @@ function shard(game: GameContext, p: Player, item: string, def: StaffItem) {
       damage: def.damage,
       knockback: 0.15,
       weapon: item,
-      trail: { color: '#dff6ff', every: 0.05, size: 0.08 },
+      trail: { color: '#dff6ff', every: 0.05, size: 0.08, end: '#e6f8ff' },
       hit: (g, _m, e) => chill(g, e, 1, spellMods.chillTime(p)),
-      end: (g, _m: Missile, at) => g.fx.burst(at, { color: '#e6f8ff', count: 8, speed: 2.2, size: 0.08, gravity: 6, life: 0.4 }),
     },
     from,
     dir,
