@@ -281,7 +281,7 @@
 
 /* ---------- The boss bar (top middle, under the wave): its name in Roman capitals, a wide bar in blood ---------- */
 .bossbar {
-  top: 112px;
+  top: 132px;
   width: min(640px, 72vw);
   filter: var(--ar-halo);
   animation: ar-boss-in 700ms cubic-bezier(0.2, 0.8, 0.2, 1);

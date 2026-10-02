@@ -86,7 +86,7 @@ export function music(): ClientKit {
           score.length = 0;
           for (const n of notes) score.push({ ...n, t: n.t + at });
           // (Two voices of the same music taking turns: two beats close together are never taken for one sound.)
-          client.audio.play(alt ? 'ar_music_b' : 'ar_music', { volume: vol * 0.8 });
+          client.audio.play(alt ? 'ar_music_b' : 'ar_music', { volume: vol * (mood === 'calm' ? 0.8 : 1) });
           score.length = 0;
           alt = !alt;
         }

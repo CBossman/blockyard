@@ -179,7 +179,7 @@ export function defineHudSounds(client: Client) {
   }, { reverb: 0.4 });
   // The final wave: horns in a chord, the choir, a drum roll into a hit.
   a.define('ar_sting_final', (s) => {
-    for (const n of [-31, -24, -19, -15]) horn(s, hz(n), { volume: 0.09, hold: 1.1, attack: 0.25 });
+    for (const n of [-31, -24, -19, -15]) horn(s, hz(n), { volume: 0.075, hold: 1.1, attack: 0.25 });
     for (const n of [-19, -15, -12]) sing(s, hz(n), 'a', { attack: 0.4, hold: 1, duration: 0.8, volume: 0.07 });
     for (let t = 0; t < 0.6; t += 0.05) taiko(s, t, 0.12 + t * 0.35, 1.2);
     taiko(s, 0.65, 0.7);
@@ -202,25 +202,26 @@ export function defineHudSounds(client: Client) {
   }, { reverb: 0.4 });
   // A wave won: a bright chord, resolving, and a bell.
   a.define('ar_sting_cleared', (s) => {
-    stab(s, [hz(-7), hz(-3), hz(0)], 0, 0.05, 0.2);
-    stab(s, [hz(-2), hz(2), hz(5)], 0.14, 0.06, 0.9);
-    bell(s, hz(17), 0.14, 0.05);
+    stab(s, [hz(-7), hz(-3), hz(0)], 0, 0.07, 0.2);
+    stab(s, [hz(-2), hz(2), hz(5)], 0.14, 0.085, 0.9);
+    bell(s, hz(17), 0.14, 0.07);
     taiko(s, 0, 0.35, 1.2);
   }, { reverb: 0.5 });
   // The Crowd's Favour: brass climbing to a held chord, bells.
   a.define('ar_sting_favour', (s) => {
     const up = [hz(5), hz(9), hz(12), hz(17)];
-    up.forEach((f, i) => stab(s, [f], i * 0.07, 0.07, 0.2));
-    stab(s, [hz(5), hz(9), hz(12), hz(17)], 0.3, 0.05, 1.1);
-    bell(s, hz(29), 0.3, 0.05);
-    bell(s, hz(24), 0.42, 0.04);
-    swell(s, 0.3, 0, 0.08);
+    up.forEach((f, i) => stab(s, [f, f / 2], i * 0.07, 0.11, 0.2));
+    stab(s, [hz(5), hz(9), hz(12), hz(17)], 0.3, 0.08, 1.1);
+    taiko(s, 0.3, 0.6, 1.1);
+    bell(s, hz(29), 0.3, 0.09);
+    bell(s, hz(24), 0.42, 0.07);
+    swell(s, 0.3, 0, 0.14);
   }, { reverb: 0.5 });
   // A feat (a multikill, a parry): one brass hit, higher the bigger the feat (`pitch`).
   a.define('ar_sting_feat', (s) => {
-    stab(s, [hz(-7) * s.pitch, hz(-3) * s.pitch, hz(0) * s.pitch], 0, 0.07, 0.26);
-    s.noise({ duration: 0.08, filter: 'highpass', from: 5000, volume: 0.06 });
-    taiko(s, 0, 0.3, 1.3);
+    stab(s, [hz(-7) * s.pitch, hz(-3) * s.pitch, hz(0) * s.pitch], 0, 0.1, 0.26);
+    s.noise({ duration: 0.08, filter: 'highpass', from: 5000, volume: 0.09 });
+    taiko(s, 0, 0.45, 1.3);
   }, { reverb: 0.3 });
   // Their own fall: a dull blow, the music draining away.
   a.define('ar_sting_out', (s) => {
@@ -230,7 +231,7 @@ export function defineHudSounds(client: Client) {
   }, { reverb: 0.5 });
   // Back in the fight: a quick climb.
   a.define('ar_sting_back', (s) => {
-    [hz(-7), hz(-3), hz(0), hz(5)].forEach((f, i) => stab(s, [f], i * 0.06, 0.05, 0.18));
+    [hz(-7), hz(-3), hz(0), hz(5)].forEach((f, i) => stab(s, [f], i * 0.06, 0.08, 0.18));
   }, { reverb: 0.3 });
   // A friend's fortunes (down, back up): a soft two-note call.
   a.define('ar_sting_ally', (s) => {
@@ -266,13 +267,13 @@ export function defineHudSounds(client: Client) {
     s.noise({ duration: 0.03, filter: 'bandpass', from: 2600, q: 3, volume: 0.15 });
   }, { reverb: 0.3 });
   // Text arriving on a card: a soft tick.
-  a.define('ar_tally', (s) => s.tone({ wave: 'triangle', from: 1800 * s.pitch, to: 1500 * s.pitch, duration: 0.04, volume: 0.06 }), dry);
+  a.define('ar_tally', (s) => s.tone({ wave: 'triangle', from: 1800 * s.pitch, to: 1500 * s.pitch, duration: 0.05, volume: 0.2 }), dry);
 
   // ---------- Hits ----------
   // A hit landed: a dry knock, brighter for a heavier one (`pitch`).
   a.define('ar_hit', (s) => {
-    s.tone({ wave: 'sine', from: 1900 * s.pitch, to: 1500 * s.pitch, duration: 0.04, attack: 0.001, volume: 0.13 });
-    s.noise({ duration: 0.025, filter: 'highpass', from: 5000, volume: 0.06 });
+    s.tone({ wave: 'sine', from: 1900 * s.pitch, to: 1500 * s.pitch, duration: 0.05, attack: 0.001, volume: 0.32 });
+    s.noise({ duration: 0.03, filter: 'highpass', from: 5000, volume: 0.14 });
   }, dry);
   // A heavy hit: a thump and a crunch of bone.
   a.define('ar_hit_heavy', (s) => {
@@ -282,10 +283,10 @@ export function defineHudSounds(client: Client) {
   }, dry);
   // A kill: a meaty crunch under a bright confirm.
   a.define('ar_kill', (s) => {
-    s.tone({ from: 130, to: 48, duration: 0.18, attack: 0.001, volume: 0.5 });
-    s.noise({ duration: 0.1, filter: 'bandpass', from: 1100, to: 400, q: 0.9, volume: 0.32 });
-    s.tone({ wave: 'triangle', from: 1568, duration: 0.07, attack: 0.002, volume: 0.13 });
-    s.tone({ wave: 'triangle', from: 2349, duration: 0.16, delay: 0.055, attack: 0.002, volume: 0.13, fm: { ratio: 2, depth: 0.2, to: 0 } });
+    s.tone({ from: 130, to: 48, duration: 0.18, attack: 0.001, volume: 0.8 });
+    s.noise({ duration: 0.1, filter: 'bandpass', from: 1100, to: 400, q: 0.9, volume: 0.5 });
+    s.tone({ wave: 'triangle', from: 1568, duration: 0.07, attack: 0.002, volume: 0.2 });
+    s.tone({ wave: 'triangle', from: 2349, duration: 0.16, delay: 0.055, attack: 0.002, volume: 0.2, fm: { ratio: 2, depth: 0.2, to: 0 } });
   }, dry);
   // A boss slain: a boom and a gong.
   a.define('ar_kill_boss', (s) => {
@@ -296,15 +297,15 @@ export function defineHudSounds(client: Client) {
   }, { reverb: 0.7 });
   // Gore: a wet splat where one dies.
   a.define('ar_gore', (s) => {
-    s.noise({ duration: 0.22, filter: 'lowpass', from: 1700 * s.pitch, to: 200, volume: 0.32 });
-    s.noise({ duration: 0.12, filter: 'bandpass', from: 380, q: 2, volume: 0.25, delay: 0.03 });
-    s.tone({ from: 95 * s.pitch, to: 40, duration: 0.14, volume: 0.25 });
+    s.noise({ duration: 0.22, filter: 'lowpass', from: 1700 * s.pitch, to: 200, volume: 0.5 });
+    s.noise({ duration: 0.12, filter: 'bandpass', from: 380, q: 2, volume: 0.4, delay: 0.03 });
+    s.tone({ from: 95 * s.pitch, to: 40, duration: 0.14, volume: 0.4 });
   });
   // A coin to the purse.
   a.define('ar_coin', (s) => {
-    s.tone({ wave: 'triangle', from: 2350 * s.pitch, to: 2250 * s.pitch, duration: 0.09, attack: 0.001, volume: 0.1 });
-    s.tone({ wave: 'triangle', from: 3520 * s.pitch, duration: 0.16, delay: 0.045, attack: 0.001, volume: 0.08 });
-    s.noise({ duration: 0.02, filter: 'highpass', from: 7000, volume: 0.04 });
+    s.tone({ wave: 'triangle', from: 2350 * s.pitch, to: 2250 * s.pitch, duration: 0.09, attack: 0.001, volume: 0.22 });
+    s.tone({ wave: 'triangle', from: 3520 * s.pitch, duration: 0.16, delay: 0.045, attack: 0.001, volume: 0.17 });
+    s.noise({ duration: 0.02, filter: 'highpass', from: 7000, volume: 0.08 });
   }, dry);
   // Their heart, when it's nearly over: lub-dub.
   a.define('ar_heartbeat', (s) => {
@@ -315,9 +316,9 @@ export function defineHudSounds(client: Client) {
   // ---------- The crowd ----------
   // Thousands murmuring: noise in the bands a voice fills. Its loudness and brightness follow the fight.
   a.defineLoop('ar_crowd', (l) => {
-    l.noise({ freq: 480, filter: 'bandpass', q: 0.9, volume: 0.55 });
-    l.noise({ freq: 1150, filter: 'bandpass', q: 1.5, volume: 0.28 });
-    l.noise({ freq: 2500, filter: 'bandpass', q: 2.5, volume: 0.06 });
+    l.noise({ freq: 480, filter: 'bandpass', q: 0.9, volume: 1.1 });
+    l.noise({ freq: 1150, filter: 'bandpass', q: 1.5, volume: 0.55 });
+    l.noise({ freq: 2500, filter: 'bandpass', q: 2.5, volume: 0.12 });
   });
   // Their roar, swelling over it.
   a.defineLoop('ar_roar', (l) => {
@@ -338,15 +339,15 @@ export function defineHudSounds(client: Client) {
   }, { reverb: 0.8 });
   // A gasp: "ooh", falling.
   a.define('ar_gasp', (s) => {
-    s.noise({ duration: 0.8, attack: 0.06, filter: 'bandpass', from: 1000, to: 600, q: 1.2, volume: 0.2 });
+    s.noise({ duration: 0.8, attack: 0.06, filter: 'bandpass', from: 1000, to: 600, q: 1.2, volume: 0.32 });
     for (let i = 0; i < 6; i++) {
       const f = 170 + Math.random() * 120;
-      sing(s, f, 'o', { delay: Math.random() * 0.08, attack: 0.08, hold: 0.25, duration: 0.6, volume: 0.035, to: f * 0.8 });
+      sing(s, f, 'o', { delay: Math.random() * 0.08, attack: 0.08, hold: 0.25, duration: 0.6, volume: 0.055, to: f * 0.8 });
     }
   }, { reverb: 0.8 });
   // A groan: "aww", sinking.
   a.define('ar_groan', (s) => {
-    s.noise({ duration: 1.6, attack: 0.15, filter: 'bandpass', from: 800, to: 450, q: 1, volume: 0.22 });
+    s.noise({ duration: 1.6, attack: 0.15, filter: 'bandpass', from: 800, to: 450, q: 1, volume: 0.3 });
     for (let i = 0; i < 7; i++) {
       const f = 160 + Math.random() * 110;
       sing(s, f, Math.random() < 0.5 ? 'a' : 'o', { delay: Math.random() * 0.12, attack: 0.15, hold: 0.5, duration: 1, volume: 0.035, to: f * 0.72 });
@@ -354,7 +355,7 @@ export function defineHudSounds(client: Client) {
   }, { reverb: 0.8 });
   // The stands clapping as one.
   a.define('ar_clap', (s) => {
-    for (let i = 0; i < 14; i++) s.noise({ duration: 0.03, filter: 'bandpass', from: 1500 + Math.random() * 900, q: 1.4, volume: 0.07, delay: Math.random() * 0.05 });
+    for (let i = 0; i < 14; i++) s.noise({ duration: 0.035, filter: 'bandpass', from: 1500 + Math.random() * 900, q: 1.4, volume: 0.2, delay: Math.random() * 0.05 });
   }, { reverb: 0.8 });
   // …and stamping.
   a.define('ar_stomp', (s) => {

@@ -6,8 +6,9 @@ import { clock, el, hidden, hud, num, project, replay } from './store';
 /**
  * The Arena's standing HUD on each screen, drawn from what the server part says (`store.ts`):
  *
- * - the wave (top middle): its number and name, the enemies left as a bar, its twist or boss as a
- *   chip; between waves the time to the next and what it is; before the first, the countdown;
+ * - the wave (top middle): its number and name, the enemies left as a bar, its twist as a chip
+ *   (a boss has its bar under it); between waves the time to the next and what it is; before the
+ *   first, the countdown;
  * - gold and the crowd (bottom right): the fighter's gold, rolling up to what it is with "+12"s
  *   popping beside it (and where it was picked up, when that's in sight), and the crowd's hype as
  *   a meter that glows and shakes while the Crowd's Favour is on, counting it down;
@@ -143,10 +144,8 @@ function build(client: Client, layer: HTMLElement): (dt: number) => void {
     bar.style.display = fighting ? '' : 'none';
     fill.style.width = `${r.total > 0 ? (r.left / r.total) * 100 : 0}%`;
     left.textContent = `${r.left} left`;
-    chips.replaceChildren(
-      ...(fighting && r.twist ? [chip(r.twist.name, r.twist.color)] : []),
-      ...(fighting && r.boss ? [chip(r.boss.name, r.boss.color, 'boss')] : []),
-    );
+    // The twist as a chip (a boss is named by its own bar, under this).
+    chips.replaceChildren(...(fighting && r.twist ? [chip(r.twist.name, r.twist.color)] : []));
     // A new wave (or the break before one) arrives with a flourish.
     const head = JSON.parse(was || '[]') as unknown[];
     if (head[0] !== r.phase || head[1] !== r.wave) replay(wave, 'arrive');
@@ -254,8 +253,8 @@ function build(client: Client, layer: HTMLElement): (dt: number) => void {
   };
 }
 
-function chip(text: string, color: string, cls = ''): HTMLElement {
-  const c = el(`span.ar-chip${cls ? `.${cls}` : ''}`, text);
+function chip(text: string, color: string): HTMLElement {
+  const c = el('span.ar-chip', text);
   c.style.setProperty('--c', color);
   return c;
 }
