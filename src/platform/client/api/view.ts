@@ -190,6 +190,8 @@ export class FirstPersonLayer implements ViewLayer {
     readonly animations: ReadonlyMap<string, ViewAnimation>,
     /** Tells the game's client code (`equip`). */
     private emit: (e: ClientEvent) => void,
+    /** The items as this screen has them (their looks over the server's definitions), for `item`. */
+    private items: ReadonlyMap<string, ItemDefinition>,
   ) {
     this.view = new ViewScene(albedo, material);
     const root = new THREE.Group();
@@ -245,6 +247,23 @@ export class FirstPersonLayer implements ViewLayer {
     m.visible = false;
     m.frustumCulled = false;
     this.owned.set(m, { geometry: true, material: true });
+    return m;
+  }
+
+  item(id: string): Node | null {
+    const def = this.items.get(id);
+    const look = def && this.graphics.itemLook(def);
+    if (!look) return null;
+    // A material of its own (what's in hand binds the shared one as it's drawn, and two drawn
+    // one after the other would share its textures too), lit as the layer's items are.
+    const material = this.view.litMaterial(THREE.DoubleSide);
+    material.uniforms.uAtlas.value = look.albedo;
+    material.uniforms.uEmissive.value = look.emissive;
+    setSurface(material.uniforms, look.surface);
+    const m = new THREE.Mesh(look.geometry, material);
+    m.frustumCulled = false;
+    // (Its geometry is the look's, shared: freeing it frees only the material.)
+    this.owned.set(m, { geometry: false, material: true });
     return m;
   }
 
