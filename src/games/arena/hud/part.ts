@@ -5,6 +5,7 @@ import { bossKind } from '../bosses';
 import { monsterKind } from '../monsters';
 import { bus, type RunResult, type Unlock } from '../run/bus';
 import { finalWave, monstersAlive, TWISTS, waveName, waveSpec, type Twist } from '../run/director';
+import { counts } from '../run/downed';
 import { addGold, gold } from '../run/gold';
 import { map, state } from '../run/state';
 import { className, END, endActions, endScreen, LEVEL_UP_AT, type EndExtras, type EndRun } from './end';
@@ -409,6 +410,8 @@ export const hudPart: ArenaPart = {
     });
 
     game.events.on('playerDamage', ({ player, amount }) => {
+      // (Not a blow on the ground, nor the bleed-out's end.)
+      if (!counts(player)) return;
       tallies.taken(player, amount);
       // A big blow draws a gasp from the stands.
       if (player.maxHealth > 0 && amount >= player.maxHealth * 0.3) crowd(game, { v: 0.5, r: 'gasp' });

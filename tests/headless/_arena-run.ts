@@ -215,10 +215,15 @@ function downs() {
   // Bob goes down and nobody comes: he bleeds out and falls.
   const fell: string[] = [];
   bus.on('fell', ({ player }) => fell.push(player.name));
+  const blows: number[] = [];
+  game.events.on('playerDamage', ({ player, amount }) => void (player === bob && blows.push(amount)));
+  const taken = state.damageTaken;
   bob.damage(1000);
   check(isDowned(bob), 'Bob down');
   idle(h, BLEED + 1);
   check(!bob.alive && fell.includes('Bob'), `bled out after ${BLEED} s: Bob ${bob.alive ? 'alive' : 'fell'}`);
+  // Its end is only what was left of him, and it isn't damage taken (nor anything on the ground).
+  check(blows.length === 1 && blows[0] <= bob.maxHealth && state.damageTaken === taken, `the bleed-out's blow: ${blows.map((n) => n.toFixed(1)).join(', ')}; damage taken ${taken.toFixed(1)} then ${state.damageTaken.toFixed(1)}`);
   // Alone on your feet, a killing blow is the end (no feather): the fight's lost.
   me.damage(10000);
   idle(h, 3);
