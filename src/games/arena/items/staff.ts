@@ -97,7 +97,7 @@ function fireball(game: GameContext, p: Player, item: string, def: StaffItem) {
     game,
     p,
     {
-      look: { streak: { color: '#ff7a1a', length: 0.9, width: 0.85, intensity: 4.5, flicker: 0.35 } },
+      look: { streak: { color: '#ff5a0a', length: 0.7, width: 0.7, intensity: 2.2, flicker: 0.35 } },
       speed: FIREBALL_SPEED,
       life: 1.4,
       radius: 0.35,
@@ -182,7 +182,7 @@ function lightning(use: ItemUse<StaffItem>, item: string, def: StaffItem) {
     // Nothing to strike: it cracks out to where they look.
     const hit = game.world.raycast(p.eye, p.look, range);
     const end = hit ? hit.point : { x: p.eye.x + p.look.x * range, y: p.eye.y + p.look.y * range, z: p.eye.z + p.look.z * range };
-    arc(game, from, end, '#cfe9ff');
+    arc(game, from, end, '#cfe9ff', 0.1);
     game.fx.burst(end, { color: '#cfe9ff', count: 8, speed: 2, glow: 1.5, life: 0.25 });
     return;
   }
@@ -197,7 +197,7 @@ function lightning(use: ItemUse<StaffItem>, item: string, def: StaffItem) {
     if (!e) break;
     const q = e.position;
     const to = { x: q.x, y: q.y + 1.1, z: q.z };
-    arc(game, at, to, n === 0 ? '#e6f4ff' : '#9fd4ff');
+    arc(game, at, to, n === 0 ? '#e6f4ff' : '#9fd4ff', n === 0 ? 0.1 : 0.2);
     e.damage(amount, { source: p, knockback: 0.3, weapon: item, cause: 'lightning' });
     if (!e.alive) killed = true;
     else stagger(game, e, 0.25);
@@ -226,7 +226,7 @@ const FWD = new math.Vector3(0, 0, -1);
 const _d = new math.Vector3();
 
 /** A crackling bolt from `a` to `b`, gone in a blink: two jagged halves. */
-function arc(game: GameContext, a: Vec3, b: Vec3, color: string) {
+function arc(game: GameContext, a: Vec3, b: Vec3, color: string, width: number) {
   const mid = { x: (a.x + b.x) / 2 + (Math.random() - 0.5) * 0.6, y: (a.y + b.y) / 2 + (Math.random() - 0.5) * 0.6, z: (a.z + b.z) / 2 + (Math.random() - 0.5) * 0.6 };
   for (const [s, e] of [
     [a, mid],
@@ -234,7 +234,7 @@ function arc(game: GameContext, a: Vec3, b: Vec3, color: string) {
   ] as const) {
     const len = Math.hypot(e.x - s.x, e.y - s.y, e.z - s.z);
     if (len < 0.05) continue;
-    const bolt = game.props.bolt({ color, length: len, width: 0.22, intensity: 7, flicker: 0.5 });
+    const bolt = game.props.bolt({ color, length: len, width, intensity: 7, flicker: 0.5 });
     bolt.position.set(s.x, s.y, s.z);
     bolt.quaternion.setFromUnitVectors(FWD, _d.set(e.x - s.x, e.y - s.y, e.z - s.z).normalize());
     game.clock.after(0.16, () => bolt.remove());

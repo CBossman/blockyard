@@ -163,7 +163,7 @@ export function slamAt(game: GameContext, by: Player, at: Vec3, o: SlamOpts, eff
   }
   if (effects) {
     game.fx.shockwave({ x: at.x, y: at.y + 0.15, z: at.z }, o.radius, '#e8d2a0');
-    game.fx.burst({ x: at.x, y: at.y + 0.2, z: at.z }, { color: '#c8b088', count: 34, speed: 4.5, size: 0.2, gravity: 9, life: 0.8, drag: 1.5 });
+    game.fx.burst({ x: at.x, y: at.y + 0.2, z: at.z }, { color: '#c8b088', count: 30, speed: 5, size: 0.12, gravity: 9, life: 0.7, drag: 1.5 });
     game.fx.burst({ x: at.x, y: at.y + 0.3, z: at.z }, { color: '#fff0c0', count: 12, speed: 3, size: 0.1, glow: 1.2, life: 0.3 });
     game.audio.play('arena_slam', { at, pitch: 1.1 - Math.min(0.3, o.radius / 20) });
   }

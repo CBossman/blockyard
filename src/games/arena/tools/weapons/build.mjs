@@ -226,7 +226,8 @@ function gladius(rarity) {
   for (const j of [-2, 2]) g.set(0, j, g.cell(2, 3.1), 'gem');
   // The blade: a waist, swelling toward the point, then the long point.
   const tip = blade(g, 3.75, 18.4, (t) => (t < 0.62 ? 1.75 - 0.35 * Math.sin((t / 0.62) * Math.PI) + 0.2 * (t / 0.62) : 1.95 * Math.sqrt(Math.max(0, 1 - ((t - 0.62) / 0.38) ** 1.4))), { rarity, runes: glowing(rarity), fuller: 0.6 });
-  return g.mark('grip', [0, 0, 0]).mark('muzzle', [0, 0, tip]);
+  // (A second grip just behind the hand: a fighter's figure holds it blade up, ready, as a sword.)
+  return g.mark('grip', [0, 0, 0]).mark('grip2', [0, 0, -1.6]).mark('muzzle', [0, 0, tip]);
 }
 
 /** The scutum-style round shield that goes with the gladius: bronze rim, painted boards, a boss. */
