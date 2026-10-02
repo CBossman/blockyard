@@ -4,7 +4,7 @@ import { BLESSINGS, blessingsOf } from '../blessings';
 import { bossKind } from '../bosses';
 import { monsterKind } from '../monsters';
 import { bus, type RunResult, type Unlock } from '../run/bus';
-import { finalWave, TWISTS, WAVES, type Twist } from '../run/director';
+import { finalWave, monstersAlive, TWISTS, waveName, waveSpec, type Twist } from '../run/director';
 import { addGold, gold } from '../run/gold';
 import { map, state } from '../run/state';
 import { className, END, endActions, endScreen, LEVEL_UP_AT, type EndExtras, type EndRun } from './end';
@@ -83,23 +83,22 @@ function kindOf(game: GameContext, type: string) {
 }
 
 /** Monsters still to beat this wave: those in the arena and those still to come. */
-const leftNow = (game: GameContext) => (state.phase === 'fighting' ? game.entities.count() + state.queue.length : 0);
+const leftNow = (game: GameContext) => (state.phase === 'fighting' ? monstersAlive(game) + state.queue.length : 0);
 
 function runMsg(game: GameContext): RunMsg {
   const n = state.wave;
-  const w = WAVES[Math.max(0, n - 1)];
   const twist = state.twist ? TWISTS[state.twist as Twist] : null;
   const boss = state.boss ? bossKind(state.boss) : undefined;
   const left = leftNow(game);
   waveTotal = Math.max(waveTotal, left);
   const now = game.clock.now;
-  // The countdown to the first wave (three beats after a moment), or the break between waves.
-  const next = state.phase === 'intermission' ? Math.max(0, Math.ceil(state.nextWaveAt - now)) : state.phase === 'countdown' ? Math.max(0, Math.ceil(state.startedAt + 4.5 - now)) : 0;
+  // The countdown to the first wave (the class pick's), or the break between waves.
+  const next = state.phase === 'intermission' || state.phase === 'countdown' ? Math.max(0, Math.ceil(state.nextWaveAt - now)) : 0;
   return {
     phase: state.phase,
     wave: n,
     of: finalWave(),
-    name: w?.name ?? '',
+    name: n > 0 ? waveName(n) : '',
     left,
     total: Math.max(waveTotal, left),
     next,
@@ -115,8 +114,7 @@ function runMsg(game: GameContext): RunMsg {
 function upcoming(): RunMsg['upcoming'] {
   if (state.phase !== 'intermission' && state.phase !== 'countdown') return null;
   const n = state.phase === 'countdown' ? 1 : state.wave + 1;
-  const w = WAVES[n - 1];
-  return w ? { wave: n, name: w.name, boss: !!w.boss } : null;
+  return { wave: n, name: waveName(n), boss: !!waveSpec(n).boss };
 }
 
 /** Each rarity of blessing's colour (as the armory's `BLESSING_COLOR`): its icon's frame, its callout. */
@@ -169,19 +167,20 @@ function catchUp(game: GameContext, p: Player) {
 /** A wave won: each fighter's card (their part in it, the party's best, the bonus, what's next). */
 function waveCards(game: GameContext, wave: number, bonus: number) {
   const best = game.players.length > 1 ? tallies.waveBest() : null;
-  const w = WAVES[wave];
+  // (After the run's last wave, nothing's next unless they fight on.)
+  const next = wave < finalWave() || state.endless ? { wave: wave + 1, name: waveName(wave + 1), boss: !!waveSpec(wave + 1).boss } : null;
   for (const p of game.players) {
     const t = tallies.waveOf(p.id);
     const card: WaveCard = {
       wave,
-      name: WAVES[wave - 1]?.name ?? '',
+      name: waveName(wave),
       time: Math.round(game.clock.now - waveAt),
       kills: t.kills,
       gold: t.gold,
       damage: Math.round(t.damage),
       mvp: best ? { name: tallies.names.get(best.id) ?? '', kills: best.kills, you: best.id === p.id } : null,
       bonus,
-      next: w ? { wave: wave + 1, name: w.name, boss: !!w.boss } : null,
+      next,
     };
     tell(game, p, MSG.wave, card);
   }
@@ -342,7 +341,7 @@ export const hudPart: ArenaPart = {
       tell(game, 'all', MSG.end, { won, wave });
       crowd(game, { v: 1, r: won ? 'roar' : 'groan' });
       call(game, 'all', won ? { k: 'victory', q: m.name, t: 'Victory', s: 'The arena is yours' } : { k: 'defeat', q: endless ? `Endless wave ${wave}` : `Wave ${wave}`, t: 'Defeated', s: 'The arena claims you' });
-      const run: EndRun = { won, wave, endless, time: time > 0 ? time : game.clock.now - state.startedAt, map: m.name, of: finalWave(), name: WAVES[Math.max(0, wave - 1)]?.name ?? '' };
+      const run: EndRun = { won, wave, endless, time: time > 0 ? time : game.clock.now - state.startedAt, map: m.name, of: finalWave(), name: waveName(Math.max(1, wave)) };
       endRun(game, run, results);
     });
 
@@ -430,7 +429,7 @@ export const hudPart: ArenaPart = {
 /** The run as it stands, ended (`hud end`, for looking at the end screen). */
 function sampleRun(game: GameContext, won: boolean): EndRun {
   const wave = Math.max(1, state.wave);
-  return { won, wave, endless: false, time: game.clock.now - state.startedAt, map: map().name, of: finalWave(), name: WAVES[wave - 1]?.name ?? '' };
+  return { won, wave, endless: false, time: game.clock.now - state.startedAt, map: map().name, of: finalWave(), name: waveName(Math.max(1, wave)) };
 }
 
 /** A fighter's results as the run's part might give them (`hud end`): some XP, a level gained and what it unlocked, a new best. */

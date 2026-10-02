@@ -8,6 +8,9 @@ import { GameHost } from '../../src/platform/host/game';
 import { PLACEHOLDER_ICON } from '../../src/platform/looks';
 import type { HostEvent } from '../../src/platform/net/protocol';
 import arenaClient from '../../src/games/arena/client';
+import { gold } from '../../src/games/arena/run/gold';
+import { isDowned } from '../../src/games/arena/run/downed';
+import { blessingsOf } from '../../src/games/arena/blessings';
 import { check, games } from './_harness';
 
 /** The fields of an item that are its look (`ItemLook`): the Arena's server gives none. */
@@ -16,9 +19,10 @@ const LOOK_FIELDS = ['icon', 'hold', 'sounds', 'tracer', 'trail', 'drawIcon'] as
 const ENGINE_SOUNDS = ['hit', 'hurt', 'pickup', 'heal', 'wave', 'victory', 'defeat', 'spawn', 'click', 'countdown', 'lock', 'alarm'];
 
 /**
- * Arena together: everyone's armed (at the start, in the countdown, mid-fight), waves grow with
- * the party, a fallen player sits the wave out and comes back, rewards for each, the fight is lost
- * only when everyone's down, and the last one out leaves it ready for the next.
+ * Arena together: everyone's armed with their class's kit (at the start, in the countdown,
+ * mid-fight, with gold to catch up), waves grow with the party, a fighter at the end of their
+ * health goes down while friends stand and is back up when the wave's won, rewards for each, the
+ * fight is lost only when nobody's left standing, and the last one out leaves it ready for the next.
  */
 export default function arenaMultiplayer() {
   const def = games.find((g) => g.id === 'arena')!;
@@ -29,6 +33,7 @@ export default function arenaMultiplayer() {
     for (let i = 0; i < n; i++) for (const [id, b] of host.step(1 / 30)) events.set(id, [...(events.get(id) ?? []), ...b.events]);
   };
   const calls = (id: string, method: string) => (events.get(id) ?? []).flatMap((e) => (e.t === 'call' && e.call.method === method ? [e.call.args.map(String)] : []));
+  const menus = (id: string) => (events.get(id) ?? []).flatMap((e) => (e.t === 'call' && e.call.method === 'menu' ? [(e.call.args[1] as { title: string }).title] : []));
   /** The game's messages to someone's screen (the HUD's: `hud/messages.ts`), and the end screen (`arena-end`) put up there. */
   const msgs = <T>(id: string, name: string) => (events.get(id) ?? []).flatMap((e) => (e.t === 'call' && e.call.target === 'message' && e.call.method === name ? [e.call.args[0] as T] : []));
   const ends = (id: string) => (events.get(id) ?? []).flatMap((e) => (e.t === 'call' && e.call.method === 'widget' && e.call.args[0] === 'arena-end' ? [e.call.args[1] as { word?: string; headline?: string }] : []));
@@ -45,58 +50,77 @@ export default function arenaMultiplayer() {
   const ann = join('Ann');
   const bob = join('Bob');
   step(15);
-  check(player('Ann').inventory.count('wooden_sword') === 1 && player('Bob').inventory.count('wooden_sword') === 1, 'both start with a sword');
+  const armed = (n: string) => ['stone_sword', 'gladius'].some((w) => player(n).inventory.count(w) === 1);
+  check(armed('Ann') && armed('Bob'), 'both start with a Gladiator\'s blade');
+  check(menus(ann).includes('Choose your class'), 'and are asked their class');
   // Cat arrives during the countdown.
   const cat = join('Cat');
   step(5);
-  check(player('Cat').inventory.count('wooden_sword') === 1, 'joined in the countdown: armed');
+  check(armed('Cat'), 'joined in the countdown: armed');
 
-  // Wave 1 with three: 5 zombies, half as many again for each extra fighter.
+  // Wave 1 with three: 6 zombies, half as many again for each extra fighter.
   let zombies = 0;
   let cleared = -1;
-  for (let i = 0; i < 30 * 40 && cleared < 0; i++) {
+  let downed = false;
+  for (let i = 0; i < 30 * 60 && cleared < 0; i++) {
     step(1);
     for (const e of game.entities.all()) {
+      if (e.data.scenery) continue;
       if (e.type === 'zombie') zombies++;
       e.remove();
     }
-    // Bob falls partway through.
-    if (zombies >= 3 && player('Bob').alive) player('Bob').damage(1000);
+    // Bob takes a killing blow partway through: with Ann and Cat standing, he goes down instead.
+    if (zombies >= 3 && !downed) {
+      player('Bob').damage(1000);
+      downed = isDowned(player('Bob'));
+    }
     if (msgs(ann, 'ar.wave').length) cleared = pickups();
   }
-  check(zombies === 10, `wave 1 for three: ${zombies} zombies`);
-  check(msgs<{ k: string }>(bob, 'ar.call').some((c) => c.k === 'out') && calls(ann, 'feed').some((a) => a[0] === 'Bob is down'), 'Bob fell; the others hear');
+  check(zombies === 12, `wave 1 for three: ${zombies} zombies`);
+  check(downed && !msgs<{ k: string }>(bob, 'ar.call').some((c) => c.k === 'out'), 'Bob went down (not out)');
   check(!ends(ann).length, 'one down is not the end');
-  check(player('Bob').alive && Math.hypot(player('Bob').position.x, player('Bob').position.z) < 3, `Bob back on the floor when the wave is won: ${JSON.stringify(player('Bob').position)}`);
-  check(cleared === 6, `a reward set each: ${cleared} pickups`);
+  check(player('Bob').alive && !isDowned(player('Bob')) && Math.hypot(player('Bob').position.x, player('Bob').position.z) < 3, `Bob back on his feet when the wave is won: ${JSON.stringify(player('Bob').position)}`);
+  check(cleared === 3, `a reward each: ${cleared} pickups`);
   // The first wave is everyone's; not a scratch on Ann or Cat, but Bob fell.
   check(['Ann', 'Bob', 'Cat'].every((n) => player(n).achieved('first_wave')), 'the first wave cleared: all three');
   check(player('Ann').achieved('untouched') && player('Cat').achieved('untouched') && !player('Bob').achieved('untouched'), 'untouched: Ann and Cat, not Bob');
   check(!player('Ann').achieved('first_blood'), 'no kills, no First Blood');
-  // Each takes only their own: standing on the dais, Ann gets one bow, not three.
+  // Each takes only their own: standing on the dais, Ann gets one potion, not three.
+  const potions = (n: string) => player(n).inventory.count('health_potion');
+  const had = potions('Ann');
   for (const n of ['Bob', 'Cat']) player(n).teleport({ x: 20, y: 72, z: 0 });
   player('Ann').teleport({ x: 0.5, y: 72, z: 0.5 });
   step(60);
-  check(player('Ann').inventory.count('bow') === 1 && player('Ann').inventory.count('arrow') === 18 && pickups() === 4, `Ann took her own reward only: ${player('Ann').inventory.count('bow')} bow, ${pickups()} left`);
+  check(potions('Ann') === had + 1 && pickups() === 2, `Ann took her own reward only: ${potions('Ann') - had} potion, ${pickups()} left`);
   for (const n of ['Bob', 'Cat']) player(n).teleport({ x: 0.5, y: 72, z: 0.5 });
   step(60);
-  check(pickups() === 0 && player('Bob').inventory.count('bow') === 1 && player('Cat').inventory.count('bow') === 1, 'and the others theirs');
+  check(pickups() === 0 && potions('Bob') === had + 1 && potions('Cat') === had + 1, 'and the others theirs');
+  check(['Ann', 'Bob', 'Cat'].every((n) => gold(player(n)) > 0), `the wave's gold for each: ${['Ann', 'Bob', 'Cat'].map((n) => gold(player(n))).join(', ')}`);
 
-  // Dan joins mid-fight in wave 2: a sword and the bow and arrows wave 1 gave out.
-  step(30 * 14);
+  // Dan joins mid-fight in wave 2: his class's kit, and gold for the wave he missed.
+  step(30 * 22);
   const dan = join('Dan');
   step(5);
   const d = player('Dan').inventory;
-  check(d.count('wooden_sword') === 1 && d.count('bow') === 1 && d.count('arrow') === 18, `late arrival caught up: ${d.slots.filter(Boolean).map((s) => `${s!.item}x${s!.count}`).join(' ')}`);
+  check(armed('Dan') && gold(player('Dan')) > 0, `late arrival caught up: ${d.slots.filter(Boolean).map((s) => `${s!.item}x${s!.count}`).join(' ')}, ${gold(player('Dan'))} gold`);
+  check(menus(dan).includes('Choose your class'), 'and may choose a class');
   check(calls(ann, 'feed').some((a) => a[0] === 'Dan joins the fight'), 'the others hear Dan joined');
 
   const looked = looks(events.get(ann) ?? []);
 
-  // Everyone down: the fight's lost. Leavers count: Dan goes first, then the rest fall.
+  // Nobody standing: the fight's lost. Leavers count: Dan goes first, then Ann and Bob go down, and
+  // with Cat the last on her feet, she can't: she falls, and they bleed out.
   host.disconnect(dan);
+  // (The monsters cleared away first, and a moment for anyone just hit to be hurt again.)
+  const clear = () => {
+    for (const e of game.entities.all()) if (!e.data.scenery) e.remove();
+  };
+  clear();
+  step(20);
+  clear();
   for (const n of ['Ann', 'Bob']) player(n).damage(1000);
   step(10);
-  check(!ends(ann).length, 'Cat still standing');
+  check(isDowned(player('Ann')) && isDowned(player('Bob')) && !ends(ann).length, `Cat still standing (${['Ann', 'Bob', 'Cat'].map((n) => `${n}: ${player(n).alive} ${player(n).health} ${isDowned(player(n))} ${blessingsOf(player(n))}`).join('; ')})`);
   player('Cat').damage(1000);
   step(90);
   const screen = ends(ann)[0];
@@ -107,10 +131,10 @@ export default function arenaMultiplayer() {
   step(5);
   const eve = join('Eve');
   step(30 * 2);
-  check(player('Eve').alive && player('Eve').inventory.count('wooden_sword') === 1 && player('Eve').inventory.count('bow') === 0, 'a fresh start for the next arrival');
+  check(player('Eve').alive && armed('Eve') && gold(player('Eve')) === 0, 'a fresh start for the next arrival');
   check(msgs<{ phase: string }>(eve, 'ar.run').some((r) => r.phase === 'countdown'), 'the countdown begins again');
   host.dispose();
-  return `3 armed (1 in the countdown) · wave 1 for three: ${zombies} zombies · Bob fell and came back · ${cleared} rewards, one set each · Dan caught up · lost when all were down · fresh for Eve · ${looked}`;
+  return `3 armed (1 in the countdown) · wave 1 for three: ${zombies} zombies · Bob went down and got up · ${cleared} rewards, one each · Dan caught up · lost with nobody standing · fresh for Eve · ${looked}`;
 }
 
 /**

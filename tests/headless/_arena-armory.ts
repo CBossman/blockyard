@@ -270,6 +270,9 @@ export default function arenaArmory() {
   // R drinks a potion, from anywhere in the hotbar, and the hand goes back to the sword.
   {
     const s = scene(12);
+    // (A plain sword and two potions, whatever the class gave.)
+    s.me.inventory.clear();
+    s.me.inventory.give('wooden_sword');
     s.me.inventory.give('health_potion', 2);
     s.me.inventory.select(0);
     s.me.health = 700;
