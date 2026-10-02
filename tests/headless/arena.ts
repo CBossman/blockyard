@@ -22,8 +22,9 @@ export default function arena() {
   const me = game.player;
   me.maxHealth = 800;
   me.health = 800;
+  // (As a blast: no shield turns it, as a knight's does the bot's blows from in front.)
   game.clock.every(0.7, () => {
-    for (const e of game.entities.all()) if (!e.data.scenery && e.type !== 'warden' && (e.distanceTo(me) > 4 || e.age > 20)) e.damage(4, { source: me, knockback: 0 });
+    for (const e of game.entities.all()) if (!e.data.scenery && e.type !== 'warden' && (e.distanceTo(me) > 4 || e.age > 20)) e.damage(4, { source: me, knockback: 0, cause: 'explosion' });
   });
 
   // Shopping, between waves: the next armour, the best blade it can afford, potions.
@@ -95,7 +96,8 @@ export default function arena() {
     });
     if (slot !== inv.selected) inv.select(slot);
     last = { down, yaw: Math.atan2(-dx, -dz), pitch: Math.atan2(dy, Math.hypot(dx, dz)) };
-    return { ...last, clicked: fighting ? 1 : 0 };
+    // (A tap: the button down for the frame, as a hand's click; a warhammer swings on its release.)
+    return { ...last, clicked: fighting ? 1 : 0, buttons: fighting ? 1 : 0 };
   };
 
   // The end screen (the HUD's `arena-end` widget), once it's up.
