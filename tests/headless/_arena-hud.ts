@@ -26,7 +26,7 @@ export default function arenaHud() {
   bus.on('slain', ({ by }) => void (by === me && kills++));
   bus.on('waveCleared', () => void (killsAtClear < 0 && (killsAtClear = kills)));
   // The countdown (the class pick's), then the first wave.
-  h.run(16, { until: () => state.phase === 'fighting' });
+  h.run(25, { until: () => state.phase === 'fighting' });
   const runs = msgs<RunMsg>('ar.run');
   check(runs.some((r) => r.phase === 'countdown' && r.next > 0 && r.upcoming?.wave === 1), 'the countdown, and the wave it counts down to');
   h.run(3);

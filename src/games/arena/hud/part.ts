@@ -415,13 +415,21 @@ export const hudPart: ArenaPart = {
     });
 
     game.events.on('playerJoin', ({ player }) => tallies.join(player));
+    // Arriving in the middle of it: where they've come in, told once their fly-over and class pick are done.
+    const joining = new Set<string>();
     game.events.on('playerReady', ({ player }) => {
       catchUp(game, player);
-      // Arriving in the middle of it: where they've come in.
+      if (!player.bot && (state.phase === 'fighting' || state.phase === 'intermission')) joining.add(player.id);
+    });
+    bus.on('classSet', ({ player }) => {
+      if (!joining.delete(player.id)) return;
       if (state.phase === 'fighting') call(game, player, { k: 'wave', q: 'Joining the fight', t: `Wave ${state.wave}`, s: waveName(state.wave) });
       else if (state.phase === 'intermission') call(game, player, { k: 'wave', q: 'Joining the fight', t: `Wave ${state.wave + 1}`, s: 'Next: rest, shop, choose a blessing' });
     });
-    game.events.on('playerLeave', ({ player }) => void downs.delete(player.id));
+    game.events.on('playerLeave', ({ player }) => {
+      downs.delete(player.id);
+      joining.delete(player.id);
+    });
 
     // For looking at the HUD's pieces (development, or a server with cheats).
     game.commands.register('hud', {

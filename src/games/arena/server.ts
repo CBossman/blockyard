@@ -15,7 +15,8 @@ import { resetUsables } from './run/use';
 import { catchUp, payWave } from './run/coins';
 import { bledOut, standAll, standing } from './run/downed';
 import { closeShop, openShop } from './run/shop';
-import { CLASSES, classOf, closeClassMenus, hasChosen, showClassMenu } from './run/classes';
+import { CLASSES, classOf, classWaiting, closeClassMenus, hasChosen, offerClass } from './run/classes';
+import { INTRO_TIME } from './maps/messages';
 import { results } from './run/progression';
 import { feat } from './run/hype';
 
@@ -42,21 +43,23 @@ function stand(p: Player, i: number, n: number) {
 }
 
 /**
- * The countdown to the first wave (`state.nextWaveAt`), everyone choosing a class meanwhile. (What
- * the screens show of all this is the HUD's, from the bus and the state: `hud/`.)
+ * The countdown to the first wave (`state.nextWaveAt`): the map's fly-over first (the maps' part
+ * sends it on `runStart`), then everyone choosing a class. (What the screens show of all this is the
+ * HUD's, from the bus and the state: `hud/`.)
  */
 function begin(game: GameContext) {
+  const intro = map().intro.length ? INTRO_TIME.full + INTRO_TIME.ease / 2 : 0;
   state.phase = 'countdown';
   state.startedAt = game.clock.now;
-  state.nextWaveAt = game.clock.now + CHOOSING;
+  state.nextWaveAt = game.clock.now + intro + CHOOSING;
   bus.emit('runStart', { map: map() });
-  for (const p of game.players) showClassMenu(game, p);
+  for (const p of game.players) offerClass(game, p, intro);
 }
 
-/** The countdown's ticking: down to the last seconds once everyone's chosen, then the first wave. */
+/** The countdown's ticking: down to the last seconds once everyone's seen the map and chosen, then the first wave. */
 function countdown(game: GameContext) {
   const now = game.clock.now;
-  if (game.players.every(hasChosen) && state.nextWaveAt - now > LAST_SECONDS) state.nextWaveAt = now + LAST_SECONDS;
+  if (!classWaiting() && game.players.every(hasChosen) && state.nextWaveAt - now > LAST_SECONDS) state.nextWaveAt = now + LAST_SECONDS;
   if (now >= state.nextWaveAt) {
     closeClassMenus();
     startWave(game, 1);
@@ -321,7 +324,8 @@ export default defineServer(shared, {
       stand(player, 0, 1);
       if (state.phase === 'waiting') return begin(game);
       game.hud.feed(`${player.name} joins the fight`, { color: '#ffb36b' });
-      if (inFight()) showClassMenu(game, player);
+      // Their class once their (shorter) fly-over's done.
+      if (inFight()) offerClass(game, player, INTRO_TIME.short + INTRO_TIME.ease / 2);
     });
     game.events.on('playerLeave', () => {
       // The last one out: the arena resets for whoever comes next.
