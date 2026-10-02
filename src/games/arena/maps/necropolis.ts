@@ -898,7 +898,8 @@ export const NECROPOLIS: ArenaMap = {
   center: { x: C.x, y: FLOOR + 1, z: C.z },
   radius: 20,
   gates: GATES,
-  bossGates: [gate(at(0, NAVE_Y + 1.05, -16)), gate(at(16, FLOOR + 1.05, 0)), gate(at(0, FLOOR + 1.05, 14)), gate(at(-17, FLOOR + 0.05, 0))],
+  // On open ground (big bosses need room): east of the plaza, the south path, the sunken graves.
+  bossGates: [gate(at(12, FLOOR + 1.05, 0)), gate(at(0, FLOOR + 1.05, 14)), gate(at(-17, FLOOR + 0.05, 0))],
   portcullises: PORTCULLISES,
   lookout: at(12, FLOOR + 13, -9),
   time: 0.86,
@@ -911,6 +912,7 @@ export const NECROPOLIS: ArenaMap = {
   ],
   shop: at(-6, FLOOR + 1, 2),
   chests: [at(-17, FLOOR, -8), at(22, FLOOR + 1, -2), at(-10, FLOOR + 1, 19)],
+  crowd: false,
   traps: TRAPS,
   decor: DECOR,
   fires: FIRES,

@@ -493,7 +493,8 @@ export const COLOSSEUM: ArenaMap = {
   center: { x: 0.5, y: FLOOR + 1, z: 0.5 },
   radius: PIT - 1,
   gates: GATES.map(gate),
-  bossGates: GATES.map((a) => gateAt(C, a, PIT - 4)),
+  // Bosses come in on open sand before the north and south gates (big ones need room).
+  bossGates: [Math.PI / 2, -Math.PI / 2].map((a) => gateAt(C, a, 15)),
   portcullises: GATES.map((a) => ({ at: { x: C.x + Math.cos(a) * (PIT + 0.2), y: FLOOR + 1, z: C.z + Math.sin(a) * (PIT + 0.2) }, yaw: gate(a).yaw, width: 5, height: 5 })),
   lookout: { x: 0.5, y: POD_TOP + 5, z: POD + 3.5 },
   time: 0.66,
@@ -511,7 +512,14 @@ export const COLOSSEUM: ArenaMap = {
     { x: 16.5, y: FLOOR + 1, z: 10.5 },
   ],
   traps: TRAPS,
-  stands: { inner: POD - 1, outer: BACK, low: POD_TOP + 1, high: GALLERY + 1 },
+  // Spectators all round the stands, the front rows to the gallery.
+  crowd: {
+    at: Array.from({ length: 24 }, (_, i) => {
+      const a = (i / 24) * TAU;
+      const r = POD + (i % 3) * 3.5;
+      return { x: C.x + Math.cos(a) * r, y: POD_TOP + 2 + (r - POD), z: C.z + Math.sin(a) * r };
+    }),
+  },
   decor: DECOR,
   fires: FIRES,
   air: { kind: 'dust', heading: 0.6, wind: 1.2, gust: 3.5, loop: 'amb_arena_wind', calls: ['amb_hawk', 'amb_horn'] },

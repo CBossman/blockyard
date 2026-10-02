@@ -622,7 +622,7 @@ export const SANCTUM: ArenaMap = {
   ],
   bossGates: [
     { at: { x: C.x, y: LOW + 1.05, z: O.z - 7.5 }, yaw: Math.PI },
-    { at: { x: O.x + 8.5, y: LOW + 1.05, z: C.z }, yaw: -Math.PI / 2 },
+    { at: { x: O.x + 8.5, y: LOW + 1.05, z: C.z }, yaw: Math.PI / 2 },
     { at: { x: O.x - 5.5, y: LOW + 1.05, z: O.z - 6.5 }, yaw: Math.atan2(-(C.x - (O.x - 5.5)), -(C.z - (O.z - 6.5))) },
   ],
   portcullises: [
@@ -640,6 +640,7 @@ export const SANCTUM: ArenaMap = {
   ],
   shop: w(-5, LOW + 1, 8),
   chests: [w(8, LOW + 1, -6), w(21, FLOOR + 1, 9), w(-15, FLOOR + 1, 19)],
+  crowd: false,
   traps: TRAPS,
   hazards: [{ kind: 'frost', zone: poolZone() }],
   decor: DECOR,

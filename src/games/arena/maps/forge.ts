@@ -788,7 +788,8 @@ export const FORGE: ArenaMap = {
   center: { x: C.x, y: FLOOR + 1, z: C.z },
   radius: 22,
   gates: GATES,
-  bossGates: [bossGate(0, -9), bossGate(-23, 5), bossGate(15, 5), bossGate(0, 23)],
+  // On the open floor round the plaza (big bosses need room).
+  bossGates: [bossGate(0, -8), bossGate(-11, 0), bossGate(11, 0), bossGate(0, 10)],
   portcullises: PORTCULLISES,
   lookout: at(0.5, HALL.roof + 1, -24.5),
   time: 0.725,
@@ -801,6 +802,7 @@ export const FORGE: ArenaMap = {
   ],
   shop: at(7.5, FLOOR + 1, -6.5),
   chests: [at(-17.5, FLOOR + 1, 18.5), at(20.5, FLOOR + 2, -7.5), at(-21.5, FLOOR + 1, -5.5)],
+  crowd: false,
   traps: TRAPS,
   hazards: HAZARDS,
   decor: DECOR,

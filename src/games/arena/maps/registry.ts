@@ -188,10 +188,11 @@ export interface ArenaMap {
   traps?: TrapSpec[];
   hazards?: Hazard[];
   /**
-   * Where a crowd sits, if it has one (round `center`: from `inner` to `outer` blocks out, `low`
-   * to `high` up): they throw petals into the pit when they cheer (`client/maps/crowd.ts`).
+   * Its crowd, if it has one: points in the stands where spectators sit (the HUD's crowd is heard
+   * from round them; they throw petals into the pit when they cheer, `client/maps/crowd.ts`), or
+   * false: nobody watches here, and no crowd's heard.
    */
-  stands?: { inner: number; outer: number; low: number; high: number };
+  crowd?: { at: Vec3[] } | false;
   /** Its set pieces (props), what burns on it (each screen draws the flames), and its air. */
   decor?: Decor[];
   fires?: Fire[];

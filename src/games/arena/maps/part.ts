@@ -44,10 +44,10 @@ export const mapsPart: ArenaPart = {
     // The crowd throws petals: a shower for the Crowd's Favour, a handful for a feat.
     cheered = -99;
     bus.on('hype', ({ favour }) => {
-      if (favour && map().stands) game.clients.send('all', CHEER_MSG, { big: true } satisfies CheerMessage);
+      if (favour && map().crowd) game.clients.send('all', CHEER_MSG, { big: true } satisfies CheerMessage);
     });
     bus.on('feat', () => {
-      if (!map().stands || game.clock.total - cheered < 4) return;
+      if (!map().crowd || game.clock.total - cheered < 4) return;
       cheered = game.clock.total;
       game.clients.send('all', CHEER_MSG, { big: false } satisfies CheerMessage);
     });

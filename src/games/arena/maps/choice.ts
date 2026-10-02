@@ -4,17 +4,18 @@ import { MAPS, mapById, type ArenaMap } from './index';
 
 /**
  * Which map a fight's on. The public room goes round the maps (`MAPS`, in order), a run on each;
- * as a run ends, everyone in it is asked where the next is fought (a menu over their results, as
- * Call of Blocky's vote on the next match; voting closes it, and M brings it back), the most votes
- * winning and a tie (or no votes) going to the rotation's next. In a room of one's own it's a
- * pick: the same at the end of a run (the same map again if nobody picks), and M picks a map to
- * start over on at any time. The change happens as the next fight starts (`chooseMap`, from the
- * maps' part's `start`).
+ * as a run ends, everyone in it is asked where the next is fought (a row of the maps along the
+ * bottom of the screen, under the HUD's end screen, which makes room for it; M brings the same up
+ * as a menu when nothing else is up), the most votes winning and a tie (or no votes) going to the
+ * rotation's next. In a room of one's own it's a pick: the same at the end of a run (the same map
+ * again if nobody picks), and M picks a map to start over on at any time. The change happens as
+ * the next fight starts (`chooseMap`, from the maps' part's `start`).
  */
 
 export const PICK_KEY = 'KeyM';
-/** Seconds after a run ends that the vote's put up (over the results, once they're in). */
-const AFTER = 3.6;
+/** The vote's row of maps (the HUD's end screen moves up for a widget of this name), and how long after a run ends it's put up. */
+const VOTE = 'arena-vote';
+const AFTER = 1.5;
 /** How long a vote shows as made before its menu closes. */
 const SEEN = 1.1;
 
@@ -34,6 +35,18 @@ export function setupChoice(game: GameContext) {
   votes.clear();
   menus.clear();
   voting = false;
+  game.hud.define(VOTE, {
+    at: 'bottom',
+    html: `<div class="vote">
+      <div class="head"><b>Next arena</b><span>{{note}}</span></div>
+      <div class="cards"><button data-each="maps" class="card {{state}}" data-action="vote" data-value="{{id}}" style="--c: {{color}}">
+        <span class="name">{{name}}</span><span class="line">{{line}}</span>
+        <span class="tally"><em data-if="votes > 0">{{votes}}</em><i data-if="state == 'mine'">your pick</i><i data-if="state == 'next'">next</i><i data-if="state == 'mine next'">your pick · next</i></span>
+      </button></div>
+    </div>`,
+    css: VOTE_CSS,
+    actions: { vote: (p, id) => vote(game, p, id) },
+  });
   game.commands.register('map', {
     usage: '<map>',
     help: 'Start the fight over on another map',
@@ -63,11 +76,8 @@ export function runEnded(game: GameContext) {
   planned = own(game) ? map() : next(map());
   votes.clear();
   voting = true;
-  // A moment for the results to land before the vote's put up over them.
-  game.clock.after(AFTER, () => {
-    if (!voting) return;
-    for (const p of game.players) if (!p.bot) offer(game, p);
-  });
+  // A moment for the results to land before the vote's put up under them.
+  game.clock.after(AFTER, () => voting && refresh(game));
 }
 
 /** What wins as the votes stand: the most votes; a tie (or none) to what was coming anyway. */
@@ -86,16 +96,30 @@ function vote(game: GameContext, p: Player, id: string) {
   votes.set(p.id, id);
   p.audio.play('click');
   refresh(game);
-  // Seen as made a moment, then out of the way of their results.
+  // A menu brought up to vote in: seen as made a moment, then out of the way of their results.
   const menu = menus.get(p.id);
   game.clock.after(SEEN, () => {
     if (menus.get(p.id) === menu && menu?.open) menu.close();
   });
 }
 
-/** Everyone's menu that's up, as the votes stand. */
+/** Everyone's row of maps (and menu, if it's up) as the votes stand. */
 function refresh(game: GameContext) {
+  const win = winner();
+  const count = new Map<string, number>();
+  for (const id of votes.values()) count.set(id, (count.get(id) ?? 0) + 1);
   for (const p of game.players) {
+    if (p.bot) continue;
+    const mine = votes.get(p.id);
+    const maps = MAPS.map((m) => ({
+      id: m.id,
+      name: m.name,
+      line: m.line,
+      color: m.color,
+      votes: own(game) ? 0 : (count.get(m.id) ?? 0),
+      state: [mine === m.id ? 'mine' : '', win === m && !own(game) ? 'next' : ''].filter(Boolean).join(' '),
+    }));
+    p.hud.widget(VOTE, { note: subtitle(game), maps });
     const menu = menus.get(p.id);
     if (menu?.open) menu.update({ subtitle: subtitle(game), sections: sections(game, p) });
   }
@@ -165,6 +189,7 @@ export function updateChoice(game: GameContext) {
  */
 export function chooseMap(game: GameContext) {
   const m = voting ? winner() : (planned ?? map());
+  if (voting) for (const p of game.players) if (!p.bot) p.hud.widget(VOTE).remove();
   for (const menu of menus.values()) menu.close();
   menus.clear();
   votes.clear();
@@ -184,3 +209,22 @@ export function chooseMap(game: GameContext) {
   });
 }
 
+/** The row of maps: compact (it sits under the end screen's buttons), in the HUD's palette where it has one. */
+const VOTE_CSS = `
+:scope { margin-bottom: 22px; pointer-events: auto; }
+.vote { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.head { display: flex; gap: 12px; align-items: baseline; font: 500 12px/1 var(--ar-label, var(--sans)); letter-spacing: 0.06em; color: var(--ar-fg2, #e9dcc4); text-shadow: 0 1px 3px #000c; }
+.head b { font: 700 15px/1 var(--ar-title, var(--pixel)); letter-spacing: 0.14em; text-transform: uppercase; color: var(--ar-gold, #ffd36b); }
+.cards { display: flex; gap: 8px; }
+.card { all: unset; box-sizing: border-box; width: 180px; padding: 8px 11px 7px; display: flex; flex-direction: column; gap: 2px; cursor: pointer;
+  background: var(--ar-glass, linear-gradient(180deg, #1c140ee6, #0d0907e6)); border: 1px solid var(--ar-line, #ffffff26); border-top: 3px solid var(--c); border-radius: 5px;
+  box-shadow: 0 6px 16px #0008; transition: transform 120ms ease, border-color 120ms ease; }
+.card:hover { transform: translateY(-2px); border-color: var(--ar-line2, #ffffff55); }
+.card.mine, .card.mine.next { border-color: var(--c); box-shadow: 0 0 0 1px var(--c), 0 6px 16px #0008; }
+.name { font: 700 13px/1.15 var(--ar-title, var(--pixel)); color: var(--ar-fg, #fff3df); letter-spacing: 0.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.line { font: 400 11px/1.3 var(--sans); color: var(--ar-fg3, #d8c8adcc); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tally { display: flex; gap: 7px; align-items: center; font: 600 10px/1 var(--ar-label, var(--sans)); color: var(--c); min-height: 14px; }
+.tally em { font-style: normal; background: var(--c); color: #140c06; border-radius: 8px; padding: 2px 6px; }
+.tally i { font-style: normal; text-transform: uppercase; letter-spacing: 0.1em; }
+@media (max-width: 1400px) { .card { width: 156px; } .line { display: none; } }
+`;
