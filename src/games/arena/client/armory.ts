@@ -6,6 +6,7 @@ import type { CrossbowItem } from '../items/crossbow';
 import type { ArmsMelee } from '../items/melee';
 import { crossbowMove, meleeMove, type CrossbowShown } from '../items/moves';
 import { rarityOf, shieldOf } from '../items/rarity';
+import { armoryFx } from './fx';
 import { boltSpots, heldExtras } from './held';
 import type { ClientPart } from './part';
 
@@ -422,4 +423,4 @@ const meleeScreen: ClientKit = {
   figureSignals: (state) => ((state as { g?: boolean } | null)?.g ? { sights: 1 } : { sights: 0 }),
 };
 
-export const armoryClient: ClientPart = { name: 'armoryClient', kits: [armory(), crossbowScreen(), meleeScreen, heldExtras()] };
+export const armoryClient: ClientPart = { name: 'armoryClient', kits: [armory(), crossbowScreen(), meleeScreen, heldExtras(), armoryFx()] };
