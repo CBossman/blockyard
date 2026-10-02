@@ -22,6 +22,8 @@ function scene(seed: number) {
   const me = game.player as Player;
   me.maxHealth = 400;
   me.health = 400;
+  // (No armour, whatever the class gave: blows land as dealt.)
+  me.armor = 0;
   const mine = new Set<Entity>();
   const spawn = (type: string, x: number, z: number, data: Record<string, unknown> = {}) => {
     const e = spawnMonster(game, type, { x, y: FLOOR + 1.05, z: z + 8 }, { data: { summoned: true, ...data } });
@@ -152,6 +154,8 @@ export default function arenaBestiary() {
   {
     const s = scene(19);
     const m = s.spawn('minotaur', 4.5, 0.5);
+    // (Ready to charge at once, whatever its first wait rolled.)
+    m.data._cd = 0;
     let gored = false;
     s.game.events.on('playerDamage', ({ source, amount }) => {
       if (source === m && amount >= 8) gored = true;
