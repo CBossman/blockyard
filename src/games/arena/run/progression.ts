@@ -1,4 +1,5 @@
-import type { GameContext, Player } from '@platform';
+import type { Entity, GameContext, Player } from '@platform';
+import { share } from './coins';
 import { monsterKind } from '../monsters';
 import { bossKind } from '../bosses';
 import { bus, type Gain, type RunResult, type Unlock, type XpState } from './bus';
@@ -118,16 +119,16 @@ function levelUp(p: Player, from: number, to: number) {
   bus.emit('levelUp', { player: p, level: to, unlocks });
 }
 
-/** A kill's worth: its cost to the director, a champion's twice, a boss's its own. */
-function killXp(type: string, elite: boolean): number {
-  if (bossKind(type)) return XP.boss;
-  if (type === 'goblin') return XP.feats.goblin;
-  return (monsterKind(type)?.cost ?? 1) * XP.kill * (elite ? 2 : 1);
+/** A kill's worth: its cost to the director, a champion's twice, a boss's its own; a fifth for one brought in by another (a raised zombie, a slime's split, a minion: `coins.ts`'s `share`). */
+function killXp(e: Entity): number {
+  if (bossKind(e.type)) return XP.boss;
+  if (e.type === 'goblin') return XP.feats.goblin;
+  return (monsterKind(e.type)?.cost ?? 1) * XP.kill * (e.data.elite ? 2 : 1) * Math.max(0.2, share(e));
 }
 
 export function progressionListen(game: GameContext) {
   bus.on('slain', ({ entity, type, by }) => {
-    if (by) award(game, by, [[killXp(type, !!entity.data.elite), bossKind(type) ? 'BOSS SLAIN' : entity.data.elite ? 'CHAMPION' : 'KILL']]);
+    if (by) award(game, by, [[killXp(entity), bossKind(type) ? 'BOSS SLAIN' : entity.data.elite ? 'CHAMPION' : 'KILL']]);
   });
   bus.on('feat', ({ player, name }) => {
     const n = XP.feats[name];

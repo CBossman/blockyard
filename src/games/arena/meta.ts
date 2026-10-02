@@ -39,8 +39,9 @@ export default defineMeta({
   cover,
   instances: true,
   controls: [
-    ['LMB', 'attack · hold to draw bow'],
-    ['RMB', 'drink potion'],
+    ['LMB', 'attack · hold to draw a bow or charge a hammer'],
+    ['RMB', 'block · throw · aim (by weapon)'],
+    ['R', 'drink a potion'],
     ['Q', 'dodge roll'],
     ['G', 'throw a bomb'],
     ['E', 'shop · mystery chest · hold to revive'],

@@ -44,13 +44,20 @@ export function defineCoins(game: GameContext) {
   }
 }
 
+/**
+ * How much of its kind's worth a monster brings: nothing for one something else brought into the
+ * fight (raised by a necromancer, split off a slime, a boss's minion: `data.master`), a quarter
+ * for one of a flock (`data.flock`), all of it otherwise. (XP goes by it too.)
+ */
+export const share = (e: Entity): number => (e.data.master !== undefined ? 0 : e.data.flock ? 0.25 : 1);
+
 /** What a monster's worth in gold (before Gold Rush and the Favour). */
 export function worth(e: Entity): number {
   if (bossKind(e.type)) return 0;
   if (e.type === 'goblin') return GOBLIN_GOLD;
   const base = (monsterKind(e.type)?.cost ?? 1) * GOLD_PER_COST;
   const elite = typeof e.data.worth === 'number' ? e.data.worth : e.data.elite ? ELITE : 1;
-  return Math.round(base * elite);
+  return Math.round(base * elite * share(e));
 }
 
 /** Spill `value` gold at `at`: a coin, or piles flung about. */

@@ -3,7 +3,7 @@
  * The run's things, as micro-voxel models (`tools/voxel.mjs`, the Arena's monsters' and weapons'
  * style) written as binary glTF to `src/games/arena/models/run/`: the coins monsters spill (one
  * coin, and a heap), the Phoenix Feather, the mystery chest and its lid, the skull the chest
- * sometimes laughs out, the armour on the shop's shelf, and the merchant's stall. Dependency-free (Node 22+):
+ * sometimes laughs out, and the merchant's stall. Dependency-free (Node 22+):
  * `node src/games/arena/tools/run/build.mjs [ids...]`. Each file is read back and checked.
  *
  * Conventions:
@@ -14,7 +14,7 @@
  * - Shapes are written standing up (+y up, the front toward +z). Things that are picked up or held
  *   (`held: true`: the coins, the feather, the skull) are written out as the platform holds items:
  *   along +z, so a pickup on the ground (stood up again by the platform) and a held one stand as
- *   they were made. Props (the chest, its lid) and pictures (the armour) stay as made.
+ *   they were made. Props (the chest, its lid, the stall) stay as made.
  * - The chest's origin is the middle of its bottom; the lid's is its hinge (the back of its bottom
  *   edge), which sits on the chest's back top edge (`LID_HINGE`, blocks, in the chest's space), so
  *   turning the lid about x (negative: the front up) opens it.
@@ -210,28 +210,6 @@ function skull() {
   return m;
 }
 
-/** A muscled cuirass for the shop's armour: iron, gold trim, shoulder guards. */
-function armor() {
-  const m = new Model('armor', 'Armour').colours({ iron: [0xb9c0c8, 0.35, 1], ironDark: [0x7d858e, 0.45, 1], ...GOLD, leather: [0x6b3f1f, 0.85] });
-  m.shape([-7, 0, -3], [7, 14, 4], (x, y, z) => {
-    const w = 5.2 + Math.min(1.6, (y - 2) * 0.25);
-    if (Math.abs(x) > w) return null;
-    // The front's swell; hollow behind.
-    const front = 1.2 + 1.8 * Math.cos((x / w) * 1.3) - (y > 11 ? (y - 11) * 0.6 : 0);
-    if (z > front || z < front - 2) return null;
-    // A neck opening.
-    if (y > 11.5 && Math.abs(x) < 2.4) return null;
-    if (y < 1.2 || Math.abs(x) > w - 1) return 'gold';
-    // The muscles' lines.
-    if ((Math.abs(x) < 0.5 && y > 4) || (Math.abs(y - 8) < 0.5 && Math.abs(x) > 0.8)) return 'ironDark';
-    return 'iron';
-  });
-  for (const s of [-1, 1]) m.shape([s < 0 ? -10 : 5, 9, -3], [s < 0 ? -5 : 10, 14, 3], (x, y) => (Math.abs(x) > 5 && y < 13.5 - (Math.abs(x) - 5) * 0.6 ? (y < 10 ? 'gold' : 'iron') : null));
-  // Leather straps hanging below.
-  for (let i = -5; i <= 4; i += 3) m.box([i, -3, 0], [i + 2, 0, 2], 'leather');
-  return m;
-}
-
 /**
  * The merchant's stall, set up between waves: a counter of planks with a round shield hung on its
  * front, his wares on top (potions, a sword, a heap of gold), corner posts, a striped awning with a
@@ -297,7 +275,7 @@ function stall() {
   return m;
 }
 
-const MODELS = { coin, coin_pile: coinPile, phoenix_feather: feather, chest, chest_lid: lid, chest_skull: skull, armor, stall };
+const MODELS = { coin, coin_pile: coinPile, phoenix_feather: feather, chest, chest_lid: lid, chest_skull: skull, stall };
 
 // ---------------------------------------------------------------------------------------------
 // Writing and checking

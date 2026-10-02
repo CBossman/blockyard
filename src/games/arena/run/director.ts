@@ -35,8 +35,9 @@ const arrows = (count: number) => ({ item: 'arrow_bundle', count });
 
 /**
  * The run: gentle at first (the dead, then bones and powder), a boss every fifth wave, each third
- * of the run bringing in new kinds (knights and imps after the Colossus, wraiths, slimes and the
- * cult after the Warden, golems and everything at once after the Broodmother), and a finale.
+ * of the run bringing in new kinds (knights, imps, bats and a minotaur after the Colossus; wraiths,
+ * slimes, the cult and golems after the Warden; everything at once after the Broodmother), and a
+ * finale. A roster names kinds as many as it likes (a kind's `max` holds only for the budget).
  * Kinds that aren't in the game yet are made up from the budget (`compose`).
  */
 export const WAVES: WaveSpec[] = [
@@ -46,19 +47,19 @@ export const WAVES: WaveSpec[] = [
   { name: 'Crawlers', roster: { spider: 6, zombie: 3, sapper: 1 }, budget: 4, reward: [arrows(2), POTION] },
   { boss: 'colossus', name: 'Bone Colossus', roster: { skeleton: 3, zombie: 2 }, reward: [POTION, bombs(2), arrows(2)] },
   { name: 'Dark Rites', roster: { necromancer: 2, zombie: 4, skeleton: 3 }, budget: 7, reward: [POTION, bombs(2)] },
-  { name: 'The Iron Line', roster: { knight: 3, skeleton: 3, sapper: 2 }, budget: 8, reward: [arrows(3), POTION] },
-  { name: 'Hellfire', roster: { imp: 5, spider: 3, sapper: 2 }, budget: 9, reward: [bombs(3), POTION] },
-  { name: 'The Brutes', roster: { brute: 2, zombie: 6, sapper: 2 }, budget: 9, reward: [POTION, arrows(2)] },
+  { name: 'The Iron Line', roster: { knight: 3, skeleton: 3, sapper: 2 }, budget: 6, reward: [arrows(3), POTION] },
+  { name: 'Hellfire', roster: { imp: 5, spider: 3, sapper: 2, bat: 1 }, budget: 8, reward: [bombs(3), POTION] },
+  { name: 'Horns and Hide', roster: { minotaur: 1, brute: 1, zombie: 6, sapper: 2 }, budget: 8, reward: [POTION, arrows(2)] },
   { boss: 'warden', name: 'The Warden', roster: { skeleton: 2, sapper: 2, knight: 2 }, reward: [{ item: 'health_potion', count: 2 }, bombs(3)] },
-  { name: 'Wraiths', roster: { wraith: 4, necromancer: 1, skeleton: 3 }, budget: 16, reward: [POTION, arrows(3)] },
-  { name: 'Slime Time', roster: { slime: 5, imp: 3, spider: 3 }, budget: 16, reward: [bombs(3), POTION] },
-  { name: 'The Cult', roster: { cultist: 3, knight: 2, zombie: 6 }, budget: 19, reward: [POTION, arrows(3)] },
-  { name: 'Stone and Fire', roster: { golem: 1, imp: 4, brute: 1 }, budget: 20, reward: [{ item: 'health_potion', count: 2 }, bombs(2)] },
+  { name: 'Wraiths', roster: { wraith: 3, necromancer: 1, skeleton: 3 }, budget: 14, reward: [POTION, arrows(3)] },
+  { name: 'Slime Time', roster: { slime: 3, imp: 3, spider: 3 }, budget: 13, reward: [bombs(3), POTION] },
+  { name: 'The Cult', roster: { cultist: 2, knight: 2, zombie: 6 }, budget: 17, reward: [POTION, arrows(3)] },
+  { name: 'Stone and Fire', roster: { golem: 1, imp: 4, brute: 1, bat: 1 }, budget: 16, reward: [{ item: 'health_potion', count: 2 }, bombs(2)] },
   { boss: 'broodmother', name: 'The Broodmother', roster: { spider: 5, sapper: 2 }, reward: [{ item: 'health_potion', count: 2 }, bombs(3), arrows(3)] },
-  { name: 'The Horde', roster: { zombie: 14, spider: 6, skeleton: 4, sapper: 3 }, budget: 16, reward: [POTION, bombs(3)] },
-  { name: 'Night Terrors', roster: { wraith: 4, imp: 4, necromancer: 2 }, budget: 24, reward: [POTION, arrows(3)] },
-  { name: 'The Siege', roster: { golem: 2, knight: 4, sapper: 4 }, budget: 24, reward: [{ item: 'health_potion', count: 2 }, bombs(3)] },
-  { name: 'The Gauntlet', roster: { brute: 2, cultist: 2, wraith: 2, golem: 1, slime: 2 }, budget: 28, reward: [{ item: 'health_potion', count: 2 }, bombs(3), arrows(3)] },
+  { name: 'The Horde', roster: { zombie: 14, spider: 6, skeleton: 4, sapper: 3 }, budget: 14, reward: [POTION, bombs(3)] },
+  { name: 'Night Terrors', roster: { wraith: 3, imp: 4, necromancer: 2, bat: 2 }, budget: 20, reward: [POTION, arrows(3)] },
+  { name: 'The Siege', roster: { golem: 2, knight: 4, sapper: 4, minotaur: 1 }, budget: 18, reward: [{ item: 'health_potion', count: 2 }, bombs(3)] },
+  { name: 'The Gauntlet', roster: { brute: 2, cultist: 2, wraith: 2, golem: 1, slime: 2, minotaur: 1 }, budget: 22, reward: [{ item: 'health_potion', count: 2 }, bombs(3), arrows(3)] },
   { boss: 'lich', name: 'The Lich King', roster: { skeleton: 4, wraith: 2, necromancer: 1 } },
 ];
 
@@ -76,7 +77,7 @@ export function waveSpec(n: number): WaveSpec {
   const k = n - WAVES.length;
   const reward = [POTION, bombs(2), arrows(2)];
   if (n % 5 === 0) return { boss: BOSS_ROUND[(n / 5 - 1) % BOSS_ROUND.length], roster: { brute: 1, wraith: 2, knight: 2 }, budget: 14 + 3 * k, reward };
-  return { name: ENDLESS_NAMES[(k - 1) % ENDLESS_NAMES.length], budget: 48 + 5 * k, reward };
+  return { name: ENDLESS_NAMES[(k - 1) % ENDLESS_NAMES.length], budget: 56 + 5 * k, reward };
 }
 
 /**
@@ -212,8 +213,9 @@ function spawnNext(game: GameContext) {
   const g = game.rng.pick(boss ? (m.bossGates ?? m.gates) : m.gates);
   const spread = g.spread ?? 1.5;
   const pos = along(g, boss ? 0 : game.rng.range(-1.5, 1.5), game.rng.range(-spread, spread));
-  // Past the run's last wave the bosses come back as champions.
-  const e = spawnMonster(game, type, pos, { yaw: g.yaw, data: boss && state.endless ? { elite: true } : undefined });
+  // Past the run's last wave the bosses come back without ceremony, and tougher each time round (the bosses' `quick` and `might`).
+  const again = boss && state.endless ? { quick: true, might: 1.4 + 0.2 * Math.floor((state.wave - WAVES.length - 1) / 20) } : undefined;
+  const e = spawnMonster(game, type, pos, { yaw: g.yaw, data: again });
   game.fx.burst({ x: pos.x, y: pos.y + 1, z: pos.z }, { color: boss ? boss.color : type === 'goblin' ? '#ffd23a' : '#8fd6ff', count: 24, speed: 2.5, gravity: -1 });
   game.audio.play(boss ? 'boss' : 'spawn', { at: pos, volume: boss ? 1.4 : 0.8 });
   if (boss) game.fx.shake(0.2, 1.2);

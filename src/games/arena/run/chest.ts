@@ -2,7 +2,7 @@ import { math, type GameContext, type Pickup, type Player, type Prop, type PropM
 import { LID_HINGE, RUN_MODELS } from '../models/run';
 import { bus } from './bus';
 import { addGold, spend } from './gold';
-import { chestPool, RARITY, rarityOf, rollWeapon } from './loot';
+import { chestSpin, describe, dropWeapon, rarityColor, rarityOf, rollWeapon } from './loot';
 import { map, state } from './state';
 import { addUsable } from './use';
 
@@ -108,13 +108,12 @@ export function rollChest(game: GameContext, p: Player): boolean {
   const cleared = state.phase === 'fighting' ? state.wave - 1 : state.wave;
   const flies = chest.rolls > STAYS && spots().length > 1 && game.rng.chance(FLY_CHANCE);
   const item = rollWeapon(game, Math.max(1, cleared));
-  const color = flies ? '#ff4d4d' : RARITY[rarityOf(item)].color;
+  const color = flies ? '#ff4d4d' : rarityColor(item);
   chest.roll = { by: p, at: game.clock.now + ROLL_TIME, item: flies ? null : item, color, price: PRICE };
   chest.to = 1;
   beam(game, '#ffe9a8');
-  // What spins above it on every screen: a run of the chest's weapons, slowing to what it gives.
-  const pool = chestPool(game).map((w) => w.item);
-  const spin = Array.from({ length: 16 }, () => game.rng.pick(pool));
+  // What spins above it on every screen: a run of the arsenal, slowing to what it gives.
+  const spin = chestSpin(game, 16);
   const b = chest.base!;
   game.clients.send('all', 'arena.chest', { at: [t.x, t.y, t.z], yaw: Math.atan2(map().center.x - b.position.x, map().center.z - b.position.z), spin, final: flies ? SKULL : item, color, time: ROLL_TIME });
   game.audio.play('chest_open', { at: t });
@@ -127,16 +126,18 @@ function reveal(game: GameContext) {
   chest.roll = null;
   const t = top()!;
   if (!r.item) return flyOff(game, r.by, r.price);
-  const pickup = game.items.spawnPickup(r.item, { x: t.x, y: t.y + 0.4, z: t.z }, { beam: r.color, despawn: TAKE_TIME, for: game.players.length > 1 ? r.by : undefined });
+  const legendary = rarityOf(r.item) === 'legendary';
+  const pickup = dropWeapon(game, r.item, { x: t.x, y: t.y + 0.4, z: t.z }, { despawn: TAKE_TIME, for: game.players.length > 1 ? r.by : undefined });
   chest.prize = { pickup, until: game.clock.now + TAKE_TIME };
   beam(game, r.color);
-  game.audio.play('chest_reveal', { at: t, pitch: r.color === RARITY.legendary.color ? 0.8 : 1 });
+  game.audio.play('chest_reveal', { at: t, pitch: legendary ? 0.8 : 1 });
   game.fx.burst(t, { color: r.color, count: 40, speed: 4, gravity: 2, glow: 1 });
   const name = game.items.get(r.item)?.name ?? r.item;
-  r.by.hud.toast(`The mystery chest gives you: ${name}`);
-  if (r.color === RARITY.legendary.color) {
+  const line = describe(r.item);
+  r.by.hud.toast(line ? `${name}: ${line}` : name);
+  if (legendary) {
     r.by.achieve('high_roller');
-    game.hud.feed([{ text: r.by.name, color: '#ffd23a' }, ' rolled a legendary ', { icon: { item: r.item } }, { text: name, color: RARITY.legendary.color }]);
+    game.hud.feed([{ text: r.by.name, color: '#ffd23a' }, ' rolled a legendary ', { icon: { item: r.item } }, { text: name, color: r.color }]);
   }
   bus.emit('chest', { player: r.by, item: r.item });
 }

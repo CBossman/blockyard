@@ -28,6 +28,9 @@ const LAST_SECONDS = 3.5;
 const READY_KEY = 'KeyN';
 /** Who's ready for the next wave, by player id. */
 const ready = new Set<string>();
+/** A boss's wave won: a beat for its fall (its death cam) before the wave's done, and when that ends. */
+const BOSS_BEAT = 1.2;
+let wonAt: number | null = null;
 
 /** Each fighter's place round the middle of the map as a fight begins (or they arrive), facing in. */
 function stand(p: Player, i: number, n: number) {
@@ -221,6 +224,8 @@ export default defineServer(shared, {
     runs.clear();
     resetBlessings();
     // (Its voices and its items' looks are each screen's, `client/`: played and named here.)
+    // No replays to show, so none kept: recording would cost a sixth of every step.
+    game.replay.keep(0);
     defineArt(game);
     defineItems(game);
     defineMonsters(game);
@@ -331,6 +336,7 @@ export default defineServer(shared, {
     runs.clear();
     resetBlessings();
     fireworks = null;
+    wonAt = null;
     // The parts first: the maps' choose where this fight is.
     for (const part of PARTS) part.start?.(game);
     const c = map().center;
@@ -351,7 +357,13 @@ export default defineServer(shared, {
     for (const part of PARTS) part.update?.(game, dt);
     if (state.phase === 'countdown') countdown(game);
     else if (state.phase === 'fighting') {
-      if (tick(game, dt).cleared) waveCleared(game);
+      if (tick(game, dt).cleared) {
+        wonAt ??= game.clock.now + (state.boss ? BOSS_BEAT : 0);
+        if (game.clock.now >= wonAt) {
+          wonAt = null;
+          waveCleared(game);
+        }
+      }
     } else if (state.phase === 'intermission') {
       reopen(game);
       readyUp(game);

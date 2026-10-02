@@ -3,7 +3,9 @@ import type { Headless } from '../../src/platform/host/headless';
 import { bus } from '../../src/games/arena/run/bus';
 import { addGold, gold } from '../../src/games/arena/run/gold';
 import { GOLD_PER_COST, waveBonus } from '../../src/games/arena/run/coins';
-import { ARMOR, armorTier, FEATHER_PRICE, purchase, shopOpen } from '../../src/games/arena/run/shop';
+import { FEATHER_PRICE, purchase, shopOpen } from '../../src/games/arena/run/shop';
+import { ARMOR, armorOf } from '../../src/games/arena/items';
+import { WARES } from '../../src/games/arena/items/catalog';
 import { PRICE, ROLL_TIME, rollChest } from '../../src/games/arena/run/chest';
 import { BLEED, FEATHER, isDowned, REVIVE } from '../../src/games/arena/run/downed';
 import { hypeValue } from '../../src/games/arena/run/hype';
@@ -112,22 +114,25 @@ function shop() {
   addGold(game, me, -g);
   check(!purchase(game, me, 'armor:1'), 'nothing without gold');
   addGold(game, me, 2000);
+  const price = (id: string) => WARES.find((w) => w.item === id)!.price;
   const armor = me.armor;
-  check(purchase(game, me, 'armor:1') && me.armor === armor + ARMOR[0].points && armorTier(me) === 1, `leather armour: ${me.armor}`);
-  check(purchase(game, me, 'armor:2') && me.armor === armor + ARMOR[1].points, `then the cuirass: ${me.armor}`);
-  check(!purchase(game, me, 'pike'), 'the pike is on sale from wave 3');
+  check(purchase(game, me, 'leather_armor') && me.armor === armor + ARMOR.leather_armor.points && armorOf(me) === ARMOR.leather_armor.points, `leather armour: ${me.armor}`);
+  check(!purchase(game, me, 'mail_armor'), 'mail is on sale from wave 3');
+  check(!purchase(game, me, 'leather_armor'), 'not twice');
   check(purchase(game, me, 'bow') && me.inventory.count('bow') === 1, 'a bow');
   check(!purchase(game, me, 'bow'), 'not a second');
   check(purchase(game, me, FEATHER) && me.inventory.count(FEATHER) === 1 && !purchase(game, me, FEATHER), 'one Phoenix Feather at a time');
   const spent = 2000 - gold(me);
-  check(spent === ARMOR[0].price + ARMOR[1].price + 60 + FEATHER_PRICE, `paid for: ${spent}`);
+  check(spent === price('leather_armor') + price('bow') + FEATHER_PRICE, `paid for: ${spent}`);
+  // The forge: the bow up a rarity.
+  check(purchase(game, me, 'forge:bow') && me.inventory.count('bow_rare') === 1 && me.inventory.count('bow') === 0, 'the bow forged to a rare one');
   // Ready (N): the next wave comes in a few seconds rather than the rest of the break.
   const left = state.nextWaveAt - game.clock.now;
   h.step(1 / 60, { pressed: ['KeyN'], down: ['KeyN'] });
   check(state.nextWaveAt - game.clock.now < 4 && left > 10, `ready: the next wave in ${(state.nextWaveAt - game.clock.now).toFixed(1)} s, not ${left.toFixed(1)}`);
   h.run(5);
   check((state.phase as string) === 'fighting' && !shopOpen() && !game.entities.all().some((e) => e.type === 'merchant'), 'he packs up when the next wave begins');
-  log(`shop: armour to ${me.armor} points, a bow and a feather for ${spent} gold; open between waves only; N for ready cuts the break short`);
+  log(`shop: armour to ${me.armor} points, a bow (forged rare) and a feather for ${spent} gold and the forge's price; open between waves only; N for ready cuts the break short`);
 }
 
 function chest() {

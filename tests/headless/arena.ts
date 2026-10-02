@@ -1,5 +1,6 @@
 import type { Pilot } from '../../src/platform/host/headless';
-import { ARMOR, armorTier, purchase } from '../../src/games/arena/run/shop';
+import { purchase } from '../../src/games/arena/run/shop';
+import { ARMOR, armorOf } from '../../src/games/arena/items';
 import { gold } from '../../src/games/arena/run/gold';
 import { WARES } from '../../src/games/arena/items/catalog';
 import { progressOf } from '../../src/games/arena/run/progression';
@@ -27,8 +28,7 @@ export default function arena() {
   const bought: string[] = [];
   const shop = () => {
     const buy = (id: string) => purchase(game, me, id) && bought.push(id);
-    const tier = armorTier(me);
-    if (tier < ARMOR.length && gold(me) >= ARMOR[tier].price) buy(`armor:${tier + 1}`);
+    for (const w of WARES.filter((x) => x.kind === 'armor')) if (gold(me) >= w.price && buy(w.item)) break;
     const blades = WARES.filter((w) => w.kind === 'weapon' && game.items.get(w.item)?.kind === 'melee' && !me.inventory.count(w.item)).sort((a, b) => b.price - a.price);
     for (const w of blades) if (gold(me) >= w.price && buy(w.item)) break;
     if (me.inventory.count('health_potion') < 2 && gold(me) >= 40) buy('health_potion');
@@ -108,7 +108,7 @@ export default function arena() {
   const slain = stats.get('Monsters slain')?.split(' ')[0];
   check(String(me.store.get<number>('kills')) === slain, `kills kept all-time: ${me.store.get('kills')} of ${slain} (${stats.get('Monsters slain')})`);
   // The economy: gold earned and spent at the merchant's, the best armour by the end.
-  check(bought.length >= 8 && armorTier(me) === ARMOR.length, `shopping: ${bought.join(', ')} (armour tier ${armorTier(me)})`);
+  check(bought.length >= 6 && armorOf(me) === ARMOR.plate_armor.points, `shopping: ${bought.join(', ')} (armour ${armorOf(me)})`);
   // Levels: XP earned for the run, the best wave kept.
   const xp = progressOf(me);
   check(xp.level >= 4 && stats.get('Best wave here')?.startsWith('20'), `progression: level ${xp.level} (${xp.total} XP), best ${stats.get('Best wave here')}`);
