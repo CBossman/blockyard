@@ -1,12 +1,13 @@
 import { HeldModels, type BladeSpec, type HoldSpec, type ItemLook, type ItemSounds } from '@platform';
 import type { Client } from '@platform/client';
-import { AXE_MODEL, BOMB_MODEL, PIKE_MODEL, Sprite } from '../art';
+import { BOMB_MODEL, Sprite } from '../art';
 import { RARITIES, RARITY, shieldOf, variant, type Rarity } from '../items/rarity';
 import { WEAPON_MODELS } from '../models/weapons';
 
 /**
  * How the Arena's weapons and pickups look on each screen (`client.items.look`): their icons, the
- * arsenal's voxel models in each rarity (`models/weapons`, built by `tools/weapons/build.mjs`),
+ * arsenal's voxel models in each rarity, the starter swords and the potion too (`models/weapons`,
+ * built by `tools/weapons/build.mjs`),
  * how each is held in first person (the pose, its own swing: `client/armory.ts` defines the
  * Arena's), the voices each plays (`client/sounds/armory.ts`), and a rarer blade's glow: a thin
  * edge of light in its rarity's colour that leaves a fading arc as it's swung. The server's
@@ -42,22 +43,22 @@ const ARSENAL: Record<string, (r: Rarity, id: string) => ItemLook> = {
   fire_staff: (_r, id) => voxel(id, { style: 'sword', use: 'arena_cast', scale: 0.62 }, { use: 'arena_cast_fire' }),
   frost_staff: (_r, id) => voxel(id, { style: 'sword', use: 'arena_cast_quick', scale: 0.62 }, { use: 'arena_cast_frost' }),
   storm_wand: (_r, id) => voxel(id, { style: 'sword', use: 'arena_flick', scale: 1.1 }, { use: 'arena_cast_storm' }),
-  // The older arms keep their looks; a rarer one's edge glows its colour.
-  battle_axe: (r) => ({ icon: Sprite.battle_axe, hold: { style: 'axe', model: AXE_MODEL, use: 'hew', blade: edge(r, 0.75) }, sounds: HEAVY }),
-  pike: (r) => ({ icon: Sprite.pike, hold: { style: 'polearm', model: PIKE_MODEL, blade: edge(r, 0.82) }, sounds: THRUST }),
-  diamond_sword: (r) => ({ icon: 'diamond_sword', hold: { model: HeldModels.diamondSword, blade: edge(r, 0.3) }, sounds: BLADE }),
+  battle_axe: (_r, id) => voxel(id, { style: 'axe', use: 'hew', scale: 0.95 }, HEAVY),
+  pike: (r, id) => voxel(id, { style: 'polearm', scale: 0.85, blade: edge(r, 0.8) }, THRUST),
+  diamond_sword: (r, id) => voxel(id, { style: 'sword', use: 'arena_slash', blade: edge(r, 0.22) }, BLADE),
+  // The bow keeps its sprites (drawn, it shows the drawn one).
   bow: () => ({ icon: 'bow', drawIcon: 'bow_pulling' }),
 };
 
 export const LOOKS: Record<string, ItemLook> = {
-  wooden_sword: { icon: 'wooden_sword', hold: { model: HeldModels.woodenSword }, sounds: BLADE },
-  stone_sword: { icon: 'stone_sword', hold: { model: HeldModels.stoneSword }, sounds: BLADE },
-  iron_sword: { icon: 'iron_sword', hold: { model: HeldModels.ironSword }, sounds: BLADE },
+  wooden_sword: voxel('wooden_sword', { style: 'sword', use: 'arena_slash' }, BLADE),
+  stone_sword: voxel('stone_sword', { style: 'sword', use: 'arena_slash' }, BLADE),
+  iron_sword: voxel('iron_sword', { style: 'sword', use: 'arena_slash' }, BLADE),
   ...Object.fromEntries(Object.entries(ARSENAL).flatMap(([base, look]) => RARITIES.map((r) => [variant(base, r), look(r, variant(base, r))]))),
   // The gladius's shield (never carried: the first-person view holds it with the gladius).
   ...Object.fromEntries(RARITIES.map((r) => [shieldOf(r), { icon: { gltf: WEAPON_MODELS[shieldOf(r)] }, hold: { model: HeldModels.gltf(WEAPON_MODELS[shieldOf(r)]) } }])),
   arrow: { icon: 'arrow' },
-  health_potion: { icon: 'health_potion', hold: { model: HeldModels.healthPotion } },
+  health_potion: voxel('health_potion', { style: 'item' }, {}),
   heart: { icon: 'heart' },
   arrow_bundle: { icon: Sprite.arrow_bundle },
   bomb: { icon: Sprite.bomb, hold: { style: 'throw', model: BOMB_MODEL, scale: 0.42 }, trail: '#ffb34a' },

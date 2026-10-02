@@ -479,6 +479,85 @@ function crossbow(rarity) {
   return g.mark('grip', [0, 0, 0]).mark('grip2', [0, 0.3, 9.4]).mark('muzzle', [0, 2.2, 17.5]).mark('sight', [0, 3.4, -1.6]).mark('mag', [0, 2.2, 3.1]);
 }
 
+/** The blade materials of the plain swords: wood, stone, iron, diamond. */
+const SWORD_BLADES = {
+  wooden_sword: { steel: [0x8a6236, 0.75], steelDark: [0x6a4626, 0.78], edge: [0xa47a48, 0.7] },
+  stone_sword: { steel: [0x7c7c7a, 0.85], steelDark: [0x5a5a58, 0.88], edge: [0x9c9c98, 0.8] },
+  iron_sword: { steel: [0x8e959e, 0.3, 1], steelDark: [0x565c66, 0.36, 1], edge: [0xc6ccd4, 0.2, 1] },
+  diamond_sword: { steel: [0x34c6be, 0.15, 0.2, 0.08], steelDark: [0x1a8a86, 0.2, 0.2, 0.05], edge: [0xa4f6ee, 0.1, 0.2, 0.18] },
+};
+
+/**
+ * A plain broadsword (the starters, and the diamond sword in its rarities): a round pommel, a
+ * leather grip, a straight guard, a blade of wood, stone, iron or diamond with a fuller.
+ */
+function broadsword(id, name, rarity = 'common') {
+  const g = model(id, name, rarity, { leather: [0x4a2e18, 0.8], leatherDark: [0x2e1c0e, 0.85], ...SWORD_BLADES[id] });
+  const wood = id === 'wooden_sword';
+  if (wood) g.colours({ fit: [0x5a3a1e, 0.8], fitDark: [0x40280f, 0.85] });
+  g.ball(1.2, [0, 0, -2.5], (i, j, k, d) => (d < 0.5 && glowing(rarity) ? 'gem' : 'fit'));
+  g.disc(0.8, [0, 0], [-1.6, 2.2], (i, j, k) => wrap(k, i, j));
+  g.pbox([-3.1, 3.1], [-0.95, 0.95], [2.2, 3.4], (i) => (Math.abs(g.c(0, i)) > 2.4 ? 'fitDark' : 'fit'));
+  for (const j of [-2, 2]) g.set(0, j, g.cell(2, 2.8), glowing(rarity) ? 'gem' : 'fitDark');
+  const tip = blade(g, 3.4, 17.5, (t) => (t < 0.8 ? 1.6 : 1.6 * Math.sqrt(Math.max(0, 1 - ((t - 0.8) / 0.2) ** 1.3))), { rarity, runes: glowing(rarity), fuller: 0.72, thick: wood ? 1 : 3 });
+  return g.mark('grip', [0, 0, 0]).mark('grip2', [0, 0, -1.5]).mark('muzzle', [0, 0, tip]);
+}
+
+/** The battle axe: an ash haft, a double bit flaring from an iron socket, the rarity's fittings. */
+function battleAxe(rarity) {
+  const g = model('battle_axe', 'Battle Axe', rarity, { wood: [0x6a4626, 0.72], woodDark: [0x4a2e18, 0.76], leather: [0x3a2414, 0.8], leatherDark: [0x24160b, 0.85], iron: [0x3e424a, 0.35, 0.9] });
+  g.disc(1.0, [0, 0], [-3.4, -2.2], 'fitDark');
+  g.disc(0.8, [0, 0], [-2.2, 21.0], (i, j, k) => (g.c(2, k) < 3.4 ? wrap(k, i, j) : (i + k * 3) % 8 === 0 ? 'woodDark' : 'wood'));
+  g.pbox([-1.3, 1.3], [-1.3, 1.3], [14.4, 21.6], (i, j, k) => (Math.abs(g.c(2, k) - 15.0) < 0.35 || Math.abs(g.c(2, k) - 21.0) < 0.35 ? 'fit' : 'iron'));
+  // Each bit: out along x from the socket, flaring from a narrow neck to a broad curved edge.
+  for (const side of [1, -1])
+    for (let k = g.cell(2, 11.0); k < g.cell(2, 25.0); k++)
+      for (let i = 0; i < 16; i++) {
+        const u = 1.3 + i * V;
+        const t = g.c(2, k) - 18.0;
+        const hw = Math.min(5.8, 1.1 + 0.6 * (u - 1.3));
+        const edge = 7.4 + 1.3 * Math.sqrt(Math.max(0, 1 - (t / 6.2) ** 2));
+        if (Math.abs(t) > hw || u > edge) continue;
+        const near = edge - u < 1.2;
+        const x = side > 0 ? g.cell(0, u) : g.cell(0, -u);
+        for (const j of near ? [0] : [-1, 0, 1]) g.set(x, j, k, near ? 'edge' : u < 2.4 ? 'steelDark' : glowing(rarity) && Math.abs(t) < 0.4 && u > 3 && u < 6 ? 'rune' : 'steel');
+      }
+  return g.mark('grip', [0, 0, 0]).mark('grip2', [0, 0, 9.0]).mark('muzzle', [8.4, 0, 18.0]);
+}
+
+/** The pike: a long ash shaft wrapped for two hands, a long narrow head on a socket, a butt cap. */
+function pike(rarity) {
+  const g = model('pike', 'Pike', rarity, { wood: [0x8e6a3e, 0.68], woodDark: [0x6e4e2a, 0.72], leather: [0x4a2e18, 0.8], leatherDark: [0x2e1c0e, 0.85] });
+  g.disc(0.9, [0, 0], [-6.9, -5.6], 'fitDark');
+  g.disc(0.7, [0, 0], [-5.6, 40.0], (i, j, k) => {
+    const z = g.c(2, k);
+    if ((z > -1.9 && z < 1.9) || (z > 12.1 && z < 15.9)) return wrap(k, i, j);
+    return (k + i * 3) % 9 === 0 ? 'woodDark' : 'wood';
+  });
+  g.disc(0.95, [0, 0], [38.1, 41.2], (i, j, k, rim) => (rim && k % 2 === 0 ? 'fitDark' : 'fit'));
+  const tip = blade(g, 41.2, 13.8, (t) => 1.55 * Math.sin(Math.PI * clamp(t) ** 0.6) + 0.2, { rarity, runes: glowing(rarity), fuller: 0.7 });
+  for (const j of [-2, 2]) g.set(0, j, g.cell(2, 39.6), 'gem');
+  return g.mark('grip', [0, 0, 0]).mark('grip2', [0, 0, 14]).mark('muzzle', [0, 0, tip]);
+}
+
+/** The health potion: a round bottle of glowing red brew, a long neck, a cork. Upright along +z. */
+function potion() {
+  const g = new Model('health_potion', 'Health Potion').colours({
+    brew: [0xc8102a, 0.2, 0, 0.55], brewDeep: [0x8a0818, 0.25, 0, 0.4], glass: [0xcfe6f0, 0.08, 0.1], glassDark: [0x9ab8c6, 0.1, 0.1], cork: [0x9a6e3e, 0.8], label: [0xe8dcc0, 0.8], seal: [0x8a1a18, 0.6],
+  });
+  g.ball(3.1, [0, 0, 2.9], (i, j, k, d) => {
+    const z = g.c(2, k);
+    if (z > 3.6) return d > 0.82 ? 'glass' : 'glassDark';
+    if (Math.abs(z - 2.2) < 0.9 && g.c(0, i) > 1.2 && Math.abs(g.c(1, j)) < 1.4) return 'label';
+    return d > 0.85 ? 'brew' : 'brewDeep';
+  });
+  g.disc(1.0, [0, 0], [5.6, 8.1], (i, j, k, rim) => (rim ? 'glass' : 'glassDark'));
+  g.disc(1.3, [0, 0], [7.5, 8.1], 'glass');
+  g.disc(0.75, [0, 0], [8.1, 9.6], 'cork');
+  g.disc(0.95, [0, 0], [8.1, 8.75], 'seal');
+  return g.mark('grip', [0, 0, -1.4]).mark('muzzle', [0, 0, 9.6]);
+}
+
 /** A crossbow bolt in flight (the props'): a short shaft, a steel head, fletching. */
 function bolt() {
   const g = new Model('bolt', 'Bolt').colours({ shaft: [0xb08a5a, 0.7], fletch: [0xe8e2d4, 0.8], fletchRed: [0xa8241c, 0.8], head: [0xc8ced6, 0.2, 1] });
@@ -619,7 +698,10 @@ function show(g) {
   view(0, 1, 2, false, 'behind (x across, y up), from -z');
 }
 
-const MODELS = { gladius, gladius_shield: shield, warhammer, spear, daggers, greatsword, fire_staff: fireStaff, frost_staff: frostStaff, storm_wand: stormWand, crossbow };
+const MODELS = {
+  gladius, gladius_shield: shield, warhammer, spear, daggers, greatsword, fire_staff: fireStaff, frost_staff: frostStaff, storm_wand: stormWand, crossbow,
+  battle_axe: battleAxe, pike, diamond_sword: (r) => broadsword('diamond_sword', 'Diamond Sword', r),
+};
 const args = process.argv.slice(2);
 const only = args.filter((a) => !a.startsWith('--'));
 mkdirSync(OUT, { recursive: true });
@@ -629,8 +711,12 @@ const jobs = [
   ['leather_armor', () => armor('leather_armor', 'Leather Armour', 'leather')],
   ['mail_armor', () => armor('mail_armor', 'Mail Armour', 'mail')],
   ['plate_armor', () => armor('plate_armor', 'Plate Armour', 'plate')],
+  ['wooden_sword', () => broadsword('wooden_sword', 'Wooden Sword')],
+  ['stone_sword', () => broadsword('stone_sword', 'Stone Sword')],
+  ['iron_sword', () => broadsword('iron_sword', 'Iron Sword')],
+  ['health_potion', potion],
 ];
-const SINGLE = new Set(['bolt', 'leather_armor', 'mail_armor', 'plate_armor']);
+const SINGLE = new Set(['bolt', 'leather_armor', 'mail_armor', 'plate_armor', 'wooden_sword', 'stone_sword', 'iron_sword', 'health_potion']);
 let total = 0;
 for (const [id, make] of jobs) {
   if (only.length && !only.includes(id)) continue;

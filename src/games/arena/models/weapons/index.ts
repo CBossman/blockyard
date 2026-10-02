@@ -39,10 +39,26 @@ import crossbow from './crossbow.glb?url';
 import crossbowRare from './crossbow_rare.glb?url';
 import crossbowEpic from './crossbow_epic.glb?url';
 import crossbowLegendary from './crossbow_legendary.glb?url';
+import battleAxe from './battle_axe.glb?url';
+import battleAxeRare from './battle_axe_rare.glb?url';
+import battleAxeEpic from './battle_axe_epic.glb?url';
+import battleAxeLegendary from './battle_axe_legendary.glb?url';
+import pike from './pike.glb?url';
+import pikeRare from './pike_rare.glb?url';
+import pikeEpic from './pike_epic.glb?url';
+import pikeLegendary from './pike_legendary.glb?url';
+import diamondSword from './diamond_sword.glb?url';
+import diamondSwordRare from './diamond_sword_rare.glb?url';
+import diamondSwordEpic from './diamond_sword_epic.glb?url';
+import diamondSwordLegendary from './diamond_sword_legendary.glb?url';
 import bolt from './bolt.glb?url';
 import leatherArmor from './leather_armor.glb?url';
 import mailArmor from './mail_armor.glb?url';
 import plateArmor from './plate_armor.glb?url';
+import woodenSword from './wooden_sword.glb?url';
+import stoneSword from './stone_sword.glb?url';
+import ironSword from './iron_sword.glb?url';
+import healthPotion from './health_potion.glb?url';
 
 export const WEAPON_MODELS: Record<string, string> = {
   gladius: gladius,
@@ -85,8 +101,24 @@ export const WEAPON_MODELS: Record<string, string> = {
   crossbow_rare: crossbowRare,
   crossbow_epic: crossbowEpic,
   crossbow_legendary: crossbowLegendary,
+  battle_axe: battleAxe,
+  battle_axe_rare: battleAxeRare,
+  battle_axe_epic: battleAxeEpic,
+  battle_axe_legendary: battleAxeLegendary,
+  pike: pike,
+  pike_rare: pikeRare,
+  pike_epic: pikeEpic,
+  pike_legendary: pikeLegendary,
+  diamond_sword: diamondSword,
+  diamond_sword_rare: diamondSwordRare,
+  diamond_sword_epic: diamondSwordEpic,
+  diamond_sword_legendary: diamondSwordLegendary,
   bolt: bolt,
   leather_armor: leatherArmor,
   mail_armor: mailArmor,
   plate_armor: plateArmor,
+  wooden_sword: woodenSword,
+  stone_sword: stoneSword,
+  iron_sword: ironSword,
+  health_potion: healthPotion,
 };
