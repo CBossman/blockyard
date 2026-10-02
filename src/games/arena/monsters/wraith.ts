@@ -1,7 +1,7 @@
 import { CHARACTER_STYLE, Models, type Behavior, type Entity, type GameContext, type Player, type Vec3 } from '@platform';
 import { MONSTER_MODELS } from './models';
 import type { MonsterKind } from './registry';
-import { flat, inPit, show } from './util';
+import { flat, held, inPit, show } from './util';
 
 /**
  * The Wraith: a hooded skull in a ragged shroud, floating. Every few seconds it blinks: fading
@@ -14,7 +14,7 @@ interface WraithState {
   _blink?: number;
   _fade?: number;
   _dcd?: number;
-  _wind?: number;
+  _tell?: number;
   _drain?: number;
   _tick?: number;
   _hp?: number;
@@ -50,6 +50,15 @@ function endDrain(game: GameContext, self: Entity, s: WraithState) {
 
 const wraithAI: Behavior = (self, game, dt) => {
   const s = self.data as WraithState;
+  if (
+    held(self, () => {
+      const had = s._fade !== undefined || s._tell !== undefined || s._drain !== undefined;
+      if (s._drain !== undefined) show(game, 'tether', { id: self.id, player: null });
+      s._fade = s._tell = s._drain = undefined;
+      return had;
+    })
+  )
+    return;
   s._blink = (s._blink ?? game.rng.range(1.5, 3)) - dt;
   s._dcd = (s._dcd ?? game.rng.range(1.5, 3)) - dt;
   const lost = Math.max(0, (s._hp ?? self.health) - self.health);
@@ -111,19 +120,19 @@ const wraithAI: Behavior = (self, game, dt) => {
     return;
   }
   // Raising its claws: the drain in a moment (hit it now and it never starts).
-  if (s._wind !== undefined) {
+  if (s._tell !== undefined) {
     self.stop();
     self.lookAt(target);
-    s._wind -= dt;
+    s._tell -= dt;
     if (lost >= 3 || d > DRAIN_RANGE + 1) {
-      s._wind = undefined;
+      s._tell = undefined;
       self.glow(null);
       self.animate('none');
       s._dcd = 2;
       return;
     }
-    if (s._wind > 0) return;
-    s._wind = undefined;
+    if (s._tell > 0) return;
+    s._tell = undefined;
     s._drain = 2.4;
     s._tick = 0.15;
     s._taken = 0;
@@ -140,7 +149,7 @@ const wraithAI: Behavior = (self, game, dt) => {
     return;
   }
   if (d <= DRAIN_RANGE && s._dcd <= 0 && self.canSee(target)) {
-    s._wind = 0.55;
+    s._tell = 0.55;
     self.stop();
     self.animate('raise');
     self.glow(GHOST);

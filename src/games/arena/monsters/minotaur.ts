@@ -2,7 +2,7 @@ import { CHARACTER_STYLE, Models, type Behavior, type DamageEvent, type Entity, 
 import { bossKind } from '../bosses';
 import { MONSTER_MODELS } from './models';
 import type { MonsterKind } from './registry';
-import { ahead, heading, near, shakeNear, show } from './util';
+import { ahead, heading, held, near, shakeNear, show } from './util';
 
 /**
  * The Minotaur: a bull-headed brute with a double axe. Close up it chops. From across the pit it
@@ -14,7 +14,7 @@ import { ahead, heading, near, shakeNear, show } from './util';
 
 interface MinotaurState {
   _cd?: number;
-  _wind?: number;
+  _tell?: number;
   _paw?: number;
   _dir?: number;
   _charge?: number;
@@ -38,6 +38,15 @@ function endCharge(self: Entity, s: MinotaurState) {
 
 const minotaurAI: Behavior = (self, game, dt) => {
   const s = self.data as MinotaurState;
+  if (
+    held(self, () => {
+      const had = s._paw !== undefined || s._tell !== undefined;
+      if (s._charge !== undefined) endCharge(self, s);
+      s._paw = s._tell = undefined;
+      return had;
+    })
+  )
+    return;
   s._cd = (s._cd ?? game.rng.range(2, 4)) - dt;
   s._swing = Math.max(0, (s._swing ?? 1) - dt);
   const e = self.position;
@@ -103,12 +112,12 @@ const minotaurAI: Behavior = (self, game, dt) => {
     game.audio.play('stampede', { at: e, volume: 1.2 });
     return;
   }
-  if (s._wind !== undefined) {
+  if (s._tell !== undefined) {
     self.stop();
     self.lookAt(target);
-    s._wind -= dt;
-    if (s._wind > 0) return;
-    s._wind = undefined;
+    s._tell -= dt;
+    if (s._tell > 0) return;
+    s._tell = undefined;
     self.glow(null);
     self.animate('attack');
     game.audio.play('knight_swing', { at: e, pitch: 0.7 });
@@ -130,7 +139,7 @@ const minotaurAI: Behavior = (self, game, dt) => {
     return;
   }
   if (d < 3 && s._swing === 0 && self.canSee(target)) {
-    s._wind = 0.6;
+    s._tell = 0.6;
     self.stop();
     self.animate('raise');
     self.glow('#ffb43a');

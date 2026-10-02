@@ -1,6 +1,7 @@
 import { CHARACTER_STYLE, Models, type Behavior, type GameContext, type Player, type ProjectileSpec } from '@platform';
 import { MONSTER_MODELS } from './models';
 import type { MonsterKind } from './registry';
+import { held } from './util';
 
 /**
  * The Imp: a little winged devil, quick and never still, hopping about at a distance and lobbing
@@ -12,7 +13,7 @@ export const FIREBALL: ProjectileSpec = { glow: '#ff8a2a', speed: 15, gravity: 9
 
 interface ImpState {
   _cd?: number;
-  _wind?: number;
+  _tell?: number;
   _hop?: number;
   _flee?: number;
   _strafe?: number;
@@ -21,6 +22,7 @@ interface ImpState {
 
 const impAI: Behavior = (self, game, dt) => {
   const s = self.data as ImpState;
+  if (held(self, () => s._tell !== undefined && ((s._tell = undefined), true))) return;
   s._cd = (s._cd ?? game.rng.range(1.2, 2.5)) - dt;
   s._hop = (s._hop ?? game.rng.range(0.5, 1.5)) - dt;
   s._flee = Math.max(0, (s._flee ?? 0) - dt);
@@ -38,12 +40,12 @@ const impAI: Behavior = (self, game, dt) => {
   const p = target.position;
   const d = self.distanceTo(target);
   self.lookAt(target);
-  if (s._wind !== undefined) {
+  if (s._tell !== undefined) {
     // A ball of fire held up, blazing: thrown in a moment.
     self.stop();
-    s._wind -= dt;
-    if (s._wind > 0) return;
-    s._wind = undefined;
+    s._tell -= dt;
+    if (s._tell > 0) return;
+    s._tell = undefined;
     self.glow(null);
     self.animate('attack');
     if (self.canSee(target)) {
@@ -75,7 +77,7 @@ const impAI: Behavior = (self, game, dt) => {
       self.jump();
     }
     if (s._cd <= 0 && d < 15 && self.onGround) {
-      s._wind = 0.55;
+      s._tell = 0.55;
       self.animate('raise');
       self.glow('#ff9a2a');
       game.audio.play('imp', { at: e });

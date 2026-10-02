@@ -3,6 +3,7 @@ import { map } from '../run/state';
 import { spawnMonster } from '../run/spawn';
 import { MONSTER_MODELS } from './models';
 import type { MonsterKind } from './registry';
+import { held } from './util';
 
 /**
  * Bats come in flocks of four, circling over your head out of reach of a blade. One at a time
@@ -34,6 +35,17 @@ function flyTo(self: Entity, to: Vec3, ease = 2) {
 
 const batAI: Behavior = (self, game, dt) => {
   const s = self.data as BatState;
+  // Frozen or dazed it drops out of the air (and a blade can reach it).
+  if (
+    held(self, () => {
+      const had = s._mode === 'shriek';
+      if (s._mode === 'shriek' || s._mode === 'dive') self.setSpeed((self.data.speed as number | undefined) ?? 1);
+      s._mode = 'circle';
+      s._cd = 2;
+      return had;
+    })
+  )
+    return;
   s._cd = (s._cd ?? game.rng.range(2, 5)) - dt;
   s._ang ??= game.rng.range(0, Math.PI * 2);
   s._dir ??= game.rng.chance(0.5) ? 1 : -1;
