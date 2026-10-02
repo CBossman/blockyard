@@ -1,7 +1,8 @@
 import { COLOSSEUM } from './colosseum';
 import type { ArenaMap } from './registry';
 
-export { FLOOR, along, type ArenaMap, type Gate, type IntroKey } from './registry';
+export { FLOOR, along, inBox, mapNear, type ArenaMap, type Box, type Fire, type Gate, type IntroKey, type TrapSpec } from './registry';
+export { MAP_BLOCKS } from './blocks';
 
 /** Every map, in the order the public rotation takes them (the first is the default). */
 export const MAPS: readonly ArenaMap[] = [COLOSSEUM];

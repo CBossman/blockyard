@@ -128,7 +128,7 @@ function looks(seen: HostEvent[]): string {
   for (const d of content) screen.apply(d);
   const voices = new Map<string, SynthVoice>();
   const client = {
-    audio: { play() {}, define: (n: string, v: SynthVoice) => voices.set(n, v) },
+    audio: { play() {}, define: (n: string, v: SynthVoice) => voices.set(n, v), defineLoop() {} },
     items: { look: (id: string, l: ItemLook) => screen.lookItem(id, l), get: (id: string) => screen.items.get(id) },
   } as unknown as Client;
   for (const k of sounds.standard()) k.setup?.(client);
