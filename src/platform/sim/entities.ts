@@ -105,6 +105,8 @@ export interface EntityFrame {
   dying: number;
   /** An item in its right hand (players' figures, and an entity's `held`): its id. */
   held?: string | null;
+  /** How big it is (`Entity.size`), when it isn't 1. */
+  size?: number;
   /** Health, 0..1 (health bars over heads). */
   hp?: number;
   /** A model animation clip it's playing (`animate`). */
@@ -165,6 +167,7 @@ class EntityImpl implements Entity {
   clipSeq = 0;
   ambientTimer = 2 + Math.random() * 6;
   speedMul = 1;
+  private grown = 1;
 
   constructor(
     private m: EntitySim,
@@ -204,7 +207,19 @@ class EntityImpl implements Entity {
   }
 
   get height(): number {
-    return this.def.hitbox.height;
+    return this.def.hitbox.height * this.grown;
+  }
+
+  get size(): number {
+    return this.grown;
+  }
+
+  set size(f: number) {
+    this.grown = Math.max(0.1, Math.min(10, f));
+    const b = this.m.bodies;
+    const o = this.o;
+    b[o + B.HALF_W] = (this.def.hitbox.width / 2) * this.grown;
+    b[o + B.HEIGHT] = this.def.hitbox.height * this.grown;
   }
 
   damage(amount: number, opts: DamageOptions = {}): boolean {
@@ -307,6 +322,28 @@ class EntityImpl implements Entity {
 
   stop() {
     this.m.bodies[this.o + B.MODE] = 3;
+  }
+
+  fly(x: number, y: number, z: number) {
+    const b = this.m.bodies;
+    const o = this.o;
+    const l = Math.hypot(x, y, z);
+    const k = l > 1 ? 1 / l : 1;
+    b[o + B.MODE] = 2;
+    b[o + B.WISH_X] = x * k;
+    b[o + B.WISH_Z] = z * k;
+    // Up or down: most of the way to the speed it asks for, each step (flying damps the rest).
+    b[o + B.IMP_Y] += (y * k * b[o + B.SPEED] - b[o + B.VY]) * 0.5;
+  }
+
+  teleport(at: Vec3) {
+    const b = this.m.bodies;
+    const o = this.o;
+    b[o + B.X] = at.x;
+    b[o + B.Y] = at.y;
+    b[o + B.Z] = at.z;
+    b[o + B.VX] = b[o + B.VY] = b[o + B.VZ] = 0;
+    b[o + B.RIDE] = 0;
   }
 
   jump() {
@@ -538,13 +575,15 @@ export class EntitySim implements EntityApi {
 
   /** An entity's hitbox (from its definition). */
   hitbox(e: Entity): { width: number; height: number } {
-    return (e as EntityImpl).def.hitbox;
+    const { def, size } = e as EntityImpl;
+    return size === 1 ? def.hitbox : { width: def.hitbox.width * size, height: def.hitbox.height * size };
   }
 
   /** Its hitbox for bullets: a humanoid's top quarter is its head. */
   shape(e: Entity): { width: number; height: number; head: boolean } {
     const d = (e as EntityImpl).def;
-    return { width: d.hitbox.width, height: d.hitbox.height, head: d.model.rig === 'humanoid' || !!d.model.gltf?.head };
+    const { width, height } = this.hitbox(e);
+    return { width, height, head: d.model.rig === 'humanoid' || !!d.model.gltf?.head };
   }
 
   byBody(slot: number): EntityImpl | null {
@@ -722,6 +761,7 @@ export class EntitySim implements EntityApi {
         hp: e.health / e.maxHealth,
         clip: e.clip ?? undefined,
         ...(e.held ? { held: e.held } : {}),
+        ...(e.size !== 1 ? { size: e.size } : {}),
       });
     }
     const p = this.projectiles;

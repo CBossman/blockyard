@@ -16,7 +16,8 @@
 //   never (however indirectly) its client code or '@platform/client'.
 // - Its other files (helpers): '@platform', '@platform/art', '@platform/kits' and its folder's
 //   files. Build tools (`tools/`, Node scripts that write the game's models and art, never part
-//   of the game itself) may also use Node's built-ins (`node:*`).
+//   of the game itself) may also use Node's built-ins (`node:*`), and read the platform's
+//   characters (src/platform/character/) to make figures of their own in its people's style.
 //
 // The indirect rules follow imports within the game's folder, types included.
 //
@@ -46,8 +47,11 @@ const at = (p) => join(root, p);
 const problems = [];
 
 const inside = (file, spec, folder) => spec.startsWith('.') && under(resolve(dirname(file), spec), folder);
-/** A game's own build tools (`src/games/<name>/tools/`) may use Node's built-ins; they never run in the game. */
-const tool = (file, folder, spec) => spec.startsWith('node:') && under(file, join(folder, 'tools'));
+/**
+ * A game's own build tools (`src/games/<name>/tools/`) may use Node's built-ins and read the
+ * platform's characters (to build figures in their style); they never run in the game.
+ */
+const tool = (file, folder, spec) => under(file, join(folder, 'tools')) && (spec.startsWith('node:') || (spec.startsWith('.') && under(resolve(dirname(file), spec), at('src/platform/character'))));
 
 /** Direct imports: each file in `folder` imports only `allowed(file)` packages and files inside the folder. */
 function check(folder, allowed, what, { relative: own = () => true } = {}) {
