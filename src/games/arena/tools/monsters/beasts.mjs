@@ -1,7 +1,8 @@
 /**
  * The beasts: monsters that aren't people (a spider, slimes, a bat), each painted as voxel parts on
- * bones of its own, with the clips it moves by (`idle`, `walk`, `attack` and its own), in
- * voxels at 26 a metre as the platform's people are. Each returns { vox, palette, skeleton, clips }.
+ * bones of its own, with the clips it moves by (`idle`, `walk`, `attack` and its own), in voxels at
+ * 26 a metre as the platform's people are. Each returns { vox, palette, skeleton, clips }, and
+ * `rigid`, its trunk's parts (see `figureGlb`).
  */
 import { Palette, Voxels } from '../voxel.mjs';
 import { clip } from './glb.mjs';

@@ -4,8 +4,9 @@ import type { Entity, EntityDefinition, GameContext, Player } from '@platform';
  * A kind of monster, as the director sees it: its platform definition (made at setup), and what it
  * costs, from when it turns up and what it does, so waves can be composed from whatever kinds
  * there are (`run/director.ts`). Add a monster: a file in `monsters/` exporting a `MonsterKind`,
- * listed in `monsters/index.ts`. Its looks are the entity's model; its voices are each screen's
- * (`client/sounds.ts`, by the names in `sounds`).
+ * listed in `monsters/index.ts`. Its looks are the entity's model (a voxel GLB from
+ * `tools/monsters/build.mjs`, or a character); its voices are each screen's (`client/sounds/`, by
+ * the names in `sounds`); what its screens draw for it, `client/bestiary.ts`.
  */
 export interface MonsterKind {
   id: string;
