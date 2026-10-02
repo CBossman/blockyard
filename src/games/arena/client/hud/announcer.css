@@ -210,6 +210,10 @@ body:has(.ar-card:not(.out)) .ar-stage {
   color: #fff6dc;
   text-shadow: 0 0 24px var(--c), 0 0 48px color-mix(in srgb, var(--c) 50%, transparent), 0 2px 3px rgba(0, 0, 0, 0.7);
 }
+.ar-feat.long .ar-feat-t {
+  font-size: 24px;
+  letter-spacing: 0.08em;
+}
 .ar-feat-s {
   margin-top: 4px;
   font: 500 12px/1 var(--ar-label);

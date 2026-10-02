@@ -26,8 +26,22 @@ const KINDS: Record<CallMsg['k'], { time: number; sting: string; big: boolean }>
 /** A callout still waiting this long (ms) has missed its moment. */
 const STALE = 4000;
 
-/** Feats that come in sizes (multikills): how big each is, 0..3: louder, higher, bigger. */
-const TIER: Record<string, number> = { double_kill: 0, triple_kill: 1, multi_kill: 2, quad_kill: 2, massacre: 3, rampage: 3 };
+/** How big each feat is, 0..3 (louder, higher, bigger): the multikills climb; the rest by how rare a thing it is. */
+const TIER: Record<string, number> = {
+  double_kill: 0,
+  triple_kill: 1,
+  multi_kill: 2,
+  rampage: 3,
+  kaboom: 2,
+  goblin: 2,
+  boss_stagger: 2,
+  last_stand: 2,
+  forge: 0,
+  boss_egg: 0,
+  trap: 0,
+};
+/** Feats with words past this many letters come smaller. */
+const LONG = 16;
 
 /**
  * The announcer, on each screen: big callouts in the middle of the screen for the run's moments (a
@@ -62,7 +76,7 @@ export function announcer(): ClientKit {
   const feat = (client: Client, c: CallMsg) => {
     const k = KINDS[c.k];
     const tier = c.name ? (TIER[c.name] ?? 1) : 0;
-    const e = el(`div.ar-feat.t${tier}.k-${c.k}`, el('div.ar-feat-t', c.t), c.s ? el('div.ar-feat-s', c.s) : null);
+    const e = el(`div.ar-feat.t${tier}.k-${c.k}${c.t.length > LONG ? '.long' : ''}`, el('div.ar-feat-t', c.t), c.s ? el('div.ar-feat-s', c.s) : null);
     if (c.c) e.style.setProperty('--c', c.c);
     e.style.setProperty('--life', `${k.time}s`);
     feats.prepend(e);

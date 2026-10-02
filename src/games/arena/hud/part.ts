@@ -51,7 +51,9 @@ const FAVOUR = 10;
 /** At most this many deaths' gore a second (the rest are quiet: the platform's own burst still shows). */
 const GORE_PER_SECOND = 10;
 /** Feats the crowd roars at (the rest it cheers). */
-const ROARS = new Set(['rampage', 'multi_kill', 'kaboom', 'goblin', 'last_stand']);
+const ROARS = new Set(['rampage', 'multi_kill', 'kaboom', 'goblin', 'last_stand', 'boss_stagger']);
+/** Feats drawn elsewhere: a boss's new phase (the bosses' own card), a revive (the HUD's revive callouts). */
+const UNSAID = new Set(['boss_phase', 'revive']);
 
 function send(game: GameContext, to: Player | 'all', name: string, data: unknown, force = false) {
   const key = `${name}@${to === 'all' ? 'all' : to.id}`;
@@ -284,8 +286,11 @@ export const hudPart: ArenaPart = {
         return crowd(game, { v: 1, r: 'roar' });
       }
       if (name === 'boss_slain') return call(game, 'all', { k: 'slain', q: player ? `${player.name} strikes the last blow` : 'The crowd rises', t: text.replace(/!$/, '') });
-      call(game, player ?? 'all', { k: 'feat', t: text.replace(/!$/, ''), name });
       crowd(game, ROARS.has(name) ? { v: 0.9, r: 'roar' } : { v: 0.5, r: 'cheer' });
+      if (UNSAID.has(name)) return;
+      // Their own feat, to them: "Ann caught the Treasure Goblin" is "You caught…".
+      const own = player && text.startsWith(`${player.name} `) ? `You ${text.slice(player.name.length + 1)}` : text;
+      call(game, player ?? 'all', { k: 'feat', t: own.replace(/!$/, ''), name });
     });
 
     bus.on('downed', ({ player, bleed }) => {
@@ -297,8 +302,9 @@ export const hudPart: ArenaPart = {
 
     bus.on('revived', ({ player, by }) => {
       downs.delete(player.id);
-      call(game, player, { k: 'back', t: by ? 'Revived' : 'Back on your feet', s: by ? `${by.name} pulled you up` : undefined });
+      // (Up by a feather or the wave's end: the feat or the wave's card says so.)
       if (!by) return;
+      call(game, player, { k: 'back', t: 'Revived', s: `${by.name} pulled you up` });
       tallies.revived(by);
       call(game, by, { k: 'ally', t: `You revived ${player.name}` });
       crowd(game, { v: 0.6, r: 'cheer' });
