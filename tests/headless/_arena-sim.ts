@@ -181,7 +181,13 @@ function simulate(seed: number, classes: ClassId[], mapId: string) {
   // What happens, wave by wave.
   const waves: WaveLog[] = [];
   const cur = () => waves.at(-1);
-  const deaths: { wave: number; who: string; to: string }[] = [];
+  const deaths: { wave: number; who: string; to: string; at: string }[] = [];
+  /** Where on the map (blocks from its middle), and what's at its feet there. */
+  const where = (q: Vec3) => {
+    const c = map().center;
+    const at = (y: number) => game.world.blockName(game.world.getBlock(Math.floor(q.x), Math.floor(y), Math.floor(q.z)));
+    return `(${(q.x - c.x).toFixed(0)},${(q.y - c.y).toFixed(0)},${(q.z - c.z).toFixed(0)} ${at(q.y + 0.1)}/${at(q.y - 0.5)})`;
+  };
   let earnedTotal = 0;
   const earnedBy: Record<number, number> = {};
   bus.on('waveStart', ({ wave, name, boss, twist }) => {
@@ -237,7 +243,7 @@ function simulate(seed: number, classes: ClassId[], mapId: string) {
   });
   game.events.on('playerDeath', ({ player }) => {
     const f = fighters.find((x) => x.p === player);
-    deaths.push({ wave: state.wave, who: f?.cls ?? player.name, to: lastHit.get(player.id) ?? '?' });
+    deaths.push({ wave: state.wave, who: f?.cls ?? player.name, to: lastHit.get(player.id) ?? '?', at: where(player.position) });
   });
   game.events.on('ability', ({ name }) => void (name === 'roll' && cur() && cur()!.rolls++));
 
@@ -323,12 +329,16 @@ function simulate(seed: number, classes: ClassId[], mapId: string) {
     // The soonest first.
     return out.sort((a, b) => a.left - b.left);
   }
-  /** Ground to keep off: lava and frost (the map's), a boss's pools. */
-  function badGround(q: Vec3, pad = 0.4): boolean {
+  /** Ground to keep off: a boss's pools; lava and frost (the map's). */
+  /** In a boss's pool. */
+  function inPool(q: Vec3): boolean {
     const now = game.clock.now;
     for (const pl of pools.values()) if (pl.until > now && flat(q, pl.at) < pl.r + 0.4 && Math.abs(q.y - pl.at.y) < 2) return true;
-    for (const h of map().hazards ?? [])
-      for (const b of h.zone) if (b.max.y >= q.y - 3 && b.min.y <= q.y + 1 && inBox({ min: { ...b.min, y: -1e3 }, max: { ...b.max, y: 1e3 } }, q, pad)) return true;
+    return false;
+  }
+  /** Standing in the map's lava or frost, feet at `q` (as the maps' hazards judge it: a bridge over the river is no hazard). */
+  function inHazard(q: Vec3, pad = 0): boolean {
+    for (const h of map().hazards ?? []) for (const b of h.zone) if (inBox(b, { x: q.x, y: q.y + 0.3, z: q.z }, pad)) return true;
     return false;
   }
   // The ground it can walk (what a person sees at a glance: a way round a headstone, up a step,
@@ -356,7 +366,7 @@ function simulate(seed: number, classes: ClassId[], mapId: string) {
           if (game.world.collisionHeight(x, y, z) > 0 || game.world.collisionHeight(x, y + 1, z) > 0) continue;
           if (Number.isNaN(best) || Math.abs(top - base) < Math.abs(best - base)) best = top;
         }
-        if (!Number.isNaN(best) && (badGround({ x: x + 0.5, y: best, z: z + 0.5 }) || liquid({ x: x + 0.5, y: best + 0.1, z: z + 0.5 }))) {
+        if (!Number.isNaN(best) && (inHazard({ x: x + 0.5, y: best, z: z + 0.5 }) || liquid({ x: x + 0.5, y: best + 0.1, z: z + 0.5 }))) {
           best = NaN;
           bad[i * n + j] = 1;
         }
@@ -500,8 +510,7 @@ function simulate(seed: number, classes: ClassId[], mapId: string) {
     return c >= 0 && navGrid().bad[c] === 1;
   };
   function hazardAt(q: Vec3): boolean {
-    for (const h of map().hazards ?? []) for (const b of h.zone) if (inBox(b, q, 0.2)) return true;
-    return wet(q) || liquid({ x: q.x, y: q.y - 0.3, z: q.z }) || liquid(q);
+    return inHazard(q, 0.2) || wet(q) || liquid({ x: q.x, y: q.y - 0.3, z: q.z }) || liquid(q);
   }
   /** The nearest walkable ground (a cell's middle) within a few blocks. */
   function nearestGround(q: Vec3): Vec3 | null {
@@ -530,7 +539,7 @@ function simulate(seed: number, classes: ClassId[], mapId: string) {
       // (Close by, and tight to it: a way between the river and a pocket is a way.)
       return [0.6, 1.2].every((k) => {
         const q = { x: me.x + vx * k, y: me.y, z: me.z + vz * k };
-        return !badGround(q, 0.1) && !wet(q);
+        return !inPool(q) && !wet(q);
       })
         ? [vx, vz]
         : null;
@@ -698,12 +707,13 @@ function simulate(seed: number, classes: ClassId[], mapId: string) {
     }
 
     const all = monsters();
-    // Knocked into lava (or the frozen pool): swim up and out to the nearest bank, now.
+    // Knocked into lava (or the frozen pool): swim up and out to the nearest bank, now (sprinting:
+    // swimming at the bank with Space alone leaves a body just short of its top).
     if (!downedNow && hazardAt(me)) {
       const out = nearestGround(me);
       if (out) {
         look(out, 0);
-        down.push('Space');
+        down.push('Space', 'ControlLeft');
         return finish(out.x - me.x, out.z - me.z);
       }
     }
@@ -1011,7 +1021,18 @@ function simulate(seed: number, classes: ClassId[], mapId: string) {
     if (state.phase === 'victory' || state.phase === 'defeat') break;
   }
   const won = state.phase === 'victory';
-  const result = { seed, classes, map: mapId, won, wave: state.wave, time: t, waves, deaths, earnedBy, kinds, armour: fighters.map((f) => f.p.armor), bought: fighters.map((f) => f.bought), blessings: fighters.map((f) => blessingsOf(f.p)), final: { gold: fighters.map((f) => gold(f.p)), armor: fighters.map((f) => armorOf(f.p)), weapons: fighters.map((f) => f.p.inventory.slots.flatMap((s) => (s && game.items.get(s.item)?.kind !== 'misc' ? [s.item] : [])).join(' ')) } };
+  // Out of time: what was left, and where (a boss's state with it), and where the fighters were.
+  const stuck =
+    state.phase === 'victory' || state.phase === 'defeat'
+      ? ''
+      : [
+          ...monsters().map((e) => {
+            const b = bossOf(e);
+            return `${e.type}${where(e.position)}${b ? `[${b.shield ? 'shielded ' : ''}${Math.round((100 * e.health) / e.maxHealth)}%]` : ''}`;
+          }),
+          ...fighters.map((f) => `${f.name}${where(f.p.position)}`),
+        ].join(' ');
+  const result = { seed, classes, map: mapId, stuck, won, wave: state.wave, time: t, waves, deaths, earnedBy, kinds, armour: fighters.map((f) => f.p.armor), bought: fighters.map((f) => f.bought), blessings: fighters.map((f) => blessingsOf(f.p)), final: { gold: fighters.map((f) => gold(f.p)), armor: fighters.map((f) => armorOf(f.p)), weapons: fighters.map((f) => f.p.inventory.slots.flatMap((s) => (s && game.items.get(s.item)?.kind !== 'misc' ? [s.item] : [])).join(' ')) } };
   host.dispose?.();
   return result;
 }
@@ -1045,7 +1066,7 @@ export default function arenaSim() {
   console.log(`  won ${runs.length - lost.length} of ${runs.length}; lost at ${lost.map((r) => `${r.map} ${r.classes.length > 1 ? 'duo' : 'solo'} ${r.classes[0]} w${r.wave}`).join(', ') || '-'}`);
   for (const r of runs) {
     const party = r.classes.length > 1 ? `duo ${r.classes[0]}` : `solo ${r.classes[0]}`;
-    console.log(`\n  == ${party}, seed ${r.seed}, ${r.map}: ${r.won ? 'VICTORY' : `fell on wave ${r.wave}`} after ${(r.time / 60).toFixed(1)} min; deaths ${r.deaths.map((d) => `w${d.wave} ${d.to}`).join(', ') || 'none'}`);
+    console.log(`\n  == ${party}, seed ${r.seed}, ${r.map}: ${r.won ? 'VICTORY' : `fell on wave ${r.wave}`} after ${(r.time / 60).toFixed(1)} min; deaths ${r.deaths.map((d) => `w${d.wave} ${d.to} ${d.at}`).join(', ') || 'none'}${r.stuck ? `; out of time with ${r.stuck}` : ''}`);
     console.log(`     gold earned by wave 5/10/15: ${[5, 10, 15].map((n) => r.earnedBy[n] ?? '-').join(' / ')}; bought: ${r.bought.map((b) => b.join(' ')).join(' | ')}`);
     console.log(`     blessings: ${r.blessings.map((b) => b.join(' ')).join(' | ')}; final: ${r.final.weapons.join(' | ')}, armour worn ${r.final.armor.join('/')} (all told ${r.armour.join('/')} points), gold ${r.final.gold.join('/')}`);
     for (const w of r.waves) {
