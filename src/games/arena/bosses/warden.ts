@@ -2,7 +2,7 @@ import { Models, type CharacterLook, type Entity, type GameContext, type Player,
 import { Sprite } from '../art';
 import { map } from '../run/state';
 import { spawnMonster } from '../run/spawn';
-import { adds, angle, announce, brain, chill, drop, fighters, furthest, own, propModel, pull, ring, root, strike, sweep, tether, type Move } from './fight';
+import { adds, angle, announce, brain, chill, drop, fighters, furthest, own, propModel, pull, quicken, ring, root, strike, sweep, tether, type Move } from './fight';
 import { MODEL } from './models';
 import type { BossKind } from './registry';
 
@@ -43,7 +43,7 @@ const swipe: Move = {
     const p = c.self.position;
     const a = c.s.mem.swipe as number;
     c.self.animate('attack');
-    strike(c.game, { source: c.self, at: p, r: 4.6, damage: 7, arc: [a - 1, a + 1], knockback: 8, lift: 3 });
+    strike(c.game, { source: c.self, at: p, r: 4.6, damage: 6, arc: [a - 1, a + 1], knockback: 8, lift: 3 });
     c.game.audio.play('warden_swing', { at: p });
     c.game.fx.shake(0.12, 0.25);
   },
@@ -69,7 +69,7 @@ const slam: Move = {
     game.fx.shockwave({ x: p.x, y: p.y, z: p.z }, SLAM, SOUL);
     game.fx.shake(0.35, 0.6);
     game.audio.play('slam', { at: p, volume: 1.3 });
-    const { dodged } = strike(game, { source: self, at: p, r: SLAM, damage: [9, 4], grounded: true, cover: true, knockback: 9, lift: 3 });
+    const { dodged } = strike(game, { source: self, at: p, r: SLAM, damage: [9, 4], grounded: true, cover: true, knockback: 9, lift: 3, cause: 'shockwave' });
     // In the air as it lands: jumped clean over it.
     for (const f of dodged) if (!f.onGround) f.achieve('slam_dodge');
     // Hurt, his slams send soul fire rolling out along the ground: jump it.
@@ -197,10 +197,10 @@ const prison: Move = {
   },
 };
 
-/** Aid at the gates: the dead, sappers among them (slay one beside him and its keg goes off in his face). */
+/** Aid at the gates: the dead, a sapper among them (slay it beside him and its keg goes off in his face). */
 function aid(game: GameContext, e: Entity) {
   const gates = map().gates;
-  const list = ['zombie', 'sapper', 'skeleton', 'sapper', 'zombie', 'skeleton'].slice(0, adds(game, 4, 1));
+  const list = ['zombie', 'sapper', 'zombie', 'skeleton', 'zombie', 'skeleton'].slice(0, adds(game, 3, 1));
   list.forEach((type, i) => {
     const g = gates[i % gates.length];
     spawnMonster(game, type, g.at, { yaw: g.yaw, data: { master: e.id } });
@@ -226,7 +226,7 @@ const wardenAI = brain({
         roar(c.game, c.self);
         aid(c.game, c.self);
         c.s.enraged = true;
-        c.self.setSpeed(1.4);
+        quicken(c.self, 1.4);
         announce(c.game, 'ENRAGED', 'The Warden chains two at once', '#ff5a5a');
       },
     },
@@ -247,7 +247,7 @@ function roar(game: GameContext, e: Entity) {
     game.fx.shockwave({ x: p.x, y: p.y + 0.1, z: p.z }, 8, SOUL);
     game.fx.burst({ x: p.x, y: p.y + 2.5, z: p.z }, { color: SOUL, count: 60, speed: 6, size: 0.16, gravity: -1, glow: 1.3, life: 1 });
     game.fx.shake(0.3, 1);
-    strike(game, { source: e, at: p, r: 5, damage: 0.5, knockback: 10, lift: 4 });
+    strike(game, { source: e, at: p, r: 5, damage: 0.5, knockback: 10, lift: 4, cause: 'shockwave' });
     game.clock.after(0.4, () => e.alive && e.animate('none'));
   });
 }
@@ -272,12 +272,11 @@ export const warden: BossKind = {
   color: COLOR,
   height: 4.4,
   bounty: 250,
-  escort: { zombie: 2, skeleton: 1 },
   define: () => ({
     name: 'The Warden',
     model: Models.character(LOOK, { scale: 1.95 }),
     hitbox: { width: 1.7, height: 4.2 },
-    health: 1900,
+    health: 1600,
     speed: 2.7,
     knockbackResistance: 0.95,
     boss: true,

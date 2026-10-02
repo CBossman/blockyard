@@ -134,6 +134,11 @@ export interface Strike {
   /** How hard it throws them back from `at`, and up. */
   knockback?: number;
   lift?: number;
+  /**
+   * What it is (default `melee`: a blow a shield can take, and a well-timed one parry). A
+   * shockwave, a falling weight, a charge or a spell isn't stopped by a shield: `shockwave`,
+   * `impact`, `magic`.
+   */
   cause?: string;
   weapon?: string;
 }
@@ -479,6 +484,8 @@ export interface Brain {
   chase?(c: Ctx): void;
   /** Every tick it's in the fight, whatever it's doing (auras, tethers). */
   always?(c: Ctx): void;
+  /** How it stands still through a tell or a recovery (default: it stops; the Lich King hovers). */
+  still?(self: Entity, game: GameContext): void;
 }
 
 const cooldownOf = (game: GameContext, m: Move) => (typeof m.cooldown === 'number' ? m.cooldown : game.rng.range(m.cooldown[0], m.cooldown[1]));
@@ -496,20 +503,35 @@ export function interrupt(c: Ctx) {
   c.self.glow(null);
 }
 
+/** Its speed from now on (times its type's): an enrage. Kept in `data.speed`, which the arsenal's slows go on top of (`items/status.ts`). */
+export function quicken(self: Entity, f: number) {
+  self.data.speed = f;
+  self.setSpeed(f);
+}
+
+/** Its speed as it stands (an enrage's, before any slow). */
+export const pace = (self: Entity) => (self.data.speed as number | undefined) ?? 1;
+
 /**
  * A boss's AI from its moves: it walks at its target; when a move may start (its cooldown done,
  * its `can`), it starts one (by weight), standing through its tell, the blow, the recovery; it
  * goes into its next phase as its health falls past the mark, standing and roaring a moment. It
- * does nothing while its entrance plays or it's beaten (`part.ts`), and reels while staggered.
+ * does nothing while its entrance plays or it's beaten (`part.ts`), and reels while staggered,
+ * by a blast of its own (`stagger`) or by the arsenal's (a parry, a slam: `data.stunned`).
  */
 export function brain(b: Brain): Behavior {
   return (self, game, dt) => {
     const s = bossState(self);
-    if (s.held || s.dying) {
+    const halt = () => (b.still ? b.still(self, game) : self.stop());
+    if (s.dying) {
+      self.stop();
+      return;
+    }
+    if (s.held) {
       const out = s.emerge && { x: -Math.sin(s.emerge.yaw), z: -Math.cos(s.emerge.yaw) };
-      if (s.held && s.emerge && out && (roofed(game, self.position, s.emerge.height) || roofed(game, { x: self.position.x - out.x * s.emerge.back, y: self.position.y, z: self.position.z - out.z * s.emerge.back }, s.emerge.height)))
+      if (s.emerge && out && (roofed(game, self.position, s.emerge.height) || roofed(game, { x: self.position.x - out.x * s.emerge.back, y: self.position.y, z: self.position.z - out.z * s.emerge.back }, s.emerge.height)))
         self.moveDirection(out.x, out.z);
-      else self.stop();
+      else halt();
       return;
     }
     for (const k in s.cds) s.cds[k] -= dt;
@@ -532,12 +554,19 @@ export function brain(b: Brain): Behavior {
       interrupt(c);
       s.phase++;
       s.transition = next.pause ?? 1.8;
-      self.stop();
+      halt();
       next.enter(c);
       return;
     }
-    if (s.transition > 0 || s.stagger > 0) {
-      self.stop();
+    // Reeling from the arsenal (a parry, a slam): its move cut short, the reel shown once.
+    const stunned = ((self.data.stunned as number | undefined) ?? 0) > 0;
+    if (stunned && !s.mem.reeling) {
+      s.mem.reeling = true;
+      if (s.move) interrupt(c);
+      self.animate('stagger', { fade: 0.1 });
+    } else if (!stunned) s.mem.reeling = false;
+    if (s.transition > 0 || s.stagger > 0 || stunned) {
+      halt();
       if (s.transition > 0) self.lookAt(target);
       return;
     }
@@ -546,7 +575,7 @@ export function brain(b: Brain): Behavior {
     if (m && s.step) {
       if (s.step === 'windup') {
         s.t -= dt;
-        self.stop();
+        halt();
         if (s.t > 0) return;
         s.step = 'act';
         m.act(c);
@@ -559,7 +588,7 @@ export function brain(b: Brain): Behavior {
         s.step = 'recover';
         s.t = m.recover * tempo;
       } else {
-        self.stop();
+        halt();
         s.t -= dt;
         if (s.t > 0) return;
         m.end?.(c);
@@ -581,7 +610,7 @@ export function brain(b: Brain): Behavior {
       s.t = mv.windup * tempo;
       s.cds[mv.name] = cooldownOf(game, mv) * tempo + mv.windup * tempo;
       mv.start?.(c);
-      self.stop();
+      halt();
       return;
     }
     if (b.chase) b.chase(c);

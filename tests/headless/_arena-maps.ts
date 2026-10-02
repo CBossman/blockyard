@@ -1,5 +1,5 @@
 import type { Entity, GameContext, Player, Vec3 } from '@platform';
-import { FLOOR, along, MAPS, type ArenaMap, type TrapSpec } from '../../src/games/arena/maps';
+import { FLOOR, along, inBox, MAPS, type ArenaMap, type Gate, type TrapSpec } from '../../src/games/arena/maps';
 import { bus } from '../../src/games/arena/run/bus';
 import { addGold, gold } from '../../src/games/arena/run/gold';
 import { map } from '../../src/games/arena/run/state';
@@ -9,7 +9,10 @@ import { check, launch } from './_harness';
  * Probe: every map is walkable, and its traps work. On each, zombies brought in at every gate
  * and every boss gate must find their way to a fighter standing in the middle, at the shop, at
  * each chest and at spots round the floor (each placement in turn); the map's own places (the
- * middle, the shop, the chests, the lookout) must have room for a body. Then each trap: a fighter with gold
+ * middle, the shop, the chests, the lookout) must have room for a body, the shop 3 by 3 of clear
+ * floor, and neither the shop nor a chest in a trap's way; every boss gate must be open floor a
+ * boss fits on (its floor, clear air 9 high for 3 blocks round, open floor 12 long in front of it
+ * for its entrance's camera). Then each trap: a fighter with gold
  * walks up to its lever and presses E, pays, and zombies held where it works are hurt and slain
  * by it, the kills theirs. The waves' own monsters are cleared as they come.
  * `node scripts/headless.mjs tests/headless/_arena-maps.ts` (MAP=id for one map).
@@ -48,6 +51,18 @@ function probe(m: ArenaMap): { row: string; failed: string[] } {
   for (const [name, p] of [...places, ['the lookout', m.lookout] as [string, Vec3]]) {
     if (!game.world.fits({ x: p.x, y: p.y + 0.05, z: p.z })) failed.push(`${m.id}: no room for a body at ${name} (${fmt(p)})`);
   }
+  if (m.shop) {
+    const s = m.shop;
+    for (const dx of [-1, 0, 1]) for (const dz of [-1, 0, 1]) if (!game.world.fits({ x: s.x + dx, y: s.y + 0.05, z: s.z + dz })) failed.push(`${m.id}: the shop's floor isn't clear 3 by 3 (at ${fmt({ x: s.x + dx, y: s.y, z: s.z + dz })})`);
+  }
+  for (const [name, p] of places.slice(1)) {
+    const trap = (m.traps ?? []).find((t) => inTrap(t, p));
+    if (trap) failed.push(`${m.id}: ${name} is in ${trap.id}'s way (${fmt(p)})`);
+  }
+  (m.bossGates ?? []).forEach((g, i) => {
+    const why = bossRoom(game, g);
+    if (why) failed.push(`${m.id}: boss gate ${i + 1} (${fmt(g.at)}): ${why}`);
+  });
 
   // Spots round the floor too: out toward the edge, all round.
   const round = [0, 1, 2, 3, 4, 5].map((i) => {
@@ -139,6 +154,11 @@ function trap(h: ReturnType<typeof launch>, game: GameContext, me: Player, t: Tr
   bus.on('slain', ({ entity, by, weapon }) => {
     if (ours.has(entity) && weapon === 'trap' && by === me) kills++;
   });
+  // (Its kills may drop coins too: the price is looked for as a payment of its own.)
+  let paid = false;
+  bus.on('gold', ({ player, delta }) => {
+    if (player === me && delta === -t.price && !paid) paid = true;
+  });
   let pressed = false;
   h.run(t.time + 2, {
     pilot: () => {
@@ -150,12 +170,50 @@ function trap(h: ReturnType<typeof launch>, game: GameContext, me: Player, t: Tr
     },
   });
   off();
-  const paid = gold(me) === 50;
   for (const e of held) e.remove();
-  if (!paid) failed.push(`${t.id}: the lever didn't take ${t.price} gold (left ${gold(me)})`);
+  if (!paid) failed.push(`${t.id}: the lever didn't take ${t.price} gold`);
   if (!hits) failed.push(`${t.id}: hurt nothing held in it (${where.map(fmt).join('; ')})`);
   if (wrong) failed.push(`${t.id}: ${wrong} hits not credited to the puller`);
   return `${t.id.split('.')[1]} ${hits}/${kills}`;
+}
+
+/** Whether a spot's where a trap does its work (its zone, a jet's flames, a blade's swing, the bell's blast, the sluice). */
+function inTrap(t: TrapSpec, p: Vec3): boolean {
+  const near = (q: Vec3, r: number) => Math.hypot(p.x - q.x, p.z - q.z) < r;
+  if (t.zone.some((b) => inBox(b, { x: p.x, y: b.min.y, z: p.z }, 1))) return true;
+  if (t.kind === 'jets')
+    return t.jets.some((j) => {
+      const u = (p.x - j.at.x) * j.dir.x + (p.z - j.at.z) * j.dir.z;
+      const across = Math.abs(-(p.x - j.at.x) * j.dir.z + (p.z - j.at.z) * j.dir.x);
+      return u > -1 && u < j.length + 1 && across < 2.5;
+    });
+  if (t.kind === 'pendulum') return t.blades.some((b) => near(b.pivot, b.length * 0.8 + 1.5));
+  if (t.kind === 'bell') return near(t.bell, t.reach);
+  if (t.kind === 'sluice') return t.channel.some((c) => near({ x: c.x + 0.5, y: c.y, z: c.z + 0.5 }, 1.5));
+  return false;
+}
+
+/** What's wrong with a boss gate as somewhere a big boss comes in (null: nothing). */
+function bossRoom(game: GameContext, g: Gate): string | null {
+  const solid = (x: number, y: number, z: number) => !!game.world.blockInfo(game.world.getBlock(Math.floor(x), Math.floor(y), Math.floor(z)))?.solid;
+  const { x, z } = g.at;
+  const y = Math.floor(g.at.y);
+  if (!solid(x, y - 1, z)) return 'no floor under it';
+  for (let dx = -3; dx <= 3; dx++)
+    for (let dz = -3; dz <= 3; dz++) {
+      if (Math.hypot(dx, dz) > 3.2) continue;
+      for (let k = 0; k < 9; k++) if (solid(x + dx, y + k, z + dz)) return `something in its way ${k} up at ${fmt({ x: x + dx, y: y + k, z: z + dz })}`;
+    }
+  const f = { x: -Math.sin(g.yaw), z: -Math.cos(g.yaw) };
+  for (let d = 3; d <= 12; d++)
+    for (const s of [-1, 0, 1]) {
+      const cx = x + f.x * d - f.z * s;
+      const cz = z + f.z * d + f.x * s;
+      // Open floor within a step of the gate's, three blocks of air over it.
+      const floor = [0, -1, 1, -2].map((dy) => y + dy).find((fy) => solid(cx, fy - 1, cz) && !solid(cx, fy, cz) && !solid(cx, fy + 1, cz) && !solid(cx, fy + 2, cz));
+      if (floor === undefined) return `the floor in front isn't open ${d} blocks out (${fmt({ x: cx, y, z: cz })})`;
+    }
+  return null;
 }
 
 /** The floor under a point (feet), or null where there's none within a few blocks. */

@@ -297,6 +297,12 @@ export function defineBossSounds(client: Client) {
     s.tone({ from: 90, to: 40, duration: 0.8, volume: 0.6 });
     shimmer(s, 14, 0.05, 0.06);
   }, { reverb: 0.5 });
+  // A blink: frost gathered in a rush, a crack, gone.
+  a.define('lich_blink', (s) => {
+    s.noise({ duration: 0.35, filter: 'bandpass', from: 800 * s.pitch, to: 5000 * s.pitch, q: 3, volume: 0.45 });
+    s.tone({ wave: 'sine', from: 2400 * s.pitch, to: 600, duration: 0.3, volume: 0.12, fm: { ratio: 2.76, depth: 1.2 } });
+    shimmer(s, 6, 0.05, 0.05);
+  });
   a.define('ice_spike', (s) => {
     s.noise({ duration: 0.18, filter: 'bandpass', from: 3500 * s.pitch, to: 1500, q: 2, volume: 0.5 });
     s.tone({ wave: 'sine', from: 1600 * s.pitch, to: 1500 * s.pitch, duration: 0.3, volume: 0.07, fm: { ratio: 2.76, depth: 1.5 } });

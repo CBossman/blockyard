@@ -698,10 +698,10 @@
   color: var(--ar-fg3);
 }
 .widget-screen:has(.gw-arena-end) {
-  /* Its veil is the screens' own (client/hud/status.css), under the map vote; only the screen's content takes the mouse. */
+  /* Its veil is the screens' own (client/hud/status.css), under the map vote; only the screen's content takes the mouse (over the platform's own `#ui .screen`, hence important). */
   background: none;
   backdrop-filter: none;
-  pointer-events: none;
+  pointer-events: none !important;
 }
 .widget-screen:has(.gw-arena-end) .gw-arena-end {
   pointer-events: auto;

@@ -7,6 +7,7 @@ import { bus } from '../../src/games/arena/run/bus';
 import { bossState, type BossState } from '../../src/games/arena/bosses/fight';
 import { bossKind } from '../../src/games/arena/bosses';
 import { WAVES } from '../../src/games/arena/run/director';
+import { stagger as stun } from '../../src/games/arena/items/status';
 import { check, launch } from './_harness';
 
 /**
@@ -41,6 +42,8 @@ function scene(seed: number, type: string, at: Vec3 = { x: 0.5, y: FLOOR + 1, z:
   const me = game.player as Player;
   me.maxHealth = 1000;
   me.health = 1000;
+  // (Bare: no class's armour, so the blows' damage shows as it is.)
+  me.armor = 0;
   me.teleport(at, 0, 0);
   const hits: Scene['hits'] = [];
   game.events.on('playerDamage', ({ amount, weapon, source }) => hits.push({ t: h.time, amount, weapon, from: !source || source === 'world' ? 'world' : source.kind === 'entity' ? source.type : 'player' }));
@@ -86,7 +89,7 @@ const SCREEN_SOUNDS = ['boss_sting', 'boss_vanquished', 'boss_phase', 'colossus_
 function voices(log: (s: string) => void) {
   for (const h of games) for (const c of h.find('audio', 'play')) asked.add(c.args[0] as string);
   const defined = new Set<string>();
-  const client = { audio: { play() {}, define: (n: string, _v: SynthVoice) => defined.add(n) }, items: { look() {}, get() {} } } as unknown as Client;
+  const client = { audio: { play() {}, define: (n: string, _v: SynthVoice) => defined.add(n), defineLoop() {} }, items: { look() {}, get() {} } } as unknown as Client;
   for (const k of sounds.standard()) k.setup?.(client);
   arenaClient.client.setup!(client);
   const missing = [...asked, ...SCREEN_SOUNDS].filter((n) => !defined.has(n) && !ENGINE_SOUNDS.includes(n));
@@ -370,6 +373,29 @@ function broodmother(log: (s: string) => void) {
 
 function lich(log: (s: string) => void) {
   const sc = scene(41, 'lich', { x: 0.5, y: FLOOR + 1, z: 16.5 });
+  // He floats a block over the floor.
+  run(sc, 2, undefined, (h) => (sc.only('none'), watch(sc)(h)));
+  const floats = sc.boss.position.y - (FLOOR + 1);
+  check(floats > 0.6 && floats < 1.6, `he floats over the floor (${floats.toFixed(2)} blocks)`);
+  // Crowded, he blinks to the marked spot well away, leaving frost where he was.
+  sc.me.teleport({ x: sc.boss.position.x, y: FLOOR + 1, z: sc.boss.position.z + 2.5 }, 0, 0);
+  const pools = sc.h.find('message', 'arena.boss.mark').filter((c) => (c.args[0] as { k: string }).k === 'pool').length;
+  sc.s.mem.pressure = 5;
+  run(sc, 3, () => sc.s.move?.name === 'blink' && sc.s.step !== 'windup', (h) => (sc.only('blink'), watch(sc)(h)));
+  run(sc, 0.2);
+  const away = sc.boss.distanceTo(sc.me);
+  const frost = sc.h.find('message', 'arena.boss.mark').filter((c) => (c.args[0] as { k: string }).k === 'pool').length > pools;
+  log(`blink: ${away.toFixed(1)} blocks away after it, frost left behind: ${frost}`);
+  check(away > 6 && frost, 'crowded, he blinks well away and leaves frost behind');
+  // The arsenal's stagger (a parry, a slam) cuts a move short and holds him a moment.
+  facing(sc, 10);
+  run(sc, 6, () => sc.s.move?.name === 'spikes' && sc.s.step === 'windup', (h) => (sc.only('spikes'), watch(sc)(h)));
+  stun(sc.game, sc.boss, 1.6);
+  run(sc, 0.1);
+  check(!sc.s.move && ((sc.boss.data.stunned as number) ?? 0) > 0, 'a stagger from the arsenal cuts his move short');
+  run(sc, 1, undefined, (h) => (sc.only('bolts'), watch(sc)(h)));
+  check(bossState(sc.boss).move?.name === 'bolts', 'and he takes up the fight again after it');
+  log('the arsenal\'s stagger: his move cut short, then back at it');
   // Frost bolts chill.
   const t0 = sc.h.time;
   run(sc, 8, () => sc.hits.some((x) => x.t >= t0 && x.weapon === 'frost'), (h) => (sc.only('bolts'), watch(sc)(h)));
@@ -377,7 +403,7 @@ function lich(log: (s: string) => void) {
   log('frost bolt: chilled');
   run(sc, 3);
   // The nova freezes whoever it catches on the ground; a jump clears it.
-  sc.me.teleport({ x: 0.5, y: FLOOR + 1, z: 8.5 }, 0, 0);
+  clearOf(sc, 3.5);
   run(sc, 8, () => sc.s.move?.name === 'nova' && sc.s.step !== 'windup', (h) => (sc.only('nova'), watch(sc)(h)));
   run(sc, 0.15);
   const frozen = sc.me.frozen;

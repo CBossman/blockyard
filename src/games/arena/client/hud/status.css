@@ -592,7 +592,7 @@
 /*
  * The end screen (hud/end.ts) has the screen to itself, over a veil of its own (a layer under the
  * widgets, so the map vote, the maps' 'arena-vote' widget, shows over it and takes its clicks):
- * the rest of the HUD and the other widgets out of the way under it.
+ * the rest of the HUD, the other widgets and any menu left open out of the way under it.
  */
 .ar-endveil {
   position: absolute;
@@ -608,7 +608,8 @@ body:has(.gw-arena-end) .ar-endveil {
   opacity: 1;
 }
 body:has(.gw-arena-end) :is(.hud, .gamehud) > :not(.gw-layer, .water-tint, [data-layer='arena.endveil']),
-body:has(.gw-arena-end) .gw-layer > .gw-slot:not(:has(.gw-arena-end, .gw-arena-vote)) {
+body:has(.gw-arena-end) .gw-layer > .gw-slot:not(:has(.gw-arena-end, .gw-arena-vote)),
+body:has(.gw-arena-end) .menu-screen {
   opacity: 0 !important;
   pointer-events: none !important;
   transition: opacity 400ms ease;
