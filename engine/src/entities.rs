@@ -106,6 +106,9 @@ pub struct Target {
 
 /// At most this many players get a navigation field at once (the ones being chased).
 const MAX_FIELDS: usize = 8;
+/// How often each navigation field is brought up to date (seconds). The fields take turns, one a
+/// step at most, so a step never rebuilds them all at once.
+const FLOW_REFRESH: f64 = 0.25;
 
 /// Breadth-first distance field toward one player over walkable cells.
 pub struct FlowField {
@@ -347,14 +350,23 @@ fn ray_aabb(o: [f64; 3], d: [f64; 3], min: [f64; 3], max: [f64; 3]) -> Option<f6
     Some(t0)
 }
 
+/// A chased player's navigation field: its age, and whether a body steered by it since it was built.
+struct Nav {
+    slot: usize,
+    field: FlowField,
+    age: f64,
+    wanted: bool,
+}
+
 pub struct Entities {
     pub bodies: Vec<f64>,
     pub projectiles: Vec<f64>,
-    /// A navigation field per chased player (by slot), rebuilt a few times a second.
-    flows: Vec<(usize, FlowField)>,
-    /// Players some body navigated toward since the last rebuild.
+    /// A navigation field per chased player, each rebuilt every `FLOW_REFRESH` seconds in turn.
+    flows: Vec<Nav>,
+    /// Players some body navigated toward this step.
     chased: Vec<usize>,
-    flow_timer: f64,
+    /// A field or two no longer wanted, kept to reuse (each is a couple of MB).
+    pool: Vec<FlowField>,
 }
 
 /// The nearest player to a point.
@@ -378,7 +390,7 @@ impl Entities {
             projectiles: vec![0.0; max_projectiles * proj::STRIDE],
             flows: Vec::new(),
             chased: Vec::new(),
-            flow_timer: 0.0,
+            pool: Vec::new(),
         }
     }
 
@@ -390,60 +402,74 @@ impl Entities {
         self.projectiles.len() / proj::STRIDE
     }
 
-    /// Rebuild the navigation fields toward these players now (normally ~4x per second, and
-    /// only for players being chased).
+    /// Rebuild the navigation fields toward these players now, all of them (normally each is
+    /// rebuilt every `FLOW_REFRESH` seconds in turn, and only for players being chased).
     pub fn rebuild_flow(&mut self, world: &World, players: &[Target]) {
         self.chased = players.iter().map(|t| t.slot).collect();
-        self.rebuild_chased(world, players);
+        self.update_flows(world, 0.0, players);
+        for n in self.flows.iter_mut() {
+            if let Some(t) = players.iter().find(|t| t.slot == n.slot) {
+                n.field.rebuild(world, t.pos[0], t.pos[1], t.pos[2]);
+                n.age = 0.0;
+            }
+        }
     }
 
-    fn rebuild_chased(&mut self, world: &World, players: &[Target]) {
-        // Fields for players who left or aren't chased any more go back to the pool.
-        let mut pool: Vec<FlowField> = Vec::new();
-        let mut keep: Vec<(usize, FlowField)> = Vec::new();
-        for (slot, f) in self.flows.drain(..) {
-            if self.chased.contains(&slot) && players.iter().any(|t| t.slot == slot) {
-                keep.push((slot, f));
+    /// The fields brought up to date for this step: those of players who left put away; a player
+    /// chased last step without one given one at once; and the stalest, once it's due, rebuilt
+    /// (or put away, if no body steered by it since it was last built). At most one is rebuilt in
+    /// a step for its age, so the fields take turns rather than all coming due together.
+    fn update_flows(&mut self, world: &World, dt: f64, players: &[Target]) {
+        let mut i = 0;
+        while i < self.flows.len() {
+            if players.iter().any(|t| t.slot == self.flows[i].slot) {
+                self.flows[i].age += dt;
+                i += 1;
             } else {
-                pool.push(f);
+                let gone = self.flows.swap_remove(i);
+                self.put_away(gone.field);
             }
         }
-        for t in players {
-            if keep.len() >= MAX_FIELDS {
-                break;
+        for slot in std::mem::take(&mut self.chased) {
+            if let Some(n) = self.flows.iter_mut().find(|n| n.slot == slot) {
+                n.wanted = true;
+                continue;
             }
-            if self.chased.contains(&t.slot) && !keep.iter().any(|(s, _)| *s == t.slot) {
-                keep.push((t.slot, pool.pop().unwrap_or_else(FlowField::new)));
+            if self.flows.len() >= MAX_FIELDS {
+                continue;
+            }
+            if let Some(t) = players.iter().find(|t| t.slot == slot) {
+                let mut field = self.pool.pop().unwrap_or_else(FlowField::new);
+                field.rebuild(world, t.pos[0], t.pos[1], t.pos[2]);
+                self.flows.push(Nav { slot, field, age: 0.0, wanted: true });
             }
         }
-        for (slot, f) in keep.iter_mut() {
-            if let Some(t) = players.iter().find(|t| t.slot == *slot) {
-                f.rebuild(world, t.pos[0], t.pos[1], t.pos[2]);
+        let due = (0..self.flows.len()).filter(|&k| self.flows[k].age >= FLOW_REFRESH).max_by(|&a, &b| self.flows[a].age.total_cmp(&self.flows[b].age));
+        if let Some(k) = due {
+            if self.flows[k].wanted {
+                let n = &mut self.flows[k];
+                if let Some(t) = players.iter().find(|t| t.slot == n.slot) {
+                    n.field.rebuild(world, t.pos[0], t.pos[1], t.pos[2]);
+                }
+                n.age = 0.0;
+                n.wanted = false;
+            } else {
+                let gone = self.flows.swap_remove(k);
+                self.put_away(gone.field);
             }
         }
-        self.flows = keep;
-        self.chased.clear();
     }
 
-    /// Whether any body is navigating toward a player (and so wants their field).
-    fn any_chaser(&self) -> bool {
-        self.bodies.chunks_exact(body::STRIDE).any(|b| (b[body::FLAGS] as u32) & FLAG_ACTIVE != 0 && b[body::MODE] as i32 == 1 && b[body::TARGET_KIND] as i32 != 1)
+    fn put_away(&mut self, field: FlowField) {
+        if self.pool.len() < 2 {
+            self.pool.push(field);
+        }
     }
 
     /// Advance all bodies toward, or away from, these players.
     pub fn step_bodies(&mut self, world: &World, dt: f64, players: &[Target]) {
         let dt = dt.min(0.1);
-        self.flow_timer -= dt;
-        if self.flow_timer <= 0.0 {
-            // The first time, before anyone has been chased, every player gets a field: but only
-            // if some body is heading for a player. (Else, with nobody chasing, this came round
-            // every other rebuild and built fields for every player, bots too, that nothing used.)
-            if self.flows.is_empty() && self.chased.is_empty() && self.any_chaser() {
-                self.chased = players.iter().map(|t| t.slot).collect();
-            }
-            self.rebuild_chased(world, players);
-            self.flow_timer = 0.25;
-        }
+        self.update_flows(world, dt, players);
         let n = self.body_capacity();
         let steps = ((dt / (1.0 / 90.0)).ceil() as usize).max(1);
         let h = dt / steps as f64;
@@ -499,7 +525,7 @@ impl Entities {
                         chased.push(slot);
                     }
                 }
-                let flow = field.and_then(|slot| flows.iter().find(|(s, _)| *s == slot)).map(|(_, f)| f);
+                let flow = field.and_then(|slot| flows.iter().find(|n| n.slot == slot)).map(|n| &n.field);
                 if let Some(flow) = flow {
                     let close = los && dist < 4.5;
                     match flow.steer(pos) {
@@ -889,6 +915,37 @@ mod tests {
         assert!(b0[body::X] > 7.0, "body 0 went to the nearest player, x = {}", b0[body::X]);
         assert_eq!(b1[body::PLAYER], 3.0);
         assert!(b1[body::X] < -10.0, "body 1 went after its target, x = {}", b1[body::X]);
+    }
+
+    #[test]
+    fn navigation_fields_take_turns() {
+        let w = flat_world();
+        let mut e = Entities::new(8, 4);
+        let players: Vec<Target> = (0..4).map(|k| target([k as f64 * 6.0 - 9.0, 64.0, 12.0], k + 1)).collect();
+        for k in 0..4 {
+            spawn(&mut e, k, k as f64 * 6.0 - 9.0, -12.0);
+            e.bodies[k * body::STRIDE + body::TARGET_KIND] = 2.0;
+            e.bodies[k * body::STRIDE + body::TX] = (k + 1) as f64;
+        }
+        // A field for each chased player at once, then rebuilt in turn: one a step at most, each
+        // about every FLOW_REFRESH seconds.
+        e.step_bodies(&w, 1.0 / 30.0, &players);
+        e.step_bodies(&w, 1.0 / 30.0, &players);
+        assert_eq!(e.flows.len(), 4);
+        for _ in 0..60 {
+            e.step_bodies(&w, 1.0 / 30.0, &players);
+            let fresh = e.flows.iter().filter(|n| n.age == 0.0).count();
+            assert!(fresh <= 1, "{fresh} fields rebuilt in one step");
+            assert!(e.flows.iter().all(|n| n.age < FLOW_REFRESH + 4.5 / 30.0), "a field went stale: {:?}", e.flows.iter().map(|n| n.age).collect::<Vec<_>>());
+        }
+        // Nobody chasing any more: the fields are put away as they come due.
+        for k in 0..4 {
+            e.bodies[k * body::STRIDE + body::MODE] = 3.0;
+        }
+        for _ in 0..30 {
+            e.step_bodies(&w, 1.0 / 30.0, &players);
+        }
+        assert!(e.flows.is_empty() && e.pool.len() <= 2);
     }
 
     #[test]
