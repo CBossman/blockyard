@@ -252,8 +252,14 @@ export default function arenaBestiary() {
     hp = k.health;
     k.damage(5, { source: s.me, cause: 'melee', weapon: 'gladius' });
     const frozen = hp - k.health;
-    log(`knight vs the armory: a bash from in front ${bash}, the slam ${slam.toFixed(1)}, reeling ${reeling} so a blade does ${open.toFixed(1)}; frozen, ${frozen.toFixed(1)}`);
-    check(bash === 0 && slam > 0 && reeling && open > 0 && frozen > 0, 'a slam goes under the shield and opens its guard; so does a freeze');
+    // A slam by its own cause (the hammer's): through, and the guard knocked open.
+    s.run(3);
+    hp = k.health;
+    k.damage(4, { source: s.me, cause: 'slam', weapon: 'warhammer', from: { x: -6, y: FLOOR + 1, z: 8.5 } });
+    k.damage(4, { source: s.me, cause: 'melee', weapon: 'gladius' });
+    const slammed = hp - k.health;
+    log(`knight vs the armory: a bash from in front ${bash}, the slam ${slam.toFixed(1)}, reeling ${reeling} so a blade does ${open.toFixed(1)}; frozen, ${frozen.toFixed(1)}; a 'slam' then a blade ${slammed.toFixed(1)}`);
+    check(bash === 0 && slam > 0 && reeling && open > 0 && frozen > 0 && slammed >= 8, 'a slam goes under the shield and opens its guard; so does a freeze');
   }
 
   // Frozen or reeling (the armory's `data.stunned`): a knight in reach does nothing, a bat drops.

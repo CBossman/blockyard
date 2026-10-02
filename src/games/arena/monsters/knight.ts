@@ -108,14 +108,16 @@ const knightAI: Behavior = (self, game, dt) => {
 
 /**
  * A blow at a Knight (the `damage` event): turned aside by its shield when it comes from in front,
- * with its guard up, and isn't a blast, fire or magic; a bomb knocks its guard open for a moment.
+ * with its guard up, and isn't a blast, a slam, fire or magic; a bomb or a slam knocks its guard
+ * open for a moment.
  */
 export function knightGuard(game: GameContext, hit: DamageEvent) {
   const self = hit.target;
   if (self.kind !== 'entity' || self.type !== 'knight' || !self.alive) return;
   const s = self.data as KnightState;
   const now = game.clock.now;
-  if (hit.cause === 'explosion') {
+  // A blast, or a hammer's slam on the ground: through, and its guard knocked open.
+  if (hit.cause === 'explosion' || hit.cause === 'slam') {
     s._open = Math.max(s._open ?? 0, now + 1.6);
     return;
   }
