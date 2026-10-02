@@ -17,9 +17,3 @@ export function iron(s: S, seed: number, l0: number): Px {
   }
   return px(IRON, l);
 }
-
-/** Worn leather (shared with the player skin in the engine). */
-export function pLeather(s: S, seed: number, l0: number): Px {
-  const l = l0 + 1.2 * (s.fbm(1.8, seed) - 0.5) + 0.6 * (s.rnd(seed + 1) - 0.5);
-  return px(LEATHER, l).h(0.8);
-}

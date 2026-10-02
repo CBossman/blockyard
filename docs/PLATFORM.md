@@ -831,7 +831,7 @@ Built-in animations are `swing` (Minecraft's), `slash` (a diagonal cut for 3D bl
 
 For procedural motion, pass `sample(t)` instead of `keys`.
 
-**3D held items.** An item can be held as a box model (`HeldModelSpec`) instead of its flat sprite: same UV layout as mobs, length along +z, the hand position marked. They look much better in the hand than extruded sprites. The starter kit includes models for the swords and the potion; an item uses one by naming it: `hold: { model: HeldModels.ironSword }`. Without a model, an item is held as its sprite, extruded. Held models get their own grip: swords rise from the fist into the scene with their flat turned to you and attack with a diagonal `slash`; axes are held low on the haft and `hew`; bottles sit on the palm and `sip`. The Arena's battle axe and pike are models of its own (`src/games/arena/art/`):
+**3D held items.** An item can be held as a box model (`HeldModelSpec`) instead of its flat sprite: same UV layout as mobs, length along +z, the hand position marked. They look much better in the hand than extruded sprites. The starter kit includes models for the swords and the potion; an item uses one by naming it: `hold: { model: HeldModels.ironSword }`. Without a model, an item is held as its sprite, extruded. Held models get their own grip: swords rise from the fist into the scene with their flat turned to you and attack with a diagonal `slash`; axes are held low on the haft and `hew`; bottles sit on the palm and `sip`. A game paints its own into an atlas of its own (`items.atlas`), a pike, say:
 
 ```ts
 const PIKE: HeldModelSpec = {
@@ -1167,7 +1167,7 @@ const { albedo, emissive } = cv.finish();
 game.items.atlas('mine', { width: ATLAS, height: ATLAS, pixels: albedo, emissive });
 ```
 
-The Arena paints its whole atlas this way (`src/games/arena/art/`): five mob skins, weapon sprites and the pike's texture, with bevelled pixel-art shading, in about 50 ms at startup. Bed Wars paints four team skins, a shopkeeper and its item sprites the same way.
+The Arena paints its whole atlas this way (`src/games/arena/art/`): its mob skins and item sprites, with bevelled pixel-art shading, in about 50 ms at startup. Bed Wars paints four team skins, a shopkeeper and its item sprites the same way.
 
 **Sound.** A game's client code defines its voices (`client.audio.define(name, voice)`, in `setup`), and anything plays them by name: the server's `audio.play(name, { at })`, client code's `client.audio.play`, and items' `sounds`. Voices are synthesised on each play, on each player's machine, with real Web Audio.
 

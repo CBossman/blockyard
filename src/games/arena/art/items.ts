@@ -4,61 +4,18 @@
  * built-in atlas.
  */
 import { type Canvas, rnd, remEuclid, SpriteCanvas } from '@platform/art';
-import { pikeIcon } from './pike';
 import { bombIcon } from './bombs';
 
 export const ITEM_Y = 128;
 
 /** Item sprite cells: x at y = `ITEM_Y` (16 * the item's index in the engine's `ITEMS`). */
-export const ITEM_X = { battle_axe: 64, arrow_bundle: 160, golden_trophy: 176, soul_fireball: 192, pike: 208, bomb: 224 } as const;
+export const ITEM_X = { arrow_bundle: 160, golden_trophy: 176, soul_fireball: 192, bomb: 224 } as const;
 
 export function items(cv: Canvas, ox: number, oy: number) {
-  battleAxe().blit(cv, ox + ITEM_X.battle_axe, oy);
   arrowBundle().blit(cv, ox + ITEM_X.arrow_bundle, oy);
   trophy().blit(cv, ox + ITEM_X.golden_trophy, oy);
   soulFireball().blit(cv, ox + ITEM_X.soul_fireball, oy);
-  pikeIcon().blit(cv, ox + ITEM_X.pike, oy);
   bombIcon().blit(cv, ox + ITEM_X.bomb, oy);
-}
-
-const HANDLE = [0x80592f, 0x5a3c1c, 0x22160a];
-
-const AXE_HEAD = [0xf4f6f8, 0xcdd2d7, 0xa3a9b0, 0x7b828a, 0x535a62, 0x1f2226];
-
-function battleAxe(): SpriteCanvas {
-  const s = new SpriteCanvas();
-  for (let y = 0; y < 16; y++) {
-    for (let x = 0; x < 16; x++) {
-      const a = x - y; // along the haft, toward the top right
-      const d = x + y; // across: the haft is d = 15, 16
-      // double bit: each blade flares from a narrow neck at the haft to a convex edge
-      const u = d <= 14 ? 15 - d : d >= 17 ? d - 16 : 0;
-      const lit = d <= 14;
-      const t = Math.abs(a - 3);
-      const edge = 6.2 - t * t / 16.0;
-      const inside = u >= 1 && t <= Math.min(0.9 + 1.35 * u, 6.0) && u <= edge;
-      if (inside) {
-        let c: number;
-        if (u > edge - 1.3) {
-          c = lit ? AXE_HEAD[0] : AXE_HEAD[1];
-        } else if (u <= 1) {
-          c = AXE_HEAD[4];
-        } else if (lit) {
-          c = AXE_HEAD[2];
-        } else {
-          c = AXE_HEAD[3];
-        }
-        s.put(x, y, c, AXE_HEAD[5]);
-        continue;
-      }
-      if ((d === 15 || d === 16) && -13 <= a && a <= 7) {
-        const c = a > 5 ? AXE_HEAD[3] : d === 15 ? HANDLE[0] : HANDLE[1];
-        s.put(x, y, c, HANDLE[2]);
-      }
-    }
-  }
-  s.outline();
-  return s;
 }
 
 const FLINT = [0xd6d9dc, 0xa3a8ad, 0x6d7278, 0x1f2124];
