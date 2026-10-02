@@ -150,7 +150,8 @@
   font: 500 11px/1 var(--ar-label);
   letter-spacing: 0.24em;
   text-transform: uppercase;
-  color: var(--ar-fg3, rgba(245, 239, 228, 0.44));
+  color: var(--ar-fg2, rgba(245, 239, 228, 0.7));
+  font-variant-numeric: tabular-nums;
 }
 .ar-wave-hint:empty {
   display: none;
