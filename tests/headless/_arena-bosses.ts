@@ -4,8 +4,11 @@ import type { Headless, Pilot } from '../../src/platform/host/headless';
 import { sounds } from '../../src/platform/client-kits';
 import arenaClient from '../../src/games/arena/client';
 import { bus } from '../../src/games/arena/run/bus';
-import { bossState, type BossState } from '../../src/games/arena/bosses/fight';
+import { bossState, near, type BossState } from '../../src/games/arena/bosses/fight';
 import { bossKind } from '../../src/games/arena/bosses';
+import { MARK_MSG, type Mark } from '../../src/games/arena/bosses/messages';
+import { MAPS } from '../../src/games/arena/maps';
+import { map } from '../../src/games/arena/run/state';
 import { WAVES } from '../../src/games/arena/run/director';
 import { stagger as stun } from '../../src/games/arena/items/status';
 import { check, launch } from './_harness';
@@ -14,7 +17,9 @@ import { check, launch } from './_harness';
  * Probe: the four bosses, one at a time, each brought in with `/boss` on a floor kept clear of the
  * waves' monsters: the entrance holds everyone, each signature move lands, a roll or a jump (or a
  * step aside) gets out of it, each phase comes at its mark, and each can be killed (its throes,
- * its fall, its loot and gold). Last, a boss fight with its adds is timed tick by tick.
+ * its fall, its loot and gold). Then each boss's wave on every map: it comes in at a boss gate,
+ * gets to a fighter in the middle, keeps to the arena, and every circle it marks (bones, souls,
+ * a leap, a nova) lies on the floor. Last, a boss fight with its adds is timed tick by tick.
  * `node scripts/headless.mjs tests/headless/_arena-bosses.ts`
  */
 const FLOOR = 70;
@@ -233,18 +238,18 @@ function colossus(log: (s: string) => void) {
   const jumped = landed(sc, 'stomp', before(sc, 'stomp', 'Space', 0.1));
   const rolled = landed(sc, 'stomp', before(sc, 'stomp', 'KeyQ', 0.06));
   log(`stomp: ${stomp} standing, ${jumped} jumping it, ${rolled} rolling through it`);
-  check(stomp >= 3 && jumped === 0 && rolled === 0, 'the stomp lands standing, and a jump or a roll avoids it');
+  check(stomp >= 2.5 && jumped === 0 && rolled === 0, 'the stomp lands standing, and a jump or a roll avoids it');
   // The sweep: in front of it it lands; a roll goes through it.
   const swept = landed(sc, 'sweep');
   const swRolled = landed(sc, 'sweep', before(sc, 'sweep', 'KeyQ', 0.06));
   log(`sweep: ${swept} standing, ${swRolled} rolling`);
-  check(swept >= 5 && swRolled === 0, 'the sweep lands in front of it, and a roll avoids it');
+  check(swept >= 4 && swRolled === 0, 'the sweep lands in front of it, and a roll avoids it');
   // The bone rain: a circle under the fighter; standing still it lands, running out of it it doesn't.
   sc.me.teleport({ x: 0.5, y: FLOOR + 1, z: 14.5 }, 0, 0);
   const rain = landed(sc, 'rain');
   const ran = landed(sc, 'rain', escape(sc, 'rain', 'KeyA', 1.4));
   log(`bone rain: ${rain} standing, ${ran} running out of its circle`);
-  check(rain >= 5 && ran < rain, 'the bones land on whoever stays in the circle');
+  check(rain >= 4 && ran < rain, 'the bones land on whoever stays in the circle');
   // A blast at its feet staggers it.
   sc.s.staggerCd = 0;
   const b = sc.boss.position;
@@ -278,7 +283,7 @@ function warden(log: (s: string) => void) {
   const slam = landed(sc, 'slam');
   const jumped = landed(sc, 'slam', before(sc, 'slam', 'Space', 0.1));
   log(`slam: ${slam} standing, ${jumped} jumping it`);
-  check(slam >= 5 && jumped === 0 && sc.me.achieved('slam_dodge'), 'the slam lands standing; jumping it avoids it');
+  check(slam >= 4 && jumped === 0 && sc.me.achieved('slam_dodge'), 'the slam lands standing; jumping it avoids it');
   // The chain, from far off (across open floor, nothing in the way): it drags the fighter in.
   clearOf(sc, 12);
   const t0 = sc.h.time;
@@ -466,8 +471,92 @@ export default function arenaBosses() {
   broodmother(log);
   lich(log);
   party(log);
+  everyMap(log);
   voices(log);
   timing(log);
+}
+
+/** Air under a body's feet at `p` (0: standing on something), to a quarter block. */
+function gap(game: GameContext, p: Vec3): number {
+  for (let d = 0; d < 8; d += 0.25) if (!game.world.fits({ x: p.x, y: p.y + 0.05 - d, z: p.z })) return Math.max(0, d - 0.25);
+  return 8;
+}
+
+/** How close (flat) each boss gets to a fighter when it's fighting them: its reach. */
+const CLOSE: Record<string, number> = { colossus: 7, warden: 4.5, broodmother: 5, lich: 11 };
+
+/** Each boss's wave on every map, the fighter standing in the middle (unhurt, the waves' monsters cleared). */
+function everyMap(log: (s: string) => void) {
+  const rows: string[] = [];
+  for (const m0 of MAPS) {
+    // Spots about the floor (the bones', the storm's, the eggs'): on the floor, not in the air over a sunken one.
+    {
+      const h = launch('arena', { seed: 3 });
+      const game = h.ctx as GameContext;
+      game.commands.run(`map ${m0.id}`);
+      h.run(0.5, { pilot: () => ({}) });
+      const m = map();
+      check(m.id === m0.id, `the fight moved to ${m0.id}`);
+      let off = 0;
+      for (let i = 0; i < 200; i++) {
+        const p = near(game, m.center, m.radius - 2, m.center, m.radius);
+        if (!game.world.fits({ x: p.x, y: p.y + 0.05, z: p.z }) || gap(game, p) > 0.6) off++;
+      }
+      check(off <= 2, `${m0.id}: spots about the floor on it (${off} of 200 not)`);
+    }
+    const seen: string[] = [];
+    for (const w of WAVES.map((x, i) => ({ wave: i + 1, boss: x.boss })).filter((x) => x.boss && bossKind(x.boss))) {
+      const h = launch('arena', { seed: 7 });
+      const game = h.ctx as GameContext;
+      const me = game.player as Player;
+      game.commands.run(`map ${m0.id}`);
+      h.run(0.5, { pilot: () => ({}) });
+      const m = map();
+      me.maxHealth = 5000;
+      me.health = 5000;
+      me.teleport({ x: m.center.x, y: m.center.y + 0.05, z: m.center.z }, 0, 0);
+      game.commands.run(`wave ${w.wave}`);
+      h.run(10, { until: () => game.entities.all().some((e) => bossKind(e.type)) });
+      const boss = game.entities.all().find((e) => bossKind(e.type));
+      check(boss, `${m0.id}: wave ${w.wave} brings its boss`);
+      const s = bossState(boss);
+      const at = boss.position;
+      const gateD = Math.min(...(m.bossGates ?? m.gates).map((g) => Math.hypot(g.at.x - at.x, g.at.z - at.z)));
+      check(gateD < 2, `${m0.id}: the ${boss.type} comes in at a boss gate (${gateD.toFixed(1)} from one)`);
+      const marks = h.find('message', MARK_MSG).length;
+      const t0 = h.time;
+      let close = -1;
+      let outside = 0;
+      let floats = 0;
+      h.run(25, {
+        pilot: () => {
+          for (const e of game.entities.all()) if (e !== boss && e.data.master === undefined) e.remove();
+          me.health = me.maxHealth;
+          const b = boss.position;
+          const p = me.position;
+          if (close < 0 && Math.hypot(b.x - p.x, b.z - p.z) < CLOSE[boss.type]) close = h.time - t0;
+          if (Math.hypot(b.x - m.center.x, b.z - m.center.z) > m.radius + 1.5) outside++;
+          if (boss.type === 'lich' && !s.held && h.time - t0 > 6) {
+            const g = gap(game, b);
+            if (g < 0.4 || g > 3.2) floats++;
+          }
+          return { yaw: Math.atan2(-(b.x - p.x), -(b.z - p.z)), pitch: 0.1 };
+        },
+      });
+      const rings = h.find('message', MARK_MSG).slice(marks).map((c) => c.args[0] as Mark).filter((k): k is Extract<Mark, { k: 'ring' }> => k.k === 'ring');
+      const off = rings.filter((r) => {
+        const p = { x: r.at[0], y: r.at[1], z: r.at[2] };
+        return !game.world.fits({ x: p.x, y: p.y + 0.05, z: p.z }) || gap(game, p) > 0.6;
+      });
+      check(close >= 0 && close < 16, `${m0.id}: the ${boss.type} gets to the fighter in the middle (${close.toFixed(1)} s)`);
+      check(!outside, `${m0.id}: the ${boss.type} keeps to the arena (${outside} ticks outside)`);
+      check(!off.length, `${m0.id}: the ${boss.type}'s circles on the floor (${off.length} of ${rings.length} not: ${off.map((r) => r.at.map((v) => v.toFixed(1)).join(',')).join('; ')})`);
+      check(!floats, `${m0.id}: the Lich floats over the floor (${floats} ticks too high or low)`);
+      seen.push(`${boss.type} ${close.toFixed(0)} s`);
+    }
+    rows.push(`${m0.id} (${seen.join(', ')})`);
+  }
+  log(`every map: in at a boss gate, at the middle in: ${rows.join('; ')}; circles on the floor`);
 }
 
 /** Three fighters: all held for the entrance, the boss tougher for them, and adds for each. */

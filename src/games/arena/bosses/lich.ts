@@ -1,7 +1,7 @@
 import { Models, math, type Entity, type GameContext, type Player, type ProjectileSpec, type Vec3 } from '@platform';
 import { map } from '../run/state';
 import { spawnMonster } from '../run/spawn';
-import { adds, angle, announce, brain, chill, drop, fighters, fromSky, lane, mark, near, own, pool, propModel, quicken, ring, root, stagger, strike, tether, type Ctx, type Move } from './fight';
+import { adds, angle, announce, brain, chill, drop, fighters, fromSky, lane, mark, near, own, pool, propModel, quicken, ring, root, stagger, standAt, strike, tether, type Ctx, type Move } from './fight';
 import { monsterKind } from '../monsters';
 import { MODEL } from './models';
 import type { BossKind } from './registry';
@@ -12,9 +12,10 @@ import type { BossKind } from './registry';
  * that freezes whoever it catches on the ground (jump it, or be elsewhere), lines of ice spikes
  * erupting along the floor toward you (step aside). Phase two (two thirds): he shields himself
  * behind phylacteries about the arena, each tethered to him, and raises the dead about the
- * fighters while they stand; shatter them all and his shield breaks, leaving him stunned. Phase three (a third): soul
+ * fighters while they stand; shatter them all and his shield breaks, leaving him stunned (left
+ * standing long enough, they crumble on their own, with no stun). Phase three (a third): soul
  * storms, orbs of souls raining onto marked circles across the whole arena while he channels,
- * open to blows. Near the end he's enraged. He floats a block over the floor (higher in the
+ * holding still. Near the end he's enraged. He floats a block over the floor (higher in the
  * storm), and crowd him and he blinks away: a ring marks where he'll be, and where he was a patch
  * of frost lingers.
  */
@@ -22,7 +23,7 @@ import type { BossKind } from './registry';
 const COLOR = '#7fe3ff';
 const FROST_C = '#9fe8ff';
 const SOUL_C = '#9b7bff';
-const FROST: ProjectileSpec = { speed: 19, gravity: 0, damage: 2, knockback: 0.5, glow: FROST_C, weapon: 'frost' };
+const FROST: ProjectileSpec = { speed: 22, gravity: 0, damage: 3.5, knockback: 0.5, glow: FROST_C, weapon: 'frost' };
 const NOVA = 7.5;
 /** Spacing of the ice spikes along their lane, and how wide each one bites. */
 const SPIKE_STEP = 1.35;
@@ -31,13 +32,15 @@ const SPIKE_R = 1.3;
 const SPIKE_PACE = 0.05;
 const STORM_R = 2.3;
 /** How many raised dead may stand at once. */
-const RAISED = 4;
+const RAISED = 5;
 /** How high he floats over the floor (blocks), and in the storm. */
 const HOVER = 1;
-const HOVER_STORM = 3;
+const HOVER_STORM = 2;
+/** Seconds his phylacteries hold out on their own before they crack and fall (without the reel a fighter's shattering wins). */
+const WARD_TIME = 25;
 
-/** The floor under him (where his spells strike the ground), his feet's height over it aside. */
-const floorAt = (game: GameContext, p: Vec3): Vec3 => ({ x: p.x, y: game.world.surfaceY(Math.floor(p.x), Math.floor(p.z)) + 1, z: p.z });
+/** The floor under him (where his spells strike the ground), his feet's height over it aside: an arch or a roof overhead doesn't count. */
+const floorAt = (game: GameContext, p: Vec3): Vec3 => standAt(game, p, 8) ?? { x: p.x, y: game.world.surfaceY(Math.floor(p.x), Math.floor(p.z)) + 1, z: p.z };
 
 /** How fast to rise or sink (a share of his speed) to float `want` blocks over the floor. */
 function lift(game: GameContext, self: Entity, want: number): number {
@@ -52,7 +55,7 @@ const floatHeight = (self: Entity) => ((self.data.boss as { mem: Record<string, 
 const bolts: Move = {
   name: 'bolts',
   can: (c) => c.d > 3.5 && c.self.canSee(c.target),
-  cooldown: [3.6, 4.6],
+  cooldown: [2.8, 3.6],
   weight: 1.3,
   windup: 0.6,
   start(c) {
@@ -65,8 +68,8 @@ const bolts: Move = {
     const { self, s, game } = c;
     self.glow(null);
     self.animate('bolt', { fade: 0.05 });
-    const n = s.enraged ? 5 : 3;
-    for (let i = 0; i < n; i++) game.clock.after(i * 0.14, () => self.alive && !bossBusy(self) && self.shoot(FROST, c.target, { lead: 0.45, spread: 0.05 }));
+    const n = s.enraged ? 6 : 4;
+    for (let i = 0; i < n; i++) game.clock.after(i * 0.14, () => self.alive && !bossBusy(self) && self.shoot(FROST, c.target, { lead: 0.6, spread: 0.045 }));
     game.audio.play('frost_bolt', { at: self.position });
   },
   recover: 0.4,
@@ -91,7 +94,7 @@ const nova: Move = {
     const p = floorAt(game, self.position);
     self.glow(null);
     self.animate('nova', { fade: 0.05 });
-    const { hit } = strike(game, { source: self, at: p, r: NOVA, damage: [7, 3.5], grounded: true, cover: true, knockback: 6, lift: 2, cause: 'magic' });
+    const { hit } = strike(game, { source: self, at: p, r: NOVA, damage: [9, 4.5], grounded: true, cover: true, knockback: 6, lift: 2, cause: 'magic' });
     for (const f of hit) {
       if (root(game, f, 1.3)) {
         f.hud.pop('FROZEN', { color: FROST_C });
@@ -116,7 +119,7 @@ const nova: Move = {
 const spikes: Move = {
   name: 'spikes',
   can: (c) => c.d > 5 && c.d < 22 && c.self.canSee(c.target),
-  cooldown: [6, 8],
+  cooldown: [5, 6.5],
   windup: 0.85,
   start(c) {
     const { game, self, target } = c;
@@ -150,17 +153,17 @@ const spikes: Move = {
     }
     spots.forEach((at, i) => {
       game.clock.after(i * SPIKE_PACE, () => {
-        const spike = own(game.props.spawn(propModel(game, MODEL.ice_spike), { position: at }));
+        const spike = own(game, game.props.spawn(propModel(game, MODEL.ice_spike), { position: at }));
         spike.quaternion.setFromEuler(new math.Euler(game.rng.range(-0.15, 0.15), game.rng.range(0, Math.PI * 2), game.rng.range(-0.15, 0.15)));
         spike.play('rise');
-        game.clock.after(1.3, () => drop(spike));
+        game.clock.after(1.3, () => drop(game, spike));
         if (i % 2 === 0) game.audio.play('ice_spike', { at, pitch: game.rng.range(0.9, 1.15) });
         game.fx.burst({ x: at.x, y: at.y + 0.3, z: at.z }, { color: '#e8fbff', count: 8, speed: 3, size: 0.12, gravity: 10 });
         for (const f of fighters(game)) {
           const q = f.position;
           if (struck.has(f.id) || Math.hypot(q.x - at.x, q.z - at.z) > SPIKE_R || Math.abs(q.y - at.y) > 2) continue;
           struck.add(f.id);
-          if (f.damage(6, { source: self, knockback: 0, cause: 'magic', weapon: 'ice_spike' })) {
+          if (f.damage(8, { source: self, knockback: 0, cause: 'magic', weapon: 'ice_spike' })) {
             f.impulse(0, 9, 0);
             chill(game, f, 0.6, 2);
           }
@@ -216,7 +219,7 @@ const raise: Move = {
 const blink: Move = {
   name: 'blink',
   can: (c) => ((c.s.mem.pressure as number | undefined) ?? 0) >= 3 || ((c.s.mem.stuckT as number | undefined) ?? 0) > 1.5,
-  cooldown: [10, 13],
+  cooldown: [12, 15],
   weight: 4,
   windup: 0.5,
   start(c) {
@@ -226,7 +229,7 @@ const blink: Move = {
     const p = self.position;
     const q = target.position;
     const a = Math.atan2(p.z - q.z, p.x - q.x) + game.rng.range(-0.8, 0.8);
-    const r = game.rng.range(9, 13);
+    const r = game.rng.range(7, 10);
     let to = near(game, { x: q.x + Math.cos(a) * r, y: floorAt(game, q).y, z: q.z + Math.sin(a) * r }, 2.5, m.center, m.radius);
     if (Math.hypot(to.x - m.center.x, to.z - m.center.z) > m.radius - 3) to = near(game, m.center, m.radius * 0.5, m.center, m.radius);
     c.s.aim = to;
@@ -275,16 +278,15 @@ const storm: Move = {
     const { game, self, s, dt } = c;
     const st = s.mem.storm as { t: number; next: number };
     st.t += dt;
-    s.vulnerable = 0.3;
     if (st.t >= st.next) {
-      st.next += s.enraged ? 0.27 : 0.34;
+      st.next += s.enraged ? 0.24 : 0.3;
       const m = map();
       const fs = fighters(game);
-      // A third of them on (or near) a fighter, the rest anywhere on the floor.
-      const at = game.rng.chance(0.35) && fs.length ? near(game, game.rng.pick(fs).position, 3, m.center, m.radius) : near(game, m.center, m.radius - 2, m.center, m.radius);
+      // Two in five of them on (or near) a fighter, the rest anywhere on the floor.
+      const at = game.rng.chance(0.4) && fs.length ? near(game, game.rng.pick(fs).position, 3, m.center, m.radius) : near(game, m.center, m.radius - 2, m.center, m.radius);
       ring(game, at, STORM_R, 1.25, SOUL_C);
       fromSky(game, MODEL.soul_orb, at, 1.25, () => {
-        strike(game, { source: self, at, r: STORM_R, damage: 6, knockback: 5, lift: 3, cause: 'magic' });
+        strike(game, { source: self, at, r: STORM_R, damage: 7, knockback: 5, lift: 3, cause: 'magic' });
         game.fx.burst({ x: at.x, y: at.y + 0.4, z: at.z }, { color: SOUL_C, count: 26, speed: 5, size: 0.14, gravity: 3, glow: 1.4, life: 0.8 });
         game.fx.shockwave({ x: at.x, y: at.y + 0.1, z: at.z }, STORM_R + 0.4, SOUL_C);
         game.audio.play('soul_crash', { at, pitch: game.rng.range(0.85, 1.15) });
@@ -319,6 +321,7 @@ function shield(c: Ctx) {
   }
   s.shield = true;
   s.mem.wards = game.entities.all('phylactery').filter((e) => e.data.master === self.id).map((e) => e.id);
+  s.mem.wardsUntil = game.clock.now + WARD_TIME;
   game.audio.play('shield_up', { at: self.position, volume: 1.3 });
 }
 
@@ -346,7 +349,7 @@ function drift(c: Ctx) {
   const p = self.position;
   const up = lift(game, self, floatHeight(self));
   self.lookAt(target);
-  const mem = c.s.mem as { side?: number; flip?: number; last?: Vec3; stuckT?: number };
+  const mem = c.s.mem as { side?: number; flip?: number; last?: Vec3; stuckT?: number; slowT?: number };
   const q = target.position;
   const l = Math.hypot(p.x - q.x, p.z - q.z) || 1;
   const nx = (p.x - q.x) / l;
@@ -360,14 +363,21 @@ function drift(c: Ctx) {
     return;
   }
   mem.stuckT = 0;
-  mem.last = undefined;
+  // Drifting into something (a pillar, a tomb): the other way.
+  const slid = mem.last ? Math.hypot(p.x - mem.last.x, p.z - mem.last.z) : 1;
+  mem.last = { ...p };
+  mem.slowT = slid < 0.4 * dt ? (mem.slowT ?? 0) + dt : 0;
   mem.flip = (mem.flip ?? 0) - dt;
-  if (mem.flip <= 0) {
+  if (mem.slowT > 0.6) {
+    mem.side = -(mem.side ?? 1);
+    mem.flip = game.rng.range(1.5, 3);
+    mem.slowT = 0;
+  } else if (mem.flip <= 0) {
     mem.side = game.rng.chance(0.5) ? 1 : -1;
     mem.flip = game.rng.range(1.5, 3);
   }
   // Backing off is a slow drift (a fighter who closes in can stay on him, and his nova answers that).
-  const away = d < 6 ? 0.45 : d > 11 ? -1 : 0;
+  const away = d < 6 ? 0.3 : d > 10 ? -1 : 0;
   const m = map();
   const ox = p.x - m.center.x;
   const oz = p.z - m.center.z;
@@ -435,7 +445,15 @@ const lichAI = brain({
       if (left.length) announce(c.game, `${left.length} ${left.length === 1 ? 'phylactery stands' : 'phylacteries stand'}`, undefined, FROST_C);
     }
     if (!left.length) shatter(c);
-    else if (!s.move) self.glow(Math.sin(self.age * 5) > 0 ? FROST_C : null);
+    else if (c.game.clock.now > (s.mem.wardsUntil as number)) {
+      // Held out long enough: they crack and fall on their own, and his shield with them (no reel).
+      for (const e of left) e.kill();
+      for (const id of s.mem.wards as number[]) mark(c.game, { k: 'clear', id: `teth:${id}` });
+      s.shield = false;
+      s.mem.wards = [];
+      c.game.audio.play('shield_break', { at: self.position, volume: 1.1 });
+      announce(c.game, 'The phylacteries crumble', 'His shield is down', FROST_C);
+    } else if (!s.move) self.glow(Math.sin(self.age * 5) > 0 ? FROST_C : null);
   },
 });
 
@@ -476,7 +494,7 @@ export const lich: BossKind = {
     name: 'The Lich King',
     model: Models.gltf(MODEL.lich, { clips: { idle: 'idle', walk: 'walk' }, head: 'skull' }),
     hitbox: { width: 1.6, height: 4.6 },
-    health: 2300,
+    health: 2000,
     speed: 3,
     knockbackResistance: 1,
     boss: true,

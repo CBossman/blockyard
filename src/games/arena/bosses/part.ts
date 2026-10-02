@@ -274,8 +274,8 @@ export const bossesPart: ArenaPart = {
     });
   },
   start(game) {
-    resetHolds();
-    resetProps();
+    resetHolds(game);
+    resetProps(game);
     clearHazards(game);
   },
   update(game) {
