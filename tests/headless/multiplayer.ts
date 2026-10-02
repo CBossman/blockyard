@@ -97,12 +97,18 @@ function arena() {
     p.api.maxHealth = 400;
     p.api.health = 400;
   }
-  // Either side of the middle of whichever arena the fight's on (the public rotation may have
-  // moved on from the Colosseum after an earlier test's run in this process).
+  // Either side of the middle of whichever arena the fight's on (an earlier test's run in this
+  // process may have rotated the public room on from the Colosseum), on floor a body fits.
   const mid = host.sim.ctx.world.spawn;
-  const at = (dx: number) => ({ x: Math.floor(mid.x) + dx + 0.5, y: host.sim.surfaceY(Math.floor(mid.x) + dx, Math.floor(mid.z)) + 1, z: Math.floor(mid.z) + 0.5 });
-  pa.api.teleport(at(-15));
-  pb.api.teleport(at(15));
+  const at = (side: number) => {
+    for (const d of [5, 4, 6, 3, 7, 2]) {
+      const p = { x: mid.x + side * d, y: mid.y, z: mid.z };
+      if (host.sim.ctx.world.fits(p)) return p;
+    }
+    return mid;
+  };
+  pa.api.teleport(at(-1));
+  pb.api.teleport(at(1));
   // (A fight opens with the map's fly-over and the class pick before the first wave comes in:
   // up to 90 s, until both have been hurt.)
   let t = 0;
