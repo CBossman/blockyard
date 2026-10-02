@@ -272,7 +272,7 @@ export const broodmother: BossKind = {
     name: 'The Broodmother',
     model: Models.gltf(MODEL.broodmother, { clips: { idle: 'idle', walk: 'walk', run: 'run' }, head: 'head', scale: 2 }),
     hitbox: { width: 4.2, height: 2.8 },
-    health: 1600,
+    health: 2300,
     speed: 4.4,
     jump: 9,
     knockbackResistance: 1,

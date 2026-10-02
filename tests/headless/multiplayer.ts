@@ -99,8 +99,11 @@ function arena() {
   }
   pa.api.teleport({ x: -14.5, y: host.sim.surfaceY(-15, 0) + 1, z: 0.5 });
   pb.api.teleport({ x: 15.5, y: host.sim.surfaceY(15, 0) + 1, z: 0.5 });
-  for (let i = 0; i < 30 * 40; i++) host.step(1 / 30);
+  // (A fight opens with the map's fly-over and the class pick before the first wave comes in:
+  // up to 90 s, until both have been hurt.)
+  let t = 0;
+  for (; t < 90 && !(pa.api.health < 400 && pb.api.health < 400); t += 1 / 30) host.step(1 / 30);
   const hurt = [pa, pb].map((p) => 400 - p.api.health);
-  console.log(`  arena: after 40 s the monsters hurt Ann ${hurt[0].toFixed(0)} and Bob ${hurt[1].toFixed(0)}`);
+  console.log(`  arena: after ${t.toFixed(0)} s the monsters hurt Ann ${hurt[0].toFixed(0)} and Bob ${hurt[1].toFixed(0)}`);
   check(hurt[0] > 0 && hurt[1] > 0, 'monsters went after both players');
 }

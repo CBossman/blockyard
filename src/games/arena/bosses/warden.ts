@@ -18,11 +18,11 @@ import type { BossKind } from './registry';
 const LOOK: CharacterLook = { build: 'heavy', skin: '#5a4e76', hair: 'long', hairColor: '#1c1326', facialHair: 'beard', face: 'glow', eyes: '#e4c4ff', top: 'tunic', topColor: '#36204f', accent: '#c9a23a', bottom: 'trousers', bottomColor: '#140f1c', shoes: 'boots', shoeColor: '#0e0b12', hat: 'crown', ragged: true };
 const COLOR = '#c9a2ff';
 const SOUL = '#b76bff';
-const FIREBALL: ProjectileSpec = { sprite: Sprite.soul_fireball, speed: 17, gravity: 1.5, damage: 4, knockback: 1.1, glow: '#5fe8ff' };
+const FIREBALL: ProjectileSpec = { sprite: Sprite.soul_fireball, speed: 17, gravity: 1.5, damage: 3.5, knockback: 1.1, glow: '#5fe8ff' };
 /** His chain: quick, straight, and it drags whoever it catches to him. */
 const CHAIN: ProjectileSpec = { speed: 34, gravity: 0, damage: 2, knockback: 0, glow: SOUL, weapon: 'warden_chain' };
 /** The soul fire his slams send rolling out along the ground. */
-const EMBER: ProjectileSpec = { speed: 11, gravity: 0, damage: 4, knockback: 0.9, glow: SOUL, weapon: 'warden_ember' };
+const EMBER: ProjectileSpec = { speed: 11, gravity: 0, damage: 3.5, knockback: 0.9, glow: SOUL, weapon: 'warden_ember' };
 const SLAM = 8;
 const PRISON = 2.4;
 
@@ -43,7 +43,7 @@ const swipe: Move = {
     const p = c.self.position;
     const a = c.s.mem.swipe as number;
     c.self.animate('attack');
-    strike(c.game, { source: c.self, at: p, r: 4.6, damage: 6, arc: [a - 1, a + 1], knockback: 8, lift: 3 });
+    strike(c.game, { source: c.self, at: p, r: 4.6, damage: 5, arc: [a - 1, a + 1], knockback: 8, lift: 3 });
     c.game.audio.play('warden_swing', { at: p });
     c.game.fx.shake(0.12, 0.25);
   },
@@ -69,7 +69,7 @@ const slam: Move = {
     game.fx.shockwave({ x: p.x, y: p.y, z: p.z }, SLAM, SOUL);
     game.fx.shake(0.35, 0.6);
     game.audio.play('slam', { at: p, volume: 1.3 });
-    const { dodged } = strike(game, { source: self, at: p, r: SLAM, damage: [9, 4], grounded: true, cover: true, knockback: 9, lift: 3, cause: 'shockwave' });
+    const { dodged } = strike(game, { source: self, at: p, r: SLAM, damage: [7, 3.5], grounded: true, cover: true, knockback: 9, lift: 3, cause: 'shockwave' });
     // In the air as it lands: jumped clean over it.
     for (const f of dodged) if (!f.onGround) f.achieve('slam_dodge');
     // Hurt, his slams send soul fire rolling out along the ground: jump it.
@@ -179,9 +179,9 @@ const prison: Move = {
       caged++;
       f.damage(2, { source: self, knockback: 0, cause: 'magic' });
       f.hud.pop('CAGED', { color: SOUL, sub: 'Fight your way out: it holds 3 seconds' });
-      const cage = own(game.props.spawn(propModel(game, MODEL.soul_cage, 2), { position: { x: q.x, y: q.y, z: q.z } }));
+      const cage = own(game, game.props.spawn(propModel(game, MODEL.soul_cage, 2), { position: { x: q.x, y: q.y, z: q.z } }));
       game.clock.after(3.2, () => {
-        drop(cage);
+        drop(game, cage);
         game.fx.burst({ x: q.x, y: q.y + 1.2, z: q.z }, { color: SOUL, count: 30, speed: 4, size: 0.14, gravity: 2, glow: 1.2 });
       });
     }
