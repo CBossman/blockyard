@@ -117,7 +117,8 @@ function save(n: number) {
 
 function moodOf(client: Client): Mood {
   const r = hud.run;
-  if (!r || client.replay.playing || !client.running) return 'off';
+  // (Only for someone playing: watching from the home page is quiet.)
+  if (!r || client.replay.playing || !client.running || !client.me.id) return 'off';
   if (hud.ended || r.phase === 'victory' || r.phase === 'defeat') return 'end';
   if (r.phase === 'fighting') return r.wave === r.of ? 'final' : r.boss ? 'boss' : 'fight';
   if (r.phase === 'countdown' || r.phase === 'intermission') return 'calm';

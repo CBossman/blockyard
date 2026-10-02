@@ -160,12 +160,12 @@ function build(client: Client, layer: HTMLElement): (dt: number) => void {
       ...others.map((f) => {
         const hp = el('i');
         hp.style.width = `${f.hp * 100}%`;
-        const row = el(
+        const state = f.state === 'down' ? `Down${f.bleed > 0 ? ` ${Math.ceil(f.bleed)}s` : ''}` : f.state === 'out' ? 'Out' : f.cls;
+        return el(
           `div.ar-mate.${f.state}`,
-          el('div.ar-mate-top', el('span.ar-mate-name', f.name), el('span.ar-mate-state', f.state === 'down' ? 'Down' : f.state === 'out' ? 'Out' : f.cls)),
+          el('div.ar-mate-top', el('span.ar-mate-name', f.name), el('span.ar-mate-state', state), el('span.ar-mate-n', f.state === 'up' ? String(Math.round(f.hp * f.max)) : '')),
           el('div.ar-mate-hp', hp),
         );
-        return row;
       }),
     );
   };

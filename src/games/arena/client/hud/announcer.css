@@ -8,6 +8,11 @@
   top: 23%;
   display: grid;
   justify-items: center;
+  transition: top 300ms ease;
+}
+/* A wave's card is up (client/hud/cards.ts): callouts go under it. */
+body:has(.ar-card:not(.out)) .ar-stage {
+  top: max(23%, 390px);
 }
 .ar-call {
   --c: var(--ar-gold, #f0c060);

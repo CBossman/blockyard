@@ -131,8 +131,10 @@ function partyMsg(game: GameContext): PartyMsg {
     list: game.players.map((p) => ({
       id: p.id,
       name: p.name,
-      hp: p.maxHealth > 0 ? Math.round((Math.max(0, p.health) / p.maxHealth) * 20) / 20 : 0,
+      hp: p.maxHealth > 0 ? Math.round((Math.max(0, p.health) / p.maxHealth) * 40) / 40 : 0,
+      max: p.maxHealth,
       state: fighterState(p),
+      bleed: 0,
       cls: '',
       gold: gold(p),
     })),

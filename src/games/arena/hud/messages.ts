@@ -63,7 +63,8 @@ export interface HypeMsg {
 export type FighterState = 'up' | 'down' | 'out';
 
 export interface PartyMsg {
-  list: { id: string; name: string; hp: number; state: FighterState; cls: string; gold: number }[];
+  /** Each fighter: their health (0..1, of `max`), whether they're up, down or out (down: `bleed` seconds left), their class. */
+  list: { id: string; name: string; hp: number; max: number; state: FighterState; bleed: number; cls: string; gold: number }[];
 }
 
 export interface MeMsg {

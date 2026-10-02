@@ -19,6 +19,9 @@ const KINDS: Record<CallMsg['k'], { time: number; sting: string; big: boolean }>
   ally: { time: 2.2, sting: 'ar_sting_ally', big: false },
 };
 
+/** A callout still waiting this long (ms) has missed its moment. */
+const STALE = 4000;
+
 /** Feats that come in sizes (multikills): how big each is, 0..3: louder, higher, bigger. */
 const TIER: Record<string, number> = { double_kill: 0, triple_kill: 1, multi_kill: 2, quad_kill: 2, massacre: 3, rampage: 3 };
 
@@ -36,7 +39,8 @@ export function announcer(): ClientKit {
   let stage: HTMLElement;
   let feats: HTMLElement;
   let count: HTMLElement;
-  let queue: CallMsg[] = [];
+  /** Big callouts waiting their turn, and when each came (wall-clock ms: one held up while the tab was away is stale). */
+  let queue: { c: CallMsg; at: number }[] = [];
   let showing: { el: HTMLElement; until: number } | null = null;
   let lastCount = '';
 
@@ -80,7 +84,7 @@ export function announcer(): ClientKit {
         if (c.k === 'victory' || c.k === 'defeat') {
           queue = [];
           show(client, c);
-        } else queue.push(c);
+        } else queue.push({ c, at: performance.now() });
       });
     },
     frame(client) {
@@ -97,7 +101,8 @@ export function announcer(): ClientKit {
         window.setTimeout(() => going.remove(), 450);
         showing = null;
       }
-      if (!showing && queue.length) show(client, queue.shift()!);
+      queue = queue.filter((q) => performance.now() - q.at < STALE);
+      if (!showing && queue.length) show(client, queue.shift()!.c);
 
       // The last three seconds before a wave, a drum each.
       const r = hud.run;

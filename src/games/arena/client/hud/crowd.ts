@@ -61,7 +61,7 @@ export function crowd(): ClientKit {
     },
     frame(client, dt) {
       const r = hud.run;
-      const on = !!r && client.running && r.phase !== 'intro' && r.phase !== 'waiting' && !client.replay.playing;
+      const on = !!r && client.running && !!client.me.id && r.phase !== 'intro' && r.phase !== 'waiting' && !client.replay.playing;
       if (!on) return quiet();
       murmur ??= client.audio.loop('ar_crowd', { volume: 0 });
       roar ??= client.audio.loop('ar_roar', { volume: 0 });
