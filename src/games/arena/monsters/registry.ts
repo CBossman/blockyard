@@ -4,8 +4,9 @@ import type { Entity, EntityDefinition, GameContext, Player } from '@platform';
  * A kind of monster, as the director sees it: its platform definition (made at setup), and what it
  * costs, from when it turns up and what it does, so waves can be composed from whatever kinds
  * there are (`run/director.ts`). Add a monster: a file in `monsters/` exporting a `MonsterKind`,
- * listed in `monsters/index.ts`. Its looks are the entity's model; its voices are each screen's
- * (`client/sounds.ts`, by the names in `sounds`).
+ * listed in `monsters/index.ts`. Its looks are the entity's model (a voxel GLB from
+ * `tools/monsters/build.mjs`, or a character); its voices are each screen's (`client/sounds/`, by
+ * the names in `sounds`); what its screens draw for it, `client/bestiary.ts`.
  */
 export interface MonsterKind {
   id: string;
@@ -23,6 +24,10 @@ export interface MonsterKind {
   role: 'melee' | 'ranged' | 'swarm' | 'support' | 'heavy' | 'special';
   /** One is one, however many fight (not multiplied by party size): a brute, a goblin. */
   single?: boolean;
+  /** How to fight it, shown the first time one comes in each run (its name, and this under it). */
+  tip?: string;
+  /** Its name's colour on that tip. */
+  color?: string;
   /** Its own business once it's killed (a Sapper's keg, a goblin's loot), after the platform's drops. */
   slain?(game: GameContext, e: Entity, by: Player | null): void;
   /** Its own business when it comes in (a goblin's marker). */
