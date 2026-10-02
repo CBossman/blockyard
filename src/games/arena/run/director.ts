@@ -118,7 +118,7 @@ export function startWave(game: GameContext, n: number) {
   // (The HUD announces it: `hud/part.ts`.)
   // Dusk falls as the fight goes on; a Blood Moon brings the night.
   game.env.time = twist === 'blood_moon' ? 0.82 : dusk(n);
-  bus.emit('waveStart', { wave: n, name: w.name, twist, boss: w.boss ?? null, final });
+  bus.emit('waveStart', { wave: n, name: w.name, twist, boss: w.boss ?? null, final, endless: false });
 }
 
 /** The map's time of day as the fight goes on (wave `n`). */

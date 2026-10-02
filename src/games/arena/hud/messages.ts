@@ -28,6 +28,8 @@ export const MSG = {
   wave: 'ar.wave',
   /** Everyone: the run is over (`EndMsg`). */
   end: 'ar.end',
+  /** One fighter: they reached a level (`LevelMsg`). */
+  level: 'ar.level',
 } as const;
 
 export type Phase = 'intro' | 'waiting' | 'countdown' | 'fighting' | 'intermission' | 'victory' | 'defeat';
@@ -78,16 +80,19 @@ export interface MeMsg {
 export interface GoldMsg {
   d: number;
   at?: [number, number, number];
+  /** What it was for, when it says (`wave`: the wave's bonus, `boss`, `goblin`, `gift`). */
+  why?: string;
 }
 
 /**
  * A callout. `k` is what it is, which picks its size, its place and its sting on the screen:
- * `wave`, `final`, `boss` and `twist` (a wave begins), `favour` (the Crowd's Favour), `feat` (a
- * multikill, a parry: `name` says which), `down`, `out` and `back` (one fighter's own), `ally`
- * (a friend's fortunes), `victory`, `defeat`.
+ * `wave`, `final`, `boss`, `endless` and `twist` (a wave begins, the endless waves begin),
+ * `favour` (the Crowd's Favour), `slain` (a boss falls), `feat` (a multikill, a parry: `name` says
+ * which), `down`, `out` and `back` (one fighter's own), `ally` (a friend's fortunes), `victory`,
+ * `defeat`.
  */
 export interface CallMsg {
-  k: 'wave' | 'final' | 'boss' | 'twist' | 'favour' | 'feat' | 'down' | 'out' | 'back' | 'ally' | 'victory' | 'defeat';
+  k: 'wave' | 'final' | 'boss' | 'endless' | 'twist' | 'favour' | 'slain' | 'feat' | 'down' | 'out' | 'back' | 'ally' | 'victory' | 'defeat';
   /** The kicker over it, the title, the line under it, its colour. */
   q?: string;
   t: string;
@@ -131,6 +136,8 @@ export interface WaveCard {
   gold: number;
   damage: number;
   mvp: { name: string; kills: number; you: boolean } | null;
+  /** The gold each fighter was given for winning it. */
+  bonus: number;
   /** The next wave's number and name, and whether it's a boss's. */
   next: { wave: number; name: string; boss: boolean } | null;
 }
@@ -138,4 +145,9 @@ export interface WaveCard {
 export interface EndMsg {
   won: boolean;
   wave: number;
+}
+
+export interface LevelMsg {
+  level: number;
+  unlocks: { kind: string; name: string }[];
 }

@@ -26,7 +26,7 @@ export function cards(): ClientKit {
     };
     const time = cell('Time');
     const kills = cell('Kills');
-    const gold = cell('Gold', '.gold');
+    const gold = cell(c.bonus > 0 ? `Gold · +${num(c.bonus)} bonus` : 'Gold', '.gold');
     const dmg = cell('Damage');
     const e = el(
       'div.ar-card',

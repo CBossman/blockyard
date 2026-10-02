@@ -1,4 +1,5 @@
 import type { GameContext, Player, WidgetDefinition } from '@platform';
+import type { RunResult, Unlock } from '../run/bus';
 import { WAVES } from '../run/director';
 import type { Tallies } from './tally';
 
@@ -9,14 +10,22 @@ export interface EndRun {
   wave: number;
   of: number;
   name: string;
-  /** Seconds it lasted, on which map. */
+  /** Seconds it lasted, on which map; whether it was in the endless waves. */
   time: number;
   map: string;
+  endless: boolean;
 }
 
-/** What the run's part says of a fighter's experience at the end (the `progress` it sends), as the screen shows it. */
-export interface EndXp {
-  earned: number;
+/** What the run's part said of each fighter at the end (`runEnd`'s results), the levels they reached on the way, and their classes. */
+export interface EndExtras {
+  results: RunResult[];
+  unlocks: Map<string, Unlock[]>;
+  classes: Map<string, string>;
+}
+
+/** A fighter's experience from the run, as the end screen shows it. */
+interface EndXp {
+  earned: string;
   lines: { label: string; amount: string }[];
   level: number;
   /** The bar before and after, 0..1 of the level now (before: 0 when they've gone up). */
@@ -30,6 +39,8 @@ export interface EndXp {
 
 const fmtTime = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 const num = (n: number) => Math.round(n).toLocaleString('en-US');
+/** A class's name from its id (`gladiator`: Gladiator). */
+export const className = (id: string) => (id ? id[0].toUpperCase() + id.slice(1).replace(/_/g, ' ') : '');
 
 /**
  * The end-of-run screen: VICTORY or DEFEATED over the run's track (a mark for every wave, the
@@ -58,7 +69,7 @@ export const END: { name: string; def: WidgetDefinition } = {
       <div class="reached"><span class="wv">{{reached}}</span><span class="best" data-if="newBest">New best</span><span class="prev" data-if="best">{{best}}</span></div>
       <div class="cols">
         <div class="panel run">
-          <div class="ph"><span>Your run</span></div>
+          <div class="ph"><span>Your run</span><span class="cls" data-if="cls">{{cls}}</span></div>
           <div class="grid">
             <div class="cell"><span class="v">{{time}}</span><span class="k">Time</span></div>
             <div class="cell"><span class="v">{{kills}}</span><span class="k">Kills</span></div>
@@ -84,7 +95,7 @@ export const END: { name: string; def: WidgetDefinition } = {
           <div class="ph"><span>The party</span></div>
           <div class="rows">
             <div class="row head"><span class="nm"></span><span>Kills</span><span>Damage</span><span>Gold</span></div>
-            <div data-each="crew" class="row you-{{you}} mvp-{{mvp}}"><span class="nm"><i class="crown" data-if="mvp"></i>{{name}}</span><span>{{kills}}</span><span>{{damage}}</span><span>{{gold}}</span></div>
+            <div data-each="crew" class="row you-{{you}} mvp-{{mvp}}"><span class="nm"><i class="crown" data-if="mvp"></i>{{name}}<small data-if="cls">{{cls}}</small></span><span>{{kills}}</span><span>{{damage}}</span><span>{{gold}}</span></div>
           </div>
         </div>
       </div>
@@ -106,7 +117,7 @@ export const END: { name: string; def: WidgetDefinition } = {
       color: var(--fg);
     }
     .es { width: min(960px, calc(100vw - 40px)); display: flex; flex-direction: column; align-items: center; animation: rise 800ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
-    .es-defeat { --c: var(--blood); }
+    .es-defeat, .es-endless { --c: var(--blood); }
     .kicker { display: flex; align-items: center; gap: 14px; font: 500 13px/1 var(--label); letter-spacing: 0.4em; margin-right: -0.4em; color: var(--fg2); text-transform: uppercase; }
     .kicker i { width: 5px; height: 5px; background: var(--bronze); transform: rotate(45deg); }
     .word {
@@ -115,7 +126,8 @@ export const END: { name: string; def: WidgetDefinition } = {
       filter: drop-shadow(0 0 28px rgba(240, 192, 96, 0.35)) drop-shadow(0 3px 2px rgba(0, 0, 0, 0.6));
       animation: slam 900ms cubic-bezier(0.2, 0.8, 0.2, 1) both 150ms;
     }
-    .es-defeat .word { background: linear-gradient(180deg, #ffd9d2 5%, #e0505a 50%, #8e1820 92%); -webkit-background-clip: text; background-clip: text; filter: drop-shadow(0 0 26px rgba(216, 52, 60, 0.35)) drop-shadow(0 3px 2px rgba(0, 0, 0, 0.6)); }
+    .es-endless .word { font-size: 64px; letter-spacing: 0.1em; }
+    .es-defeat .word, .es-endless .word { background: linear-gradient(180deg, #ffd9d2 5%, #e0505a 50%, #8e1820 92%); -webkit-background-clip: text; background-clip: text; filter: drop-shadow(0 0 26px rgba(216, 52, 60, 0.35)) drop-shadow(0 3px 2px rgba(0, 0, 0, 0.6)); }
     .headline { margin-top: 12px; font: 500 16px/1.3 var(--sans); letter-spacing: 0.02em; color: var(--fg2); text-shadow: var(--shadow); text-align: center; }
     .track { margin-top: 20px; display: flex; align-items: center; gap: 8px; animation: fade 600ms ease both 500ms; }
     .pip { width: 11px; height: 11px; transform: rotate(45deg); background: rgba(255, 255, 255, 0.1); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.2); }
@@ -140,7 +152,7 @@ export const END: { name: string; def: WidgetDefinition } = {
     .v.gold { color: var(--gold-hi); }
     .k { font: 500 10px/1 var(--label); letter-spacing: 0.26em; text-transform: uppercase; color: var(--fg3); white-space: nowrap; }
     .lines { display: flex; flex-wrap: wrap; gap: 6px; }
-    .line { display: flex; align-items: baseline; gap: 7px; padding: 4px 9px; border-radius: 2px; background: rgba(255, 255, 255, 0.05); box-shadow: inset 0 0 0 1px var(--line); font: 500 11px/1.2 var(--label); letter-spacing: 0.14em; text-transform: uppercase; color: var(--fg2); animation: pop 400ms cubic-bezier(0.3, 1.6, 0.5, 1) both; animation-delay: calc(1000ms + var(--d) * 90ms); }
+    .line { display: flex; align-items: baseline; gap: 7px; padding: 4px 9px; border-radius: 2px; background: rgba(255, 255, 255, 0.05); box-shadow: inset 0 0 0 1px var(--line); font: 500 11px/1.2 var(--label); letter-spacing: 0.14em; text-transform: uppercase; white-space: nowrap; color: var(--fg2); animation: pop 400ms cubic-bezier(0.3, 1.6, 0.5, 1) both; animation-delay: calc(1000ms + var(--d) * 90ms); }
     .line b { font: 600 13px/1 var(--label); letter-spacing: 0.02em; color: var(--gold-hi); }
     .level { display: flex; align-items: center; gap: 12px; }
     .badge { display: flex; align-items: baseline; gap: 3px; padding: 6px 10px 5px; border-radius: 2px; background: linear-gradient(180deg, #ffe3a1, var(--gold) 60%, #b9802c); color: #1a120a; box-shadow: 0 0 16px rgba(240, 192, 96, 0.35); }
@@ -160,7 +172,9 @@ export const END: { name: string; def: WidgetDefinition } = {
     .row { display: grid; grid-template-columns: minmax(0, 1.6fr) repeat(3, minmax(0, 1fr)); align-items: center; padding: 6px 2px; border-top: 1px solid rgba(255, 255, 255, 0.05); font: 500 15px/1.1 var(--label); font-variant-numeric: tabular-nums; color: var(--fg2); }
     .row > span:not(.nm) { text-align: right; }
     .row.head { border-top: 0; padding-top: 0; font-size: 10px; letter-spacing: 0.24em; text-transform: uppercase; color: var(--fg3); }
-    .nm { display: flex; align-items: center; gap: 8px; min-width: 0; font: 600 14px/1.1 var(--sans); color: var(--fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .nm { display: flex; align-items: baseline; gap: 8px; min-width: 0; font: 600 14px/1.1 var(--sans); color: var(--fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .nm small, .cls { font: 500 10px/1 var(--label); letter-spacing: 0.22em; text-transform: uppercase; color: var(--fg3); }
+    .crown { align-self: center; }
     .row.you-true { color: var(--fg); box-shadow: inset 2px 0 0 var(--gold); padding-left: 8px; background: rgba(240, 192, 96, 0.06); }
     .crown { flex: none; width: 14px; height: 10px; background: var(--gold); clip-path: polygon(0 100%, 0 20%, 25% 55%, 50% 0, 75% 55%, 100% 20%, 100% 100%); filter: drop-shadow(0 0 4px rgba(240, 192, 96, 0.8)); }
     .buttons { margin-top: 24px; display: flex; gap: 10px; animation: fade 600ms ease both 1100ms; }
@@ -180,19 +194,22 @@ export const END: { name: string; def: WidgetDefinition } = {
   },
 };
 
-/** What the run's part said of each fighter's experience at the end, and whether the run offers endless waves. */
-const xps = new Map<string, EndXp>();
-let keepOffered = false;
-
-export function setEndXp(p: Player, xp: EndXp) {
-  xps.set(p.id, xp);
-}
-export function offerKeepFighting(on: boolean) {
-  keepOffered = on;
-}
-export function resetEnd() {
-  xps.clear();
-  keepOffered = false;
+/** A fighter's XP from the run (`RunResult.xp`) and the levels' unlocks, as the end screen shows them: the bar from where it was to where it is. */
+function xpOf(r: RunResult, unlocks: Unlock[]): EndXp {
+  const x = r.xp;
+  const up = Math.max(0, x.level - x.from);
+  const frac = (n: number) => (x.need > 0 ? Math.max(0, Math.min(1, n / x.need)) : 1);
+  return {
+    earned: num(x.earned),
+    lines: x.lines.slice(0, 6).map(([label, count, amount]) => ({ label: `${label.toLowerCase()}${count > 1 ? ` ×${count}` : ''}`, amount: num(amount) })),
+    level: x.level,
+    from: up > 0 ? 0 : frac(x.into - x.earned),
+    to: frac(x.into),
+    up,
+    togo: x.need > 0 ? `${num(x.need - x.into)} to level ${x.level + 1}` : 'Top level',
+    unlocks: unlocks.map((u) => ({ kind: u.kind, name: u.name })),
+    guest: x.guest,
+  };
 }
 
 /** The marks along the run's track: each wave, lit as far as they got (the bosses' bigger, the last one in blood when it's lost). */
@@ -202,35 +219,39 @@ function waveMarks(run: EndRun): string[] {
     const cls = n < run.wave || (run.won && n <= run.wave) ? 'won' : n === run.wave && !run.won ? 'lost' : 'todo';
     return w.boss ? `${cls} boss` : cls;
   });
-  if (run.wave > run.of) marks.push(`more`);
+  if (run.wave > run.of) marks.push('more');
   return marks;
 }
 
-/** Put a fighter's end screen up (or back up), filled in from the run and their tallies. */
-export function endScreen(p: Player, run: EndRun, tallies: Tallies) {
+/** Put a fighter's end screen up (or back up), filled in from the run, their tallies and what the run's part said. */
+export function endScreen(p: Player, run: EndRun, tallies: Tallies, extras: EndExtras) {
   if (p.bot) return;
   const t = tallies.of(p.id);
   const fighters = [...tallies.names.keys()];
   const coop = fighters.length > 1;
   const mvp = coop ? tallies.runBest() : null;
-  const endless = run.wave > run.of;
+  const endless = run.endless || run.wave > run.of;
   const who = coop ? 'Your party' : 'You';
   const headline = run.won
-    ? endless
-      ? `${who} held the arena to wave ${run.wave} in ${fmtTime(run.time)}`
-      : `${who} conquered ${run.map} in ${fmtTime(run.time)}`
-    : `${who} fell on wave ${run.wave}: ${run.name}`;
-  const xp = xps.get(p.id) ?? null;
+    ? `${who} conquered ${run.map} in ${fmtTime(run.time)}`
+    : endless
+      ? `${who} held on to endless wave ${run.wave}: ${run.name}`
+      : `${who} fell on wave ${run.wave}: ${run.name}`;
+  const r = extras.results.find((x) => x.player.id === p.id);
+  const xp = r ? xpOf(r, extras.unlocks.get(p.id) ?? []) : null;
+  const clsOf = (id: string) => className(extras.classes.get(id) ?? extras.results.find((x) => x.player.id === id)?.cls ?? '');
+  const keep = run.won && !endless;
   const data = {
-    result: run.won ? 'victory' : 'defeat',
-    word: run.won ? 'Victory' : 'Defeated',
+    result: run.won ? 'victory' : endless ? 'endless' : 'defeat',
+    word: run.won ? 'Victory' : endless ? 'The arena claims you' : 'Defeated',
     map: run.map,
     party: coop ? `${fighters.length} fighters` : 'Solo',
     headline,
     waves: waveMarks(run),
-    reached: endless ? `Wave ${run.wave} · endless` : `Wave ${run.wave} of ${run.of}`,
-    newBest: false,
-    best: '',
+    reached: endless ? `Endless wave ${run.wave}` : `Wave ${run.wave} of ${run.of}`,
+    newBest: !!r?.newBest,
+    best: r && !r.newBest && r.best > 0 ? `Best: wave ${r.best}` : '',
+    cls: clsOf(p.id),
     time: fmtTime(run.time),
     kills: num(t.kills),
     damage: num(t.damage),
@@ -241,16 +262,16 @@ export function endScreen(p: Player, run: EndRun, tallies: Tallies) {
     crew: coop
       ? fighters.map((id) => {
           const f = tallies.of(id);
-          return { name: tallies.names.get(id) ?? '', kills: num(f.kills), damage: num(f.damage), gold: num(f.gold), you: id === p.id, mvp: id === mvp };
+          return { name: tallies.names.get(id) ?? '', cls: clsOf(id), kills: num(f.kills), damage: num(f.damage), gold: num(f.gold), you: id === p.id, mvp: id === mvp };
         })
       : null,
-    keep: run.won && !endless && keepOffered,
-    againClass: run.won && !endless && keepOffered ? '' : 'primary',
+    keep,
+    againClass: keep ? '' : 'primary',
   };
   p.hud.widget(END.name, data);
 }
 
-/** The run's actions on the end screen (`END.def.actions`, set by the HUD's part). */
+/** The end screen's buttons (`END.def.actions`, set by the HUD's part): play again, leave, or keep fighting. */
 export function endActions(game: GameContext, keep: (p: Player) => void): WidgetDefinition['actions'] {
   return {
     again: () => game.restart(),

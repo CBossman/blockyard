@@ -88,12 +88,14 @@ function build(client: Client, layer: HTMLElement): (dt: number) => void {
       return;
     }
     const now = client.time;
-    if (pop && now < pop.until - 0.6) {
+    // A bonus says what it's for, on its own line; coins add up in one.
+    const label = g.why ? WHY[g.why] : undefined;
+    if (!label && pop && now < pop.until - 0.6) {
       pop.n += g.d;
       pop.el.textContent = `+${num(pop.n)}`;
       replay(pop.el, 'bump');
     } else {
-      const e = el('span.ar-gold-pop', `+${num(g.d)}`);
+      const e = el('span.ar-gold-pop', `+${num(g.d)}`, label ? el('small', label) : null);
       pops.prepend(e);
       while (pops.children.length > 3) pops.lastChild!.remove();
       pop = { el: e, n: g.d, until: now };
@@ -252,6 +254,9 @@ function build(client: Client, layer: HTMLElement): (dt: number) => void {
     }
   };
 }
+
+/** What a gold bonus was for, by the run's word (`gold`'s `why`). */
+const WHY: Record<string, string> = { wave: 'wave bonus', boss: 'boss bounty', goblin: "goblin's loot", gift: "emperor's gift", start: 'purse' };
 
 function chip(text: string, color: string): HTMLElement {
   const c = el('span.ar-chip', text);

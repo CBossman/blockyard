@@ -52,7 +52,7 @@ function waveCleared(game: GameContext) {
     if (state.wave === 1) p.achieve('first_wave');
   }
   for (const p of game.players) if (!p.alive) rejoin(game, p, !last);
-  bus.emit('waveCleared', { wave: state.wave, final: last });
+  bus.emit('waveCleared', { wave: state.wave, final: last, endless: false, bonus: 0 });
   if (last) return victory(game);
   state.phase = 'intermission';
   state.nextWaveAt = game.clock.now + INTERMISSION;
@@ -145,7 +145,7 @@ function checkWipe(game: GameContext) {
 
 function victory(game: GameContext) {
   state.phase = 'victory';
-  bus.emit('runEnd', { won: true, wave: state.wave });
+  bus.emit('runEnd', { won: true, wave: state.wave, endless: false, map: map(), time: game.clock.now - state.startedAt, results: [] });
   for (const p of game.players) {
     p.achieve('champion');
     const r = runs.get(p.id);
@@ -161,7 +161,7 @@ function victory(game: GameContext) {
 function defeat() {
   if (state.phase === 'defeat' || state.phase === 'victory') return;
   state.phase = 'defeat';
-  bus.emit('runEnd', { won: false, wave: state.wave });
+  bus.emit('runEnd', { won: false, wave: state.wave, endless: false, map: map(), time: 0, results: [] });
 }
 
 /**
