@@ -9,7 +9,7 @@ import { check, launch } from './_harness';
  * Probe: what the Arena's HUD part (`hud/part.ts`) tells the screens over a fight: the run's
  * state as it changes (the countdown, a wave with its monsters left), the announcer, a hit's word
  * to whoever landed it and gore for everyone, gold, a wave's card, the end screen when everyone's
- * down (and its buttons), and how few messages it all takes.
+ * down (and its buttons, and the HUD going on after Play again), and how few messages it all takes.
  * `node scripts/headless.mjs tests/headless/_arena-hud.ts`
  */
 export default function arenaHud() {
@@ -90,6 +90,11 @@ export default function arenaHud() {
   h.send({ t: 'widgetAction', player: me.id, widget: 'arena-end', action: 'again', value: '' });
   h.run(2);
   check(state.phase === 'countdown' && state.wave === 0, `play again: ${state.phase}, wave ${state.wave}`);
-  log('Play again: a fresh countdown');
+  // (The clock starts again with the fight: what each screen's told keeps coming.)
+  const before2 = msgs<MeMsg>('ar.me').length;
+  addGold(game, me, 7);
+  h.run(0.5);
+  check(msgs<MeMsg>('ar.me').at(-1)?.gold === 7 && msgs<MeMsg>('ar.me').length > before2, 'the purse after Play again');
+  log('Play again: a fresh countdown, the HUD still told');
   return rows.join(' · ');
 }

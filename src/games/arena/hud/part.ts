@@ -399,6 +399,9 @@ export const hudPart: ArenaPart = {
     ended = null;
     hype = { value: 0, favour: false };
     waveTotal = 0;
+    // (The clock may have started again with the fight: the periodic sends go from now.)
+    meAt = partyAt = bossCheer = 0;
+    goreBudget = { at: 0, n: 0 };
     downs.clear();
     unlocks.clear();
     tallies.reset();
