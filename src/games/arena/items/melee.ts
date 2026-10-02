@@ -1,5 +1,6 @@
 import { math, type Entity, type GameContext, type ItemBody, type ItemHost, type ItemKind, type ItemKit, type ItemUse, type Player } from '@platform';
 import type { MeleeItem, MeleeOwn } from '@platform/items';
+import { bus } from '../run/bus';
 import { meleeMove } from './moves';
 import { afterRoll, frontOf, legendHit, legendSwing, slamAt } from './combat';
 import { throwSpear, spearOut, recallSpear } from './spear';
@@ -184,10 +185,6 @@ export function melee(): ItemKit<ItemKind<ArmsMelee>> {
         const r = handOf(v.player);
         return { strength: 1 - r.cooldown / r.max, guard: r.guard, charge: r.charge, aiming: r.aiming } satisfies MeleeOwn & Record<string, unknown>;
       },
-      shown(v) {
-        const r = handOf(v.player);
-        return r.guard || r.charging || r.aiming ? { g: r.guard, c: Math.round(r.charge * 20) / 20, a: r.aiming } : null;
-      },
       reset(p) {
         hands.delete(p);
       },
@@ -298,6 +295,7 @@ function strike(use: ItemUse<ArmsMelee>, r: Hand, def: ArmsMelee, item: string |
       me.audio.play(def.sounds?.hit ?? (crit ? 'crit' : 'hit'), { at: target.position, pitch: crit ? 1.25 : 1, ...(item && { item: { id: item, sound: 'hit' as const, pitch: crit ? 1.25 : 1 } }) });
       if (back) burstAt(game, target, '#ff4a6a', 14);
     }
+    if (back && !target.alive) bus.emit('feat', { player: me, name: 'backstab', text: 'Backstab!' });
     if (def.legend) legendHit(game, me, target, def, item ?? '', { crit, back, amount });
   });
   if (!any) return;
@@ -361,6 +359,7 @@ function slam(use: ItemUse<ArmsMelee>, r: Hand, def: ArmsMelee, item: string, k:
   });
   me.fx.shake(0.12 + 0.12 * k, 0.35);
   if (hits.length) use.hitMarker(hits.some((e) => !e.alive) ? 'kill' : k >= 1);
+  if (hits.length >= 3) bus.emit('feat', { player: me, name: 'slam', text: `Slam ×${hits.length}` });
   if (def.legend) legendHit(game, me, null, def, item, { crit: k >= 1, back: false, amount: 0, slam: at });
 }
 

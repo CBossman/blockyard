@@ -1,4 +1,5 @@
 import { math, type Entity, type GameContext, type ItemBody, type ItemUse, type Player, type Prop, type PropModel, type Vec3 } from '@platform';
+import { bus } from '../run/bus';
 import { armsHost, type ArmsMelee, type SpearThrow } from './melee';
 import { stagger } from './status';
 
@@ -127,6 +128,7 @@ function fly(game: GameContext, s: Thrown, bodies: ItemBody[], dt: number) {
   const reach = wall ? Math.max(0, Math.hypot(wall.point.x - s.pos.x, wall.point.y - s.pos.y, wall.point.z - s.pos.z) - 0.4) : step;
   for (const e of along(bodies, s.pos, _d, reach, s.hit)) {
     if (s.left <= 0) break;
+    if (s.hit.size === 2) bus.emit('feat', { player: s.p, name: 'skewer', text: 'Skewered three!' });
     s.hit.add(e);
     s.left--;
     const amount = s.def.damage;

@@ -1,4 +1,5 @@
 import { math, type Entity, type GameContext, type ItemBase, type ItemKind, type ItemKit, type ItemUse, type Player, type Vec3 } from '@platform';
+import { bus } from '../run/bus';
 import { swingTargets } from './melee';
 import { launch, type Missile } from './missiles';
 import { burn, chill, stagger } from './status';
@@ -218,6 +219,7 @@ function lightning(use: ItemUse<StaffItem>, item: string, def: StaffItem) {
     if (next) struck.push(next);
   }
   game.audio.play('arena_zap', { at: first.position, pitch: 0.9 + Math.random() * 0.2 });
+  if (struck.length >= 4) bus.emit('feat', { player: p, name: 'chain', text: `Chain ×${struck.length}` });
   use.hitMarker(killed ? 'kill' : struck.length > 2);
   p.fx.shake(0.02, 0.08);
 }

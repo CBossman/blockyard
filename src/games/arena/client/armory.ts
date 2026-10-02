@@ -110,10 +110,63 @@ const SHIELD_SCALE = 0.38;
 let forced: string | null = null;
 if (import.meta.env.DEV) (globalThis as { __armoryPose?: unknown }).__armoryPose = (p: string | null) => void (forced = p);
 
+/**
+ * The ring round the crosshair: the warhammer's charge filling (amber, bright when full), the
+ * crossbow spanning (pale), and a gold flash as a guard goes up that fades over its parry window,
+ * so the timing can be learnt.
+ */
+const RING_CSS = `
+.arena-ring { position: absolute; left: 50%; top: 50%; width: 46px; height: 46px; margin: -23px 0 0 -23px; opacity: 0; transition: opacity 0.12s; pointer-events: none; }
+.arena-ring.on { opacity: 1; }
+.arena-ring circle { fill: none; stroke-width: 3; }
+.arena-ring .track { stroke: rgba(0, 0, 0, 0.35); }
+.arena-ring .fill { stroke-linecap: round; transform: rotate(-90deg); transform-origin: 50% 50%; filter: drop-shadow(0 0 3px rgba(0, 0, 0, 0.6)); }
+.arena-ring.full .fill { filter: drop-shadow(0 0 6px #ffb347); }
+`;
+const RING_R = 19;
+const RING_LEN = 2 * Math.PI * RING_R;
+
+function ring(client: Client) {
+  client.hud.style(RING_CSS);
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('viewBox', '0 0 46 46');
+  svg.classList.add('arena-ring');
+  const circle = (cls: string) => {
+    const c = document.createElementNS(ns, 'circle');
+    c.setAttribute('cx', '23');
+    c.setAttribute('cy', '23');
+    c.setAttribute('r', String(RING_R));
+    c.classList.add(cls);
+    svg.append(c);
+    return c;
+  };
+  circle('track');
+  const fill = circle('fill');
+  fill.setAttribute('stroke-dasharray', `${RING_LEN}`);
+  client.hud.layer('arena.armory', 'middle').append(svg);
+  let shown = '';
+  /** Show `k` (0..1) of the ring in `color`, or hide it (null). */
+  return (k: number | null, color = '#ffb347') => {
+    const key = k === null ? '' : `${Math.round(k * 60)}|${color}`;
+    if (key === shown) return;
+    shown = key;
+    svg.classList.toggle('on', k !== null);
+    svg.classList.toggle('full', k !== null && k >= 1);
+    if (k === null) return;
+    fill.setAttribute('stroke', color);
+    fill.setAttribute('stroke-dashoffset', String(RING_LEN * (1 - Math.min(1, k))));
+  };
+}
+
 function armory(): ClientKit {
   let lmb = false;
   let rmb = false;
   let pose: string | null = null;
+  let showRing: ReturnType<typeof ring> | null = null;
+  /** How long the fire button's been held with a warhammer in hand, and since the guard went up (seconds). */
+  let held = 0;
+  let guardFor = 99;
   /** The shield on show (by item), its node, and how far it's raised (0..1). */
   let shield: { id: string; node: Node } | null = null;
   let raised = 0;
@@ -135,8 +188,9 @@ function armory(): ClientKit {
 
   return {
     name: 'arena.armory',
-    setup() {
+    setup(client) {
       for (const [name, anim] of Object.entries({ ...ANIMS, ...POSES })) fp.define(name, anim);
+      showRing = ring(client);
     },
     controls(_client, c) {
       lmb = c.active && c.button(0);
@@ -154,9 +208,18 @@ function armory(): ClientKit {
       else if (melee && def.throw && rmb) want = 'arena_aim';
       if (forced) want = forced;
       if (want !== pose) {
+        if (want === 'arena_guard') guardFor = 0;
         pose = want;
         fp.pose(want, { ease: want ? 0.08 : 0.14 });
       }
+      // The ring: a hammer's charge, a crossbow spanning, a guard's parry window.
+      held = melee && def.slam && lmb ? held + dt : 0;
+      guardFor += dt;
+      const span = (me.held?.state as { reload?: number } | undefined)?.reload ?? -1;
+      if (melee && def.slam && held > def.slam.min) showRing?.(Math.min(1, (held - def.slam.min) / (def.slam.charge - def.slam.min)));
+      else if (melee && def.guard && pose === 'arena_guard' && guardFor < def.guard.parry + 0.15) showRing?.(1 - guardFor / (def.guard.parry + 0.15), '#ffe28a');
+      else if (span >= 0) showRing?.(span, '#e8e2d4');
+      else showRing?.(null);
       // The gladius's shield on the off hand, raised behind the guard.
       setShield(client, melee && def.guard && id ? shieldOf(rarityOf(id)) : null);
       if (!shield) return;

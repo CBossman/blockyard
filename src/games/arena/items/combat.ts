@@ -86,6 +86,7 @@ export function combatDamage(game: GameContext, hit: DamageEvent) {
     game.fx.burst({ x: q.x, y: q.y + 1, z: q.z }, { color: '#e6f8ff', count: 30, speed: 4.5, size: 0.14, gravity: 10, glow: 0.5, life: 0.7 });
     game.audio.play('arena_shatter', { at: q });
     thaw(target);
+    bus.emit('feat', { player: source, name: 'shatter', text: 'Shattered!' });
   }
   // The Sunbow's arrows set them burning.
   if (source && source !== 'world' && source.kind === 'player' && hit.weapon === 'bow_legendary' && hit.cause === 'projectile') burn(game, target, source, 3, 3, 'bow_legendary');
@@ -192,6 +193,7 @@ export function legendHit(game: GameContext, me: Player, target: Entity | null, 
         const q = target.position;
         game.fx.burst({ x: q.x, y: q.y + 1.2, z: q.z }, { color: '#ff3030', count: 30, speed: 5, size: 0.14, life: 0.5 });
         game.audio.play('arena_execute', { at: q });
+        bus.emit('feat', { player: me, name: 'execute', text: 'Beheaded!' });
         target.damage(target.health + 50, { source: me, knockback: 1.5, weapon: item, cause: 'melee', crit: true });
       }
       return;
