@@ -17,10 +17,14 @@ interface BatState {
   _cd?: number;
   _ang?: number;
   _dir?: number;
+  /** Seconds it's not seen whom it's after. */
+  _lost?: number;
 }
 
 const HOVER = 3.2;
 const ORBIT = 5;
+/** Seconds out of sight of whom it's after before it gives up on getting round what's between. */
+const LOST = 20;
 /** Bats diving at once: one, and another with more fighters. */
 const divers = (game: GameContext) => game.entities.all('bat').filter((b) => (b.data as BatState)._mode === 'shriek' || (b.data as BatState)._mode === 'dive').length;
 
@@ -96,13 +100,22 @@ const batAI: Behavior = (self, game, dt) => {
     }
     return;
   }
-  // Circling over their head (out of the gates first, if it can't see them yet).
+  // Circling over their head. Out of sight of them: out of the gates to the middle first; then,
+  // still nothing (a wall between, a roof over), up and over to above them; at last it flutters
+  // off and comes back in over the middle (never stuck behind a wall for good).
   s._mode = 'circle';
   if (!self.canSee(target)) {
     const c = map().center;
-    flyTo(self, { x: c.x, y: Math.max(c.y, p.y) + HOVER + 1, z: c.z });
+    const t = (s._lost = (s._lost ?? 0) + dt);
+    if (t > LOST) {
+      s._lost = 0;
+      self.teleport({ x: c.x, y: c.y + HOVER + 4, z: c.z });
+    } else if (t % 9 < 3) flyTo(self, { x: c.x, y: Math.max(c.y, p.y) + HOVER + 1, z: c.z });
+    else if (t % 9 < 5) flyTo(self, { x: e.x, y: Math.max(e.y, p.y + HOVER) + 4, z: e.z });
+    else flyTo(self, { x: p.x, y: p.y + HOVER + 4, z: p.z });
     return;
   }
+  s._lost = 0;
   s._ang += dt * 0.9 * s._dir;
   const bob = Math.sin(self.age * 2.3 + self.id) * 0.5;
   flyTo(self, { x: p.x + Math.cos(s._ang) * ORBIT, y: p.y + HOVER + bob, z: p.z + Math.sin(s._ang) * ORBIT });
