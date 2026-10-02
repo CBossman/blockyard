@@ -26,7 +26,7 @@ function scene(seed: number) {
   me.armor = 0;
   const mine = new Set<Entity>();
   const spawn = (type: string, x: number, z: number, data: Record<string, unknown> = {}) => {
-    const e = spawnMonster(game, type, { x, y: FLOOR + 1.05, z: z + 8 }, { data: { summoned: true, ...data } });
+    const e = spawnMonster(game, type, { x, y: FLOOR + 1.05, z: z + 4 }, { data: { summoned: true, ...data } });
     mine.add(e);
     return e;
   };
@@ -36,7 +36,7 @@ function scene(seed: number) {
   const clear = () => {
     for (const e of game.entities.all()) if (!mine.has(e) && !e.data.spawned && !e.data.flock) e.remove();
   };
-  me.teleport({ x: -8.5, y: FLOOR + 1, z: 8.5 }, -Math.PI / 2, 0);
+  me.teleport({ x: -8.5, y: FLOOR + 1, z: 4.5 }, -Math.PI / 2, 0);
   const run = (seconds: number, pilot: Pilot = () => ({})) => h.run(seconds, { pilot: (t) => (clear(), pilot(t)) });
   return { h, game, me, spawn, run, hurt: () => hurt, heal: () => ((me.health = me.maxHealth), (hurt = 0)) };
 }
@@ -51,7 +51,7 @@ export default function arenaBestiary() {
     k.setSpeed(0);
     s.run(1.5);
     const hp = () => k.health;
-    const at = (x: number, z: number, y = FLOOR + 1) => s.me.teleport({ x, y, z: z + 8 }, 0, 0);
+    const at = (x: number, z: number, y = FLOOR + 1) => s.me.teleport({ x, y, z: z + 4 }, 0, 0);
     // In front (it faced us as we stood), out of its reach: an arrow's or a spear's blow.
     at(-8.5, 0.5);
     s.run(0.3);
@@ -164,8 +164,8 @@ export default function arenaBestiary() {
     log(`minotaur: gored us standing in its line ${gored}`);
     check(gored, 'the charge gores whoever stays in its way');
     // Again, toward the wall behind us; we step out of the line during the tell.
-    s.me.teleport({ x: -14.5, y: FLOOR + 1, z: 8.5 }, 0, 0);
-    m.teleport({ x: -5.5, y: FLOOR + 1.05, z: 8.5 });
+    s.me.teleport({ x: -14.5, y: FLOOR + 1, z: 4.5 }, 0, 0);
+    m.teleport({ x: -5.5, y: FLOOR + 1.05, z: 4.5 });
     m.data._cd = 0;
     m.data._stun = 0;
     m.data._charge = undefined;
@@ -174,7 +174,7 @@ export default function arenaBestiary() {
     s.run(6, () => {
       if (m.data._paw !== undefined && !stepped) {
         stepped = true;
-        s.me.teleport({ x: -12.5, y: FLOOR + 1, z: 13.5 }, 0, 0);
+        s.me.teleport({ x: -12.5, y: FLOOR + 1, z: 9.5 }, 0, 0);
       }
       if (((m.data._stun as number | undefined) ?? 0) > 0) stunned = true;
       return {};
@@ -237,13 +237,13 @@ export default function arenaBestiary() {
     const s = scene(21);
     const k = s.spawn('knight', -4.5, 0.5);
     k.setSpeed(0);
-    s.me.teleport({ x: -8.5, y: FLOOR + 1, z: 8.5 }, -Math.PI / 2, 0);
+    s.me.teleport({ x: -8.5, y: FLOOR + 1, z: 4.5 }, -Math.PI / 2, 0);
     s.run(1.5);
     let hp = k.health;
     k.damage(3, { source: s.me, cause: 'melee', weapon: 'gladius', knockback: 2.2 });
     const bash = hp - k.health;
     hp = k.health;
-    slamAt(s.game, s.me, { x: -6.5, y: FLOOR + 1, z: 8.5 }, { radius: 3, damage: 8, knockback: 0.4, weapon: 'warhammer', stagger: 1.4 });
+    slamAt(s.game, s.me, { x: -6.5, y: FLOOR + 1, z: 4.5 }, { radius: 3, damage: 8, knockback: 0.4, weapon: 'warhammer', stagger: 1.4 });
     const slam = hp - k.health;
     s.run(0.1);
     const reeling = k.data._down === true;
@@ -259,7 +259,7 @@ export default function arenaBestiary() {
     // A slam by its own cause (the hammer's): through, and the guard knocked open.
     s.run(3);
     hp = k.health;
-    k.damage(4, { source: s.me, cause: 'slam', weapon: 'warhammer', from: { x: -6, y: FLOOR + 1, z: 8.5 } });
+    k.damage(4, { source: s.me, cause: 'slam', weapon: 'warhammer', from: { x: -6, y: FLOOR + 1, z: 4.5 } });
     k.damage(4, { source: s.me, cause: 'melee', weapon: 'gladius' });
     const slammed = hp - k.health;
     log(`knight vs the armory: a bash from in front ${bash}, the slam ${slam.toFixed(1)}, reeling ${reeling} so a blade does ${open.toFixed(1)}; frozen, ${frozen.toFixed(1)}; a 'slam' then a blade ${slammed.toFixed(1)}`);
@@ -294,7 +294,7 @@ export default function arenaBestiary() {
     state.wave = 12;
     let elites = 0;
     for (let i = 0; i < 200; i++) {
-      const e = spawnMonster(s.game, 'zombie', { x: -1.5, y: FLOOR + 1.05, z: 8.5 });
+      const e = spawnMonster(s.game, 'zombie', { x: -1.5, y: FLOOR + 1.05, z: 4.5 });
       if (e.data.elite) elites++;
       e.remove();
     }
@@ -330,7 +330,7 @@ export default function arenaBestiary() {
     check(s.hurt() > 2, 'an explosive elite blows up');
 
     s.heal();
-    s.me.teleport({ x: -8.5, y: FLOOR + 1, z: 8.5 }, -Math.PI / 2, 0);
+    s.me.teleport({ x: -8.5, y: FLOOR + 1, z: 4.5 }, -Math.PI / 2, 0);
     const f = s.spawn('zombie', -6.5, 0.5);
     f.setSpeed(0);
     makeElite(s.game, f, 'fiery');

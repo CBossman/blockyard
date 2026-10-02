@@ -154,6 +154,11 @@ function trap(h: ReturnType<typeof launch>, game: GameContext, me: Player, t: Tr
   bus.on('slain', ({ entity, by, weapon }) => {
     if (ours.has(entity) && weapon === 'trap' && by === me) kills++;
   });
+  // (Its kills may drop coins too: the price is looked for as a payment of its own.)
+  let paid = false;
+  bus.on('gold', ({ player, delta }) => {
+    if (player === me && delta === -t.price && !paid) paid = true;
+  });
   let pressed = false;
   h.run(t.time + 2, {
     pilot: () => {
@@ -165,9 +170,8 @@ function trap(h: ReturnType<typeof launch>, game: GameContext, me: Player, t: Tr
     },
   });
   off();
-  const paid = gold(me) === 50;
   for (const e of held) e.remove();
-  if (!paid) failed.push(`${t.id}: the lever didn't take ${t.price} gold (left ${gold(me)})`);
+  if (!paid) failed.push(`${t.id}: the lever didn't take ${t.price} gold`);
   if (!hits) failed.push(`${t.id}: hurt nothing held in it (${where.map(fmt).join('; ')})`);
   if (wrong) failed.push(`${t.id}: ${wrong} hits not credited to the puller`);
   return `${t.id.split('.')[1]} ${hits}/${kills}`;
