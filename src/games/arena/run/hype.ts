@@ -30,6 +30,8 @@ const FEATS: Record<string, number> = {
   untouched: 0.06,
   last_stand: 0.15,
   parry: 0.05,
+  boss_crash: 0.12,
+  boss_stagger: 0.08,
 };
 const FEAT_DEFAULT = 0.05;
 /** A boss's blows: this much per point of damage dealt to it. */
