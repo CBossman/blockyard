@@ -63,6 +63,10 @@ const ROARS = new Set(['rampage', 'multi_kill', 'kaboom', 'goblin', 'last_stand'
 const UNSAID = new Set(['boss_phase', 'revive']);
 /** A first sighting's tip stays up this long before the next (seconds). */
 const FOE_EVERY = 5;
+/** A fighter's light hits (a burn, a spell's chain) are told at most this often (seconds); kills and heavy hits always. */
+const LIGHT_EVERY = 0.1;
+/** When each fighter's screen was last told of a hit. */
+const lastHit = new Map<string, number>();
 
 function send(game: GameContext, to: Player | 'all', name: string, data: unknown, force = false) {
   const key = `${name}@${to === 'all' ? 'all' : to.id}`;
@@ -228,6 +232,7 @@ function announceWave(game: GameContext, e: { wave: number; name: string; twist:
 /** A fight begins afresh: nothing ended, nobody down, no waves named, no monster seen. */
 function fresh() {
   ended = null;
+  lastHit.clear();
   waveTotal = 0;
   waveNames.clear();
   endless = false;
@@ -409,7 +414,11 @@ export const hudPart: ArenaPart = {
         const hit: HitMsg = { e: entity.id, n: Math.round(amount * 10) / 10, h: Math.round(Math.min(1, amount / Math.max(6, entity.maxHealth * 0.4)) * 100) / 100 };
         if (!entity.alive || entity.health <= 0) hit.k = 1;
         if (boss) hit.b = 1;
-        tell(game, source, MSG.hit, hit);
+        const now = game.clock.now;
+        if (hit.k || hit.h >= 0.3 || now - (lastHit.get(source.id) ?? -1) >= LIGHT_EVERY) {
+          lastHit.set(source.id, now);
+          tell(game, source, MSG.hit, hit);
+        }
       }
       // The crowd cheers the blows on a boss, now and then.
       if (boss && game.clock.now - bossCheer > 2.5) {
