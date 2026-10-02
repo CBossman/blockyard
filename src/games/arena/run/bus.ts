@@ -64,6 +64,8 @@ export interface ArenaEvents {
   rejoined: { player: Player };
   /** The fight is over: won (the last wave of the run cleared) or lost, how far it got, and each fighter's run. */
   runEnd: { won: boolean; wave: number; endless: boolean; map: ArenaMap; time: number; results: RunResult[] };
+  /** Gold coins worth `value` scattered at `at` (a boss's loot shower), for the run to drop as it drops monsters' coins. */
+  coins: { at: Vec3; value: number; by: Player | null };
   /** A fighter's gold changed (`delta` this time, `total` now), from `at` if it was picked up somewhere, and why. */
   gold: { player: Player; delta: number; total: number; at?: Vec3; why?: 'coin' | 'wave' | 'goblin' | 'boss' | 'gift' | 'start' | 'spend' };
   /** The crowd's hype (0..1); while the Crowd's Favour is on (`favour`), its seconds counting down as a fraction. */

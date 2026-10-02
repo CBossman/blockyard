@@ -11,14 +11,13 @@ import { state } from './state';
  * for a big one), pulled to whoever comes near and counted into their purse (`gold.ts`). A monster's
  * worth is its cost to the director times `GOLD_PER_COST`, more for a champion (`data.worth` times,
  * the bestiary's elites say; else three); a
- * Treasure Goblin bursts into a shower, a boss into a fortune. Gold Rush and the Crowd's Favour
- * each double it. Whatever's left lying when a wave's won is raked up and shared out, and each
+ * Treasure Goblin bursts into a shower, and a boss's bounty is its own to scatter (`coins` on the
+ * bus). Gold Rush and the Crowd's Favour each double it all. Whatever's left lying when a wave's won is raked up and shared out, and each
  * fighter gets the wave's bonus.
  */
 export const GOLD_PER_COST = 6;
 const ELITE = 3;
 const GOBLIN_GOLD = 100;
-const BOSS_GOLD = 250;
 /** A wave's bonus, for each fighter: this, and this much more each wave. */
 export const waveBonus = (n: number) => 15 + 5 * n;
 /** Up to this much is one coin; more is piles. */
@@ -47,7 +46,7 @@ export function defineCoins(game: GameContext) {
 
 /** What a monster's worth in gold (before Gold Rush and the Favour). */
 export function worth(e: Entity): number {
-  if (bossKind(e.type)) return BOSS_GOLD;
+  if (bossKind(e.type)) return 0;
   if (e.type === 'goblin') return GOBLIN_GOLD;
   const base = (monsterKind(e.type)?.cost ?? 1) * GOLD_PER_COST;
   const elite = typeof e.data.worth === 'number' ? e.data.worth : e.data.elite ? ELITE : 1;
@@ -66,13 +65,18 @@ export function spill(game: GameContext, at: Vec3, value: number) {
   }
 }
 
+/** Gold Rush and the Crowd's Favour, each doubling what's spilled. */
+const boosted = (game: GameContext, value: number) => value * (state.twist === 'gold_rush' ? 2 : 1) * (favoured(game) ? 2 : 1);
+
 export function coinsListen(game: GameContext) {
   bus.on('slain', ({ entity, at }) => {
-    let value = worth(entity);
-    if (state.twist === 'gold_rush') value *= 2;
-    if (favoured(game)) value *= 2;
+    const value = boosted(game, worth(entity));
     if (value > 0) spill(game, at, value);
-    if (entity.type === 'goblin' || bossKind(entity.type)) game.audio.play('coins', { at, volume: 1.2 });
+    if (entity.type === 'goblin') game.audio.play('coins', { at, volume: 1.2 });
+  });
+  bus.on('coins', ({ at, value }) => {
+    spill(game, at, boosted(game, value));
+    game.audio.play('coins', { at, volume: 1.4 });
   });
 }
 

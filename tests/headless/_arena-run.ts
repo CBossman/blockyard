@@ -79,8 +79,13 @@ function coins() {
   slay(game, me, 'goblin', at);
   idle(h, 3);
   const goblin = gold(me) - before;
-  log(`coins: a zombie ${zombie}, a champion ${elite}, in a Gold Rush ${rush}, a goblin's shower ${goblin}`);
-  check(zombie === GOLD_PER_COST && elite === 3 * GOLD_PER_COST && rush === 2 * GOLD_PER_COST && goblin >= 90, 'what monsters are worth');
+  // A boss's bounty, scattered on the bus.
+  const pre = gold(me);
+  bus.emit('coins', { at: { x: at.x, y: c.y - 1, z: at.z }, value: 300, by: me });
+  idle(h, 4);
+  const bounty = gold(me) - pre;
+  log(`coins: a zombie ${zombie}, a champion ${elite}, in a Gold Rush ${rush}, a goblin's shower ${goblin}, a boss's bounty ${bounty}`);
+  check(zombie === GOLD_PER_COST && elite === 3 * GOLD_PER_COST && rush === 2 * GOLD_PER_COST && goblin >= 90 && bounty >= 290, 'what monsters are worth');
   // Coins left lying when the wave's won are raked up; and the wave's bonus.
   slay(game, me, 'brute', { x: c.x + 12, z: c.z - 12 });
   idle(h, 0.5);
