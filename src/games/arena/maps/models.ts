@@ -252,42 +252,81 @@ export function throne(): Model {
   return { bp, scale: 1 / 8, pivot: { x: 6, y: 0, z: 5 } };
 }
 
-/** A bronze lion's head on a wall, its mouth open (the fire comes out of it), facing +z. Pivot: the mouth. */
+/** Whether (x, y, z) is inside the ellipsoid round `c` with radii `r`. */
+const inside = (x: number, y: number, z: number, c: [number, number, number], r: [number, number, number]) =>
+  ((x - c[0]) / r[0]) ** 2 + ((y - c[1]) / r[1]) ** 2 + ((z - c[2]) / r[2]) ** 2 <= 1;
+
+/**
+ * A bronze lion's head on a wall, roaring (the fire comes out of its mouth), facing +z: a ragged
+ * gilt mane, a broad brow and muzzle, eyes under a heavy brow, ears, the jaw dropped open on a
+ * dark throat. Pivot: the mouth.
+ */
 export function lionHead(): Model {
-  const bp = voxels({ x: 17, y: 17, z: 8 }, (x, y, z) => {
-    const dx = x - 8;
-    const dy = y - 8;
+  const bp = voxels({ x: 19, y: 20, z: 11 }, (x, y, z) => {
+    const dx = x - 9;
+    const dy = y - 10;
     const r = Math.hypot(dx, dy);
-    // The mane: a ragged disc at the back.
-    if (z <= 2) return r <= 8 - (Math.abs(Math.atan2(dy, dx) * 6) % 2 > 1 ? 1 : 0) ? (r > 6 ? 'gilt' : 'bronze') : undefined;
-    // The face, its muzzle forward.
-    const face = Math.abs(dx) <= 4.5 - (z - 3) * 0.4 && dy >= -5 && dy <= 4;
-    if (!face) return undefined;
-    // The open mouth: dark, below the nose.
-    if (dy >= -4 && dy <= -2 && Math.abs(dx) <= 2) return z >= 6 ? undefined : 'black_concrete';
-    if (dy === 2 && (dx === -2 || dx === 2) && z === 6) return 'black_concrete';
-    return z === 7 && dy > -1 ? 'gilt' : 'bronze';
+    const ang = Math.atan2(dy, dx);
+    // The mane: locks round the head, raggedly, deepest at the back.
+    const lock = 8.4 + 1.3 * Math.sin(ang * 9) + 0.7 * Math.sin(ang * 4 + 1);
+    if (z <= 3 && r <= lock - z * 0.35) return r > 6.5 ? (Math.sin(ang * 9) > 0.2 ? 'gilt' : 'bronze') : 'bronze';
+    // The open mouth: a dark throat under the muzzle, fangs at its corners, the lower jaw below.
+    if (inside(x, y, z, [9, 5.2, 7], [2.6, 1.6, 3.2]) && z >= 5) return x === 7 || x === 11 ? (y >= 5 ? 'white_concrete' : 'black_concrete') : 'black_concrete';
+    if (inside(x, y, z, [9, 3, 6.4], [3.3, 1.2, 2.6])) return 'bronze';
+    // The muzzle and nose; the brow and cheeks.
+    if (inside(x, y, z, [9, 7.4, 8.3], [2.4, 1.6, 1.8])) return y >= 8 && Math.abs(dx) <= 1 && z >= 9 ? 'black_concrete' : 'gilt';
+    if (inside(x, y, z, [9, 9, 5.4], [4.6, 4.6, 3.4])) {
+      // The eyes, deep under the brow.
+      if (z >= 7 && y >= 10 && y <= 11 && (x === 6 || x === 7 || x === 11 || x === 12)) return 'black_concrete';
+      return y >= 12 && z >= 7 ? 'gilt' : 'bronze';
+    }
+    // The ears.
+    if (inside(x, y, z, [4.5, 14.5, 4.5], [1.3, 1.5, 1.2]) || inside(x, y, z, [13.5, 14.5, 4.5], [1.3, 1.5, 1.2])) return 'bronze';
+    return undefined;
   });
-  return { bp, scale: 1 / 8, pivot: { x: 8.5, y: 5, z: 7 } };
+  return { bp, scale: 1 / 8, pivot: { x: 9.5, y: 5, z: 9 } };
 }
 
-/** A marble statue of a gladiator on guard, sword up, about 3.6 blocks tall. Pivot: its feet, facing +z. */
+/**
+ * A marble statue of a gladiator standing guard on a plinth, about 3.4 blocks tall: a crested
+ * helmet, a round shield on his left arm, his gladius raised, legs braced. Pivot: the middle of
+ * the plinth's foot, facing +z.
+ */
 export function statue(): Model {
-  const m = 'diorite';
-  const bp = parts([
-    [1, 0, 1, 2, 6, 2, m],
-    [4, 0, 2, 5, 6, 3, m],
-    [0, 6, 0, 6, 11, 3, m],
-    [0, 7, 0, 6, 7, 3, 'andesite'],
-    [-2, 7, 1, -1, 11, 2, m],
-    [7, 9, 1, 8, 11, 3, m],
-    [7, 9, 4, 8, 10, 5, m],
-    [7, 10, 5, 8, 18, 5, 'andesite'],
-    [2, 12, 1, 4, 12, 2, m],
-    [1, 13, 0, 5, 16, 3, m],
-    [0, 16, 0, 6, 17, 3, m],
-    [3, 18, 0, 3, 19, 4, m],
-    [-4, 4, 0, -3, 12, 4, m],
-  ]);
-  return { bp, scale: 1 / 5, pivot: { x: 2.5, y: 0, z: 2 } };
+  const m = 'marble';
+  const list: Part[] = [
+    // The plinth, its moulding.
+    [-5, 0, -4, 5, 2, 4, 'travertine_bricks'],
+    [-6, 3, -5, 6, 3, 5, 'travertine'],
+    // Legs, braced apart, greaves; a short tunic.
+    [-3, 4, -1, -2, 11, 1, m],
+    [2, 4, -1, 3, 11, 1, m],
+    [-3, 4, 0, -2, 7, 2, m],
+    [-4, 12, -2, 4, 15, 2, m],
+    // The torso, a belt, the shoulders.
+    [-3, 16, -2, 3, 22, 2, m],
+    [-4, 15, -2, 4, 15, 2, 'gilt'],
+    [-5, 21, -2, 5, 23, 2, m],
+    // Neck and head, the helmet with its crest and cheek guards.
+    [-1, 24, -1, 1, 24, 1, m],
+    [-2, 25, -2, 2, 29, 2, m],
+    [-3, 28, -3, 3, 30, 3, m],
+    [0, 31, -4, 0, 34, -1, 'red_concrete'],
+    [0, 30, -4, 0, 31, 3, 'red_concrete'],
+    [-1, 27, 2, 1, 27, 2, 'black_concrete'],
+    // The left arm down with the round shield on it.
+    [-7, 15, -1, -6, 22, 1, m],
+    // The right arm raised, the gladius up over the head.
+    [6, 22, -1, 7, 25, 1, m],
+    [6, 26, -1, 7, 29, 1, m],
+    [6, 30, 0, 7, 30, 0, 'gilt'],
+    [6, 31, 0, 7, 39, 0, 'iron_block'],
+  ];
+  // The shield: a disc on the left arm, a boss in its middle.
+  for (let y = 12; y <= 24; y++)
+    for (let z = -6; z <= 6; z++) {
+      const d = Math.hypot(y - 18, z);
+      if (d <= 6.2) list.push([-8, y, z, -8, y, z, d < 1.5 ? 'gilt' : d > 5.2 ? 'bronze' : m]);
+    }
+  return { bp: parts(list), scale: 1 / 10, pivot: { x: 0.5, y: 0, z: 0.5 } };
 }
