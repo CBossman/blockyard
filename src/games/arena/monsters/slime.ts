@@ -138,6 +138,6 @@ function slimeKind(id: string, extra: Partial<MonsterKind>): MonsterKind {
   };
 }
 
-export const slime = slimeKind('slime', { cost: 2.5, from: 4, weight: 0.8, max: 3, tip: 'It splits when it dies, and again: bombs and wide swings', color: '#8ff06a' });
+export const slime = slimeKind('slime', { cost: 3, from: 4, weight: 0.8, max: 3, tip: 'It splits when it dies, and again: bombs and wide swings', color: '#8ff06a' });
 export const slimeSmall = slimeKind('slime_small', {});
 export const slimeTiny = slimeKind('slime_tiny', { from: 99 });

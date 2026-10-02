@@ -207,7 +207,8 @@ export function bat() {
   P.add('furDark', 0x241a1e, { rough: 0.95 });
   P.add('wing', 0x4a2a36, { rough: 0.7, vary: 0.05 });
   P.add('wingBone', 0x2a161e, { rough: 0.6 });
-  P.add('ear', 0x7a4a5a, { rough: 0.7 });
+  P.add('ear', 0x6a3a4a, { rough: 0.7 });
+  P.add('nose', 0x8a5a66, { rough: 0.6 });
   P.add('eye', 0xff3030, { rough: 0.2, glow: 1 });
   P.add('fang', 0xf2ead8, { rough: 0.4 });
   const vox = new Voxels();
@@ -215,36 +216,41 @@ export function bat() {
     { name: 'body', parent: null, at: [0, 9, 0] },
     { name: 'head', parent: 'body', at: [0, 10, 3] },
     { name: 'wingL', parent: 'body', at: [2, 10, 1] },
-    { name: 'tipL', parent: 'wingL', at: [10, 11, 0] },
+    { name: 'tipL', parent: 'wingL', at: [10, 11, 2] },
     { name: 'wingR', parent: 'body', at: [-2, 10, 1] },
-    { name: 'tipR', parent: 'wingR', at: [-10, 11, 0] },
+    { name: 'tipR', parent: 'wingR', at: [-10, 11, 2] },
   ];
-  ball(vox, 'body', [0, 9, 0], [3, 3, 4.2], (i, j, k) => (hash(i, j, k, 1) < 0.25 ? 'furDark' : 'fur'));
-  ball(vox, 'head', [0, 10.5, 4.5], [2.6, 2.4, 2.4], 'fur');
+  /** A flat triangle a voxel thick, its cells coloured by `colour(u, v)` (u along a→b, v along a→c). */
+  const tri = (part, a, b, c, colour) => {
+    for (let u = 0; u <= 1; u += 0.02)
+      for (let v = 0; v <= 1 - u; v += 0.02) {
+        const q = [0, 1, 2].map((x) => a[x] + (b[x] - a[x]) * u + (c[x] - a[x]) * v);
+        const col = colour(u, v);
+        if (col) vox.set(part, Math.floor(q[0]), Math.floor(q[1]), Math.floor(q[2]), col);
+      }
+  };
+  ball(vox, 'body', [0, 9, 0], [3.4, 3.2, 4.4], (i, j, k) => (hash(i, j, k, 1) < 0.25 ? 'furDark' : 'fur'));
+  ball(vox, 'head', [0, 10.6, 4.2], [2.8, 2.6, 2.6], 'fur');
+  ball(vox, 'head', [0, 10, 6.4], [1.3, 1, 0.9], 'nose');
   for (const m of [1, -1]) {
-    capsule(vox, 'head', [m * 1.5, 12, 4], [m * 2.6, 16.5, 3.4], 1.1, 0.35, 'ear');
+    // Ears: tall and pointed.
+    tri('head', [m * 0.6, 12, 4], [m * 3.2, 12, 3.6], [m * 2.6, 17, 3], (u, v) => (u + v > 0.9 ? 'furDark' : 'ear'));
     vox.set('head', m > 0 ? 1 : -2, 11, 6, 'eye');
-    vox.set('head', m > 0 ? 0 : -1, 9, 6, 'fang');
-    // Feet tucked under, little claws.
+    vox.set('head', m > 0 ? 0 : -1, 8, 6, 'fang');
     vox.set('body', m > 0 ? 1 : -2, 5, -2, 'furDark');
   }
-  // Wings: an inner panel from the body to the wrist, an outer from the wrist to the tips, a
-  // voxel thick, scalloped along the trailing edge, the finger bones darker.
+  // Wings: an arm bone to the wrist and three fingers spread from it, the membrane between them
+  // scalloped back from the fingers' tips; the inner panel on the arm, the rest on the hand.
   for (const [side, m] of [['L', 1], ['R', -1]]) {
-    for (let x = 2; x < 10; x++)
-      for (let z = -5; z < 3; z++) {
-        const edge = -5 + Math.abs(Math.sin(x * 0.8)) * 1.5;
-        if (z < edge) continue;
-        vox.set(`wing${side}`, m > 0 ? x : -1 - x, 10, z, z >= 2 ? 'wingBone' : 'wing');
-      }
-    for (let x = 10; x < 19; x++)
-      for (let z = -7; z < 3; z++) {
-        const span = 1 - (x - 10) / 9;
-        const edge = -7 + (1 - span) * 7 + Math.abs(Math.sin(x * 1.1)) * 1.6;
-        if (z < edge || z > 2 - (1 - span) * 1) continue;
-        const bone = z >= 1 || (x - 10) % 4 === 0;
-        vox.set(`tip${side}`, m > 0 ? x : -1 - x, 11, z, bone ? 'wingBone' : 'wing');
-      }
+    const X = (p) => [p[0] * m, p[1], p[2]];
+    const shoulder = X([2, 10, 1]), wrist = X([10, 11, 2]), hip = X([2, 9.5, -4]);
+    const fingers = [X([20, 11.5, 1]), X([18, 11, -5]), X([12, 10.5, -8.5])];
+    const arm = `wing${side}`, hand = `tip${side}`;
+    tri(arm, shoulder, wrist, hip, (u, v) => (v > 0.9 - u * 0.2 ? null : 'wing'));
+    tri(arm, wrist, fingers[2], hip, (u, v) => (u + v > 0.92 && v > 0.1 && u > 0.1 ? null : 'wing'));
+    for (let n = 0; n < 2; n++) tri(hand, wrist, fingers[n], fingers[n + 1], (u, v) => (u > 0.08 && v > 0.08 && u + v > 0.86 ? null : 'wing'));
+    capsule(vox, arm, shoulder, wrist, 0.7, 0.6, 'wingBone');
+    for (const f of fingers) capsule(vox, hand, wrist, f, 0.5, 0.3, 'wingBone');
   }
   // The beat: wings down hard, up softly; the body bobbing against them.
   const beat = (t) => Math.cos(t * Math.PI * 2);
