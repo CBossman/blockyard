@@ -24,7 +24,7 @@ export interface MonsterKind {
   role: 'melee' | 'ranged' | 'swarm' | 'support' | 'heavy' | 'special';
   /** One is one, however many fight (not multiplied by party size): a brute, a goblin. */
   single?: boolean;
-  /** How to fight it, shown the first time one comes in each run (its name, and this under it). */
+  /** How to fight it, shown the first time one comes in each run (the HUD's "new foe" card). */
   tip?: string;
   /** Its name's colour on that tip. */
   color?: string;
