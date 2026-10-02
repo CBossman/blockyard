@@ -162,7 +162,7 @@ const raise: Move = {
   cooldown: [8, 10],
   windup: 1.1,
   start(c) {
-    c.self.animate('raise', { fade: 0.25 });
+    c.self.animate('summon', { fade: 0.25 });
     c.self.glow('#5fe87f');
     c.game.audio.play('lich_raise', { at: c.self.position });
   },

@@ -113,7 +113,7 @@ export function lich() {
   f.box('skull', [-3.5, 59.5, 2], [3.5, 62, 6.5], 'bone');
   for (const s of [1, -1]) {
     f.ball('skull', [s * 2, 63.5, 5.6], [1.6, 1.5, 1.3], 'socket');
-    f.ball('skull', [s * 2, 63.5, 5.2], [0.9, 0.9, 0.9], 'eye');
+    f.ball('skull', [s * 2, 63.5, 5.4], [1.15, 1.05, 1], 'eye');
   }
   f.box('skull', [-0.5, 60.5, 6], [0.5, 62, 7], 'socket');
   for (let i = -3; i < 3; i++) f.vox.set('skull', i, 59, 6, i % 2 ? 'boneDark' : 'bone');
@@ -188,9 +188,9 @@ function clips(f) {
     };
   }));
   // The bolt: the staff drawn back, glowing; then thrust at its mark.
-  const boltWind = { chest: [0, -0.3, 0], armR: [-0.55, -0.2, -0.1], foreR: [-0.8, 0, 0], staff: [-0.35, 0, 0], armL: [-0.7, 0.3, 0.1], foreL: [-0.4, 0, 0], skull: [0, 0.2, 0] };
+  const boltWind = { chest: [0, -0.3, 0], armR: [0.25, -0.2, -0.1], foreR: [-0.5, 0, 0], staff: [-0.1, 0, 0], armL: [-0.7, 0.3, 0.1], foreL: [-0.4, 0, 0], skull: [0, 0.2, 0] };
   f.clip('bolt_wind', [{ t: 0, turn: {} }, { t: 0.25, turn: boltWind }, { t: 3, turn: boltWind }]);
-  f.clip('bolt', [{ t: 0, turn: boltWind }, { t: 0.08, turn: { chest: [0.08, 0.2, 0], armR: [-1.35, 0.1, -0.1], foreR: [-0.15, 0, 0], staff: [-1.05, 0, 0], armL: [-0.2, 0, 0.3], skull: [0.05, -0.1, 0] } }, { t: 0.55, turn: {} }]);
+  f.clip('bolt', [{ t: 0, turn: boltWind }, { t: 0.08, turn: { chest: [0.08, 0.2, 0], armR: [-0.55, 0.1, -0.1], foreR: [-0.3, 0, 0], staff: [2.2, 0, 0], armL: [-0.2, 0, 0.3], skull: [0.05, -0.1, 0] } }, { t: 0.55, turn: {} }]);
   // The nova: the staff raised high in both hands, then driven down.
   const novaWind = { armR: [-2.65, 0, 0.25], foreR: [-0.3, 0, 0], staff: [0.1, 0, 0], armL: [-2.5, 0, -0.35], foreL: [-0.4, 0, 0], chest: [-0.15, 0, 0], skull: [-0.3, 0, 0], jaw: [0.3, 0, 0], robe: [0, 0, 0] };
   f.clip('nova_wind', [{ t: 0, turn: {}, move: {} }, { t: 0.35, turn: novaWind, move: { float: [0, 3, 0] } }, { t: 3, turn: novaWind, move: { float: [0, 3.5, 0] } }]);
@@ -200,19 +200,19 @@ function clips(f) {
     { t: 0.6, turn: {}, move: {}, scale: { robe: [1, 1, 1] } },
   ]);
   // Raising the dead: both arms up and out, palms to the sky.
-  const raise = { armL: [-0.3, 0, 2.15], armR: [-0.3, 0, -2.15], foreL: [-0.5, 0, 0], foreR: [-0.5, 0, 0], staff: [0, 0, 0.4], skull: [-0.35, 0, 0], jaw: [0.35, 0, 0], chest: [-0.12, 0, 0] };
-  f.clip('raise', [{ t: 0, turn: {}, move: {} }, { t: 0.4, turn: raise, move: { float: [0, 2, 0] } }, { t: 3, turn: raise, move: { float: [0, 2.5, 0] } }]);
+  const raise = { armL: [-0.3, 0, 2.15], armR: [-0.3, 0, -2.15], foreL: [-0.5, 0, 0], foreR: [-0.5, 0, 0], staff: [0.3, 0, 2.2], skull: [-0.35, 0, 0], jaw: [0.35, 0, 0], chest: [-0.12, 0, 0] };
+  f.clip('summon', [{ t: 0, turn: {}, move: {} }, { t: 0.4, turn: raise, move: { float: [0, 2, 0] } }, { t: 3, turn: raise, move: { float: [0, 2.5, 0] } }]);
   // The storm: risen high, arms flung wide, robes and cape whipping.
   f.clip('storm', [0, 0.3, 0.6, 0.9, 1.2].map((t, n) => {
     const b = n % 2 ? 1 : -1;
     return {
       t,
-      turn: { armL: [-0.15, 0, 1.45 + 0.05 * b], armR: [-0.15, 0, -1.45 - 0.05 * b], foreL: [-0.2, 0, 0], foreR: [-0.2, 0, 0], staff: [0, 0, 0.6], skull: [-0.45, 0.05 * b, 0], jaw: [0.5 + 0.1 * b, 0, 0], chest: [-0.15, 0, 0], robe: [0.12 * b, 0, 0.06 * b], cape: [0.3 + 0.15 * b, 0, 0.05 * b] },
+      turn: { armL: [-0.15, 0, 1.45 + 0.05 * b], armR: [-0.15, 0, -1.45 - 0.05 * b], foreL: [-0.2, 0, 0], foreR: [-0.2, 0, 0], staff: [0.15, 0, 1.6], skull: [-0.45, 0.05 * b, 0], jaw: [0.5 + 0.1 * b, 0, 0], chest: [-0.15, 0, 0], robe: [0.12 * b, 0, 0.06 * b], cape: [0.3 + 0.15 * b, 0, 0.05 * b] },
       move: { float: [0, 6 + 0.4 * b, 0] },
     };
   }));
   // The roar: flung wide, head back, jaw open.
-  const roar = { armL: [-0.6, 0, 1.4], armR: [-0.6, 0, -1.4], foreL: [-0.5, 0, 0], foreR: [-0.5, 0, 0], skull: [-0.5, 0, 0], jaw: [0.7, 0, 0], chest: [-0.3, 0, 0], cape: [0.3, 0, 0] };
+  const roar = { armL: [-0.6, 0, 1.4], armR: [-0.6, 0, -1.4], foreL: [-0.5, 0, 0], foreR: [-0.5, 0, 0], staff: [0.5, 0, 1.5], skull: [-0.5, 0, 0], jaw: [0.7, 0, 0], chest: [-0.3, 0, 0], cape: [0.3, 0, 0] };
   f.clip('roar', [
     { t: 0, turn: {}, move: {} },
     { t: 0.35, turn: roar, move: { float: [0, 3, 0] } },
@@ -221,7 +221,7 @@ function clips(f) {
   ]);
   f.clip('stagger', [
     { t: 0, turn: {}, move: {} },
-    { t: 0.15, turn: { chest: [-0.45, 0.15, 0], skull: [-0.4, 0, 0], jaw: [0.5, 0, 0], armL: [-0.3, 0, 0.9], armR: [-0.5, 0, -0.8], robe: [-0.2, 0, 0] }, move: { float: [0, -2, -2] } },
+    { t: 0.15, turn: { chest: [-0.45, 0.15, 0], skull: [-0.4, 0, 0], jaw: [0.5, 0, 0], armL: [-0.3, 0, 0.9], armR: [-0.5, 0, -0.8], staff: [0.3, 0, 0.7], robe: [-0.2, 0, 0] }, move: { float: [0, -2, -2] } },
     { t: 0.7, turn: { chest: [0.3, 0, 0], skull: [0.25, 0, 0], armL: [0.1, 0, 0.3], armR: [0.1, 0, -0.3] }, move: { float: [0, -3, 0] } },
     { t: 1.4, turn: {}, move: {} },
   ]);

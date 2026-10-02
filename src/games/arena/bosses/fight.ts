@@ -214,9 +214,30 @@ export function venom(game: GameContext, p: Player, damage: number, seconds: num
   venoms.set(p.id, { p, ticks, per: damage / ticks, next: game.clock.now + VENOM_TICK, source });
 }
 
-/** Chills, roots and venom wear off. */
+/** Fighters being dragged (a chain): toward where, until when. */
+const pulls = new Map<string, { p: Player; to: () => Vec3 | null; until: number }>();
+
+/** Drag a fighter toward a moving point (`to`, null: let go) over `seconds`, to within a couple of blocks of it. */
+export function pull(game: GameContext, p: Player, to: () => Vec3 | null, seconds: number) {
+  pulls.set(p.id, { p, to, until: game.clock.now + seconds });
+  p.impulse(0, 6, 0);
+}
+
+/** Chills, roots, venom and drags wear off (the drags steered, each tick, to arrive as they end). */
 export function updateHolds(game: GameContext) {
   const now = game.clock.now;
+  for (const [id, d] of pulls) {
+    const at = d.to();
+    const q = d.p.position;
+    const dist = at ? Math.hypot(at.x - q.x, at.z - q.z) : 0;
+    if (!at || now >= d.until || !d.p.alive || !game.players.includes(d.p) || dist < 2.2) {
+      pulls.delete(id);
+      continue;
+    }
+    const speed = Math.min(34, (dist - 2) / Math.max(0.08, d.until - now));
+    const v = d.p.velocity;
+    d.p.impulse(((at.x - q.x) / dist) * speed - v.x, 0, ((at.z - q.z) / dist) * speed - v.z);
+  }
   for (const [id, v] of venoms) {
     if (now < v.next) continue;
     if (!v.p.alive || !game.players.includes(v.p) || v.ticks <= 0) {
@@ -248,6 +269,7 @@ export function resetHolds() {
   chills.clear();
   roots.clear();
   venoms.clear();
+  pulls.clear();
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -379,6 +401,8 @@ export interface BossState {
   aim: Vec3 | null;
   /** Its entrance: it stands still and nothing touches it. */
   held: boolean;
+  /** Come in under a roof (a gate's tunnel): it strides out this way (a yaw) during its entrance, until it's clear of it (its back `back` blocks behind it too). */
+  emerge: { yaw: number; height: number; back: number } | null;
   dying: Dying | null;
   /** Seconds left of a stagger (it reels: open), and until it can be staggered again. */
   stagger: number;
@@ -397,7 +421,7 @@ export interface BossState {
 export function bossState(e: Entity): BossState {
   let s = e.data.boss as BossState | undefined;
   if (!s) {
-    s = { phase: 1, move: null, step: null, t: 0, cds: {}, focus: null, aim: null, held: false, dying: null, stagger: 0, staggerCd: 0, transition: 0, shield: false, vulnerable: 0, enraged: false, mem: {} };
+    s = { phase: 1, move: null, step: null, t: 0, cds: {}, focus: null, aim: null, held: false, emerge: null, dying: null, stagger: 0, staggerCd: 0, transition: 0, shield: false, vulnerable: 0, enraged: false, mem: {} };
     e.data.boss = s;
   }
   return s;
@@ -485,7 +509,10 @@ export function brain(b: Brain): Behavior {
   return (self, game, dt) => {
     const s = bossState(self);
     if (s.held || s.dying) {
-      self.stop();
+      const out = s.emerge && { x: -Math.sin(s.emerge.yaw), z: -Math.cos(s.emerge.yaw) };
+      if (s.held && s.emerge && out && (roofed(game, self.position, s.emerge.height) || roofed(game, { x: self.position.x - out.x * s.emerge.back, y: self.position.y, z: self.position.z - out.z * s.emerge.back }, s.emerge.height)))
+        self.moveDirection(out.x, out.z);
+      else self.stop();
       return;
     }
     for (const k in s.cds) s.cds[k] -= dt;
@@ -592,6 +619,11 @@ function chase(c: Ctx) {
     return;
   }
   self.moveTo(target);
+}
+
+/** Something solid over a spot, lower than a head `height` up (a gate's tunnel). */
+export function roofed(game: GameContext, p: Vec3, height: number): boolean {
+  return !!game.world.raycast({ x: p.x, y: p.y + 1.2, z: p.z }, { x: 0, y: 1, z: 0 }, height + 0.5);
 }
 
 /** Staggered: it reels for `seconds`, its move cut short, taking more damage meanwhile (`part.ts`). */

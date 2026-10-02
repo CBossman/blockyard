@@ -1,6 +1,6 @@
 import type { Client, ClientKit, Figure } from '@platform/client';
 import { Color, Vec3 } from '@platform/client/math';
-import { FALL_MSG, INTRO_MSG, MARK_MSG, PHASE_MSG, type FallMessage, type IntroMessage, type Mark, type PhaseMessage } from '../bosses/messages';
+import { CAM_MSG, FALL_MSG, INTRO_MSG, MARK_MSG, PHASE_MSG, type CamMessage, type FallMessage, type IntroMessage, type Mark, type PhaseMessage } from '../bosses/messages';
 import type { ClientPart } from './part';
 
 type V3 = [number, number, number];
@@ -32,8 +32,10 @@ interface Cine {
   /** The roar (an entrance), the last blast (a fall): seconds in, and whether it's come. */
   beat: number;
   struck: boolean;
-  /** Where the fall's orbit starts (radians round the boss), from where this screen was. */
+  /** Where the fall's orbit starts (radians round the boss) and which way it turns; which side the entrance's hero shots are on. */
   from: number;
+  turn: number;
+  side: number;
 }
 
 const rgbOf = (css: string): RGB => {
@@ -57,6 +59,9 @@ function bossesKit(): ClientKit {
   let el: HTMLElement;
   let phaseEl: HTMLElement;
   let phaseTimer: ReturnType<typeof setTimeout> | null = null;
+  /** The `/bosscam` cheat's view, while it's on. */
+  let cam: CamMessage | null = null;
+  const fwd = new Vec3();
   let tick = 0;
   let ambient = 0;
   const tmp = new Vec3();
@@ -112,7 +117,11 @@ function bossesKit(): ClientKit {
       });
       client.on(INTRO_MSG, (data) => {
         const m = data as IntroMessage;
-        cine = { kind: 'intro', t: 0, time: m.time, id: m.id, at: m.at, height: m.height, yaw: m.yaw, color: m.color, beat: m.roar, struck: false, from: 0 };
+        cine = { kind: 'intro', t: 0, time: m.time, id: m.id, at: m.at, height: m.height, yaw: m.yaw, color: m.color, beat: m.roar, struck: false, from: 0, turn: 0, side: 1 };
+        // The hero shots from whichever side sees more of it (a pillar can stand in the way).
+        const [hx, hz] = [-Math.sin(m.yaw), -Math.cos(m.yaw)];
+        const shot = (side: number): V3 => [m.at[0] + hx * (m.height * 1.65 + 2.2) - hz * side * (m.height * 0.55 + 0.8), m.at[1] + m.height * 0.2 + 0.5, m.at[2] + hz * (m.height * 1.65 + 2.2) + hx * side * (m.height * 0.55 + 0.8)];
+        cine.side = blocked(client, shot(-1), m.at, m.height) < blocked(client, shot(1), m.at, m.height) ? -1 : 1;
         q('.ab-kicker span').textContent = 'A champion of the pit';
         q('.ab-name').textContent = m.name;
         q('.ab-title').textContent = m.title;
@@ -124,13 +133,17 @@ function bossesKit(): ClientKit {
       client.on(FALL_MSG, (data) => {
         const m = data as FallMessage;
         const me = client.camera.position;
-        cine = { kind: 'fall', t: 0, time: m.time + m.hold, id: m.id, at: m.at, height: m.height, yaw: 0, color: m.color, beat: m.time, struck: false, from: Math.atan2(me.z - m.at[2], me.x - m.at[0]) };
+        cine = { kind: 'fall', t: 0, time: m.time + m.hold, id: m.id, at: m.at, height: m.height, yaw: 0, color: m.color, beat: m.time, struck: false, ...orbit(client, m.at, m.height, Math.atan2(me.z - m.at[2], me.x - m.at[0])), side: 1 };
         q('.ab-kicker span').textContent = m.name;
         q('.ab-name').textContent = 'Vanquished';
         q('.ab-title').textContent = m.by ? `Felled by ${m.by}` : 'The arena roars';
         el.style.setProperty('--boss', m.color);
         el.classList.remove('card', 'roar', 'blast');
         el.classList.add('on', 'fall');
+      });
+      client.on(CAM_MSG, (data) => {
+        cam = data as CamMessage | null;
+        if (!cam) client.camera.release(0.5);
       });
       client.on(PHASE_MSG, (data) => {
         const m = data as PhaseMessage;
@@ -152,6 +165,7 @@ function bossesKit(): ClientKit {
         if (cine) stop(client, 0);
       }
       if (cine) playCine(client, dt);
+      else if (cam) viewBoss(client, cam);
       // The marks, a few dozen times a second (each speck outlives a frame or two).
       tick += dt;
       if (tick >= 1 / MARK_RATE) {
@@ -289,8 +303,8 @@ function bossesKit(): ClientKit {
       const key = (fwd: number, side: number, up: number): V3 => [px + fx * fwd + rx * side, py + up, pz + fz * fwd + rz * side];
       const keys: { t: number; at: V3; look: V3 }[] = [
         { t: 0, at: key(h * 3.4 + 7, h * 1.5 + 3, h * 1.7 + 5), look: [px, py + h * 0.45, pz] },
-        { t: c.beat - 0.15, at: key(h * 1.65 + 2.2, h * 0.55 + 0.8, h * 0.18 + 0.5), look: [px, py + h * 0.62, pz] },
-        { t: c.time, at: key(h * 1.35 + 1.6, -h * 0.4 - 0.6, h * 0.26 + 0.6), look: [px, py + h * 0.6, pz] },
+        { t: c.beat - 0.15, at: key(h * 1.65 + 2.2, c.side * (h * 0.55 + 0.8), h * 0.18 + 0.5), look: [px, py + h * 0.62, pz] },
+        { t: c.time, at: key(h * 1.35 + 1.6, -c.side * (h * 0.25 + 0.4), h * 0.26 + 0.6), look: [px, py + h * 0.6, pz] },
       ];
       const i = c.t < keys[1].t ? 0 : 1;
       const s = smooth(Math.min(1, (c.t - keys[i].t) / (keys[i + 1].t - keys[i].t)));
@@ -312,12 +326,44 @@ function bossesKit(): ClientKit {
       client.audio.play('boss_vanquished', { volume: 1 });
     }
     const u = Math.min(1, c.t / c.time);
-    const a = c.from + 0.9 * smooth(u);
-    const d = h * 1.9 + 4;
+    const a = c.from + c.turn * 0.9 * smooth(u);
+    const d = FALL_REACH(h);
     const look: V3 = [px, py + h * (0.5 - 0.15 * u), pz];
     const at = clearOf(client, look, [px + Math.cos(a) * d, py + h * (0.75 - 0.35 * u) + 1.5, pz + Math.sin(a) * d]);
     client.camera.take({ position: { x: at[0], y: at[1], z: at[2] }, target: { x: look[0], y: look[1], z: look[2] }, fov: 58 });
     if (c.t >= c.time) stop(client, 1);
+  }
+
+  /** The `/bosscam` view: round the boss from in front of it (its figure's facing), looking at it. */
+  function viewBoss(client: Client, c: CamMessage) {
+    const f = client.figures.all.find((x) => x.id === c.id && !x.player);
+    if (!f) return;
+    f.root.getWorldPosition(tmp);
+    fwd.set(0, 0, 1).applyQuaternion(f.root.quaternion);
+    const a = Math.atan2(fwd.x, fwd.z) + c.angle;
+    client.camera.take({ position: { x: tmp.x + Math.sin(a) * c.dist, y: tmp.y + c.up, z: tmp.z + Math.cos(a) * c.dist }, target: { x: tmp.x, y: tmp.y + c.height * c.look, z: tmp.z }, fov: 50 });
+  }
+
+  /** How many of the lines from `at` to a boss standing at `p`, `h` tall (its feet, its middle, its head), something solid cuts. */
+  function blocked(client: Client, at: V3, p: V3, h: number): number {
+    let n = 0;
+    for (const f of [0.2, 0.5, 0.85]) if (!client.world.lineOfSight({ x: at[0], y: at[1], z: at[2] }, { x: p[0], y: p[1] + h * f, z: p[2] })) n++;
+    return n;
+  }
+
+  /** The fall's orbit: the clearest start near `from` (radians round the boss), and the clearer way to turn. */
+  function orbit(client: Client, p: V3, h: number, from: number): { from: number; turn: number } {
+    const d = FALL_REACH(h);
+    const cam = (a: number): V3 => [p[0] + Math.cos(a) * d, p[1] + h * 0.6 + 1.5, p[2] + Math.sin(a) * d];
+    let best = { from, turn: 1, cost: Infinity };
+    for (let k = 0; k < 18; k++) {
+      const a = from + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * 0.35;
+      for (const turn of [1, -1]) {
+        const cost = blocked(client, cam(a), p, h) * 10 + blocked(client, cam(a + turn * 0.9), p, h) * 6 + Math.ceil(k / 2) * 0.4;
+        if (cost < best.cost) best = { from: a, turn, cost };
+      }
+    }
+    return best;
   }
 
   /** The camera at `at`, or pulled in toward `look` before anything solid between them. */
@@ -342,10 +388,13 @@ function bossesKit(): ClientKit {
   }
 }
 
+/** How far from a falling boss `h` tall the camera circles. */
+const FALL_REACH = (h: number) => h * 1.6 + 3.5;
+
 /** Each boss's air: where (height over its feet), how much (specks a second), and how they move. */
 const AURA: Record<string, { y: number; rate: number; rgb: RGB; speed: number; size: number; gravity: number; glow: number; life: number; spread: number; up: number }> = {
   colossus: { y: 3.9, rate: 28, rgb: rgbOf('#ff9a3a'), speed: 0.4, size: 0.12, gravity: -1.6, glow: 1.6, life: 1.2, spread: 1.1, up: 0.5 },
-  warden: { y: 3.4, rate: 16, rgb: rgbOf('#b76bff'), speed: 0.4, size: 0.11, gravity: -1.4, glow: 1.5, life: 1, spread: 0.9, up: 0.4 },
+  warden: { y: 3, rate: 24, rgb: rgbOf('#b76bff'), speed: 0.4, size: 0.11, gravity: -1.6, glow: 1.5, life: 1, spread: 1, up: 0.4 },
   broodmother: { y: 1.4, rate: 10, rgb: rgbOf('#7fd23a'), speed: 0.2, size: 0.1, gravity: 9, glow: 0.8, life: 0.9, spread: 1.6, up: 0 },
   lich: { y: 0.7, rate: 30, rgb: rgbOf('#cdf6ff'), speed: 0.6, size: 0.16, gravity: 0.4, glow: 0.7, life: 1.4, spread: 1.4, up: 0.1 },
   phylactery: { y: 1.6, rate: 8, rgb: rgbOf('#9fe8ff'), speed: 0.3, size: 0.09, gravity: -1.5, glow: 1.6, life: 0.9, spread: 0.3, up: 0.3 },

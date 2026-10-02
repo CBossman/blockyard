@@ -18,10 +18,10 @@ const LEGS = [
 export function broodmother() {
   const f = new Figure('broodmother', { voxel: 1 / 12, scale: 2 });
   const C = (n, hex, o) => f.colour(n, hex, o);
-  C('chitin', 0x241a2a, { rough: 0.35, metal: 0.1, vary: 0.04 });
-  C('chitinLight', 0x3e2f48, { rough: 0.35, metal: 0.1, vary: 0.04 });
-  C('ridge', 0x6a5878, { rough: 0.4, metal: 0.1, vary: 0.03 });
-  C('belly', 0x4a3a40, { rough: 0.6, vary: 0.04 });
+  C('chitin', 0x2e2238, { rough: 0.32, metal: 0.15, vary: 0.04 });
+  C('chitinLight', 0x4c3a5c, { rough: 0.3, metal: 0.15, vary: 0.04 });
+  C('ridge', 0x7e6a94, { rough: 0.35, metal: 0.15, vary: 0.03 });
+  C('belly', 0x40303c, { rough: 0.6, vary: 0.04 });
   C('band', 0x5e6a34, { rough: 0.55, vary: 0.03 });
   C('hair', 0x140e18, { rough: 0.9, vary: 0 });
   C('crown', 0xe6dcc8, { rough: 0.6, vary: 0.03 });
@@ -69,8 +69,8 @@ export function broodmother() {
     f.ball('head', [s * 4, 24, 21.4], [0.9, 0.9, 0.9], 'eyeDim');
     f.ball('head', [s * 1.3, 24.6, 22.4], [0.9, 0.9, 0.9], 'eye');
   }
-  [[0, 33, 17], [3, 30, 16], [-3, 30, 16], [5.5, 27.5, 15], [-5.5, 27.5, 15]].forEach(([x, y, z]) =>
-    f.rod('head', [x * 0.7, 24, 17.5], [x, y, z], 1.4, 0.35, (i, j, k, t) => (t > 0.75 ? 'crownTip' : 'crown')),
+  [[0, 30.5, 15], [2.8, 29, 15], [-2.8, 29, 15], [5.2, 27, 14.5], [-5.2, 27, 14.5]].forEach(([x, y, z]) =>
+    f.path('head', [[x * 0.7, 24, 17.5], [x * 0.9, (24 + y) / 2, 17], [x, y, z]], 1.2, 0.3, (i, j, k, t) => (t > 0.7 ? 'crownTip' : 'crown')),
   );
   // Pedipalps: short feelers at the front.
   for (const s of [1, -1]) f.path('head', [[s * 5, 17, 21], [s * 8, 14, 25], [s * 7.5, 9.5, 27]], 1.1, 0.7, (i, j) => (j === 13 ? 'band' : 'chitin'));
@@ -82,14 +82,14 @@ export function broodmother() {
 
   // --- The abdomen: bloated, a glowing mark down its back, eggs glowing through its flanks, spines.
   const ab = [0, 26, -15], ar = [15, 13, 17];
+  // The mark: a row of glowing diamonds down her back, smaller toward her tail, and spots either side.
+  const diamonds = [[-6, 3.2], [-11.5, 2.7], [-16.5, 2.3], [-21, 1.8], [-25, 1.3]];
   f.ball('abdomen', ab, ar, (i, j, k, u) => {
-    const x = i + 0.5, y = j + 0.5 - ab[1], z = k + 0.5 - ab[2];
+    const x = i + 0.5, y = j + 0.5 - ab[1], z = k + 0.5;
     if (y < -6) return 'belly';
-    // The mark: an hourglass of light down the top.
-    const w = 2.2 + Math.abs(z / ar[2]) * 4.5;
-    if (u > 0.82 && y > 6 && Math.abs(x) < w && Math.abs(z) < ar[2] * 0.75 && Math.abs(Math.abs(x) - w + 1) < 1.2) return 'mark';
-    if (u > 0.82 && y > 9 && Math.abs(x) < 1.2 && Math.abs(z) < 9) return 'mark';
-    if (u > 0.85 && hash(i, j, k, 8) < 0.06) return 'chitinLight';
+    if (u > 0.84 && y > 3 && diamonds.some(([dz, r]) => Math.abs(x) + Math.abs(z - dz) < r)) return 'mark';
+    if (u > 0.86 && y > 0 && y < 8 && Math.abs(Math.abs(x) - 9) < 1.2 && [-9, -15, -21].some((dz) => Math.abs(z - dz) < 1.2)) return 'mark';
+    if (u > 0.9 && y > 4) return hash(i, j, k, 8) < 0.12 ? 'ridge' : 'chitinLight';
     return 'chitin';
   });
   for (const s of [1, -1]) {

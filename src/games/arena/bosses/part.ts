@@ -4,15 +4,15 @@ import { bus } from '../run/bus';
 import { spawnMonster } from '../run/spawn';
 import { map, state } from '../run/state';
 import { BOSSES, bossKind, type BossKind } from './index';
-import { bossState, clearHazards, fighters, resetHolds, resetProps, root, stagger, toughness, updateHazards, updateHolds, v3 } from './fight';
-import { FALL_MSG, INTRO_MSG, type FallMessage, type IntroMessage } from './messages';
+import { bossState, clearHazards, fighters, resetHolds, resetProps, roofed, root, stagger, toughness, updateHazards, updateHolds, v3 } from './fight';
+import { CAM_MSG, FALL_MSG, INTRO_MSG, type CamMessage, type FallMessage, type IntroMessage } from './messages';
 
 /** The entrance: seconds it lasts, and when (seconds in) the boss roars. */
 const INTRO = 5.4;
 const ROAR = 2.3;
 /** Its death: seconds of throes before the last blast, and the camera's hold on it after. */
 const THROES = 2.8;
-const AFTER = 1.3;
+const AFTER = 0.9;
 /** How much harder blows land on a boss while it reels (staggered, stunned, channelling). */
 const OPEN = 1.5;
 /** Seconds before the same boss can be staggered again. */
@@ -49,6 +49,8 @@ function entrance(game: GameContext, e: Entity, kind: BossKind) {
   e.lookAt({ x: p.x - Math.sin(yaw) * 10, y: p.y + kind.height * 0.6, z: p.z - Math.cos(yaw) * 10 });
   if (e.data.quick) return;
   s.held = true;
+  // Come in under a gate's arch: it strides out into the open as the camera finds it.
+  if (roofed(game, p, kind.height)) s.emerge = { yaw, height: kind.height, back: kind.define(game).hitbox.width / 2 + 0.6 };
   state.spawnTimer = Math.max(state.spawnTimer, INTRO);
   for (const f of fighters(game)) {
     f.protect(INTRO + 0.6);
@@ -59,6 +61,7 @@ function entrance(game: GameContext, e: Entity, kind: BossKind) {
   game.clock.after(ROAR, () => e.alive && !s.dying && kind.roar(game, e));
   game.clock.after(INTRO, () => {
     s.held = false;
+    s.emerge = null;
     e.lookAt(null);
   });
 }
@@ -171,7 +174,8 @@ function rules(game: GameContext) {
       by.hud.pop('STAGGERED!', { color: kind.color });
       bus.emit('feat', { player: by, name: 'boss_stagger', text: `${by.name} staggered ${kind.name}!` });
     }
-    hit.amount /= toughness(game);
+    // Tougher for a bigger party, and for one brought back mightier (`data.might`: an endless wave's).
+    hit.amount /= toughness(game) * ((t.data.might as number | undefined) ?? 1);
     if (s.stagger > 0 || s.vulnerable > 0) hit.amount *= OPEN;
     if (hit.amount >= t.health) {
       beaten(game, t, kind, by, hit.weapon);
@@ -207,6 +211,9 @@ function ahead(p: Player, d: number): Vec3 {
 }
 
 /**
+ * Whoever brings a boss in (`spawnMonster`) may say in its `data`: `quick` (no entrance: it fights
+ * at once) and `might` (it takes that many times less damage: a boss come back in an endless wave).
+ *
  * The bosses' own business: each one's entrance, its death and its loot, the rules for hurting
  * one (tougher for a bigger party; blasts stagger some; nothing lands while it roars or shields
  * itself), its chills, roots and hazards wearing off, and two cheats: `/boss <id> [now]` brings
@@ -236,6 +243,21 @@ export const bossesPart: ArenaPart = {
         const dz = p.position.z - at.z;
         spawnMonster(g, kind.id, at, { yaw: Math.atan2(-dx, -dz), data: now ? { quick: true } : {} });
         return `${kind.name} comes in`;
+      },
+    });
+    game.commands.register('bosscam', {
+      usage: '[degrees] [distance] [height] [look] | off',
+      help: "Look at the boss from an angle (0: in front of it), on your own screen; 'off' to stop",
+      cheat: true,
+      run: ([deg, dist, up, look], g, p) => {
+        const e = g.entities.all().find((x) => bossKind(x.type) && x.alive);
+        if (!e || deg === 'off') {
+          g.clients.send(p, CAM_MSG, null);
+          return 'Camera back';
+        }
+        const h = bossKind(e.type)!.height;
+        const msg: CamMessage = { id: e.id, angle: ((Number(deg) || 0) * Math.PI) / 180, dist: Number(dist) || h * 1.8 + 3, up: Number(up) || h * 0.5, look: Number(look) || 0.55, height: h };
+        g.clients.send(p, CAM_MSG, msg);
       },
     });
     game.commands.register('bosshp', {

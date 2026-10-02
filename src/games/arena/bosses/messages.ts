@@ -11,6 +11,18 @@ export const FALL_MSG = 'arena.boss.fall';
 export const PHASE_MSG = 'arena.boss.phase';
 /** A telegraph on the ground (or a lasting hazard), or one taken away. */
 export const MARK_MSG = 'arena.boss.mark';
+/** The `/bosscam` cheat: this screen's camera on a boss from an angle (null: back to the player's own). */
+export const CAM_MSG = 'arena.boss.cam';
+
+export interface CamMessage {
+  id: number;
+  /** Round it from straight ahead of it (radians, toward its left), how far, how high (blocks), looking at `look` of its height. */
+  angle: number;
+  dist: number;
+  up: number;
+  look: number;
+  height: number;
+}
 
 export interface IntroMessage {
   /** The boss's entity id (its figure, to follow), its type, and where it stands facing (yaw, as entities'). */

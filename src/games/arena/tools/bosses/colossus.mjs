@@ -23,6 +23,9 @@ export function colossus() {
   C('iron', 0x4a4542, { rough: 0.38, metal: 0.75, vary: 0.04 });
   C('ironDark', 0x2a2624, { rough: 0.45, metal: 0.6, vary: 0.02 });
   C('rust', 0x7c4a2a, { rough: 0.85, metal: 0.2, vary: 0.05 });
+  C('wood', 0x5a3e24, { rough: 0.85, vary: 0.04 });
+  C('feather', 0xe8e2d4, { rough: 0.9, vary: 0.02 });
+  C('featherRed', 0x9a2a22, { rough: 0.9, vary: 0.02 });
   C('ember', 0xffa53a, { rough: 0.5, glow: 1, vary: 0 });
   C('emberHot', 0xfff0a0, { rough: 0.5, glow: 1, vary: 0 });
   C('emberDeep', 0xff5a14, { rough: 0.5, glow: 0.9, vary: 0 });
@@ -71,16 +74,19 @@ export function colossus() {
   // --- Chest: the ribcage. Its back half (the spine through it, the ribs from it) is the chest's;
   // the front halves of the ribs and the breastbone are the doors' (`ribL`, `ribR`).
   const cage = { c: [0, 46, 1], r: [13, 10.5, 10] };
-  const ribRows = [37, 40, 43, 46, 49, 52];
+  const ribRows = [38, 41, 44, 47, 50, 53];
   for (const y0 of ribRows) {
-    // A rib is a band two voxels high round the cage's skin at that height, a voxel or two thick.
-    const yc = y0 + 1;
-    const fy = 1 - ((yc - cage.c[1]) / cage.r[1]) ** 2;
-    if (fy <= 0) continue;
-    const rx = cage.r[0] * Math.sqrt(fy), rz = cage.r[2] * Math.sqrt(fy);
-    f.each('chest', [-rx - 2, y0, cage.c[2] - rz - 2], [rx + 2, y0 + 2, cage.c[2] + rz + 2], (i, j, k) => {
-      const x = (i + 0.5) / rx, z = (k + 0.5 - cage.c[2]) / rz;
-      const d = Math.hypot(x, z);
+    // A rib: a band round the cage's skin, two voxels deep, falling as it goes from the spine to the
+    // breastbone (three and a half voxels lower at the front than at the back).
+    const fall = 3.5;
+    const yAt = (z) => y0 + 1 - ((z - (cage.c[2] - cage.r[2])) / (2 * cage.r[2])) * fall;
+    f.each('chest', [-cage.r[0] - 2, y0 - fall - 1, cage.c[2] - cage.r[2] - 2], [cage.r[0] + 2, y0 + 2, cage.c[2] + cage.r[2] + 2], (i, j, k) => {
+      const yc = yAt(k + 0.5);
+      if (Math.abs(j + 0.5 - yc) > 1) return undefined;
+      const fy = 1 - ((yc - cage.c[1]) / cage.r[1]) ** 2;
+      if (fy <= 0) return undefined;
+      const rx = cage.r[0] * Math.sqrt(fy), rz = cage.r[2] * Math.sqrt(fy);
+      const d = Math.hypot((i + 0.5) / rx, (k + 0.5 - cage.c[2]) / rz);
       if (d > 1 || d < 1 - 2.2 / Math.min(rx, rz)) return undefined;
       const part = k + 0.5 > cage.c[2] - 1 ? (i >= 0 ? 'ribL' : 'ribR') : 'chest';
       f.vox.set(part, i, j, k, boneAt(i, j, k));
@@ -99,30 +105,41 @@ export function colossus() {
     // Collarbones to the breastbone.
     f.rod('chest', [s * 15, 54, -1], [s * 2, 53, 9], 1.6, 1.4, (i, j, k, t) => boneAt(i, j, k, t));
   }
+  // Spears and arrows in its back: it's fought in this arena before.
+  for (const [a, b, r] of [[[6, 49, -9], [12, 58, -22], 0.75], [[-4, 44, -9], [-10, 47.5, -23], 0.7]]) {
+    f.rod('chest', a, b, r, r, (i, j, k, t) => (t > 0.94 ? 'ironDark' : 'wood'));
+  }
+  for (const [a, b] of [[[-8, 52, -8], [-10.5, 55.5, -15]], [[10, 42, -7], [14.5, 41.5, -13]], [[2, 39, -10], [3, 36, -16]]]) {
+    f.rod('chest', a, b, 0.45, 0.45, 'wood');
+    f.ball('chest', b, [1.1, 1.1, 1.1], (i, j, k) => ((i + j + k) % 2 ? 'feather' : 'featherRed'));
+  }
   // The soul fire inside: a hot heart in a fiery cloud, seen between the ribs.
-  f.ball('chest', [0, 46, 1], [7.5, 7, 6.5], (i, j, k, u) => (u < 0.45 ? 'emberHot' : u < 0.8 ? 'ember' : hash(i, j, k, 9) < 0.5 ? 'emberDeep' : undefined));
+  f.ball('chest', [0, 46, 1], [7, 6.5, 6], (i, j, k, u) => (u < 0.5 ? 'emberHot' : 'ember'));
 
   // --- Neck: thick vertebrae curving forward and down to the skull.
   f.path('neck', [[0, 55, -4], [0, 57, 0], [0, 58, 4]], 3, 2.6, (i, j, k) => (j % 2 ? 'boneDark' : 'bone'));
 
-  // --- Skull: a bull's, long-snouted and heavy-browed, deep sockets with embers in them, horns.
-  f.ball('skull', [0, 61.5, 9], [6.5, 6, 7], (i, j, k) => boneAt(i, j, k));
-  f.ball('skull', [0, 59.5, 15], [4.5, 4, 4.5], (i, j, k) => boneAt(i, j, k));
-  f.box('skull', [-6.5, 63, 11], [6.5, 66, 15], (i, j, k) => (j === 63 ? 'boneDark' : 'boneLight'));
-  // Cheekbones.
-  for (const s of [1, -1]) f.ball('skull', [s * 5.5, 59.5, 12], [2.2, 2, 3], 'bone');
-  // Sockets: deep and dark, an ember burning in each.
+  // --- Skull: a bull's: a rounded cranium, a long snout, heavy brows over deep sockets with an
+  // ember burning in each, cracks glowing across its crown.
+  f.ball('skull', [0, 62, 8], [6, 5.5, 6], (i, j, k) => boneAt(i, j, k));
+  f.ball('skull', [0, 59.6, 14.5], [4.3, 3.7, 6], (i, j, k) => boneAt(i, j, k));
+  f.ball('skull', [0, 60.6, 18.6], [3.4, 2.6, 2.2], 'boneLight');
   for (const s of [1, -1]) {
-    f.ball('skull', [s * 3.2, 61.5, 15.5], [2.1, 1.9, 2.5], 'socket', (i, j, k) => k >= 13);
-    f.ball('skull', [s * 3.2, 61.5, 14.5], [1.2, 1.1, 1.4], 'emberHot');
-    f.carve('skull', [s * 3.2 - 2, 60, 17], [s * 3.2 + 2, 63.5, 20], (i, j, k) => Math.hypot(i + 0.5 - s * 3.2, j + 0.5 - 61.5) < 1.7);
+    f.ball('skull', [s * 3.5, 63.6, 12.6], [2.8, 1.4, 2.4], 'boneLight');
+    f.ball('skull', [s * 5, 59.5, 11.5], [2.2, 2, 3], 'bone');
+    f.ball('skull', [s * 3.4, 61.4, 14], [2.2, 1.8, 2.2], 'socket');
+    f.ball('skull', [s * 3.4, 61.4, 14.4], [1.3, 1.1, 1], 'emberHot');
+    f.carve('skull', [s * 3.4 - 2.5, 59, 15], [s * 3.4 + 2.5, 64, 22], (i, j) => Math.hypot(i + 0.5 - s * 3.4, (j + 0.5 - 61.4) * 1.15) < 1.9);
   }
-  // The nose: two slits.
-  for (const x of [1, -2]) f.carve('skull', [x, 58, 18], [x + 1, 60.5, 20]);
-  // Cracks across its crown.
-  for (const [i, j, k] of [[1, 66, 10], [2, 66, 9], [2, 65, 8], [3, 65, 7], [-2, 66, 12], [-3, 66, 13]]) f.vox.set('skull', i, j, k, 'crack');
-  // Upper teeth.
-  for (let i = -4; i < 4; i++) for (let k = 13; k < 19; k++) if (Math.hypot(i + 0.5, (k - 13) * 0.8) > 3.2 && f.has('skull', i, 57, k)) f.vox.set('skull', i, 56, k, i % 2 ? 'teeth' : 'boneLight');
+  // Nostrils at the muzzle's end.
+  for (const x of [1, -2]) f.carve('skull', [x, 59.5, 19.5], [x + 1, 61.5, 22]);
+  // Glowing cracks across the crown.
+  for (const [i, j, k] of [[0, 67, 9], [1, 67, 8], [1, 67, 7], [2, 66, 6], [-1, 67, 10], [-2, 67, 11], [-2, 66, 12], [3, 66, 5]]) {
+    const top = [0, 1, 2].map((d) => j - d).find((y) => f.has('skull', i, y, k));
+    if (top !== undefined) f.vox.set('skull', i, top, k, 'emberDeep');
+  }
+  // Teeth along the snout's lower edge.
+  for (let i = -4; i < 4; i++) for (let k = 12; k < 21; k++) if (f.has('skull', i, 56, k) && !f.has('skull', i, 55, k) && (i + k) % 2 === 0) f.vox.set('skull', i, 55, k, 'teeth');
   // Horns: out from the sides of its head, then up and forward, darkening to black tips.
   for (const s of [1, -1]) {
     const pts = [[s * 5, 64, 8], [s * 9, 65.5, 8], [s * 13, 67, 9], [s * 16, 70, 11], [s * 17, 74, 13.5], [s * 16, 77.5, 16.5], [s * 14, 79, 19]];
@@ -134,14 +151,15 @@ export function colossus() {
   }
 
   // --- Jaw: a heavy lower jaw, hinged at the back, its teeth jutting up.
-  f.box('jaw', [-5, 53.5, 6], [5, 57, 16], (i, j, k) => {
-    const x = (i + 0.5) / 5, z = (k + 0.5 - 6) / 10;
+  f.box('jaw', [-5, 52.5, 6], [5, 56, 19], (i, j, k) => {
+    const x = (i + 0.5) / 5, z = (k + 0.5 - 6) / 13;
     if (x * x > 1 - z * z * 0.6) return undefined;
-    if (j >= 56 && Math.abs(i + 0.5) < 3.5 && k > 8) return undefined;
+    if (j >= 55 && Math.abs(i + 0.5) < 3.5 && k > 8) return undefined;
     return boneAt(i, j, k);
   });
-  for (let i = -4; i < 4; i++) for (let k = 9; k < 16; k++) if (f.has('jaw', i, 55, k) && !f.has('jaw', i, 56, k) && (i + k) % 2 === 0) f.vox.set('jaw', i, 56, k, 'teeth');
-  for (const s of [1, -1]) f.box('jaw', [s > 0 ? 3 : -4, 56, 14], [s > 0 ? 4 : -3, 58.5, 15], 'teeth');
+  for (let i = -4; i < 4; i++) for (let k = 9; k < 19; k++) if (f.has('jaw', i, 54, k) && !f.has('jaw', i, 55, k) && (i + k) % 2 === 1) f.vox.set('jaw', i, 55, k, 'teeth');
+  // Tusks jutting up either side.
+  for (const s of [1, -1]) f.rod('jaw', [s * 3.6, 55, 16.5], [s * 4.2, 59, 17.5], 0.9, 0.4, 'teeth');
 
   for (const [s, L] of [[1, 'L'], [-1, 'R']]) {
     // --- Shoulders: a rusted pauldron each, studded and spiked.

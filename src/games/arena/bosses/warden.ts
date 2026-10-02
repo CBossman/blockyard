@@ -2,7 +2,7 @@ import { Models, type CharacterLook, type Entity, type GameContext, type Player,
 import { Sprite } from '../art';
 import { map } from '../run/state';
 import { spawnMonster } from '../run/spawn';
-import { adds, angle, announce, brain, chill, drop, fighters, furthest, own, propModel, ring, root, strike, sweep, tether, type Move } from './fight';
+import { adds, angle, announce, brain, chill, drop, fighters, furthest, own, propModel, pull, ring, root, strike, sweep, tether, type Move } from './fight';
 import { MODEL } from './models';
 import type { BossKind } from './registry';
 
@@ -15,7 +15,7 @@ import type { BossKind } from './registry';
  * of his health he's enraged and chains two at once.
  */
 
-const LOOK: CharacterLook = { build: 'heavy', skin: '#5a4a7a', hair: 'long', hairColor: '#241a33', facialHair: 'beard', face: 'glow', eyes: '#c79bff', top: 'tunic', topColor: '#3a1f5c', accent: '#e0b83a', bottom: 'trousers', bottomColor: '#1e1a24', shoes: 'boots', shoeColor: '#1a1414', hat: 'crown' };
+const LOOK: CharacterLook = { build: 'heavy', skin: '#4e4466', hair: 'long', hairColor: '#17101f', facialHair: 'beard', face: 'glow', eyes: '#e4c4ff', top: 'tunic', topColor: '#2a1640', accent: '#c9a23a', bottom: 'trousers', bottomColor: '#140f1c', shoes: 'boots', shoeColor: '#0e0b12', hat: 'crown', ragged: true };
 const COLOR = '#c9a2ff';
 const SOUL = '#b76bff';
 const FIREBALL: ProjectileSpec = { sprite: Sprite.soul_fireball, speed: 17, gravity: 1.5, damage: 5, knockback: 1.1, glow: '#5fe8ff' };
@@ -259,13 +259,8 @@ function dragged(game: GameContext, p: Player) {
   const w = game.entities.all('warden').find((e) => e.alive);
   if (!w) return;
   const q = p.position;
-  const e = w.position;
-  const dx = e.x - q.x;
-  const dz = e.z - q.z;
-  const l = Math.hypot(dx, dz) || 1;
-  // Hard enough to land a couple of blocks short of him (the drag of the air takes the rest).
-  const pull = Math.min(26, 6 + l * 1.35);
-  p.impulse((dx / l) * pull, 7, (dz / l) * pull);
+  // Reeled in to his feet over half a second.
+  pull(game, p, () => (w.alive ? w.position : null), 0.5);
   chill(game, p, 0.6, 1.2);
   tether(game, w, p, 0.55, SOUL);
   game.audio.play('chain_yank', { at: q });
@@ -287,7 +282,6 @@ export const warden: BossKind = {
     health: 1500,
     speed: 2.7,
     knockbackResistance: 0.95,
-    held: 'battle_axe',
     boss: true,
     ai: wardenAI,
     sounds: { ambient: 'boss', hurt: 'brute', death: 'boss' },
