@@ -1607,6 +1607,8 @@ export interface InventoryApi {
   give(item: string, count?: number): number;
   take(item: string, count?: number): boolean;
   count(item: string): number;
+  /** Put a stack in hotbar slot `slot` (0 to 8), in place of whatever was there; `null` empties it (a drop, a swap). */
+  set(slot: number, stack: ItemStack | null): void;
   select(slot: number): void;
   clear(): void;
 }
@@ -1783,9 +1785,11 @@ export interface ItemApi {
   kind<K extends ItemKind = ItemKind>(kind: string): K | null;
   /**
    * Drop an item into the world. `beam` adds a light pillar so players can find it. `for`: only
-   * that player can pick it up (a reward each); once they've left, anyone can.
+   * that player can pick it up (a reward each); once they've left, anyone can. `delay`: seconds
+   * before anyone can take it (default 0.5). `from`: who threw it (a drop): it isn't pulled back
+   * to them until they've once been out of its reach.
    */
-  spawnPickup(item: string, at: Vec3, opts?: { count?: number; velocity?: Vec3; beam?: string; despawn?: number; for?: Player }): Pickup;
+  spawnPickup(item: string, at: Vec3, opts?: { count?: number; velocity?: Vec3; beam?: string; despawn?: number; for?: Player; delay?: number; from?: Player }): Pickup;
   clearPickups(): void;
   /** Register a custom sprite / skin atlas from any canvas (e.g. drawn with Canvas 2D). */
   atlas(name: string, source: HTMLCanvasElement | OffscreenCanvas | AtlasPixels): void;

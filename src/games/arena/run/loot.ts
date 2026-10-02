@@ -1,9 +1,10 @@
 import type { GameContext, Player } from '@platform';
-import { baseOf, RARE_BASES, RARITY, rarityOf, variant } from '../items/rarity';
+import { baseOf, hasRarities, RARE_BASES, RARITIES, RARITY, rarityOf, variant } from '../items/rarity';
 import { rollChest } from '../items/loot';
-import { forge, forgeNext } from '../items/forge';
+import { forge, forgeNext, forgePrice } from '../items/forge';
+import { WARES } from '../items/catalog';
 
-export { baseOf, RARITY, rarityOf } from '../items/rarity';
+export { ALL_VARIANTS, baseOf, hasRarities, RARITIES, RARITY, rarityOf } from '../items/rarity';
 export { describe, dropWeapon } from '../items/loot';
 export { deliver, WARES, type Ware } from '../items/catalog';
 export { forgeNext } from '../items/forge';
@@ -30,6 +31,21 @@ export function rollWeapon(game: GameContext, n: number): string {
 /** What spins above the chest while it rolls: the arsenal, each of some rarity. */
 export const chestSpin = (game: GameContext, n: number): string[] =>
   Array.from({ length: n }, () => variant(game.rng.pick(RARE_BASES), game.rng.pick(['common', 'common', 'rare', 'rare', 'epic', 'legendary'] as const)));
+
+/**
+ * What `count` of an item is worth at the merchant's prices, all told: a weapon its price and the
+ * forge's up to its rarity, supplies their price each (0: he doesn't deal in it).
+ */
+export function worth(item: string, count = 1): number {
+  if (hasRarities(item)) {
+    const base = baseOf(item);
+    let gold = WARES.find((w) => w.item === base)?.price ?? 0;
+    for (const r of RARITIES.slice(0, RARITIES.indexOf(rarityOf(item)))) gold += forgePrice(variant(base, r)) ?? 0;
+    return gold * count;
+  }
+  const w = WARES.find((x) => x.item === item);
+  return w ? (w.price / (w.count ?? 1)) * count : 0;
+}
 
 /** A weapon's rarity colour (its beam, its name). */
 export const rarityColor = (item: string): string => RARITY[rarityOf(item)].color;
