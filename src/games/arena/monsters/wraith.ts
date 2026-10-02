@@ -167,6 +167,8 @@ export const wraith: MonsterKind = {
   weight: 0.7,
   max: 3,
   role: 'special',
+  tip: 'It blinks behind you and drains your life: break its line of sight, or hit it hard',
+  color: '#6affc8',
   define: () => ({
     name: 'Wraith',
     model: LOOK,

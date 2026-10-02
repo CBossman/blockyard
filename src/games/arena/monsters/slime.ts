@@ -113,11 +113,14 @@ function slimeKind(id: string, extra: Partial<MonsterKind>): MonsterKind {
       sounds: { ambient: 'slime', hurt: 'slime_hurt', death: 'splat' },
       bloodColor: '#7fe05a',
     }),
-    // Splitting: two smaller ones, thrown apart.
+    // Splitting: two smaller ones, thrown apart (the tiny ones just burst).
     slain(game, e) {
-      if (!o.into) return;
       const q = e.position;
-      game.fx.burst({ x: q.x, y: q.y + o.height * 0.5, z: q.z }, { color: '#8ff06a', count: 30, speed: 4, gravity: 12, size: 0.14, life: 0.7 });
+      game.fx.burst({ x: q.x, y: q.y + o.height * 0.5, z: q.z }, { color: '#8ff06a', count: o.into ? 30 : 12, speed: 4, gravity: 12, size: 0.14, life: 0.7 });
+      if (!o.into) {
+        e.remove();
+        return;
+      }
       const a = game.rng.range(0, Math.PI * 2);
       for (const side of [1, -1]) {
         const dx = Math.cos(a) * side;
@@ -135,6 +138,6 @@ function slimeKind(id: string, extra: Partial<MonsterKind>): MonsterKind {
   };
 }
 
-export const slime = slimeKind('slime', { cost: 2.5, from: 4, weight: 0.8, max: 3 });
+export const slime = slimeKind('slime', { cost: 2.5, from: 4, weight: 0.8, max: 3, tip: 'It splits when it dies, and again: bombs and wide swings', color: '#8ff06a' });
 export const slimeSmall = slimeKind('slime_small', {});
 export const slimeTiny = slimeKind('slime_tiny', { from: 99 });

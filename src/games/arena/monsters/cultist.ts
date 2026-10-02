@@ -121,6 +121,7 @@ const cultistAI: Behavior = (self, game, dt) => {
     self.glow(BLOOD);
     game.audio.play('ritual', { at: e, volume: 1.2 });
     ring(game, e, 2.6, RITE, BLOOD);
+    show(game, 'rite', { id: self.id, time: RITE });
     game.hud.feed('A Cultist kneels to its dark rite: stop it!', { color: '#ff6a6a' });
     return;
   }
@@ -159,6 +160,8 @@ export const cultist: MonsterKind = {
   weight: 0.6,
   max: 2,
   role: 'support',
+  tip: 'It makes the others stronger: kill it first. Low on life it kneels to summon: finish it',
+  color: '#ff4a5a',
   define: () => ({
     name: 'Cultist',
     model: LOOK,

@@ -143,6 +143,8 @@ export const knight: MonsterKind = {
   weight: 0.8,
   max: 4,
   role: 'melee',
+  tip: 'Its shield turns blows from in front: hit it from the side, behind or above, or bomb it',
+  color: '#d8dee6',
   define: () => ({
     name: 'Knight',
     model: LOOK,
@@ -161,5 +163,11 @@ export const knight: MonsterKind = {
   spawned(_game, e) {
     // Facing into the pit, the way it came in.
     e.data._face = heading(e.position, map().center);
+  },
+  slain(game, e) {
+    // Down with a clatter of plate.
+    const q = e.position;
+    game.fx.burst({ x: q.x, y: q.y + 1, z: q.z }, { color: '#c8ced6', count: 18, speed: 3.5, size: 0.1, gravity: 14, life: 0.8 });
+    game.audio.play('knight_death', { at: q });
   },
 };

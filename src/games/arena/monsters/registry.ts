@@ -23,6 +23,10 @@ export interface MonsterKind {
   role: 'melee' | 'ranged' | 'swarm' | 'support' | 'heavy' | 'special';
   /** One is one, however many fight (not multiplied by party size): a brute, a goblin. */
   single?: boolean;
+  /** How to fight it, shown the first time one comes in each run (its name, and this under it). */
+  tip?: string;
+  /** Its name's colour on that tip. */
+  color?: string;
   /** Its own business once it's killed (a Sapper's keg, a goblin's loot), after the platform's drops. */
   slain?(game: GameContext, e: Entity, by: Player | null): void;
   /** Its own business when it comes in (a goblin's marker). */

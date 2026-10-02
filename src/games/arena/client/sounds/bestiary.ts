@@ -16,6 +16,12 @@ export function defineBestiarySounds(client: Client) {
     s.tone({ from: 1800 * s.pitch, duration: 0.25, volume: 0.18, fm: { ratio: 1.41, depth: 3, to: 0.5 } });
     s.tone({ wave: 'sawtooth', from: 120 * s.pitch, to: 80 * s.pitch, duration: 0.3, volume: 0.3, lowpass: 600 });
   });
+  // Down: plate crashing to the sand.
+  a.define('knight_death', (s) => {
+    for (let i = 0; i < 6; i++) s.tone({ from: (1600 + Math.random() * 1400) * s.pitch, duration: 0.2, volume: 0.1, delay: i * 0.07 + Math.random() * 0.03, fm: { ratio: 2.76, depth: 2.5 } });
+    s.noise({ duration: 0.5, filter: 'lowpass', from: 1500, to: 200, volume: 0.45, delay: 0.1 });
+    s.tone({ wave: 'sawtooth', from: 90 * s.pitch, to: 45, duration: 0.7, volume: 0.3, lowpass: 400 });
+  });
   // Its sword raised: steel drawn and a breath in.
   a.define('knight_raise', (s) => {
     s.noise({ duration: 0.4, filter: 'bandpass', from: 2500, to: 5200, q: 6, volume: 0.25, attack: 0.05 });

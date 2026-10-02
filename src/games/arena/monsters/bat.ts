@@ -110,6 +110,8 @@ export const bat: MonsterKind = {
   weight: 0.7,
   max: 3,
   role: 'swarm',
+  tip: 'They circle out of reach and dive to bite: swing as they come, or shoot them down',
+  color: '#c06a8a',
   define: () => ({
     name: 'Bat',
     model: Models.gltf(MONSTER_MODELS.bat, { clips: { idle: 'idle', walk: 'walk', attack: 'attack' }, head: 'head' }),

@@ -39,6 +39,14 @@ export function ring(game: GameContext, at: Vec3, radius: number, time: number, 
   show(game, 'ring', { x: at.x, y: at.y, z: at.z, radius, time, color });
 }
 
+/** A thump felt by those near it: each fighter's screen shakes as hard as they're close. */
+export function shakeNear(game: GameContext, at: Vec3, strength: number, duration: number, reach = 18) {
+  for (const p of game.players) {
+    const d = flat(p.position, at);
+    if (d < reach) p.fx.shake(strength * (1 - d / reach), duration);
+  }
+}
+
 /** Players standing (not in the air) within `radius` of `at`. */
 export function grounded(game: GameContext, at: Vec3, radius: number, rise = 1.2): Player[] {
   return game.players.filter((p) => p.alive && !p.spectating && flat(p.position, at) <= radius && p.position.y - at.y < rise && (p.onGround || p.position.y - at.y < 0.5));

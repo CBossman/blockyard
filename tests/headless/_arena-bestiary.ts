@@ -211,10 +211,12 @@ export default function arenaBestiary() {
     log(`shielded zombie: 10 soaked to ${warded}, then ${after.toFixed(1)} of 40 landed (worth ${z.data.worth})`);
     check(warded === 0 && after > 0 && after < 20 && z.data.elite === 'shielded' && z.data.worth === 3, 'the ward soaks, then it takes a share');
 
-    const j = s.spawn('brute', 3.5, 4.5);
+    const j = s.spawn('zombie', 3.5, 4.5);
     makeElite(s.game, j, 'juggernaut');
-    log(`juggernaut brute: size ${j.size}`);
-    check(j.size > 1.3, 'a juggernaut is huge');
+    const b = s.spawn('brute', 3.5, -2.5);
+    makeElite(s.game, b, 'juggernaut');
+    log(`juggernaut zombie: size ${j.size}; brute ${b.size.toFixed(2)} (${(2.55 * b.size).toFixed(2)} tall)`);
+    check(j.size > 1.3 && 2.55 * b.size <= 2.81, 'a juggernaut is huge, but still fits the gates');
 
     s.heal();
     const x = s.spawn('zombie', -7.5, 1.5);

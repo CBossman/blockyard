@@ -1,7 +1,7 @@
 import { CHARACTER_STYLE, Models, type Behavior, type DamageEvent, type GameContext } from '@platform';
 import { MONSTER_MODELS } from './models';
 import type { MonsterKind } from './registry';
-import { flat, grounded, ring } from './util';
+import { flat, grounded, ring, shakeNear } from './util';
 
 /**
  * The Golem: three metres of stone, slow and hard to hurt (armour turns aside a third of every
@@ -29,7 +29,7 @@ function slam(game: GameContext, self: Parameters<Behavior>[0]) {
   game.audio.play('pound', { at: e, volume: 1.4 });
   game.fx.shockwave({ x: e.x, y: e.y + 0.15, z: e.z }, POUND.radius, '#d8c08a');
   game.fx.burst({ x: e.x, y: e.y + 0.3, z: e.z }, { color: '#c8b080', count: 50, speed: 7, size: 0.2, gravity: 10, life: 0.9, drag: 1.5 });
-  game.fx.shake(0.4, 0.5);
+  shakeNear(game, e, 0.45, 0.5);
   for (const p of grounded(game, e, POUND.radius)) {
     const d = flat(p.position, e);
     const t = Math.min(1, d / POUND.radius);
@@ -117,6 +117,8 @@ export const golem: MonsterKind = {
   max: 2,
   role: 'heavy',
   single: true,
+  tip: 'Raised arms and a ring on the sand: jump, roll or get clear. Bombs crack it',
+  color: '#ffa83a',
   define: () => ({
     name: 'Golem',
     model: LOOK,
@@ -134,5 +136,13 @@ export const golem: MonsterKind = {
   }),
   spawned(_game, e) {
     e.armor = 8;
+  },
+  slain(game, e) {
+    // It falls to pieces: rubble and dust, and the ground shakes.
+    const q = e.position;
+    game.fx.burst({ x: q.x, y: q.y + 1.5, z: q.z }, { color: '#8c867a', count: 40, speed: 5, size: 0.3, gravity: 18, life: 1.2 });
+    game.fx.burst({ x: q.x, y: q.y + 0.5, z: q.z }, { color: '#c8b080', count: 40, speed: 3, size: 0.25, gravity: -0.5, life: 1.4, drag: 2 });
+    game.fx.burst({ x: q.x, y: q.y + 2, z: q.z }, { color: RUNE, count: 20, speed: 3, glow: 1, life: 0.7 });
+    shakeNear(game, q, 0.35, 0.6);
   },
 };

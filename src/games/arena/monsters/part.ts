@@ -6,7 +6,10 @@ import { golemCracks } from './golem';
 import { empoweredHits } from './cultist';
 import { impFire } from './imp';
 import { AFFIXES, eliteHits, eliteLanded, eliteList, eliteNight, elitesTick, eliteSlain, makeElite, resetElites, rollElite, type Affix } from './elites';
-import { MONSTERS } from './index';
+import { MONSTERS, monsterKind } from './index';
+
+/** The kinds that have come in this run (each one's tip is shown once). */
+const seen = new Set<string>();
 
 /**
  * The bestiary's own business on the server: the hits its monsters change (a knight's shield, a
@@ -17,6 +20,7 @@ export const bestiaryPart: ArenaPart = {
   name: 'bestiaryPart',
   setup(game) {
     resetElites();
+    seen.clear();
     game.events.on('damage', (hit) => {
       knightGuard(game, hit);
       if (hit.cancelled) return;
@@ -28,7 +32,16 @@ export const bestiaryPart: ArenaPart = {
       if (weapon === 'imp_fire') impFire(game, player);
       eliteLanded(game, player, amount, source);
     });
-    bus.on('spawned', ({ entity, type }) => rollElite(game, entity, type));
+    bus.on('spawned', ({ entity, type }) => {
+      rollElite(game, entity, type);
+      // The first of a kind each run: what it is, and how to beat it.
+      const kind = monsterKind(type);
+      if (kind?.tip && !seen.has(type)) {
+        seen.add(type);
+        game.hud.pop(kind.define(game).name, { color: kind.color, sub: kind.tip });
+      }
+    });
+    bus.on('runStart', () => seen.clear());
     bus.on('slain', ({ entity, by }) => eliteSlain(game, entity, by));
     bus.on('waveStart', ({ twist }) => eliteNight(twist === 'elite_night'));
     // A screen that's just arrived sees the elites already in.
@@ -57,6 +70,7 @@ export const bestiaryPart: ArenaPart = {
   },
   start() {
     resetElites();
+    seen.clear();
   },
   update(game) {
     elitesTick(game);

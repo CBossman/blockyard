@@ -4,7 +4,7 @@ import { bus } from '../run/bus';
 import { spawnMonster } from '../run/spawn';
 import { state } from '../run/state';
 import { monsterKind } from './index';
-import { flat, grounded, ring, show } from './util';
+import { flat, grounded, ring, shakeNear, show } from './util';
 
 /**
  * Elites: from the sixth wave, now and then a monster comes as a champion with an affix: a power
@@ -63,11 +63,15 @@ export function eliteChance(n: number): number {
   return Math.min(0.6, base * (night ? 3 : 1));
 }
 
-/** Which affixes a kind can take (a slime splits anyway; a bat's no juggernaut). */
-function affixesFor(type: string): Affix[] {
-  const all = Object.keys(AFFIXES) as Affix[];
-  if (type.startsWith('slime')) return all.filter((a) => a !== 'splitting');
-  if (type === 'bat') return all.filter((a) => a !== 'juggernaut' && a !== 'splitting');
+/** How much a juggernaut grows: half again, but never past the gates' height (2.8). */
+const growth = (game: GameContext, type: string) => Math.min(1.4, 2.8 / about(game, type).height);
+
+/** Which affixes a kind can take (a slime splits anyway; a bat's no juggernaut, nor anything near the gates' height already). */
+function affixesFor(game: GameContext, type: string): Affix[] {
+  let all = Object.keys(AFFIXES) as Affix[];
+  if (type.startsWith('slime')) all = all.filter((a) => a !== 'splitting');
+  if (type === 'bat') all = all.filter((a) => a !== 'splitting');
+  if (type === 'bat' || growth(game, type) < 1.12) all = all.filter((a) => a !== 'juggernaut');
   return all;
 }
 
@@ -75,7 +79,7 @@ function affixesFor(type: string): Affix[] {
 export function rollElite(game: GameContext, e: Entity, type: string) {
   if (bossKind(type) || type === 'goblin' || !monsterKind(type) || e.data.spawned || e.data.flock || e.data.master) return;
   if (!game.rng.chance(eliteChance(state.wave))) return;
-  makeElite(game, e, game.rng.pick(affixesFor(type)));
+  makeElite(game, e, game.rng.pick(affixesFor(game, type)));
 }
 
 /** Make `e` an elite with `affix` (the roll's, or a cheat's). */
@@ -91,7 +95,7 @@ export function makeElite(game: GameContext, e: Entity, affix: Affix) {
     e.data.speed = speed;
     e.setSpeed(speed);
   }
-  if (big) e.size = 1.4;
+  if (big) e.size = growth(game, e.type);
   const name = `${a.name} ${about(game, e.type).name}`;
   const h = heightOf(game, e);
   game.hud.marker(`elite:${e.id}`, e, { color: GOLD, label: name, shape: 'dot', size: 5, offset: { x: 0, y: h + 0.45, z: 0 } });
@@ -194,7 +198,7 @@ export function eliteSlain(game: GameContext, e: Entity, by: Player | null) {
     game.audio.play('fuse', { at, pitch: 1.3 });
     game.clock.after(0.9, () => {
       game.world.explode({ x: at.x, y: at.y + 0.8, z: at.z }, 2.5, { damage: [8, 2], reach: 3.4, knockback: 1.6, by: e, weapon: 'elite_blast', filter: () => false });
-      game.fx.shake(0.25, 0.4);
+      shakeNear(game, at, 0.3, 0.4);
     });
   } else if (x.affix === 'splitting') {
     game.audio.play('splat', { at, pitch: 0.8 });

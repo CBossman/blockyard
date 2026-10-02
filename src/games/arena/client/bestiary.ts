@@ -89,6 +89,8 @@ function bestiaryKit(): ClientKit {
   const tethers = new Map<number, { player: string; color: RGB; tick: number }>();
   const blessed = new Map<number, { until: number; tick: number }>();
   const links: { from: number; to: number; left: number }[] = [];
+  /** Cultists at their rite (by id): how long it's been, and how long it takes. */
+  const rites = new Map<number, { age: number; time: number }>();
   let clock = 0;
 
   return {
@@ -114,6 +116,10 @@ function bestiaryKit(): ClientKit {
         const t = d as { id: number; player: string | null; color?: string };
         if (t.player) tethers.set(t.id, { player: t.player, color: rgb(t.color ?? '#6affc8', 1.6), tick: 0 });
         else tethers.delete(t.id);
+      });
+      client.on('bestiary.rite', (d) => {
+        const r = d as { id: number; time: number };
+        rites.set(r.id, { age: 0, time: r.time });
       });
       client.on('bestiary.empower', (d) => {
         const b = d as { from: number; ids: number[]; time: number };
@@ -148,6 +154,16 @@ function bestiaryKit(): ClientKit {
           f.root.position.y += 0.22 + Math.sin(clock * 2.2 + f.id) * 0.12;
           if (Math.random() < dt * 14) fx.particles(about(f, 0.45, 0.35), [0.25, 1.2, 0.85], { count: 1, speed: 0.3, size: 0.07, glow: 1.6, gravity: -1.2, life: 0.9, spread: 0.1, drag: 1.5 });
         }
+        // A cultist at its rite: down on its knees in its robe, blood rising round it.
+        const rite = rites.get(f.id);
+        if (rite) {
+          rite.age += dt;
+          if (rite.age > rite.time + 0.2 || f.state.dying > 0) rites.delete(f.id);
+          else {
+            f.root.position.y -= 0.42 * Math.min(1, rite.age / 0.3);
+            if (Math.random() < dt * 30) fx.particles(about(f, 0.9, 0.2), [1.6, 0.06, 0.1], { count: 1, speed: 0.3, size: 0.1, glow: 2, gravity: -2.5, life: 0.8, spread: 0.1 });
+          }
+        }
         // Elites' auras.
         const a = auras.get(f.id);
         if (a && f.state.dying === 0) {
@@ -176,6 +192,7 @@ function bestiaryKit(): ClientKit {
       // Forget what's gone.
       for (const id of auras.keys()) if (!shown.has(id)) auras.delete(id);
       for (const id of raised.keys()) if (!shown.has(id)) (raised.delete(id), guards.delete(id));
+      for (const id of rites.keys()) if (!shown.has(id)) rites.delete(id);
       // The wraith's tether: a stream of ghost-light from its claws to whoever it drains.
       for (const [id, t] of tethers) {
         const w = shown.get(id);

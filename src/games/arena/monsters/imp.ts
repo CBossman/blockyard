@@ -103,6 +103,8 @@ export const imp: MonsterKind = {
   from: 5,
   weight: 1,
   role: 'ranged',
+  tip: 'It lobs fire: keep moving, and run it down',
+  color: '#ff8a2a',
   define: () => ({
     name: 'Imp',
     model: LOOK,
@@ -115,4 +117,10 @@ export const imp: MonsterKind = {
     sounds: { ambient: 'imp', hurt: 'imp_hurt' },
     bloodColor: '#ff6a2a',
   }),
+  slain(game, e) {
+    // Gone in a puff of brimstone.
+    const q = e.position;
+    game.fx.burst({ x: q.x, y: q.y + 0.6, z: q.z }, { color: '#ff8a2a', count: 16, speed: 2.5, gravity: -3, glow: 1, life: 0.5 });
+    game.fx.burst({ x: q.x, y: q.y + 0.6, z: q.z }, { color: '#3a2a26', count: 14, speed: 1.5, size: 0.2, gravity: -2, life: 0.9, drag: 2 });
+  },
 };
