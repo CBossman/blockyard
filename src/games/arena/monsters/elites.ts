@@ -55,11 +55,19 @@ export function resetElites() {
   night = false;
 }
 
-/** The chance a monster of wave `n` comes as an elite: from 6% at the sixth wave to 30% at the twentieth, and on up in the endless waves. */
+/**
+ * The elite curve's knobs, for the run's difficulty to set (rather than editing the curve here):
+ * `scale` times the chance, `from` the first wave elites come in (the curve starts there), `cap`
+ * the most the chance gets to (an Elite Night's tripling included).
+ */
+export const eliteTuning = { scale: 1, from: 6, cap: 0.6 };
+
+/** The chance a monster of wave `n` comes as an elite: from 6% at the sixth wave to 30% at the twentieth, and on up in the endless waves (as `eliteTuning` has it). */
 export function eliteChance(n: number): number {
-  if (n < 6) return 0;
-  const base = n <= 20 ? 0.06 + (n - 6) * 0.017 : Math.min(0.45, 0.3 + (n - 20) * 0.01);
-  return Math.min(0.6, base * (night ? 3 : 1));
+  const { scale, from, cap } = eliteTuning;
+  if (n < from) return 0;
+  const base = n <= 20 ? 0.06 + (n - from) * 0.017 : Math.min(0.45, 0.06 + (20 - from) * 0.017 + (n - 20) * 0.01);
+  return Math.min(cap, base * scale * (night ? 3 : 1));
 }
 
 /** How much a juggernaut grows: two fifths again, but never past the gates' height (2.8). */
