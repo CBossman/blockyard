@@ -88,11 +88,11 @@ export interface GoldMsg {
  * A callout. `k` is what it is, which picks its size, its place and its sting on the screen:
  * `wave`, `final`, `boss`, `endless` and `twist` (a wave begins, the endless waves begin),
  * `favour` (the Crowd's Favour), `slain` (a boss falls), `blessing` (one of theirs taken, in its
- * rarity's colour), `feat` (a multikill, a parry: `name` says which), `down`, `out` and `back` (one fighter's own), `ally` (a friend's fortunes), `victory`,
- * `defeat`.
+ * rarity's colour), `feat` (a multikill, a parry: `name` says which), `out` and `back` (their own
+ * fall and return), `ally` (a friend's fortunes), `victory`, `defeat`.
  */
 export interface CallMsg {
-  k: 'wave' | 'final' | 'boss' | 'endless' | 'twist' | 'favour' | 'slain' | 'blessing' | 'feat' | 'down' | 'out' | 'back' | 'ally' | 'victory' | 'defeat';
+  k: 'wave' | 'final' | 'boss' | 'endless' | 'twist' | 'favour' | 'slain' | 'blessing' | 'feat' | 'out' | 'back' | 'ally' | 'victory' | 'defeat';
   /** The kicker over it, the title, the line under it, its colour. */
   q?: string;
   t: string;

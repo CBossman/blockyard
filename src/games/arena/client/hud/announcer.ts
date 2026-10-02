@@ -18,7 +18,6 @@ const KINDS: Record<CallMsg['k'], { time: number; sting: string; big: boolean }>
   back: { time: 1.8, sting: 'ar_sting_back', big: true },
   victory: { time: 3.2, sting: 'ar_sting_victory', big: true },
   defeat: { time: 2.2, sting: 'ar_sting_defeat', big: true },
-  down: { time: 2.4, sting: 'ar_sting_out', big: true },
   feat: { time: 1.7, sting: 'ar_sting_feat', big: false },
   ally: { time: 2.2, sting: 'ar_sting_ally', big: false },
 };

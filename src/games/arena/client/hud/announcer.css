@@ -96,12 +96,10 @@ body:has(.ar-card:not(.out)) .ar-stage {
 }
 /* Harm: in blood. */
 .ar-call.k-out,
-.ar-call.k-down,
 .ar-call.k-defeat {
   --c: var(--ar-blood, #d8343c);
 }
-.ar-call.k-out .ar-call-t,
-.ar-call.k-down .ar-call-t {
+.ar-call.k-out .ar-call-t {
   font-size: 66px;
 }
 .ar-call.k-back {
