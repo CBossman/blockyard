@@ -261,6 +261,8 @@ function simulate(seed: number, classes: ClassId[], mapId: string) {
   /** A boss's moves that a jump clears (the shockwaves along the ground), and when each boss's present move began. */
   const GROUNDED = new Set(['stomp', 'slam', 'nova', 'twin']);
   const moveSeen = new Map<number, { move: string; at: number }>();
+  /** Since when each monster's been off the floor (in a gate's pen), by id. */
+  const outSince = new Map<number, number>();
   const bosses = () => game.entities.all().filter((e) => bossKind(e.type) && e.alive);
   const bossOf = (e: Entity) => (bossKind(e.type) ? (e.data.boss as BossState | undefined) : undefined);
   /** A tell's mark from a boss's screen message. */
@@ -856,7 +858,19 @@ function simulate(seed: number, classes: ClassId[], mapId: string) {
       if (!lobbed) look(q, big ? Math.min(2.4, big * 0.4) : target.type === 'spider' || target.type.startsWith('slime') || target.type === 'spiderling' ? 0.4 : target.type === 'bat' ? 0.3 : target.type === 'golem' ? 2 : 1.2);
       const d = flat(q, me);
       const dx = (q.x - me.x) / (d || 1), dz = (q.z - me.z) / (d || 1);
-      if (d > range) {
+      // One still in a gate's pen: wait for it at the floor's edge (more come in there), unless it's
+      // been there a good while (stuck: then go in and get it).
+      const c = map().center;
+      const out = flat(q, c) - (map().radius + 1);
+      if (out > 0) outSince.set(target.id, outSince.get(target.id) ?? now);
+      else outSince.delete(target.id);
+      const wait = out > 0 && now - outSince.get(target.id)! < 25;
+      const goal = wait ? { x: c.x + ((q.x - c.x) * (map().radius - 3)) / (out + map().radius + 1), y: q.y, z: c.z + ((q.z - c.z) * (map().radius - 3)) / (out + map().radius + 1) } : q;
+      if (wait && flat(goal, me) > 1.5) {
+        const r = route(f, goal);
+        [mx, mz] = [r.dx, r.dz];
+        if (r.hop && p.onGround) pressed.push('Space');
+      } else if (!wait && d > range) {
         const r = route(f, q);
         [mx, mz] = [r.dx, r.dz];
         if (r.hop && p.onGround) pressed.push('Space');
