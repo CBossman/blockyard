@@ -36,19 +36,30 @@ interface Aura {
   affix: string;
   color: RGB;
   tick: number;
+  ring: number;
 }
 
-/** Each affix's aura: particles about the figure, how often, and how. */
+/** Each affix's aura: particles about the figure, how often, and how (besides the ring at every elite's feet). */
 const AURAS: Record<string, { every: number; draw(c: Client, f: Figure, color: RGB, h: number): void }> = {
-  fiery: { every: 0.06, draw: (c, f, color, h) => c.fx.particles(about(f, 0.45, h * 0.5), color, { count: 2, speed: 0.6, size: 0.12, glow: 2.2, gravity: -4, life: 0.5, spread: 0.3, up: 1 }) },
-  frozen: { every: 0.1, draw: (c, f, color, h) => c.fx.particles(about(f, 0.5, h * 0.6), color, { count: 2, speed: 0.4, size: 0.07, glow: 1.6, gravity: 1.5, life: 0.9, spread: 0.4, up: 0.2 }) },
-  vampiric: { every: 0.12, draw: (c, f, color, h) => c.fx.particles(about(f, 0.4, h * 0.55), color, { count: 2, speed: 0.3, size: 0.09, glow: 1.4, gravity: -0.8, life: 0.8, spread: 0.35, drag: 1 }) },
-  shielded: { every: 0.12, draw: (c, f, color, h) => c.fx.particles(about(f, 0.8, h * 0.5, true), color, { count: 1, speed: 0.1, size: 0.08, glow: 2, gravity: 0, life: 0.5, spread: 0.05 }) },
-  hasted: { every: 0.05, draw: (c, f, color, h) => c.fx.particles(about(f, 0.3, h * 0.4), color, { count: 1, speed: 0.1, size: 0.06, glow: 2, gravity: 0, life: 0.35, spread: 0.4, drag: 3 }) },
-  explosive: { every: 0.08, draw: (c, f, color, h) => c.fx.particles(about(f, 0.25, h * 0.85), color, { count: 1, speed: 1.4, size: 0.06, glow: 2.4, gravity: 6, life: 0.35, spread: 0.15, up: 1.5 }) },
-  splitting: { every: 0.12, draw: (c, f, color, h) => c.fx.particles(about(f, 0.45, h * 0.3), color, { count: 2, speed: 0.5, size: 0.1, glow: 1, gravity: 3, life: 0.6, spread: 0.3, up: 0.5 }) },
-  juggernaut: { every: 0.1, draw: (c, f, color, h) => c.fx.particles(about(f, 0.7, h * 0.05), color, { count: 2, speed: 0.6, size: 0.12, glow: 1.4, gravity: -1.5, life: 0.7, spread: 0.2, up: 0.3 }) },
+  fiery: { every: 0.04, draw: (c, f, color, h) => c.fx.particles(about(f, 0.5, h * 0.45), color, { count: 3, speed: 0.7, size: 0.17, glow: 2.6, gravity: -5, life: 0.55, spread: 0.3, up: 1.2 }) },
+  frozen: { every: 0.06, draw: (c, f, color, h) => c.fx.particles(about(f, 0.55, h * 0.6), color, { count: 3, speed: 0.5, size: 0.11, glow: 2.4, gravity: 2, life: 0.9, spread: 0.4, up: 0.3 }) },
+  vampiric: { every: 0.06, draw: (c, f, color, h) => c.fx.particles(about(f, 0.45, h * 0.55), color, { count: 2, speed: 0.4, size: 0.13, glow: 2, gravity: -1, life: 0.8, spread: 0.35, drag: 1 }) },
+  shielded: { every: 0.08, draw: (c, f, color, h) => c.fx.particles(about(f, 0.85, h * 0.5, true), color, { count: 2, speed: 0.1, size: 0.1, glow: 2.4, gravity: 0, life: 0.5, spread: 0.05 }) },
+  hasted: { every: 0.04, draw: (c, f, color, h) => c.fx.particles(about(f, 0.35, h * 0.45), color, { count: 2, speed: 0.1, size: 0.09, glow: 2.4, gravity: 0, life: 0.4, spread: 0.4, drag: 3 }) },
+  explosive: { every: 0.05, draw: (c, f, color, h) => c.fx.particles(about(f, 0.3, h * 0.85), color, { count: 2, speed: 1.6, size: 0.09, glow: 3, gravity: 6, life: 0.4, spread: 0.15, up: 1.5 }) },
+  splitting: { every: 0.08, draw: (c, f, color, h) => c.fx.particles(about(f, 0.5, h * 0.3), color, { count: 2, speed: 0.6, size: 0.13, glow: 1.6, gravity: 3, life: 0.6, spread: 0.3, up: 0.6 }) },
+  juggernaut: { every: 0.06, draw: (c, f, color, h) => c.fx.particles(about(f, 0.75, h * 0.05), color, { count: 3, speed: 0.6, size: 0.15, glow: 2, gravity: -1.5, life: 0.7, spread: 0.2, up: 0.4 }) },
 };
+
+/** The ring at an elite's feet, in its affix's colour, turning. */
+function footRing(c: Client, f: Figure, color: RGB, t: number) {
+  const p = f.root.position;
+  const r = 0.75 * f.root.scale.x;
+  for (let m = 0; m < 10; m++) {
+    const a = t * 1.8 + (m / 10) * Math.PI * 2;
+    c.fx.particles({ x: p.x + Math.cos(a) * r, y: p.y + 0.08, z: p.z + Math.sin(a) * r }, color, { count: 1, speed: 0, size: 0.1, glow: 2.4, gravity: 0, life: 0.12, spread: 0 });
+  }
+}
 
 /** A point about a figure: round it at `r` (blocks, its size's), `y` up, on its rim if `rim`. */
 function about(f: Figure, r: number, y: number, rim = false) {
@@ -66,7 +77,7 @@ const heightOf = (f: Figure) => (HEIGHT[f.type] ?? 1.9) * f.root.scale.x;
 // The knight's shield arm: up before it (the forearm level, the shield square ahead), or lowered.
 const e1 = new Euler(0, 0, 0, 'YXZ');
 const q1 = new Quat();
-const ARM = { up: { upper: [-0.5, 0.12, 0.08], lower: [-1.07, 0, 0] }, down: { upper: [-0.12, 0, 0.12], lower: [-0.55, 0, 0] } };
+const ARM = { up: { upper: [-0.5, 0.12, 0.08], lower: [-1.07, 0, 0] }, down: { upper: [-0.35, 1.0, 0.3], lower: [-1.0, 0, 0] } };
 
 function bestiaryKit(): ClientKit {
   const rings: Ring[] = [];
@@ -93,7 +104,7 @@ function bestiaryKit(): ClientKit {
       });
       client.on('bestiary.elite', (d) => {
         const e = d as { id: number; affix: string; color: string };
-        auras.set(e.id, { affix: e.affix, color: rgb(e.color, 1.6), tick: Math.random() * 0.1 });
+        auras.set(e.id, { affix: e.affix, color: rgb(e.color, 1.6), tick: Math.random() * 0.1, ring: 0 });
       });
       client.on('bestiary.guard', (d) => {
         const g = d as { id: number; up: boolean };
@@ -145,6 +156,11 @@ function bestiaryKit(): ClientKit {
           if (spec && a.tick <= 0) {
             a.tick = spec.every;
             spec.draw(client, f, a.color, heightOf(f));
+          }
+          a.ring -= dt;
+          if (a.ring <= 0) {
+            a.ring = 0.1;
+            footRing(client, f, a.color, clock);
           }
         }
         // Blessed by a cultist: a red haze rising off them.
@@ -207,16 +223,19 @@ function bestiaryKit(): ClientKit {
         if ((r.tick -= dt) > 0) continue;
         r.tick = 0.05;
         const k = r.age / r.time;
-        const n = Math.ceil(r.radius * 5);
+        // The rim, turning slowly; and a second ring spreading out to meet it as the moment comes.
         const spin = r.age * 1.5;
-        for (let m = 0; m < n; m++) {
-          const a = spin + (m / n) * Math.PI * 2;
-          fx.particles({ x: r.x + Math.cos(a) * r.radius, y: r.y + 0.12, z: r.z + Math.sin(a) * r.radius }, r.color, { count: 1, speed: 0, size: 0.11, glow: 2, gravity: 0, life: 0.12, spread: 0 });
+        for (const [radius, size, glow] of [[r.radius, 0.16, 3], [r.radius * k, 0.12, 2]] as const) {
+          const n = Math.max(6, Math.ceil(radius * 7));
+          for (let m = 0; m < n; m++) {
+            const a = spin + (m / n) * Math.PI * 2;
+            fx.particles({ x: r.x + Math.cos(a) * radius, y: r.y + 0.12, z: r.z + Math.sin(a) * radius }, r.color, { count: 1, speed: 0, size, glow, gravity: 0, life: 0.1, spread: 0 });
+          }
         }
-        const inner = r.radius * k;
-        for (let m = 0; m < Math.ceil(inner * 3); m++) {
+        for (let m = 0; m < Math.ceil(r.radius * 2); m++) {
           const a = Math.random() * Math.PI * 2;
-          fx.particles({ x: r.x + Math.cos(a) * inner, y: r.y + 0.1, z: r.z + Math.sin(a) * inner }, r.color, { count: 1, speed: 0.2, size: 0.09, glow: 1.4, gravity: -1, life: 0.25, spread: 0.05 });
+          const d = Math.sqrt(Math.random()) * r.radius * k;
+          fx.particles({ x: r.x + Math.cos(a) * d, y: r.y + 0.1, z: r.z + Math.sin(a) * d }, r.color, { count: 1, speed: 0.3, size: 0.08, glow: 1.5, gravity: -2, life: 0.3, spread: 0.05 });
         }
       }
       // Fire left burning on the sand.
@@ -228,9 +247,9 @@ function bestiaryKit(): ClientKit {
           continue;
         }
         if ((f.tick -= dt) > 0) continue;
-        f.tick = 0.07;
+        f.tick = 0.05;
         const fade = Math.min(1, f.left / 1.2);
-        fx.particles({ x: f.x, y: f.y + 0.1, z: f.z }, [1.6 * fade, 0.45 * fade, 0.08 * fade], { count: 2, speed: 0.5, size: 0.14, glow: 2.4, gravity: -5, life: 0.45, spread: 0.55, up: 1 });
+        fx.particles({ x: f.x, y: f.y + 0.1, z: f.z }, [1.8 * fade, 0.5 * fade, 0.08 * fade], { count: 3, speed: 0.5, size: 0.18, glow: 2.6, gravity: -5, life: 0.5, spread: 0.6, up: 1.2 });
       }
     },
   };

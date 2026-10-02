@@ -98,7 +98,7 @@ export function makeElite(game: GameContext, e: Entity, affix: Affix) {
   if (affix === 'shielded') game.hud.marker(`ward:${e.id}`, e, { color: a.color, shape: 'ring', size: { world: h * 0.9, min: 24 }, offset: { x: 0, y: h * 0.5, z: 0 } });
   show(game, 'elite', { id: e.id, affix, color: a.color });
   game.audio.play('elite', { at: e.position });
-  game.hud.feed([{ text: name, color: GOLD }, ` comes in: ${a.text.toLowerCase()}`], { color: '#e8dcc0' });
+  game.hud.feed([{ text: name, color: GOLD }, `: ${a.text.toLowerCase()}`], { color: '#e8dcc0' });
 }
 
 /** A kind's name and height, as its definition gives them. */
