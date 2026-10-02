@@ -608,23 +608,32 @@ const BUILT = build();
 
 /**
  * Lava that burns: every lava block the caldera has (the river and its cave, the slag field's
- * pockets, the lavafalls and their pools, the furnace behind its grate), a box to each column of
- * it, so there's nowhere lava can be waded into or fallen into that doesn't burn.
+ * pockets, the lavafalls and their pools, the furnace behind its grate), a box to each unbroken
+ * run of it up a column, so there's nowhere lava can be waded into or fallen into that doesn't
+ * burn, and nothing that isn't lava (a ledge between a fall's blocks) does.
  */
 const HAZARDS: Hazard[] = [{ kind: 'lava', zone: lavaColumns(BUILT) }];
 
 function lavaColumns(bp: Blueprint): Box[] {
-  const span = new Map<string, { x: number; z: number; lo: number; hi: number }>();
+  const ys = new Map<string, { x: number; z: number; y: number[] }>();
   bp.forEach((x, y, z, b) => {
     if (b !== 'lava') return;
     const k = `${x},${z}`;
-    const s = span.get(k);
-    if (s) {
-      s.lo = Math.min(s.lo, y);
-      s.hi = Math.max(s.hi, y);
-    } else span.set(k, { x, z, lo: y, hi: y });
+    const c = ys.get(k) ?? { x, z, y: [] };
+    c.y.push(y);
+    ys.set(k, c);
   });
-  return [...span.values()].map((s) => box({ x: s.x, y: s.lo, z: s.z }, { x: s.x, y: s.hi, z: s.z }));
+  const boxes: Box[] = [];
+  for (const c of ys.values()) {
+    const y = c.y.sort((a, b) => a - b);
+    let lo = y[0];
+    for (let i = 1; i <= y.length; i++) {
+      if (i < y.length && y[i] === y[i - 1] + 1) continue;
+      boxes.push(box({ x: c.x, y: lo, z: c.z }, { x: c.x, y: y[i - 1], z: c.z }));
+      lo = y[i];
+    }
+  }
+  return boxes;
 }
 
 const TRAPS: TrapSpec[] = [
