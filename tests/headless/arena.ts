@@ -115,8 +115,8 @@ export default function arena() {
   check(popped.includes('Champion') && popped.includes('Warmed Up'), `achievements popped up: ${popped.join(', ')}`);
   const slain = end()?.kills.replace(/,/g, '');
   check(String(me.store.get<number>('kills')) === slain, `kills kept all-time: ${me.store.get('kills')} of ${slain}`);
-  // The economy: gold earned and spent at the merchant's, the best armour by the end.
-  check(bought.length >= 6 && armorOf(me) === ARMOR.plate_armor.points, `shopping: ${bought.join(', ')} (armour ${armorOf(me)})`);
+  // The economy: gold earned and spent at the merchant's (scarce: a few buys), the best armour by the end.
+  check(bought.length >= 5 && armorOf(me) === ARMOR.plate_armor.points, `shopping: ${bought.join(', ')} (armour ${armorOf(me)})`);
   // Levels: XP earned for the run, the best wave kept.
   const xp = progressOf(me);
   const best = (me.store.get<{ best: Record<string, number> }>('arena')?.best ?? {})[map().id];

@@ -2,10 +2,11 @@
  * How hard the run is, in one place. The monsters' blows and how much it takes to bring one down
  * (as if it had this many times its health: a blow on it is divided, as the elites' and the
  * bosses' own toughness are), for every monster and every boss; the late waves' growth; how many
- * come, how many at once and how fast; and the cushions: gold, the breather's mending, health
- * coming back. The director (which puts the blows on each monster as it comes in: `director.ts`),
- * the coins, the flow and the shared rules read their numbers here. Only numbers: the screens'
- * shared rules read it too.
+ * come, how many at once and how fast, and the champions among them; and the cushions: gold,
+ * the breather's mending, health coming back, a potion's worth. The director (which puts the
+ * blows on each monster as it comes in, and sets the bestiary's elites and the armory's potion
+ * from here: `director.ts`), the coins, the flow and the shared rules read their numbers here.
+ * Only numbers: the screens' shared rules read it too.
  */
 export const DIFFICULTY = {
   /** Every monster (and what a boss or a monster brings in): its blows, times; how tough, times. */
@@ -32,4 +33,8 @@ export const DIFFICULTY = {
   breakHeal: 3,
   /** Health coming back on its own: after this long unhurt, this much a second (the shared rules'). */
   regen: { delay: 6, perSecond: 0.35 },
+  /** What a health potion mends (half-hearts). */
+  potionHeal: 10,
+  /** Champions (the bestiary's elites): from this wave, the bestiary's chance times `scale`, at most `cap`. */
+  elites: { from: 6, scale: 1, cap: 0.6 },
 };

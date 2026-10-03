@@ -4,6 +4,8 @@ import { MONSTERS, monsterKind } from '../monsters';
 import { BOSSES, bossKind } from '../bosses';
 import { bus } from './bus';
 import { DIFFICULTY } from './difficulty';
+import { eliteTuning } from '../monsters/elites';
+import { POTION as POTIONS } from '../items/potions';
 import { spawnMonster } from './spawn';
 import { map, runs, state } from './state';
 
@@ -341,8 +343,10 @@ function strike(game: GameContext, at: Vec3) {
   }
 }
 
-/** What the twists do once the monsters are in (in `setup`). */
+/** What the twists do once the monsters are in (in `setup`); and the difficulty's say on the champions and the potions. */
 export function directorListen(game: GameContext) {
+  Object.assign(eliteTuning, DIFFICULTY.elites);
+  POTIONS.heal = DIFFICULTY.potionHeal;
   bus.on('spawned', ({ entity, type }) => {
     if (entity.data.scenery) return;
     // How hard each is (`DIFFICULTY`): every boss, every monster; and the ordinary ones tougher
