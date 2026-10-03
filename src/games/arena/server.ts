@@ -19,6 +19,7 @@ import { CLASSES, classOf, classWaiting, closeClassMenus, hasChosen, offerClass 
 import { INTRO_TIME } from './maps/messages';
 import { results } from './run/progression';
 import { feat } from './run/hype';
+import { DIFFICULTY } from './run/difficulty';
 
 /** Seconds between waves (the shop open, a blessing to choose). */
 const INTERMISSION = 20;
@@ -97,7 +98,7 @@ function intermission(game: GameContext) {
   state.phase = 'intermission';
   ready.clear();
   state.nextWaveAt = game.clock.now + INTERMISSION;
-  for (const p of game.players) p.heal(6);
+  for (const p of game.players) p.heal(DIFFICULTY.breakHeal);
   // A blessing each, chosen from three.
   for (const p of game.players) offer(game, p);
   game.env.time = dusk(state.wave);

@@ -5,6 +5,7 @@ import { forge, forgePrice } from '../../src/games/arena/items/forge';
 import { rollWeapon } from '../../src/games/arena/items/loot';
 import { baseOf, rarityOf, variant } from '../../src/games/arena/items/rarity';
 import { SHOWS } from '../../src/games/arena/items/moves';
+import { POTION } from '../../src/games/arena/items/potions';
 import { burning, chillOf, frozen, stagger, stunned } from '../../src/games/arena/items/status';
 import { check, launch } from './_harness';
 
@@ -283,7 +284,7 @@ export default function arenaArmory() {
       return { ...EAST, pressed: t < 0.02 ? ['KeyR'] : [] };
     });
     log(`potion on R: ${s.me.health.toFixed(1)} health, ${s.me.inventory.count('health_potion')} left, holding ${s.me.inventory.held?.item}`);
-    check(s.me.health >= 710 && s.me.health < 712 && s.me.inventory.count('health_potion') === 1 && s.me.inventory.held?.item === 'wooden_sword', 'R drinks one and puts it away');
+    check(s.me.health >= 700 + POTION.heal && s.me.health < 702 + POTION.heal && s.me.inventory.count('health_potion') === 1 && s.me.inventory.held?.item === 'wooden_sword', 'R drinks one and puts it away');
   }
 
   // Blessings: Riposte mends on a parry; one that stacks comes again (Berserker II); offers are three apart.

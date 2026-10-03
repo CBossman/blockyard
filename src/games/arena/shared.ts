@@ -4,6 +4,7 @@ import { FLOOR, MAP_BLOCKS, MAPS } from './maps';
 import { roll } from './abilities';
 import { crawl } from './run/crawl';
 import { HUD } from './hud/theme';
+import { DIFFICULTY } from './run/difficulty';
 
 const first = MAPS[0];
 
@@ -24,6 +25,6 @@ export const shared = defineShared({
     time: first.time,
     freezeTime: true,
   },
-  player: { health: 20, regen: { delay: 4, perSecond: 0.6 }, fallDamage: true, hotbar: 'items', movement: { abilities: { crawl, roll } } },
+  player: { health: 20, regen: DIFFICULTY.regen, fallDamage: true, hotbar: 'items', movement: { abilities: { crawl, roll } } },
   hud: HUD,
 });

@@ -16,6 +16,7 @@ import { award, levelOf, progressOf, savedXp, xpForLevel } from '../../src/games
 import { map, state } from '../../src/games/arena/run/state';
 import { finalWave, waveSpec } from '../../src/games/arena/run/director';
 import { spawnMonster } from '../../src/games/arena/run/spawn';
+import { DIFFICULTY } from '../../src/games/arena/run/difficulty';
 import { check, launch } from './_harness';
 
 /** The end screen's word (the HUD's `arena-end` widget, its newest): Victory, Defeated, The arena claims you. */
@@ -349,7 +350,8 @@ function late() {
   const blows = (n: number) => {
     wave(game, n);
     state.twist = null;
-    const z = spawnMonster(game, 'zombie', { x: c.x + 4, y: c.y + 0.05, z: c.z }, { data: { summoned: true } });
+    // (`spawned`: never an elite, whose own toughness would muddle it.)
+    const z = spawnMonster(game, 'zombie', { x: c.x + 4, y: c.y + 0.05, z: c.z }, { data: { summoned: true, spawned: true } });
     z.setSpeed(0);
     h.run(1);
     const hp = z.health;
@@ -358,11 +360,14 @@ function late() {
     me.damage(4, { source: z });
     return { took: hp - z.health, hurt: life - me.health };
   };
-  const early = blows(6);
+  const { monster, grow } = DIFFICULTY;
+  const early = blows(3);
   const later = blows(18);
   const boss = blows(20);
-  log(`late: a zombie on wave 6 takes ${early.took.toFixed(1)} of a blow and deals ${early.hurt.toFixed(2)}; on wave 18, ${later.took.toFixed(1)} and ${later.hurt.toFixed(2)}; in the Lich's wave, ${boss.took.toFixed(1)} and ${boss.hurt.toFixed(2)}`);
-  check(Math.abs(later.took * 1.4 - early.took) < 0.05 && Math.abs(later.hurt - early.hurt * 1.3) < 0.05, 'ten waves past the eighth: 40% tougher, 30% harder hitting');
+  const n = 18 - grow.from + 1;
+  log(`late: a zombie on wave 3 takes ${early.took.toFixed(1)} of a blow of 10 and deals ${early.hurt.toFixed(2)}; on wave 18, ${later.took.toFixed(1)} and ${later.hurt.toFixed(2)}; in the Lich's wave, ${boss.took.toFixed(1)} and ${boss.hurt.toFixed(2)}`);
+  check(Math.abs(early.took - 10 / monster.tough) < 0.05, `every monster tougher: ${early.took.toFixed(2)} of 10`);
+  check(Math.abs(later.took * (1 + grow.tough * n) - early.took) < 0.05 && Math.abs(later.hurt - early.hurt * (1 + grow.hits * n)) < 0.05, `${n} waves on: ${grow.tough * n * 100}% tougher, ${Math.round(grow.hits * n * 100)}% harder hitting`);
   check(Math.abs(boss.took - early.took) < 0.05 && Math.abs(boss.hurt - early.hurt) < 0.05, "not in a boss's wave (its fight is tuned as it is)");
 }
 

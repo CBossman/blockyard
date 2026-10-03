@@ -3,6 +3,9 @@ import { along } from '../maps';
 import { MONSTERS, monsterKind } from '../monsters';
 import { BOSSES, bossKind } from '../bosses';
 import { bus } from './bus';
+import { DIFFICULTY } from './difficulty';
+import { eliteTuning } from '../monsters/elites';
+import { POTION as POTIONS } from '../items/potions';
 import { spawnMonster } from './spawn';
 import { map, runs, state } from './state';
 
@@ -112,15 +115,14 @@ const TWIST_CHANCE = 0.6;
 /** Otherwise, a lone Treasure Goblin turns up this often in a wave. */
 const GOBLIN_CHANCE = 0.35;
 
-/** At most this many monsters in the arena at once (more as the run goes on, more in a Frenzy, up to `MOST`); the rest wait their turn. */
-export const maxAlive = (n: number) => Math.min(MOST, (n >= 12 ? 16 : 10 + Math.floor(n / 4)) + (state.twist === 'frenzy' ? 4 : 0));
-const MOST = 18;
-/** Past wave `GROW_FROM` the monsters come tougher each wave (bosses and their waves aside: theirs is `might`): this much more health, and this much harder blows. */
-const GROW_FROM = 8;
-const GROW_HEALTH = 0.04;
-const GROW_HITS = 0.03;
-/** Seconds between monsters coming in (a boss's escort, and a Frenzy, keep other paces). */
-const SPAWN_EVERY = 0.9;
+/** At most this many monsters in the arena at once (more as the run goes on, more in a Frenzy, up to the most: `DIFFICULTY`); the rest wait their turn. */
+export function maxAlive(n: number): number {
+  let m = 0;
+  for (const [from, k] of DIFFICULTY.alive) if (n >= from) m = k;
+  return Math.min(DIFFICULTY.most, m + (state.twist === 'frenzy' ? 4 : 0));
+}
+/** The ordinary monsters' growth by wave `n` (its steps from `DIFFICULTY.grow.from`, counting that one). */
+export const grown = (n: number) => Math.max(0, n - DIFFICULTY.grow.from + 1);
 
 /** Monsters per wave grow with the party: half as many again for each extra fighter. */
 export const crowd = (game: GameContext) => 1 + 0.5 * Math.max(0, game.players.length - 1);
@@ -171,6 +173,8 @@ function compose(game: GameContext, n: number, w: WaveSpec, twist: Twist | null)
   }
   if (twist === 'swarm') counts.spider = (counts.spider ?? 0) + 4 + Math.floor(n / 4);
   if (twist === 'frenzy') for (const t of Object.keys(counts)) if (!monsterKind(t)?.single) counts[t] = Math.ceil(counts[t] * 1.3);
+  // More of them, from early on (a boss's wave is its own fight; one that comes singly stays one).
+  if (n >= DIFFICULTY.more.from && !w.boss) for (const t of Object.keys(counts)) if (!monsterKind(t)?.single) counts[t] = Math.round(counts[t] * DIFFICULTY.more.by);
   return counts;
 }
 
@@ -242,7 +246,7 @@ export function tick(game: GameContext, dt: number): { left: number; cleared: bo
   state.spawnTimer -= dt;
   if (state.queue.length > 0 && alive < maxAlive(state.wave) && state.spawnTimer <= 0) {
     if (spawnNext(game)) alive++;
-    state.spawnTimer = state.boss ? 2.5 : frenzy ? SPAWN_EVERY / 2 : SPAWN_EVERY;
+    state.spawnTimer = state.boss ? 2.5 : frenzy ? DIFFICULTY.spawnEvery / 2 : DIFFICULTY.spawnEvery;
   }
   if (state.twist === 'storm') thunder(game);
   if (!state.queue.length && alive <= STRAGGLERS) stragglers(game);
@@ -339,17 +343,25 @@ function strike(game: GameContext, at: Vec3) {
   }
 }
 
-/** What the twists do once the monsters are in (in `setup`). */
+/** What the twists do once the monsters are in (in `setup`); and the difficulty's say on the champions and the potions. */
 export function directorListen(game: GameContext) {
+  Object.assign(eliteTuning, DIFFICULTY.elites);
+  POTIONS.heal = DIFFICULTY.potionHeal;
   bus.on('spawned', ({ entity, type }) => {
-    if (bossKind(type) || type === 'goblin') return;
-    // Late in the run, every ordinary monster (and what they bring in) is tougher and hits harder
-    // (below); not in a boss's wave, whose fight is tuned as it is (its escort, what it raises).
-    const past = Math.max(0, state.wave - GROW_FROM);
-    if (past > 0 && !state.boss && monsterKind(type) && !entity.data.scenery) {
-      entity.data.tough = 1 + GROW_HEALTH * past;
-      entity.data.hits = 1 + GROW_HITS * past;
+    if (entity.data.scenery) return;
+    // How hard each is (`DIFFICULTY`): every boss, every monster; and the ordinary ones tougher
+    // and harder hitting as the run goes on (below), though not in a boss's wave, whose fight is
+    // tuned as it is (its escort, what it raises).
+    const { monster, boss, grow } = DIFFICULTY;
+    if (bossKind(type)) {
+      entity.data.tough = boss.tough;
+      entity.data.hits = boss.hits;
+      return;
     }
+    const n = !state.boss && monsterKind(type) ? grown(state.wave) : 0;
+    entity.data.tough = monster.tough * (1 + grow.tough * n);
+    entity.data.hits = monster.hits * (1 + grow.hits * n);
+    if (type === 'goblin') return;
     if (state.twist === 'blood_moon') {
       entity.data.speed = 1.25;
       entity.setSpeed(1.25);
@@ -363,7 +375,7 @@ export function directorListen(game: GameContext) {
       game.items.spawnPickup('heart', { x: at.x, y: at.y + 0.5, z: at.z }, { despawn: 30 });
     }
   });
-  // A late monster: blows land on it as if it had more health, and its own (its shots, its blasts) land harder.
+  // A monster: blows land on it as if it had more health, and its own (its shots, its blasts) land harder.
   game.events.on('damage', (hit) => {
     const t = hit.target;
     const s = hit.source;

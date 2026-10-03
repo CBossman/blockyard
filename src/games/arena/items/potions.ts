@@ -2,12 +2,14 @@ import type { GameContext, Player } from '@platform';
 import { downed } from './moves';
 
 /**
- * R drinks a health potion wherever it's carried: the potion comes up in hand, a sip, five hearts
+ * R drinks a health potion wherever it's carried: the potion comes up in hand, a sip, `POTION.heal`
  * mended, and back to what was in hand. Switching away first stops it (nothing's drunk). (With the
  * potion in hand, the right button still drinks it at once: the platform's consumables.)
  */
 export const POTION_KEY = 'KeyR';
-const POTION = 'health_potion';
+/** What a health potion mends (half-hearts), however it's drunk: the run's difficulty may set it. */
+export const POTION = { heal: 10 };
+const POTION_ITEM = 'health_potion';
 /** When the sip begins, when it's drunk, and when the hand goes back (seconds after R). */
 const SIP = 0.25;
 const DRUNK = 0.6;
@@ -32,7 +34,7 @@ export function updatePotions(game: GameContext, dt: number) {
 
 function start(game: GameContext, p: Player) {
   const inv = p.inventory;
-  const slot = inv.slots.findIndex((s) => s?.item === POTION);
+  const slot = inv.slots.findIndex((s) => s?.item === POTION_ITEM);
   if (slot < 0) {
     p.hud.toast('No potions');
     p.audio.play('click', { pitch: 0.7 });
@@ -65,8 +67,8 @@ function step(game: GameContext, p: Player, q: Quaff, dt: number) {
   }
   if (!q.drunk && q.t >= DRUNK) {
     q.drunk = true;
-    if (inv.take(POTION, 1)) {
-      p.heal(10);
+    if (inv.take(POTION_ITEM, 1)) {
+      p.heal(POTION.heal);
       game.audio.play('heal', { at: p.position });
       game.audio.play('arena_gulp', { at: p.eye });
       game.fx.burst(p.eye, { color: '#ff4f6d', count: 16, speed: 2, gravity: -3, glow: 0.8 });
