@@ -120,7 +120,9 @@ export default function arenaBalance() {
     const c = table.get(base)!;
     const e = table.get(variant(base, 'epic'))!;
     const l = table.get(variant(base, 'legendary'))!;
-    check(c.single >= 8.5 && c.single <= 20, `${base}: ${c.single.toFixed(1)} a second on one, common (8.5..20)`);
+    // (What hits a crowd may give up a little on one: the floor's lower for it.)
+    const floor = AOE.has(base) ? 7.5 : 8.5;
+    check(c.single >= floor && c.single <= 20, `${base}: ${c.single.toFixed(1)} a second on one, common (${floor}..20)`);
     check(l.single >= c.single * 1.8, `${base}: a legendary deals ${(l.single / c.single).toFixed(2)}x a common's`);
     check(ttk(e.single, FOES[2]) <= 26, `${base}: an epic takes ${ttk(e.single, FOES[2]).toFixed(0)} s on an elite golem (26 at most)`);
     if (AOE.has(base)) check(c.crowd >= c.single * 2.2, `${base}: ${(c.crowd / c.single).toFixed(1)}x on a crowd (2.2 at least)`);
