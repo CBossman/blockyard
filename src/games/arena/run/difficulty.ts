@@ -11,8 +11,8 @@
 export const DIFFICULTY = {
   /** Every monster (and what a boss or a monster brings in): its blows, times; how tough, times. */
   monster: { hits: 1.2, tough: 1.15 },
-  /** Every boss. */
-  boss: { hits: 1.15, tough: 1.2 },
+  /** Every boss from wave `from`. */
+  boss: { hits: 1.15, tough: 1.2, from: 1 },
   /** From wave `from`, the ordinary monsters come tougher and hit harder each wave (on top; not in a boss's wave, whose fight is tuned as it is). */
   grow: { from: 5, tough: 0.05, hits: 0.04 },
   /** A wave's monsters (besides a boss's wave and the ones that come singly), times this from wave `from`. */
