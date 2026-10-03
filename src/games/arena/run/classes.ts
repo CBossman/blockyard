@@ -1,6 +1,7 @@
 import type { GameContext, IconRef, MenuEntry, MenuHandle, Player } from '@platform';
 import { INTRO_DONE_MSG } from '../maps/messages';
 import { bus } from './bus';
+import { baseOf } from './loot';
 import { levelOf, savedXp } from './progression';
 import { runs, state } from './state';
 
@@ -37,9 +38,10 @@ export const CLASSES = {
   hunter: {
     name: 'Hunter',
     text: 'Bow, daggers and two bombs: strike from afar, finish up close',
-    perk: 'Quarry: quicker on your feet; a bow kill gives an arrow back',
+    perk: 'Quarry: quicker, two more hearts, arrows that hit harder; a bow kill gives one back, and a dozen come each wave',
     level: 1,
-    kit: [{ item: 'daggers', or: 'wooden_sword' }, { item: 'bow' }, { item: 'arrow', count: 32 }, { item: 'bomb', count: 2 }],
+    kit: [{ item: 'daggers', or: 'wooden_sword' }, { item: 'bow' }, { item: 'arrow', count: 48 }, { item: 'bomb', count: 2 }],
+    health: 4,
     speed: 1.1,
   },
   berserker: {
@@ -53,9 +55,10 @@ export const CLASSES = {
   pyromancer: {
     name: 'Pyromancer',
     text: 'A fire staff and a bag of bombs: set the pit ablaze',
-    perk: 'Kindling: two more bombs each wave; your blasts hit harder',
+    perk: 'Kindling: a bomb more each wave, and your blasts hit harder; but a heart less',
     level: 8,
-    kit: [{ item: 'fire_staff', or: 'wooden_sword' }, { item: 'bomb', count: 4 }],
+    kit: [{ item: 'fire_staff', or: 'wooden_sword' }, { item: 'bomb', count: 3 }],
+    health: -2,
   },
 } satisfies Record<string, FighterClass>;
 
@@ -70,8 +73,12 @@ export const classOf = (p: Player): ClassId => {
 /** Someone arriving after the first wave may change their class for this long (their fly-over first). */
 const LATE_CHOICE = 24;
 /** Pyromancer: bombs each wave, and how much harder their blasts hit. */
-const KINDLING = 2;
-const KINDLING_BLAST = 1.3;
+const KINDLING = 1;
+const KINDLING_BLAST = 1.15;
+/** Hunter: arrows each wave, and how much harder their bow's (or crossbow's) shots hit. */
+const QUIVER = 12;
+const QUARRY_SHOT = 1.2;
+const shotBy = (weapon: string | undefined) => !!weapon && (baseOf(weapon) === 'bow' || baseOf(weapon) === 'crossbow');
 
 /** Whether they may take up a class (bots: any). */
 export const unlocked = (p: Player, id: ClassId) => p.bot || levelOf(savedXp(p)) >= CLASSES[id].level;
@@ -211,14 +218,20 @@ export function classesListen(game: GameContext) {
     if (!by) return;
     const c = classOf(by);
     if (c === 'berserker' && by.alive) by.heal(1);
-    if (c === 'hunter' && weapon === 'bow') by.inventory.give('arrow', 1);
+    if (c === 'hunter' && shotBy(weapon)) by.inventory.give('arrow', 1);
   });
   bus.on('waveStart', () => {
-    for (const p of game.players) if (classOf(p) === 'pyromancer' && p.alive) p.inventory.give('bomb', KINDLING);
+    for (const p of game.players) {
+      if (!p.alive) continue;
+      if (classOf(p) === 'pyromancer') p.inventory.give('bomb', KINDLING);
+      if (classOf(p) === 'hunter') p.inventory.give('arrow', QUIVER);
+    }
   });
   game.events.on('damage', (hit) => {
     const s = hit.source;
-    if (hit.target.kind === 'entity' && hit.cause === 'explosion' && s && s !== 'world' && s.kind === 'player' && classOf(s) === 'pyromancer') hit.amount *= KINDLING_BLAST;
+    if (hit.target.kind !== 'entity' || !s || s === 'world' || s.kind !== 'player') return;
+    if (hit.cause === 'explosion' && classOf(s) === 'pyromancer') hit.amount *= KINDLING_BLAST;
+    if (shotBy(hit.weapon) && classOf(s) === 'hunter') hit.amount *= QUARRY_SHOT;
   });
   // Their screen's fly-over is done (played out or skipped): their menu now.
   game.events.on('clientMessage', ({ player, name }) => {

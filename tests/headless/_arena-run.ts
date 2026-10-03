@@ -11,7 +11,7 @@ import { WARES } from '../../src/games/arena/items/catalog';
 import { PRICE, ROLL_TIME, rollChest } from '../../src/games/arena/run/chest';
 import { BLEED, FEATHER, isDowned, REVIVE } from '../../src/games/arena/run/downed';
 import { hypeValue } from '../../src/games/arena/run/hype';
-import { choose, classOf } from '../../src/games/arena/run/classes';
+import { choose, classOf, CLASSES } from '../../src/games/arena/run/classes';
 import { award, levelOf, progressOf, savedXp, xpForLevel } from '../../src/games/arena/run/progression';
 import { map, state } from '../../src/games/arena/run/state';
 import { finalWave, waveSpec } from '../../src/games/arena/run/director';
@@ -295,7 +295,7 @@ function classes() {
   check(levelOf(savedXp(me)) === 4 && levels.includes(4), `level 4: ${progressOf(me).level}`);
   const hearts = me.maxHealth;
   choose(game, me, 'berserker');
-  check(classOf(me) === 'berserker' && me.inventory.count('battle_axe') === 1 && me.inventory.count('bow') === 0 && me.maxHealth === hearts + 6, `a Berserker now: max health ${me.maxHealth}, ${me.inventory.slots.filter(Boolean).map((s) => s!.item).join(' ')}`);
+  check(classOf(me) === 'berserker' && me.inventory.count('battle_axe') === 1 && me.inventory.count('bow') === 0 && me.maxHealth === hearts - CLASSES.hunter.health + CLASSES.berserker.health, `a Berserker now: max health ${me.maxHealth}, ${me.inventory.slots.filter(Boolean).map((s) => s!.item).join(' ')}`);
   h.run(15);
   check((state.phase as string) === 'fighting', 'the first wave begins');
   choose(game, me, 'gladiator');

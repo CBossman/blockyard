@@ -354,6 +354,7 @@ export function directorListen(game: GameContext) {
     // tuned as it is (its escort, what it raises).
     const { monster, boss, grow } = DIFFICULTY;
     if (bossKind(type)) {
+      if (state.wave < boss.from) return;
       entity.data.tough = boss.tough;
       entity.data.hits = boss.hits;
       return;

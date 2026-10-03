@@ -12,7 +12,6 @@ import { map } from '../../src/games/arena/run/state';
 import { WAVES } from '../../src/games/arena/run/director';
 import { stagger as stun } from '../../src/games/arena/items/status';
 import { check, launch } from './_harness';
-import { DIFFICULTY } from '../../src/games/arena/run/difficulty';
 
 /**
  * Probe: the four bosses, one at a time, each brought in with `/boss` on a floor kept clear of the
@@ -581,6 +580,6 @@ function party(log: (s: string) => void) {
   boss.damage(27, { source: sc.me });
   const took = hp - boss.health;
   log(`three fighters: a blow of 27 takes ${took.toFixed(1)} (the boss ${(27 / took).toFixed(1)} times as tough)`);
-  // (Times the run's difficulty: `run/difficulty.ts`.)
-  check(Math.abs(27 / took - 2.4 * DIFFICULTY.boss.tough) < 0.05, 'a boss is 2.4 times as tough for three');
+  // (Times the run's difficulty, from its wave: `run/difficulty.ts`.)
+  check(Math.abs(27 / took - 2.4 * ((boss.data.tough as number | undefined) ?? 1)) < 0.05, 'a boss is 2.4 times as tough for three');
 }

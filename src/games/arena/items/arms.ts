@@ -102,7 +102,7 @@ export const ARMS: Record<RareBase, Arm> = {
     price: 220,
     from: 2,
     def: (r, rarity) =>
-      ({ kind: 'staff', spell: 'fire', damage: 5.25 * r.damage, cooldown: 0.95 * r.pace, radius: 2.6, burn: [2.25 * r.damage, 3], rank: 3.5 + r.rank, ...(rarity === 'legendary' && { legend: 'emberheart' }) }) satisfies Omit<StaffItem, 'name'>,
+      ({ kind: 'staff', spell: 'fire', damage: 4.4 * r.damage, cooldown: 0.95 * r.pace, radius: 2.4, burn: [1.85 * r.damage, 3], rank: 3.5 + r.rank, ...(rarity === 'legendary' && { legend: 'emberheart' }) }) satisfies Omit<StaffItem, 'name'>,
   },
   frost_staff: {
     name: 'Frost Staff',
