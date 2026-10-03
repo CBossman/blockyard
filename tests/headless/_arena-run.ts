@@ -285,7 +285,7 @@ function classes() {
   h.run(0.2);
   check(offered(), 'then the classes, offered in the countdown');
   choose(game, me, 'hunter');
-  check(classOf(me) === 'hunter' && me.inventory.count('bow') === 1 && me.inventory.count('arrow') >= 32 && me.inventory.count('bomb') === 2 && me.speed > 1, `a Hunter: ${me.inventory.slots.filter(Boolean).map((s) => `${s!.item}x${s!.count}`).join(' ')}`);
+  check(classOf(me) === 'hunter' && me.inventory.count('bow') === 1 && me.inventory.count('arrow') >= 32 && me.inventory.count('bomb') === 3 && me.speed > 1, `a Hunter: ${me.inventory.slots.filter(Boolean).map((s) => `${s!.item}x${s!.count}`).join(' ')}`);
   choose(game, me, 'berserker');
   check(classOf(me) === 'hunter', 'the Berserker is locked at level 1');
   const levels: number[] = [];

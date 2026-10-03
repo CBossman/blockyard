@@ -37,10 +37,10 @@ export const CLASSES = {
   },
   hunter: {
     name: 'Hunter',
-    text: 'Bow, daggers and two bombs: strike from afar, finish up close',
-    perk: 'Quarry: quicker, two more hearts, arrows that hit harder; a bow kill gives one back, and a dozen come each wave',
+    text: 'Bow, daggers and three bombs: strike from afar, finish up close',
+    perk: 'Quarry: quicker, two more hearts, arrows that hit harder; a bow kill gives one back, and each wave brings a dozen and a bomb',
     level: 1,
-    kit: [{ item: 'daggers', or: 'wooden_sword' }, { item: 'bow' }, { item: 'arrow', count: 48 }, { item: 'bomb', count: 2 }],
+    kit: [{ item: 'daggers', or: 'wooden_sword' }, { item: 'bow' }, { item: 'arrow', count: 48 }, { item: 'bomb', count: 3 }],
     health: 4,
     speed: 1.1,
   },
@@ -75,8 +75,9 @@ const LATE_CHOICE = 24;
 /** Pyromancer: bombs each wave, and how much harder their blasts hit. */
 const KINDLING = 1;
 const KINDLING_BLAST = 1.15;
-/** Hunter: arrows each wave, and how much harder their bow's (or crossbow's) shots hit. */
+/** Hunter: arrows and a bomb each wave (the bomb for the crowds that close in), and how much harder their bow's (or crossbow's) shots hit. */
 const QUIVER = 12;
+const SNARE = 1;
 const QUARRY_SHOT = 1.2;
 const shotBy = (weapon: string | undefined) => !!weapon && (baseOf(weapon) === 'bow' || baseOf(weapon) === 'crossbow');
 
@@ -224,7 +225,10 @@ export function classesListen(game: GameContext) {
     for (const p of game.players) {
       if (!p.alive) continue;
       if (classOf(p) === 'pyromancer') p.inventory.give('bomb', KINDLING);
-      if (classOf(p) === 'hunter') p.inventory.give('arrow', QUIVER);
+      if (classOf(p) === 'hunter') {
+        p.inventory.give('arrow', QUIVER);
+        p.inventory.give('bomb', SNARE);
+      }
     }
   });
   game.events.on('damage', (hit) => {
