@@ -1,7 +1,7 @@
 # Proposal: uploading games without a redeploy
 
-Status: **phases 1 and 2 built** (2026-10-04; see "Phase 1: what was found" and "Phase 2: what was
-built"). Scope agreed: uploads by the owner and trusted people only. Live editing, an in-game agent and sandboxing are out of scope
+Status: **phases 1 to 3 built** (2026-10-04; see "Phase 1: what was found", "Phase 2: what was
+built" and "Phase 3: the site"). Scope agreed: uploads by the owner and trusted people only. Live editing, an in-game agent and sandboxing are out of scope
 (see "Later").
 
 ## Why
@@ -184,7 +184,7 @@ through the packager.
    Obby (as a new id) to the live server.
 3. **The upload page.** On the site: upload a zip, see build errors, list or unlist, versions and
    rollback, restart rooms onto the new version, owners, tokens, room logs.
-4. **Platform changes.** Smoke tests on boot and the broken state; then the CI check.
+4. **Platform changes.** Smoke tests on boot and the broken state; then the CI check. (Not built yet.)
 
 ## Phase 1: what was found
 
@@ -243,6 +243,21 @@ build`, `--package <folder>[=<id>]` on any server, the screen's loader (`client/
   differed between a folder in the repo and one outside it). A game is now built from a copy of
   its own with a `package.json` and the repo's compiler settings given directly: the same folder
   builds the same version anywhere.
+
+## Phase 3: the site
+
+- **Your games** (`ui/mygames.ts`), in the account menu for an uploader (the menu asks `GET
+  /g/mine`): drop a folder (zipped in the browser with fflate, a lazy chunk of 9 KB) or a zip, an
+  optional id; what went wrong, each problem a line; each of their games with its state (on the
+  home page, link only, not hosted), Play, Copy link, list or unlist, stop or start hosting, its
+  versions (make one current) and owners (add by name, remove); an upload token for the CLI.
+- **The home page's shelf** takes the games the server lists from `/games`, which now carries each
+  one's entry (meta, version, client address, modules): they join the shelf after the built-in
+  games within a poll (5 s), and the runtime's catalog, without a reload.
+- Server: `GET /g/mine`, owners added by name, credentialed CORS on all the library's routes for
+  the site's pages, `mine` kept as an id no game may take.
+- Checked in a browser: signed in, the menu, the panel (and at phone width), an upload by zip and
+  by folder, a refused one, listing (on the shelf a poll later), Play from the panel, a token.
 
 ## Decisions to make
 

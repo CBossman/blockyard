@@ -7,6 +7,8 @@ import { avatarCode, avatarLook, parseAvatar, presetAvatar } from '../avatar';
 import { cosmeticCatalog, type Cosmetic } from '../cosmetics';
 import type { CosmeticDef } from '../api/types';
 import { hintChips, keyHints, type GameControls } from './controls';
+import { MyGamesPanel } from './mygames';
+import type { PackageEntry } from '../package/link';
 
 /** Playing on a game server: the home page asks for a name, and says who's on. */
 export interface OnlineOptions {
@@ -82,6 +84,13 @@ export class TitleScreen {
   private feats: HTMLElement;
   private profile: Profile;
   private locker: Locker;
+  /** An uploader's games (the account menu's "Your games"). */
+  private mygames = new MyGamesPanel();
+  /**
+   * Games the server hosts built (uploaded) and lists, which the page wasn't built with: they've
+   * joined the shelf (their entries, for the runtime's catalog).
+   */
+  onListed: ((entries: PackageEntry[]) => void) | null = null;
   private catalog: Map<string, Cosmetic>;
   /** What they wear (their account's once signed in; a guest's, kept in this browser). */
   private look: Look;
@@ -140,6 +149,8 @@ export class TitleScreen {
     this.locker.onSignIn = () => this.account.signIn();
     this.locker.onSave = (look) => void this.saveLook(look);
     this.account.onLocker = () => this.openLocker();
+    this.account.onGames = () => this.account.server && this.mygames.show(this.account.server);
+    this.mygames.onOpen = (id) => this.game?.onPick(id);
     const signIn = h('button.home-guest-signin', { onclick: () => this.account.signIn() }, 'Sign in with Discord');
     this.guest = h('div.home-guest.hidden', {}, 'Playing as a guest: what you earn lasts this visit. ', signIn, ' to keep it.');
     const faceButton = h('button.home-face-button', { onclick: () => this.openLocker(), title: 'Your look', 'aria-label': 'Your look' }, this.face);
@@ -159,6 +170,7 @@ export class TitleScreen {
       this.shelf,
       this.profile.root,
       this.locker.root,
+      this.mygames.root,
     );
     // The mouse wheel runs the shelf sideways, when there are more games than fit.
     this.shelf.addEventListener('wheel', (e) => {
@@ -281,6 +293,19 @@ export class TitleScreen {
     else if (s.scrollLeft < right) s.scrollLeft = right;
   }
 
+  /** More games on the shelf, after the others (uploaded ones the server lists). */
+  private addGames(more: ListedGame[]) {
+    this.games.push(...more);
+    // What may be worn and the games' names include theirs (the same map the locker has).
+    const all = cosmeticCatalog(this.games);
+    this.catalog.clear();
+    for (const [k, v] of all) this.catalog.set(k, v);
+    setGameNames(this.games);
+    this.renderShelf();
+    const current = this.game?.current;
+    for (const [gid, card] of this.cards) card.el.classList.toggle('current', gid === current);
+  }
+
   private renderShelf() {
     this.cards.clear();
     if (this.games.length < 2) return this.shelf.replaceChildren();
@@ -391,8 +416,14 @@ export class TitleScreen {
     const http = online.server.replace(/^ws/, 'http').replace(/\/+$/, '');
     const load = () =>
       fetch(`${http}/games`)
-        .then((r) => r.json() as Promise<{ games: { id: string; players: number }[] }>)
+        .then((r) => r.json() as Promise<{ games: { id: string; players: number; packaged?: PackageEntry }[] }>)
         .then(({ games }) => {
+          // Uploaded games the server lists: onto the shelf (and into the catalog), once.
+          const fresh = games.flatMap((g) => (g.packaged && !this.games.some((x) => x.id === g.id) ? [g.packaged] : []));
+          if (fresh.length) {
+            this.addGames(fresh.map((e) => ({ ...e.meta, id: e.id })));
+            this.onListed?.(fresh);
+          }
           let total = 0;
           for (const g of games) {
             total += g.players;

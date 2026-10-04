@@ -30,6 +30,10 @@ export class AccountCorner {
   onProfile: (() => void) | null = null;
   /** "Your look" in the menu: open the locker. */
   onLocker: (() => void) | null = null;
+  /** "Your games" in the menu (an uploader's): open their games. */
+  onGames: (() => void) | null = null;
+  /** May upload games to this server (asked once signed in). */
+  uploader = false;
   private http: string | null = null;
   private menuOpen = false;
 
@@ -41,6 +45,11 @@ export class AccountCorner {
     document.addEventListener('pointerdown', (e) => {
       if (this.menuOpen && !this.root.contains(e.target as Node)) this.toggleMenu(false);
     });
+  }
+
+  /** The game server it asks (its `https://` address), once known. */
+  get server(): string | null {
+    return this.http;
   }
 
   /** Ask this game server (its `https://` address) who's signed in: once per server. */
@@ -64,7 +73,17 @@ export class AccountCorner {
         this.loaded = true;
         this.render();
         this.onChange?.(me);
+        if (me) void this.askUploader(http);
       });
+  }
+
+  /** Whether they may upload games here: then "Your games" is in the menu. */
+  private async askUploader(http: string) {
+    const r = await fetch(`${http}/g/mine`, { credentials: 'include' }).catch(() => null);
+    const mine = r?.ok ? ((await r.json()) as { uploader?: boolean }) : null;
+    if (this.http !== http || !mine?.uploader) return;
+    this.uploader = true;
+    this.render();
   }
 
   /** The achievements they've earned in every game (signed in; null for a guest, or if it can't be had). */
@@ -147,6 +166,7 @@ export class AccountCorner {
       h('div.home-menu-head', {}, 'Signed in with Discord'),
       h('button.home-menu-item', { onclick: () => (this.toggleMenu(false), this.onLocker?.()) }, 'Your look'),
       h('button.home-menu-item', { onclick: () => (this.toggleMenu(false), this.onProfile?.()) }, 'Your achievements'),
+      this.uploader ? h('button.home-menu-item', { onclick: () => (this.toggleMenu(false), this.onGames?.()) }, 'Your games') : null,
       h('button.home-menu-item', { onclick: () => void this.signOut() }, 'Sign out'),
       remove,
     );

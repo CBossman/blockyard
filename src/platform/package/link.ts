@@ -87,3 +87,27 @@ export interface PackageEntry {
   /** Its client code's address (absolute). */
   client: string;
 }
+
+/** A game as its owners' page shows it (`GET /g/mine`). */
+export interface MyGame {
+  id: string;
+  title: string;
+  accent?: string;
+  cover?: string;
+  listed: boolean;
+  /** The version new rooms run (null: not hosted). */
+  current: string | null;
+  created: string;
+  owners: { id: string; name: string }[];
+  /** Newest first. */
+  versions: { version: string; built: string; by: string; title: string }[];
+  /** Its link on the site. */
+  play: string | null;
+}
+
+/** What `GET /g/mine` answers. */
+export interface MyGames {
+  uploader: boolean;
+  account: { id: string; name: string } | null;
+  games: MyGame[];
+}

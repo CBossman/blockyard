@@ -13,6 +13,7 @@ import type { GameHost, Who } from './game';
 import { PrivateStore, RoomCore, type RoomSpec } from './room';
 import type { FromRoom, RoomWorkerData, SmokeWorkerData, ToRoom } from './room-worker';
 import type { Store } from './store';
+import type { PackageEntry } from '../package/link';
 import type { GameLibrary } from './library';
 import { Uploads } from './uploads';
 
@@ -198,6 +199,13 @@ export function serve(o: ServeOptions): Promise<GameServer> {
   const limits = { ...LIMITS, ...o.limits };
   const rate = o.tickRate ?? 30;
   const defs = new Map([...(o.hidden ?? []), ...o.games].map((d) => [d.id, d]));
+  /** What a screen loads for a game from the library (its current version), to list and play it. */
+  const packagedEntry = (id: string): PackageEntry | undefined => {
+    const v = o.library?.current(id);
+    if (!v) return undefined;
+    const spec = o.library!.spec(v);
+    return { id, version: v.version, meta: { ...v.meta, id }, modules: spec.modules, client: spec.client };
+  };
   /** A game by id: compiled in, or the library's current version of it. */
   const defOf = (id: string): GameDefinition | undefined => defs.get(id) ?? (defs.has(id) ? undefined : o.library?.definition(id));
   const rooms = new Map<string, Room>();
@@ -427,8 +435,8 @@ export function serve(o: ServeOptions): Promise<GameServer> {
           // Rooms of players' own, and how many are playing in them.
           rooms: own.length,
           playingOwn: own.reduce((n, r) => n + r.playing, 0),
-          // From the library: its version (a screen loads its client code from here: `GET /g/<id>`).
-          ...(defs.has(def.id) ? {} : { packaged: o.library?.record(def.id)?.current }),
+          // From the library: what a screen loads to list and play it (`PackageEntry`).
+          ...(defs.has(def.id) ? {} : { packaged: packagedEntry(def.id) }),
         };
       });
       res.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify({ games, rooms: running() }));

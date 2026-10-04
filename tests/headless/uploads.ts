@@ -9,8 +9,9 @@ import { CLOSE_UNKNOWN, serve } from '../../src/platform/host/server';
 import { decode, encode } from '../../src/platform/net/codec';
 import type { ClientCommand, ServerWelcome } from '../../src/platform/net/protocol';
 import { buildGame } from '../../src/platform/package/build';
-import type { PackageEntry } from '../../src/platform/package/link';
+import type { MyGames, PackageEntry } from '../../src/platform/package/link';
 import { zipFolder } from '../../src/platform/package/zip';
+
 import { check } from './_harness';
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -135,13 +136,22 @@ export default async function uploads() {
     const rec = await manage(annToken);
     check(rec.status === 200 && rec.body.record?.versions.length === 2 && rec.body.record.owners.join() === ann.id, `her record: ${JSON.stringify(rec.body.record?.versions.map((v) => v.version))}`);
     check((await manage(annToken, { listed: true })).body.record?.listed === true, 'listed');
-    const listed = (await (await fetch(`${base}/games`)).json()) as { games: { id: string; title: string; packaged?: string }[] };
+    const listed = (await (await fetch(`${base}/games`)).json()) as { games: { id: string; title: string; packaged?: PackageEntry }[] };
     const sky = listed.games.find((g) => g.id === 'sky');
-    check(sky?.packaged === v2 && sky.title === 'Sky Obby II', `on /games: ${JSON.stringify(sky)}`);
+    check(sky?.packaged?.version === v2 && sky.title === 'Sky Obby II' && sky.packaged.meta.title === 'Sky Obby II' && sky.packaged.client.endsWith(`/g/sky/${v2}/client.js`), `on /games, with what a screen loads: ${JSON.stringify({ ...sky, packaged: sky?.packaged?.version })}`);
+    // Her games, as her page shows them; nobody else's.
+    const mine = (await (await fetch(`${base}/g/mine`, { headers: { Authorization: `Bearer ${annToken}` } })).json()) as MyGames;
+    check(mine.uploader && mine.games.length === 1 && mine.games[0].id === 'sky' && mine.games[0].versions[0].version === v2 && mine.games[0].versions[0].by === 'ann' && mine.games[0].owners[0].name === 'ann', `her games: ${JSON.stringify(mine.games.map((g) => [g.id, g.versions.length]))}`);
+    const cys = (await (await fetch(`${base}/g/mine`, { headers: { Authorization: `Bearer ${cyToken}` } })).json()) as MyGames;
+    check(!cys.uploader && cys.games.length === 0, "Cy's: none, and not an uploader");
+    // The site's pages may ask with her sign-in.
+    const pre = await fetch(`${base}/g/mine`, { headers: { Origin: SITE, Cookie: `session=${accounts.startSession(ann.id)}` } });
+    check(pre.ok && pre.headers.get('access-control-allow-origin') === SITE && pre.headers.get('access-control-allow-credentials') === 'true', 'credentialed CORS for the site');
     check((await manage(annToken, { current: v1 })).body.record?.current === v1, 'back to v1');
     check(((await (await fetch(`${base}/g/sky`)).json()) as PackageEntry).version === v1, 'GET /g/sky says v1');
     check((await manage(annToken, { current: 'ffffffffffff' })).status === 400, 'no such version');
-    check((await manage(annToken, { addOwner: bob.id })).body.record?.owners.includes(bob.id) === true, 'Bob added');
+    check((await manage(annToken, { addOwner: 'nobody-here' })).status === 400, 'no such account');
+    check((await manage(annToken, { addOwner: 'Bob' })).body.record?.owners.includes(bob.id) === true, 'Bob added (by name)');
     const bobs = await post('/g?id=sky', zipFolder(two), bobToken);
     check(bobs.status === 201 && bobs.body.version === v2, `now Bob may upload it (the same folder: the same version, ${String(bobs.body.version)})`);
 

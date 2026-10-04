@@ -70,6 +70,9 @@ export interface LibraryOptions {
   log?(line: string): void;
 }
 
+/** Ids no game may have: the server's own routes (`/g/mine`). */
+const RESERVED = new Set(['mine']);
+
 /** Versions kept of each game (with their files): older ones go. */
 export const KEEP_VERSIONS = 10;
 
@@ -233,6 +236,7 @@ export class GameLibrary {
       throw err;
     }
     const { id, version } = built;
+    if (RESERVED.has(id)) return { ok: false, status: 409, problems: [`"${id}" is a word the server keeps for itself: give your game another id`] };
     if (this.o.taken(id)) return { ok: false, status: 409, problems: [`"${id}" is a game this server has built in: give yours another id`] };
     if (!this.mayManage(id, by)) return { ok: false, status: 403, problems: [`"${id}" is someone else's game: ask one of its owners to add you, or give yours another id`] };
     const smoke = await this.o.smoke(built.dir);

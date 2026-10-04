@@ -4,6 +4,7 @@
 //   GET    /g/<id>/<version>/client.js     a kept version's client code (and its .map, game.json, workers/)
 //   GET    /g/<id>/assets/<file>           its files
 //   POST   /g[?id=<id>]                    upload a zip of a game's folder: built, smoke-tested, made current
+//   GET    /g/mine                         the games one may manage, and whether one may upload
 //   GET    /g/<id>/manage                  its record (owners only)
 //   POST   /g/<id>/manage                  `{ current?, listed?, addOwner?, removeOwner? }` (owners only)
 //   DELETE /g/<id>                         stop hosting it (its files and record stay)
@@ -17,7 +18,7 @@
 import { readFile } from 'node:fs/promises';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { extname, join } from 'node:path';
-import { packagePath, type PackageEntry } from '../package/link';
+import { packagePath, type MyGame, type MyGames, type PackageEntry } from '../package/link';
 import type { Account, Accounts } from './accounts';
 import type { Auth } from './auth';
 import type { GameLibrary, GameRecord } from './library';
@@ -69,8 +70,9 @@ export class Uploads {
   handle(req: IncomingMessage, res: ServerResponse, path: string): boolean {
     if (path !== '/g' && !path.startsWith('/g/') && path !== '/uploads' && path !== '/uploads/token') return false;
     const method = req.method ?? 'GET';
+    // The site's pages ask with the player's sign-in (their games, uploads, changes).
+    this.cors(req, res);
     if (method !== 'GET' && method !== 'HEAD') {
-      this.cors(req, res);
       if (method === 'OPTIONS') {
         res.writeHead(204, { 'Access-Control-Allow-Methods': 'GET, POST, DELETE', 'Access-Control-Allow-Headers': 'Authorization, Content-Type', 'Access-Control-Max-Age': '600' }).end();
         return true;
@@ -87,6 +89,7 @@ export class Uploads {
     if (path === '/uploads') return method === 'GET' ? this.tokenPage(res) : this.json(res, 405, { error: 'GET it' });
     if (path === '/uploads/token') return method === 'POST' ? this.newToken(req, res) : this.json(res, 405, { error: 'POST it' });
     if (path === '/g') return method === 'POST' ? this.upload(req, res, new URL(req.url ?? '/', 'http://server').searchParams.get('id') ?? undefined) : this.json(res, 405, { error: 'POST a zip' });
+    if (path === '/g/mine') return method === 'GET' ? this.mine(req, res) : this.json(res, 405, { error: 'GET it' });
     const parts = path.split('/').slice(2);
     const id = parts[0];
     if (parts.length === 1 && method === 'DELETE') return this.manage(req, res, id, { current: null });
@@ -168,12 +171,46 @@ export class Uploads {
       const problems: string[] = [];
       if (change.current !== undefined && !lib.setCurrent(id, change.current)) problems.push(`no version "${change.current}"`);
       if (change.listed !== undefined && !lib.setListed(id, !!change.listed)) problems.push('not listed');
-      if (change.addOwner && !lib.setOwner(id, change.addOwner, true)) problems.push(`can't add ${change.addOwner}`);
+      if (change.addOwner) {
+        // By account id or by name.
+        const owner = this.o.accounts?.get(change.addOwner) ?? this.o.accounts?.byName(change.addOwner);
+        if (!owner) problems.push(`no account "${change.addOwner}"`);
+        else if (!lib.setOwner(id, owner.id, true)) problems.push(`can't add ${owner.name}`);
+      }
       if (change.removeOwner && !lib.setOwner(id, change.removeOwner, false)) problems.push(`can't remove ${change.removeOwner} (a game keeps an owner)`);
       if (problems.length) return this.json(res, 400, { error: problems.join('; '), record: lib.record(id) });
       this.o.log?.(`[uploads] ${id}: ${JSON.stringify(change)} by ${who.account?.name ?? who.by}`);
     }
     this.json(res, 200, { record: lib.record(id) satisfies GameRecord | undefined, entry: packagePath.entry(id) });
+  }
+
+  /** The games one may manage (all of them on a development server), and whether one may upload. */
+  private mine(req: IncomingMessage, res: ServerResponse) {
+    const who = this.who(req);
+    if (!who) return this.json(res, 401, { error: 'Sign in first' });
+    const lib = this.o.library;
+    const name = (id: string) => (id === 'local' ? 'this server' : id === 'dev' ? 'a guest' : (this.o.accounts?.get(id)?.name ?? 'someone gone'));
+    const games: MyGame[] = lib
+      .records()
+      .filter((r) => this.o.dev || r.owners.includes(who.by))
+      .map((r) => {
+        const latest = r.versions[r.versions.length - 1];
+        const shown = r.versions.find((v) => v.version === r.current)?.meta ?? latest?.meta;
+        return {
+          id: r.id,
+          title: shown?.title ?? r.id,
+          accent: shown?.accent,
+          cover: shown?.cover,
+          listed: r.listed,
+          current: r.current,
+          created: r.created,
+          owners: r.owners.map((id) => ({ id, name: name(id) })),
+          versions: [...r.versions].reverse().map((v) => ({ version: v.version, built: v.built, by: name(v.by), title: v.meta.title })),
+          play: this.o.sites[0] ? `${this.o.sites[0]}/?game=${r.id}` : null,
+        };
+      })
+      .sort((a, b) => (b.versions[0]?.built ?? '').localeCompare(a.versions[0]?.built ?? ''));
+    this.json(res, 200, { uploader: this.mayUpload(who), account: who.account ? { id: who.account.id, name: who.account.name } : null, games } satisfies MyGames);
   }
 
   private newToken(req: IncomingMessage, res: ServerResponse) {

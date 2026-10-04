@@ -308,6 +308,15 @@ export class Runtime {
     if (!address()) throw new Error('No game server to play on: open with ?server=ws://host:port, or build with VITE_GAME_SERVER.');
     // The home page at once, showing the game loading (it stays up when switching games).
     const title = carried?.title ?? new TitleScreen(ui, games.map((g) => g.meta));
+    // Uploaded games the server lists join the catalog (after the page's own), as the home page finds them.
+    title.onListed = (entries) => {
+      for (const e of entries) {
+        if (games.some((g) => g.meta.id === e.id)) continue;
+        const at = hidden.findIndex((g) => g.meta.id === e.id);
+        if (at >= 0) hidden.splice(at, 1);
+        games.push(entryOf(e));
+      }
+    };
     title.select(listed.meta.id);
     // Its client code loads while the connection opens (a server's own address names the game
     // only in its welcome).

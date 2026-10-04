@@ -1651,6 +1651,8 @@ For online play there are probes rather than tests: `tests/headless/_netprobe.ts
 
 A game doesn't have to be compiled into the platform. You can upload it to a game server, which builds it, checks it and hosts it at once, with no deploy; players' screens load its client code from that server (the design: `docs/PROPOSAL-UPLOADS.md`).
 
+On the site, an uploader signed in has **Your games** in the account menu: drop a game's folder (or a zip of it) to upload it, and manage their games there (list one on the home page or keep it to its link, go back to an earlier version, add owners by name, stop hosting it, make an upload token). Listed games join the home page's shelf after the built-in ones. From the command line:
+
 ```sh
 npm run game -- push src/games/my-game                              # to the local development server (npm run dev)
 npm run game -- push src/games/my-game --server https://play.blockyard.gg
@@ -1661,7 +1663,7 @@ npm run dev -- --package ../my-game                                 # host a fol
 
 On a development server anyone may upload. On any other you need to be on its list of uploaders (`UPLOADERS`: account ids or Discord ids) and to have an upload token: open `<server>/uploads` signed in, make one, and save it with `npm run game -- token byu_…` (kept in `~/.config/blockyard/token`; `--token` or `BLOCKYARD_TOKEN` also work). The game's id is first come, first served: whoever uploads it first owns it, and only its owners may upload new versions.
 
-An uploaded game is hosted but **not listed**: open it by its link (`?game=<id>`) until its owners list it. Each upload is a new version, made current for rooms that start from then on; a room that's running keeps the version it started with, and players joining it load that version's client code. The server keeps the last 10 versions; owners can go back to one, list or unlist the game, add owners, or stop hosting it (`GET`/`POST /g/<id>/manage`, `DELETE /g/<id>`; a page on the site comes later). Uploaded games are kept in `<data>/games`, so they outlast restarts and deploys.
+An uploaded game is hosted but **not listed**: open it by its link (`?game=<id>`) until its owners list it. Each upload is a new version, made current for rooms that start from then on; a room that's running keeps the version it started with, and players joining it load that version's client code. The server keeps the last 10 versions; owners can go back to one, list or unlist the game, add owners, or stop hosting it (on the site's Your games, or `GET /g/mine`, `GET`/`POST /g/<id>/manage`, `DELETE /g/<id>`). Uploaded games are kept in `<data>/games`, so they outlast restarts and deploys.
 
 The folder is the game exactly as it sits in `src/games/<id>/`. Building it:
 

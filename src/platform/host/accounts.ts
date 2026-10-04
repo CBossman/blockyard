@@ -150,6 +150,12 @@ export class Accounts {
     return { name };
   }
 
+  /** The account with this name (ignoring case), or null. */
+  byName(name: string): Account | null {
+    const row = this.db.prepare('SELECT id FROM accounts WHERE name_key = ?').get(name.trim().toLowerCase()) as { id: string } | undefined;
+    return row ? this.get(row.id) : null;
+  }
+
   /** A new session for an account: the token for the player's cookie. */
   startSession(account: string): string {
     const token = randomBytes(32).toString('base64url');
