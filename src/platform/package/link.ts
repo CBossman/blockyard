@@ -103,6 +103,11 @@ export interface MyGame {
   versions: { version: string; built: string; by: string; title: string }[];
   /** Its link on the site. */
   play: string | null;
+  /**
+   * Its current version stopped passing its smoke test after an update to the platform: not listed
+   * or played until it passes again (or a new version is uploaded). When, and what went wrong.
+   */
+  broken: { at: string; errors: string[] } | null;
 }
 
 /** What `GET /g/mine` answers. */

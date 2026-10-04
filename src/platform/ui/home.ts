@@ -252,8 +252,8 @@ export class TitleScreen {
   }
 
   /** Picked another game: show it chosen at once, while the switch happens behind. */
-  select(id: string) {
-    this.feature(id);
+  select(id: string, title?: string) {
+    this.feature(id, title);
     this.rooms.replaceChildren();
     this.hints.replaceChildren();
   }

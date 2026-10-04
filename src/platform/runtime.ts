@@ -317,7 +317,7 @@ export class Runtime {
         games.push(entryOf(e));
       }
     };
-    title.select(listed.meta.id);
+    title.select(listed.meta.id, listed.meta.title);
     // Its client code loads while the connection opens (a server's own address names the game
     // only in its welcome).
     let early = base ? listed.load() : null;
@@ -329,6 +329,15 @@ export class Runtime {
       try {
         link = await SocketLink.connect(address()!);
       } catch (err) {
+        // Turned away for good (no such game, or one an update broke): the home page says why, and
+        // another game may be picked (a fresh start, on the first page; switching games handles its own).
+        if (err instanceof Refused && !err.retry && !carried)
+          title.failed(err.message, (next) => {
+            const to = new URL(location.href);
+            to.searchParams.set('game', next);
+            for (const p of ['room', 'shard']) to.searchParams.delete(p);
+            location.assign(to);
+          });
         if (!(err instanceof Refused) || !err.retry) throw err;
         const next = await title.busy(err.message, wait);
         const entry = next === null ? null : find(next);
@@ -344,7 +353,7 @@ export class Runtime {
         to.searchParams.set('game', entry.meta.id);
         for (const p of ['room', 'shard']) to.searchParams.delete(p);
         history.replaceState(null, '', to);
-        title.select(entry.meta.id);
+        title.select(entry.meta.id, entry.meta.title);
         early = base ? entry.load() : null;
         early?.catch(() => {});
       }
@@ -1046,7 +1055,7 @@ export class Runtime {
       const carry = this.shutdown();
       Runtime.switchTo(id, room, this.canvas, this.ui, this.games, this.hidden, carry);
     }, 260);
-    this.title.select(id);
+    this.title.select(id, [...this.games, ...this.hidden].find((g) => g.meta.id === id)?.meta.title);
   }
 
   /** Start another game (or room) on the page the last one left (the home page stays up throughout). */
@@ -1062,7 +1071,7 @@ export class Runtime {
     const server = url.searchParams.get('server');
     if (server && Runtime.gameAddress(server)) url.searchParams.delete('server');
     history.replaceState(null, '', url);
-    carry.title.select(id);
+    carry.title.select(id, [...games, ...hidden].find((g) => g.meta.id === id)?.meta.title);
     Runtime.start(canvas, ui, games, hidden, carry).catch((err: unknown) => {
       console.error(err);
       carry.title.failed(err instanceof Error ? err.message : String(err), (next) => Runtime.switchTo(next, null, canvas, ui, games, hidden, carry));

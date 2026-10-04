@@ -1,7 +1,7 @@
 # Proposal: uploading games without a redeploy
 
-Status: **phases 1 to 3 built** (2026-10-04; see "Phase 1: what was found", "Phase 2: what was
-built" and "Phase 3: the site"). Scope agreed: uploads by the owner and trusted people only. Live editing, an in-game agent and sandboxing are out of scope
+Status: **all four phases built** (2026-10-04; see "Phase 1: what was found", "Phase 2: what was
+built", "Phase 3: the site" and "Phase 4: after platform updates"). Scope agreed: uploads by the owner and trusted people only. Live editing, an in-game agent and sandboxing are out of scope
 (see "Later").
 
 ## Why
@@ -184,7 +184,8 @@ through the packager.
    Obby (as a new id) to the live server.
 3. **The upload page.** On the site: upload a zip, see build errors, list or unlist, versions and
    rollback, restart rooms onto the new version, owners, tokens, room logs.
-4. **Platform changes.** Smoke tests on boot and the broken state; then the CI check. (Not built yet.)
+4. **Platform changes.** Smoke tests on boot and the broken state; then the CI check. (Built, but
+   the CI check: see "Phase 4".)
 
 ## Phase 1: what was found
 
@@ -258,6 +259,27 @@ build`, `--package <folder>[=<id>]` on any server, the screen's loader (`client/
   the site's pages, `mine` kept as an id no game may take.
 - Checked in a browser: signed in, the menu, the panel (and at phone width), an upload by zip and
   by folder, a refused one, listing (on the shelf a poll later), Play from the panel, a token.
+
+## Phase 4: after platform updates
+
+- **Each version's last smoke test is kept with the platform build it ran on** (`check` in
+  `library.json`). The build is a hash of the engine and the server's entry (the production bundle
+  names its chunks by content, so the entry changes with any of them); a development server is a
+  new build each start.
+- **On boot, games last checked on another build are smoke-tested again**, in the background, a
+  thread each, one at a time: only once per build (a machine that sleeps and wakes doesn't redo it).
+- **A game that fails is broken**: not on `/games` (so off the home page), its link turned away
+  ("This game stopped working with an update to Blockyard: its owners have been told", shown on
+  the home page, where a first visit used to show a misleading engine error for any refusal), and
+  its owners shown the errors in Your games with **Check again** (`POST /g/<id>/manage {recheck}`).
+  A new upload mends it (it's checked as it goes in).
+- **Errors name the game's own lines**: built games' source maps are linked, and the platform turns
+  source maps on where it runs them (`blockyard://<id>/server.ts:350:43`); the platform's own
+  frames are named by file only, no paths of the server's.
+- **Not built: the CI check** (fetching uploaded games' sources and type-checking them before a
+  deploy). It would need an admin's token to read every game's source, and would hold the
+  platform's deploys hostage to others' games; the boot recheck covers what matters (nothing
+  broken is played, owners know). Worth adding if uploaders multiply.
 
 ## Decisions to make
 

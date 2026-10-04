@@ -29,6 +29,18 @@ export interface VersionRecord {
   by: string;
   /** Its meta, as its server code defines it (from the smoke test). */
   meta: GameMeta;
+  /** Its last smoke test: on which platform build (`LibraryOptions.platform`), and how it went. */
+  check?: VersionCheck;
+}
+
+/** A version's smoke test against one build of the platform. */
+export interface VersionCheck {
+  platform: string;
+  ok: boolean;
+  /** When (ISO time). */
+  at: string;
+  /** What went wrong. */
+  errors?: string[];
 }
 
 /** A game in the library (`library.json`). */
@@ -67,6 +79,11 @@ export interface LibraryOptions {
   build(folder: string, out: string, id: string | undefined): Promise<BuiltGame>;
   /** Smoke-test a built version (its folder), in a thread of its own. */
   smoke(dir: string): Promise<SmokeResult>;
+  /**
+   * Which build of the platform this is (a hash of the server's code and the engine): a game's
+   * current version is smoke-tested again (`recheck`) when the platform it last passed on differs.
+   */
+  platform: string;
   log?(line: string): void;
 }
 
@@ -152,6 +169,43 @@ export class GameLibrary {
   definition(id: string): GameDefinition | undefined {
     const v = this.current(id);
     return v ? ({ ...v.meta, id } as GameDefinition) : undefined;
+  }
+
+  /**
+   * Why a game can't be played (its current version failed its smoke test on this platform: a
+   * platform update broke it), or null.
+   */
+  broken(id: string): VersionCheck | null {
+    const r = this.games.get(id);
+    const check = r?.versions.find((v) => v.version === r.current)?.check;
+    return check && !check.ok ? check : null;
+  }
+
+  /**
+   * Smoke-test hosted games' current versions again on this build of the platform: those last
+   * checked on another (`force`: all, or just `only`). A failing one is broken (not listed, not
+   * played, its owners told) until it passes again or a new version is uploaded. One at a time,
+   * like builds. What it found: each game checked, and whether it passed.
+   */
+  recheck({ force = false, only }: { force?: boolean; only?: string } = {}): Promise<{ id: string; ok: boolean }[]> {
+    const due = [...this.games.values()].filter((r) => r.current && (!only || r.id === only) && (force || r.versions.find((v) => v.version === r.current)?.check?.platform !== this.o.platform));
+    const run = this.queue.then(async () => {
+      const found: { id: string; ok: boolean }[] = [];
+      for (const r of due) {
+        const v = r.current ? this.version(r.id, r.current) : undefined;
+        const kept = r.versions.find((x) => x.version === r.current);
+        if (!v || !kept) continue;
+        const smoke = await this.o.smoke(v.dir).catch((err: unknown) => ({ ok: false, errors: [err instanceof Error ? err.message : String(err)], summary: 'the smoke test failed' }) as SmokeResult);
+        const ok = smoke.ok;
+        kept.check = { platform: this.o.platform, ok, at: new Date().toISOString(), ...(ok ? {} : { errors: smoke.errors.slice(0, 10) }) };
+        this.save(r);
+        found.push({ id: r.id, ok });
+        this.o.log?.(`[library] ${r.id}: version ${v.version} ${ok ? 'passes' : 'FAILS'} its smoke test on platform ${this.o.platform}${ok ? '' : `: ${smoke.errors[0]?.split('\n')[0]}`}`);
+      }
+      return found;
+    });
+    this.queue = run.catch(() => {});
+    return run;
   }
 
   /** Who may manage a game: its owners (anyone, for a game nobody has yet). */
@@ -250,7 +304,7 @@ export class GameLibrary {
     writeFileSync(join(home, 'source', `${version}.zip`), zip);
     const now = new Date().toISOString();
     const r: GameRecord = this.games.get(id) ?? { id, owners: [by], current: null, listed: false, versions: [], created: now };
-    r.versions = [...r.versions.filter((v) => v.version !== version), { version, built: now, by, meta: { ...smoke.meta, id } }];
+    r.versions = [...r.versions.filter((v) => v.version !== version), { version, built: now, by, meta: { ...smoke.meta, id }, check: { platform: this.o.platform, ok: true, at: now } }];
     r.current = version;
     // Older versions go (their code and source; files still in use stay).
     while (r.versions.length > KEEP_VERSIONS) {

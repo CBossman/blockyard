@@ -6,7 +6,7 @@
 //   POST   /g[?id=<id>]                    upload a zip of a game's folder: built, smoke-tested, made current
 //   GET    /g/mine                         the games one may manage, and whether one may upload
 //   GET    /g/<id>/manage                  its record (owners only)
-//   POST   /g/<id>/manage                  `{ current?, listed?, addOwner?, removeOwner? }` (owners only)
+//   POST   /g/<id>/manage                  `{ current?, listed?, addOwner?, removeOwner?, recheck? }` (owners only)
 //   DELETE /g/<id>                         stop hosting it (its files and record stay)
 //   GET    /uploads                        a page for making an upload token (for `npm run game -- push`)
 //   POST   /uploads/token                  a new upload token
@@ -167,6 +167,11 @@ export class Uploads {
     const record = lib.record(id);
     if (!record) return this.json(res, 404, { error: `No game "${id}" here` });
     if (!this.o.dev && !record.owners.includes(who.by)) return this.json(res, 403, { error: `"${id}" isn't yours` });
+    if (change?.recheck) {
+      // Smoke-test its current version again now (after a fix to the platform, say).
+      void lib.recheck({ force: true, only: id }).then(() => this.json(res, 200, { record: lib.record(id), broken: lib.broken(id) }));
+      return;
+    }
     if (change) {
       const problems: string[] = [];
       if (change.current !== undefined && !lib.setCurrent(id, change.current)) problems.push(`no version "${change.current}"`);
@@ -207,6 +212,7 @@ export class Uploads {
           owners: r.owners.map((id) => ({ id, name: name(id) })),
           versions: [...r.versions].reverse().map((v) => ({ version: v.version, built: v.built, by: name(v.by), title: v.meta.title })),
           play: this.o.sites[0] ? `${this.o.sites[0]}/?game=${r.id}` : null,
+          broken: ((b) => (b ? { at: b.at, errors: b.errors ?? [] } : null))(lib.broken(r.id)),
         };
       })
       .sort((a, b) => (b.versions[0]?.built ?? '').localeCompare(a.versions[0]?.built ?? ''));
@@ -267,6 +273,8 @@ interface Change {
   listed?: boolean;
   addOwner?: string;
   removeOwner?: string;
+  /** Smoke-test its current version again now. */
+  recheck?: boolean;
 }
 
 /** A request's body, or null if it's longer than `limit`. */

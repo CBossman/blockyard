@@ -57,7 +57,7 @@ export default async function uploads() {
   const startWorker = (workerData: unknown) => new Worker(resolve('scripts/room-worker-dev.mjs'), { workerData });
   const libraryAt = join(dir, 'games');
   const open = () =>
-    GameLibrary.open({ root: libraryAt, publicUrl, taken: (id) => id === 'obby', build: (folder, out, id) => buildGame(folder, { out, id }), smoke: smokeInThread(startWorker as (d: SmokeWorkerData) => Worker, wasm, publicUrl) });
+    GameLibrary.open({ root: libraryAt, publicUrl, platform: 'test', taken: (id) => id === 'obby', build: (folder, out, id) => buildGame(folder, { out, id }), smoke: smokeInThread(startWorker as (d: SmokeWorkerData) => Worker, wasm, publicUrl) });
   const library = open();
   const logs: string[] = [];
   // Ann by her account's id, Bob by his Discord id; Cy isn't an uploader.

@@ -264,7 +264,9 @@ async function bundle(b: Build, side: Side, entry: string): Promise<{ code: stri
       // What Vite gives a game's code (debugging hooks behind `import.meta.env.DEV`).
       define: { 'import.meta.env': JSON.stringify(env), ...Object.fromEntries(Object.entries(env).map(([k, v]) => [`import.meta.env.${k}`, JSON.stringify(v)])) },
       outfile: join(root, `${basename(entry, extname(entry))}.js`),
-      sourcemap: side === 'meta' ? false : 'external',
+      // Linked: errors in a room name the game's own files and lines (the platform turns source
+      // maps on where it runs built games), and so do a browser's tools.
+      sourcemap: side === 'meta' ? false : 'linked',
       sourcesContent: true,
       sourceRoot: `blockyard://${id}/`,
       logLevel: 'silent',

@@ -11,8 +11,10 @@
 //
 // It reaches the games only through their server registry (src/games/server.ts): their shared
 // definitions and rules. No game's client code, and nothing of the browser's, comes in here.
+import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, renameSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { devGames, games } from './games/server';
 import type { GameDefinition } from './platform/api/types';
 import { Accounts } from './platform/host/accounts';
@@ -73,6 +75,7 @@ export async function main(args: string[], worker?: ServeOptions['worker'], mode
   const library = GameLibrary.open({
     root: join(data, 'games'),
     publicUrl,
+    platform: platformBuild(wasm, dev),
     taken: (id) => known.some((g) => g.id === id),
     // The packager (and esbuild) load only when something's built.
     build: async (folder, out, id) => (await import('./platform/package/build')).buildGame(folder, { out, id, dev }),
@@ -109,7 +112,29 @@ export async function main(args: string[], worker?: ServeOptions['worker'], mode
   const how = dev ? ' (development mode: cheats, development games, __game.dev)' : cheats ? ' (cheats on)' : '';
   console.log(`serving ${defs.map((d) => d.id).join(', ')} on port ${server.port}${how}; kept in ${defs.length === 1 && flag('db') ? flag('db') : `${data}/`}`);
   if (!dev) for (const d of defs) console.log(`  ${d.id.padEnd(12)} http://localhost:5173/?server=ws://localhost:${server.port}&game=${d.id}`);
+  // Uploaded games last checked on another build of the platform are smoke-tested again (in the
+  // background, a thread each, one at a time): one a platform update broke is marked broken.
+  void library.recheck().then((found) => {
+    const failed = found.filter((f) => !f.ok);
+    if (found.length) console.log(`[library] checked ${found.length} uploaded ${found.length === 1 ? 'game' : 'games'} on this platform: ${failed.length ? `${failed.map((f) => f.id).join(', ')} broken` : 'all pass'}`);
+  });
   return server;
+}
+
+/**
+ * Which build of the platform this is: its engine and its code (the production bundle names its
+ * chunks by their contents, so its entry's own text changes with any of them). A development
+ * server is a new one each start.
+ */
+function platformBuild(wasm: Uint8Array, dev: boolean): string {
+  if (dev) return `dev-${Date.now().toString(36)}`;
+  const hash = createHash('sha256').update(wasm);
+  try {
+    hash.update(readFileSync(fileURLToPath(import.meta.url)));
+  } catch {
+    // not a file we can read: the engine alone
+  }
+  return hash.digest('hex').slice(0, 12);
 }
 
 function fail(message: string): never {

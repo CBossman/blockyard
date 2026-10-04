@@ -1,3 +1,4 @@
+import { Refused } from './platform/client/link';
 import { Runtime } from './platform/runtime';
 import { devGames, games } from './games/browser';
 
@@ -13,6 +14,8 @@ if (import.meta.env.DEV) Runtime.onStart = (rt) => ((window as unknown as { __ga
   .then((hidden) => Runtime.start(canvas, ui, games, hidden))
   .catch((err: unknown) => {
     console.error(err);
+    // Turned away by the server: the home page has said why.
+    if (err instanceof Refused) return;
     const box = document.createElement('div');
     box.className = 'screen';
     const msg = document.createElement('div');

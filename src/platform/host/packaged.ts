@@ -40,6 +40,8 @@ let imports = 0;
  */
 export async function loadPackaged(dir: string, publicUrl: string, { fresh = false } = {}): Promise<GameDefinition> {
   linkServer(publicUrl);
+  // Its errors name its own files and lines (blockyard://<id>/server.ts:12), from its source map.
+  process.setSourceMapsEnabled(true);
   const manifest = readManifest(dir);
   // `fresh`: a module of its own (state, files' addresses), not the one this thread has cached.
   const url = pathToFileURL(join(dir, 'server.js')).href + (fresh ? `?fresh=${++imports}` : '');
@@ -130,4 +132,16 @@ export async function smokeTest(dir: string, wasm: BufferSource | WebAssembly.Mo
   return { ok: errors.length === 0, errors, summary: `${def.id} ran ${seconds} s with a player (${sent} messages sent)`, meta: metaOf(def) };
 }
 
-const describe = (err: unknown) => (err instanceof Error ? (err.stack ?? err.message) : String(err));
+/**
+ * An error as a game's owners see it: its stack, its frames in the platform named by file only (no
+ * paths of this machine's), a few of them.
+ */
+const describe = (err: unknown) => {
+  const text = err instanceof Error ? (err.stack ?? err.message) : String(err);
+  return text
+    .replace(/\?fresh=\d+/g, '')
+    .replace(/(?:file:\/\/)?(?<![:/\w])(?:\/[^\s/():]+)+\/([^\s/():]+)/g, '$1')
+    .split('\n')
+    .slice(0, 8)
+    .join('\n');
+};

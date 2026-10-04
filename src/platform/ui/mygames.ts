@@ -117,7 +117,7 @@ export class MyGamesPanel {
     const hosted = g.current !== null;
     const cover = h('span.profile-cover.mygames-cover');
     if (g.cover) cover.style.backgroundImage = `url("${g.cover}")`;
-    const state = !hosted ? 'Not hosted' : g.listed ? 'On the home page' : 'Link only';
+    const state = !hosted ? 'Not hosted' : g.broken ? 'Broken by an update' : g.listed ? 'On the home page' : 'Link only';
     const current = g.versions.find((v) => v.version === g.current);
     const open = h('a.mygames-button', { href: g.play ?? `?game=${g.id}`, onclick: (e: MouseEvent) => (e.preventDefault(), this.close(), this.onOpen?.(g.id)) }, 'Play');
     const list = h('button.mygames-button', { onclick: () => void this.change(g.id, { listed: !g.listed }) }, g.listed ? 'Unlist' : 'List on the home page');
@@ -173,12 +173,30 @@ export class MyGamesPanel {
         {},
         cover,
         h('div.profile-game-title', {}, g.title),
-        h(`span.mygames-state.${hosted ? (g.listed ? 'listed' : 'link') : 'off'}`, {}, state),
+        h(`span.mygames-state.${!hosted ? 'off' : g.broken ? 'broken' : g.listed ? 'listed' : 'link'}`, {}, state),
         h('div.mygames-sub', {}, h('code', {}, g.id), current ? ` · version ${current.version}, ${ago(current.built)}` : ''),
       ),
-      h('div.mygames-actions', {}, hosted ? open : null, hosted ? copy : null, hosted ? list : null, host),
+      g.broken && hosted ? this.brokenNote(g) : null,
+      h('div.mygames-actions', {}, hosted && !g.broken ? open : null, hosted ? copy : null, hosted ? list : null, host),
       versions,
       owners,
+    );
+  }
+
+  /** A game an update to the platform broke: what went wrong, and checking it again. */
+  private brokenNote(g: MyGame): HTMLElement {
+    const again = h('button.mygames-button.small', {}, 'Check again') as HTMLButtonElement;
+    again.onclick = () => {
+      again.disabled = true;
+      again.textContent = 'Checking…';
+      void this.change(g.id, { recheck: true });
+    };
+    return h(
+      'div.mygames-result.error',
+      {},
+      h('div', {}, `It stopped passing its smoke test after an update to Blockyard (${ago(g.broken!.at)}), so it isn't played or listed. Upload a fixed version, or check again after the next update.`),
+      h('ul.mygames-problems', {}, ...g.broken!.errors.slice(0, 3).map((e) => h('li', {}, e.split('\n').slice(0, 4).join('\n')))),
+      h('div.mygames-actions', {}, again),
     );
   }
 

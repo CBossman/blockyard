@@ -339,6 +339,8 @@ export function serve(o: ServeOptions): Promise<GameServer> {
   function roomFor(req: IncomingMessage, address: string): Room | { code: number; reason: string } {
     const url = new URL(req.url ?? '/', 'http://server');
     const parts = url.pathname.split('/').filter(Boolean);
+    // An uploaded game a platform update broke: turned away, saying so.
+    if (parts.length && !defs.has(parts[0]) && o.library?.broken(parts[0])) return { code: CLOSE_UNKNOWN, reason: 'This game stopped working with an update to Blockyard: its owners have been told' };
     const def = parts.length ? defOf(parts[0]) : o.games.length === 1 ? o.games[0] : undefined;
     const code = parts[1];
     // Rooms of players' own need threads of their own (the games' module-level state).
@@ -419,7 +421,7 @@ export function serve(o: ServeOptions): Promise<GameServer> {
       res.writeHead(200, { 'Content-Type': 'text/plain' }).end('ok');
     } else if (path === '/games' || path === '/') {
       // The library's listed games come after the ones compiled in.
-      const listed = (o.library?.records() ?? []).filter((r) => r.listed && r.current && !defs.has(r.id)).flatMap((r) => defOf(r.id) ?? []);
+      const listed = (o.library?.records() ?? []).filter((r) => r.listed && r.current && !defs.has(r.id) && !o.library!.broken(r.id)).flatMap((r) => defOf(r.id) ?? []);
       const games = [...o.games, ...listed].map((def) => {
         // The public game, in all its copies running.
         const pub = [...rooms.values()].filter((r) => r.def.id === def.id && !r.own && r.link);
