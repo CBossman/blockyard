@@ -1,4 +1,5 @@
 import { defineMeta } from '@platform';
+import cover from './cover.webp?url';
 
 /**
  * Siege Night: a team of operators keeps a VIP alive in a military base through five nights until extraction.
@@ -9,6 +10,7 @@ export default defineMeta({
   title: 'Siege Night',
   tagline: 'Keep the VIP alive until extraction',
   accent: '#d9a441',
+  cover,
   instances: true,
   controls: [
     ['LMB / RMB', 'fire / aim · hold LMB at your own wall to take it down'],
