@@ -26,7 +26,7 @@ kill_timeout = "10s"
   # comma-separated; https://play.blockyard.gg/uploads tells a signed-in account its id). Uploaded
   # games are kept on the volume, in /data/games.
   PUBLIC_URL = "https://play.blockyard.gg"
-  UPLOADERS = "87198861512146944"
+  UPLOADERS = "87198861512146944,112164261760876544"
 
 [[mounts]]
   source = "data"
