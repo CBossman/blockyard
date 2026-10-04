@@ -66,11 +66,14 @@ export class Auth {
     return this.o.dev && /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
   }
 
-  /** Who's signed in, making this request (a WebSocket upgrade, say): only for a page on the site. */
-  who(req: IncomingMessage): Account | null {
+  /**
+   * Who's signed in, making this request (a WebSocket upgrade, say): only for a page on the site
+   * (or at `alsoFrom`: the game server's own pages).
+   */
+  who(req: IncomingMessage, alsoFrom?: string): Account | null {
     const origin = req.headers.origin;
     // (A browser always says where a WebSocket comes from; a page elsewhere doesn't get to be them.)
-    if (origin !== undefined && !this.allowed(origin)) return null;
+    if (origin !== undefined && !this.allowed(origin) && origin !== alsoFrom) return null;
     return this.o.accounts.session(cookies(req).get(sessionCookie(req)));
   }
 

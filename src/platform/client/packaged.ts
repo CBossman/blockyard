@@ -24,16 +24,26 @@ export function webOrigin(socket: string): string {
 }
 
 /**
- * The built game `id` on the game server at `origin` (its web address), as a catalog entry; null
- * if it hosts no such built game.
+ * The built game `id` on the game server at `origin` (its web address), as a catalog entry (its
+ * current version); null if it hosts no such built game.
  */
 export async function packagedEntry(origin: string, id: string): Promise<GameEntry | null> {
   const res = await fetch(origin + packagePath.entry(id));
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`The game server couldn't say what "${id}" is (${res.status})`);
-  const entry = (await res.json()) as PackageEntry;
+  return entryOf((await res.json()) as PackageEntry);
+}
+
+/** The version of a built game a catalog entry loads (undefined: a game compiled into the page). */
+export function packagedVersion(entry: GameEntry | null | undefined): string | undefined {
+  return entry ? versions.get(entry) : undefined;
+}
+const versions = new WeakMap<GameEntry, string>();
+
+/** A catalog entry that loads one version of a built game. */
+export function entryOf(entry: PackageEntry): GameEntry {
   const meta = { ...entry.meta, id: entry.id };
-  return {
+  const out: GameEntry = {
     meta,
     async load(): Promise<ClientGame> {
       await link(entry.modules);
@@ -44,6 +54,8 @@ export async function packagedEntry(origin: string, id: string): Promise<GameEnt
       return game.shared.id === entry.id ? game : { ...game, shared: { ...game.shared, id: entry.id } };
     },
   };
+  versions.set(out, entry.version);
+  return out;
 }
 
 /** Hand built games the modules they import. */

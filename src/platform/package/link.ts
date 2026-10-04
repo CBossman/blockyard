@@ -1,8 +1,19 @@
 // How a built game (see ./build.ts) meets the platform that runs it: the packager turns each
 // `@platform…` import into a read of `globalThis.__blockyard.modules`, which the server's room
 // (host/packaged.ts) and the player's screen (client/packaged.ts) fill before importing it.
-// Nothing here imports anything but types: both sides and the packager use it.
+// Nothing here imports anything but types (no bundler, no Node): the packager, the server (its
+// rooms' threads too) and screens all use it.
 import type { GameMeta } from '../api/types';
+
+/** Why a folder can't be built: its problems, one per line (see ./build.ts). */
+export class BuildError extends Error {
+  constructor(readonly problems: string[]) {
+    super(problems.join('\n'));
+  }
+}
+
+/** Ids are a URL's path segment and a file name: lowercase letters, digits and dashes. */
+export const GAME_ID = /^[a-z][a-z0-9-]{1,31}$/;
 
 /** The global the platform hands built games its modules through. */
 export const GLOBAL = '__blockyard';

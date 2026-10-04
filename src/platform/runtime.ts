@@ -53,7 +53,7 @@ import { sanitizeGameMessage } from './net/validate';
 import { clipFrame, type ClipFrame } from './sim/entities';
 import { Inventory as BlockPicker } from './ui/screens';
 import { cosmeticCatalog } from './cosmetics';
-import { packagedEntry, webOrigin } from './client/packaged';
+import { entryOf, packagedEntry, packagedVersion, webOrigin } from './client/packaged';
 import { TitleScreen } from './ui/home';
 import { PauseMenu } from './ui/pause';
 import { blockIcon } from './ui/icons';
@@ -351,7 +351,17 @@ export class Runtime {
     }
     let game: ClientGame;
     try {
-      const entry = find(link.welcome.game) ?? (await fetchPackaged(webOrigin(link.url), link.welcome.game));
+      const w = link.welcome;
+      let entry = find(w.game) ?? (await fetchPackaged(webOrigin(link.url), w.game));
+      // A built game's room runs the version it started with: its client code, whatever's current.
+      if (w.package && packagedVersion(entry) !== w.package.version) {
+        const meta = entry?.meta ?? { id: w.game, title: w.game };
+        const pinned = entryOf({ id: w.game, version: w.package.version, meta, modules: w.package.modules, client: w.package.client });
+        const at = hidden.findIndex((g) => g.meta.id === w.game);
+        if (at >= 0) hidden[at] = pinned;
+        else hidden.push(pinned);
+        entry = pinned;
+      }
       if (!entry) throw new Error(`The server is running "${link.welcome.game}", which this client doesn't have.`);
       game = await (entry === listed && early ? early : entry.load());
     } catch (err) {

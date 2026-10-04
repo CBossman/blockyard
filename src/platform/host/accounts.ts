@@ -60,6 +60,12 @@ const SETUP = `
     at TEXT NOT NULL DEFAULT (datetime('now')),
     PRIMARY KEY (account, game, id)
   );
+  CREATE TABLE IF NOT EXISTS upload_tokens (
+    hash TEXT PRIMARY KEY,
+    account TEXT NOT NULL REFERENCES accounts (id) ON DELETE CASCADE,
+    created TEXT NOT NULL DEFAULT (datetime('now')),
+    used TEXT
+  );
 `;
 
 /** How long a sign-in lasts (seconds). */
@@ -165,6 +171,30 @@ export class Accounts {
 
   endSession(token: string) {
     this.db.prepare('DELETE FROM sessions WHERE hash = ?').run(hash(token));
+  }
+
+  /**
+   * A new upload token for an account (games uploaded from the command line, see host/library.ts):
+   * the token, shown once; only its hash is kept. It lasts until revoked or the account goes.
+   */
+  newUploadToken(account: string): string {
+    const token = `byu_${randomBytes(24).toString('base64url')}`;
+    this.db.prepare('INSERT INTO upload_tokens (hash, account) VALUES (?, ?)').run(hash(token), account);
+    return token;
+  }
+
+  /** Whose upload token this is (null: unknown or revoked). */
+  uploadToken(token: string | undefined): Account | null {
+    if (!token?.startsWith('byu_')) return null;
+    const row = this.db.prepare('SELECT account FROM upload_tokens WHERE hash = ?').get(hash(token)) as { account: string } | undefined;
+    if (!row) return null;
+    this.db.prepare(`UPDATE upload_tokens SET used = datetime('now') WHERE hash = ?`).run(hash(token));
+    return this.get(row.account);
+  }
+
+  /** Revoke all of an account's upload tokens: how many there were. */
+  revokeUploadTokens(account: string): number {
+    return Number(this.db.prepare('DELETE FROM upload_tokens WHERE account = ?').run(account).changes);
   }
 
   /** What an account wears: its avatar's code (null: none chosen yet) and the cosmetics it has on. */

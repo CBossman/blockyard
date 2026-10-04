@@ -1,7 +1,7 @@
 # Proposal: uploading games without a redeploy
 
-Status: **phase 1 built** (2026-10-04; see "Phase 1: what was found"). Scope agreed: uploads by
-the owner and trusted people only. Live editing, an in-game agent and sandboxing are out of scope
+Status: **phases 1 and 2 built** (2026-10-04; see "Phase 1: what was found" and "Phase 2: what was
+built"). Scope agreed: uploads by the owner and trusted people only. Live editing, an in-game agent and sandboxing are out of scope
 (see "Later").
 
 ## Why
@@ -213,6 +213,36 @@ build`, `--package <folder>[=<id>]` on any server, the screen's loader (`client/
 - The single-folder boundary rules are enforced while bundling (by what each side's bundle
   reaches), rather than by refactoring `check-boundaries.mjs`. Imports TypeScript drops (unused or
   type-only) aren't seen, which is harmless.
+
+## Phase 2: what was built
+
+- **The library** (`host/library.ts`): games on the volume as designed, a `library.json` each.
+  An upload is unpacked (`package/zip.ts`: no paths outside the folder, 4000 files and 200 MB at
+  most, hidden files and `node_modules` dropped), built in `<root>/.incoming/`, checked (not a
+  built-in id, not someone else's), smoke-tested in a thread of its own (a room's worker in smoke
+  mode, two minutes at most), then moved in and made current. One build at a time. The last 10
+  versions are kept.
+- **The server's main thread never runs an uploaded game's code**: it knows a game by the meta
+  its smoke test reported (kept with the version). Only rooms' threads import the code.
+- **Rooms are pinned**: a room takes the current version when it starts and keeps it; the welcome
+  carries that version's client address and modules, and a screen loads that, whatever the
+  catalog says (checked in a browser: two tabs ran v1's code after v2 was uploaded).
+- **Routes** (`host/uploads.ts`): `POST /g` (the zip as the body, 50 MB at most), `GET`/`POST
+  /g/<id>/manage`, `DELETE /g/<id>`, the files by kept version, and `/uploads`, a page of the
+  server's own for making an upload token (a refused account is told its id, for `UPLOADERS`).
+  Credentialed CORS for the site's pages, ready for phase 3.
+- **Identity**: upload tokens (`byu_…`, hashed in `accounts.sqlite`), or the signed-in account;
+  `UPLOADERS` (account or Discord ids) says who may upload. A development server lets anyone.
+- **`npm run game -- push`** zips and uploads a folder; `token` saves a token. `--package` now
+  installs into the library the same way.
+- **Listed games** come after the built-in ones in `/games` (with `packaged: <version>`); showing
+  them on the home page is phase 3's.
+- **Found on the way**: builds weren't deterministic. esbuild printed asset modules' absolute
+  paths (the random staging folder, and where the server keeps things, in public client code),
+  and read the `package.json` and `tsconfig.json` above the folder (the module-interop flag
+  differed between a folder in the repo and one outside it). A game is now built from a copy of
+  its own with a `package.json` and the repo's compiler settings given directly: the same folder
+  builds the same version anywhere.
 
 ## Decisions to make
 

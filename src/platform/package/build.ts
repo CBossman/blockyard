@@ -13,10 +13,12 @@
 // only its folder's files and the public API, each side only its own part of it, and its client
 // code never its server code or the other way round. Runs in Node (the CLI, the game server).
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { basename, extname, join, relative, resolve, sep } from 'node:path';
 import * as esbuild from 'esbuild';
-import { CLIENT_MODULES, GLOBAL, nativeImport, SERVER_MODULES, WORKER_MODULES, type PackageManifest, type PlatformModule } from './link';
+import { skipped } from './zip';
+import { BuildError, CLIENT_MODULES, GAME_ID, GLOBAL, nativeImport, SERVER_MODULES, WORKER_MODULES, type PackageManifest, type PlatformModule } from './link';
 
 export interface BuildOptions {
   /** Where built games go: `<out>/<id>/…`. */
@@ -35,15 +37,7 @@ export interface BuiltGame {
   manifest: PackageManifest;
 }
 
-/** Why a folder can't be built: its problems, one per line. */
-export class BuildError extends Error {
-  constructor(readonly problems: string[]) {
-    super(problems.join('\n'));
-  }
-}
-
-/** Ids are a URL's path segment and a file name: lowercase letters, digits and dashes. */
-export const GAME_ID = /^[a-z][a-z0-9-]{1,31}$/;
+export { BuildError, GAME_ID };
 
 /** Which part of the game a bundle is: what it may import, and how it names its files. */
 type Side = 'meta' | 'server' | 'client' | 'worker';
@@ -70,8 +64,21 @@ interface Build {
 /** Build the game in `folder`; throws a `BuildError` listing what's wrong with it. */
 export async function buildGame(folder: string, o: BuildOptions): Promise<BuiltGame> {
   if (!existsSync(folder) || !statSync(folder).isDirectory()) throw new BuildError([`${folder}: not a folder`]);
-  // Its real path: esbuild names files by theirs (a temporary folder on macOS is under a link).
-  const root = realpathSync(resolve(folder));
+  // Built from a copy of its own, so nothing round the folder counts (a package.json or tsconfig.json
+  // above it would change esbuild's output): the same folder builds the same version anywhere.
+  const staging = mkdtempSync(join(tmpdir(), 'blockyard-build-'));
+  try {
+    const source = resolve(folder);
+    cpSync(source, join(staging, 'game'), { recursive: true, filter: (f) => f === source || !skipped(relative(source, f).split(sep).join('/')) });
+    writeFileSync(join(staging, 'package.json'), '{ "type": "module" }\n');
+    // Its real path: esbuild names files by theirs (a temporary folder on macOS is under a link).
+    return await buildFrom(realpathSync(join(staging, 'game')), o);
+  } finally {
+    rmSync(staging, { recursive: true, force: true });
+  }
+}
+
+async function buildFrom(root: string, o: BuildOptions): Promise<BuiltGame> {
   for (const part of ['meta.ts', 'shared.ts', 'server.ts', 'client.ts']) {
     if (!existsSync(join(root, part))) throw new BuildError([`${part}: missing (a game is meta.ts, shared.ts, server.ts and client.ts; see docs/PLATFORM.md)`]);
   }
@@ -181,14 +188,17 @@ async function bundle(b: Build, side: Side, entry: string): Promise<{ code: stri
           problems.push(`${rel(a.importer)}: '${a.path}' doesn't exist`);
           return { path: a.path, external: true };
         }
-        return { path: file, namespace: kind === 'url' ? 'asset' : 'text' };
+        // Named in the bundle by its place in the folder (esbuild prints a namespace's paths whole:
+        // an absolute one would differ build to build, and tell where the server keeps things).
+        return { path: rel(file), namespace: kind === 'url' ? 'asset' : 'text', pluginData: file };
       });
-      build.onLoad({ filter: /.*/, namespace: 'text' }, (a) => ({ contents: readFileSync(a.path, 'utf8'), loader: 'text' }));
+      build.onLoad({ filter: /.*/, namespace: 'text' }, (a) => ({ contents: readFileSync(a.pluginData as string, 'utf8'), loader: 'text' }));
       build.onLoad({ filter: /.*/, namespace: 'asset' }, (a) => {
-        const ext = extname(a.path).toLowerCase();
-        if (!SERVABLE.has(ext)) problems.push(`${rel(a.path)}: a ${ext || 'file without an extension'} can't be served (${[...SERVABLE].join(', ')})`);
-        const bytes = readFileSync(a.path);
-        const name = `${basename(a.path, extname(a.path))}-${hash(bytes).slice(0, 8)}${ext}`;
+        const file = a.pluginData as string;
+        const ext = extname(file).toLowerCase();
+        if (!SERVABLE.has(ext)) problems.push(`${rel(file)}: a ${ext || 'file without an extension'} can't be served (${[...SERVABLE].join(', ')})`);
+        const bytes = readFileSync(file);
+        const name = `${basename(file, extname(file))}-${hash(bytes).slice(0, 8)}${ext}`;
         b.assets.set(name, bytes);
         const path = `assets/${name}`;
         // A screen fetches it by its code's address (`/g/<id>/<version>/client.js`, its workers one
@@ -249,6 +259,8 @@ async function bundle(b: Build, side: Side, entry: string): Promise<{ code: stri
       target: 'es2022',
       // The default `neutral` main fields are none; a game has no packages anyway.
       mainFields: ['module', 'main'],
+      // What the repo's tsconfig.json says that changes the output (and no tsconfig.json is read).
+      tsconfigRaw: { compilerOptions: { target: 'ES2022', strict: true, useDefineForClassFields: true } },
       // What Vite gives a game's code (debugging hooks behind `import.meta.env.DEV`).
       define: { 'import.meta.env': JSON.stringify(env), ...Object.fromEntries(Object.entries(env).map(([k, v]) => [`import.meta.env.${k}`, JSON.stringify(v)])) },
       outfile: join(root, `${basename(entry, extname(entry))}.js`),

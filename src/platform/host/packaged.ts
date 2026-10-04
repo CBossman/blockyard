@@ -65,6 +65,8 @@ export interface SmokeResult {
   errors: string[];
   /** What happened, in a line. */
   summary: string;
+  /** The game's meta, as its server code defines it (once it has loaded). */
+  meta?: GameMeta;
 }
 
 /**
@@ -72,7 +74,7 @@ export interface SmokeResult {
  * (walks, looks round, clicks) for `seconds` of game time, and nothing throws. It imports the
  * game afresh (a module of its own), though in this thread.
  */
-export async function smokeTest(dir: string, wasm: BufferSource, { seconds = 10, publicUrl = 'http://localhost' } = {}): Promise<SmokeResult> {
+export async function smokeTest(dir: string, wasm: BufferSource | WebAssembly.Module, { seconds = 10, publicUrl = 'http://localhost' } = {}): Promise<SmokeResult> {
   const errors: string[] = [];
   let def: GameDefinition;
   try {
@@ -125,7 +127,7 @@ export async function smokeTest(dir: string, wasm: BufferSource, { seconds = 10,
     }
   }
   if (!sent && !errors.length) errors.push('the room sent its player nothing');
-  return { ok: errors.length === 0, errors, summary: `${def.id} ran ${seconds} s with a player (${sent} messages sent)` };
+  return { ok: errors.length === 0, errors, summary: `${def.id} ran ${seconds} s with a player (${sent} messages sent)`, meta: metaOf(def) };
 }
 
 const describe = (err: unknown) => (err instanceof Error ? (err.stack ?? err.message) : String(err));

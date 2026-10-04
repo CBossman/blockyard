@@ -25,10 +25,11 @@ export interface RoomSpec {
   /** Seconds between saves. */
   saveEvery: number;
   /**
-   * A built game's (not compiled into the server; see package/build.ts): the built version's
-   * folder, which the room's worker imports, and the server's public address its files are at.
+   * A built game's (not compiled into the server; see host/library.ts): the built version's
+   * folder, which the room's worker imports, the server's public address its files are at, and
+   * what its players' screens load (the welcome says: `ServerWelcome.package`).
    */
-  package?: { dir: string; publicUrl: string };
+  package?: { dir: string; publicUrl: string } & NonNullable<ServerWelcome['package']>;
 }
 
 /** What a room says back: text for a client's socket, how many are in it, log lines. */
@@ -135,6 +136,8 @@ export class RoomCore {
     this.ids.set(client, id);
     const sp = this.host.sim.spawn;
     const welcome: ServerWelcome = { t: 'welcome', game: this.def.id, room: this.spec.instance, ...(this.spec.shard ? { shard: this.spec.shard } : {}), seed: this.host.seed, player: null, spawn: { x: sp.x, y: sp.y, z: sp.z, yaw: sp.yaw }, tickRate: this.spec.tickRate };
+    const pkg = this.spec.package;
+    if (pkg) welcome.package = { version: pkg.version, client: pkg.client, modules: pkg.modules };
     if (this.host.blocks.keys.length) welcome.blocks = this.host.blocks.keys;
     this.out.send(client, encode(welcome));
     const frame = batch.frame ? quantize(batch.frame) : undefined;

@@ -1649,13 +1649,19 @@ For online play there are probes rather than tests: `tests/headless/_netprobe.ts
 
 ## Games outside the platform's build
 
-A game doesn't have to be compiled into the platform. A server can build one from its folder and host it, and players' screens load its client code from that server (the design: `docs/PROPOSAL-UPLOADS.md`; uploading is the next step).
+A game doesn't have to be compiled into the platform. You can upload it to a game server, which builds it, checks it and hosts it at once, with no deploy; players' screens load its client code from that server (the design: `docs/PROPOSAL-UPLOADS.md`).
 
 ```sh
-npm run game -- build src/games/obby --id obby-copy     # build and smoke-test it: data/games/obby-copy/<version>/
-npm run dev -- --package src/games/obby=obby-copy       # host it too: http://localhost:5173/?game=obby-copy
-npm run dev -- --package ../my-game                     # any folder, under its meta's id
+npm run game -- push src/games/my-game                              # to the local development server (npm run dev)
+npm run game -- push src/games/my-game --server https://play.blockyard.gg
+npm run game -- push src/games/obby --id obby-copy                  # under another id
+npm run game -- build src/games/my-game                             # build and smoke-test it here only: data/builds/
+npm run dev -- --package ../my-game                                 # host a folder when the server starts (=<id>: another id)
 ```
+
+On a development server anyone may upload. On any other you need to be on its list of uploaders (`UPLOADERS`: account ids or Discord ids) and to have an upload token: open `<server>/uploads` signed in, make one, and save it with `npm run game -- token byu_…` (kept in `~/.config/blockyard/token`; `--token` or `BLOCKYARD_TOKEN` also work). The game's id is first come, first served: whoever uploads it first owns it, and only its owners may upload new versions.
+
+An uploaded game is hosted but **not listed**: open it by its link (`?game=<id>`) until its owners list it. Each upload is a new version, made current for rooms that start from then on; a room that's running keeps the version it started with, and players joining it load that version's client code. The server keeps the last 10 versions; owners can go back to one, list or unlist the game, add owners, or stop hosting it (`GET`/`POST /g/<id>/manage`, `DELETE /g/<id>`; a page on the site comes later). Uploaded games are kept in `<data>/games`, so they outlast restarts and deploys.
 
 The folder is the game exactly as it sits in `src/games/<id>/`. Building it:
 
@@ -1664,9 +1670,12 @@ The folder is the game exactly as it sits in `src/games/<id>/`. Building it:
 - **Keeps its files** (`?url`: models, pictures, sounds) by content in `<id>/assets/`, and inlines `?raw` text.
 - **Bundles its client's Web Workers** (`new Worker(new URL('./x.ts', import.meta.url), { type: 'module' })`) on their own. The platform starts them, and they get `@platform`, `/art`, `/items` and `/client/math` too.
 - **Gives it Vite's `import.meta.env`**: `DEV` is true only when built for a development server.
-- **Smoke-tests it**: its server code loads as plain Node runs it, a room starts, a player joins and plays for a few seconds, and nothing may throw.
+- **Smoke-tests it**: its server code loads as plain Node runs it (on a server, in a thread of its own), a room starts, a player joins and plays for a few seconds, and nothing may throw.
+- **Ignores what's around the folder** (it builds from a copy): the same folder builds the same version anywhere.
 
-A server hosts a built game like any other, but not listed: open it by id (`?game=<id>`). It serves screens `/g/<id>` (what to load), the client code by version (`/g/<id>/<version>/client.js`) and the files (`/g/<id>/assets/…`), never the server code. The files the server code names by URL (models it sends players) are addressed by the server's public address (`PUBLIC_URL`, default `http://localhost:<port>`).
+A refused upload says why (each boundary broken, with the file; the smoke test's errors).
+
+The server serves screens `/g/<id>` (what to load), the client code by version (`/g/<id>/<version>/client.js`) and the files (`/g/<id>/assets/…`), never the server code. The files the server code names by URL (models it sends players) are addressed by the server's public address (`PUBLIC_URL`, default `http://localhost:<port>`). An uploaded game's code runs with the same access as a built-in game's, which is why only trusted people may upload.
 
 ## Architecture and the road to multiplayer
 

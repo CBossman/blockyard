@@ -2,7 +2,7 @@ import { parentPort, workerData } from 'node:worker_threads';
 import type { GameDefinition } from '../api/types';
 import type { ClientCommand } from '../net/protocol';
 import type { Who } from './game';
-import { loadPackaged } from './packaged';
+import { loadPackaged, smokeTest, type SmokeResult } from './packaged';
 import { PrivateStore, RoomCore, type RoomSpec } from './room';
 import { SqliteStore } from './sqlite';
 import type { Store } from './store';
@@ -16,6 +16,18 @@ export interface RoomWorkerData {
   storeFile: string | null;
   /** A room of a player's own, or a copy of a public one: shares the game's data, keeps no world or places. */
   own: boolean;
+}
+
+/** What a worker that smoke-tests a built game is started with (see host/library.ts). */
+export interface SmokeWorkerData {
+  smoke: { dir: string; publicUrl: string };
+  wasm: WebAssembly.Module | Uint8Array;
+}
+
+/** A smoke-testing worker's one message: how it went. */
+export interface SmokeWorkerResult {
+  t: 'smoked';
+  result: SmokeResult;
 }
 
 /** The server to a room's worker. */
@@ -40,6 +52,15 @@ export type FromRoom =
 export async function serveRoomWorker(find: (id: string, dev: boolean) => GameDefinition | undefined | Promise<GameDefinition | undefined>): Promise<void> {
   const port = parentPort;
   if (!port) throw new Error('serveRoomWorker: not in a worker thread');
+  // Or, not a room: a built game's smoke test, in a thread of its own (the server's main thread
+  // never runs a built game's code).
+  if ((workerData as Partial<SmokeWorkerData>).smoke) {
+    const { smoke, wasm } = workerData as SmokeWorkerData;
+    const result = await smokeTest(smoke.dir, wasm, { publicUrl: smoke.publicUrl }).catch((err: unknown) => ({ ok: false, errors: [err instanceof Error ? (err.stack ?? err.message) : String(err)], summary: 'the smoke test failed' }) satisfies SmokeResult);
+    port.postMessage({ t: 'smoked', result } satisfies SmokeWorkerResult);
+    port.close();
+    return;
+  }
   const data = workerData as RoomWorkerData;
   const post = (m: FromRoom) => port.postMessage(m);
   let core: RoomCore;

@@ -21,6 +21,12 @@ kill_timeout = "10s"
   # match with bots), so back to performance-1x, 2 GB, and its measured 14. Past it the home page
   # waits and tries again; scale the [[vm]] and this together.
   ROOMS = "14"
+  # Uploaded games (docs/PROPOSAL-UPLOADS.md): the address players reach this server at, which
+  # their files (models, pictures) are named by; and who may upload (account ids or Discord ids,
+  # comma-separated; https://play.blockyard.gg/uploads tells a signed-in account its id). Uploaded
+  # games are kept on the volume, in /data/games.
+  PUBLIC_URL = "https://play.blockyard.gg"
+  UPLOADERS = ""
 
 [[mounts]]
   source = "data"

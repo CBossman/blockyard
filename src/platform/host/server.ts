@@ -1,6 +1,4 @@
-import { readFile } from 'node:fs/promises';
-import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
-import { extname, join as joinPath } from 'node:path';
+import { createServer, type IncomingMessage } from 'node:http';
 import type { Worker } from 'node:worker_threads';
 import { WebSocketServer, type WebSocket } from 'ws';
 import type { GameDefinition } from '../api/types';
@@ -10,22 +8,13 @@ import { sanitizeCommand } from '../net/validate';
 import { ADOPTED, PLAYER_DATA } from '../sim/sim';
 import type { Account, Accounts } from './accounts';
 import { Auth, type DiscordApp } from './auth';
-import { cosmeticCatalog } from '../cosmetics';
+import { cosmeticCatalog, type Cosmetic } from '../cosmetics';
 import type { GameHost, Who } from './game';
 import { PrivateStore, RoomCore, type RoomSpec } from './room';
-import type { FromRoom, RoomWorkerData, ToRoom } from './room-worker';
+import type { FromRoom, RoomWorkerData, SmokeWorkerData, ToRoom } from './room-worker';
 import type { Store } from './store';
-import { packagePath, type PackageEntry, type PackageManifest } from '../package/link';
-import { metaOf } from './packaged';
-
-/** Built games a server hosts (see `ServeOptions.packages`). */
-export interface Packages {
-  /** Where built games are kept: `<root>/<id>/<version>/`, `<root>/<id>/assets/`. */
-  root: string;
-  /** The server's address as players reach it (`https://play.blockyard.gg`). */
-  publicUrl: string;
-  games: Map<string, { dir: string; manifest: PackageManifest }>;
-}
+import type { GameLibrary } from './library';
+import { Uploads } from './uploads';
 
 export interface ServeOptions {
   /**
@@ -41,11 +30,14 @@ export interface ServeOptions {
    */
   hidden?: GameDefinition[];
   /**
-   * The built games among them (see package/build.ts), by id: the version each runs. A room of one
-   * imports that version in its worker. The server serves their screens' code and files at
-   * `/g/<id>/…` (see `packagePath`), from `root`, and names those files by `publicUrl`.
+   * Games that aren't compiled in (uploaded, or built from a folder: see host/library.ts), hosted
+   * like the others (listed once their owners say so). A room of one runs the version that was
+   * current when it started, in its worker (`worker` is needed). The server serves their screens'
+   * code and files, and takes uploads (see host/uploads.ts).
    */
-  packages?: Packages;
+  library?: GameLibrary;
+  /** Accounts that may upload games (their ids or Discord ids; a development server: anyone). */
+  uploaders?: string[];
   port: number;
   /** The engine's compiled `.wasm`. */
   wasm: BufferSource;
@@ -69,7 +61,7 @@ export interface ServeOptions {
    * their own (and one room's crash or runaway loop stays in its thread). Without it, rooms run
    * in this thread, and each game has only its public room (tests).
    */
-  worker?: (data: RoomWorkerData) => Worker;
+  worker?: (data: RoomWorkerData | SmokeWorkerData) => Worker;
   /**
    * Where a game's world, players and data are kept: rooms in this thread use `store` (a
    * `SqliteStore` per game), and a room's worker opens `storeFile` itself. With a world in it, the
@@ -157,7 +149,8 @@ class Room {
   emptySince = 0;
 
   constructor(
-    readonly def: GameDefinition,
+    /** Its game (a game from the library: the version it last started with). */
+    public def: GameDefinition,
     /** `public`, `public-2` (a copy of it), or its code. */
     readonly instance: string,
     /** Who started it (a room of their own): their address. */
@@ -200,40 +193,35 @@ class Room {
  * batch that catches them up, then a batch per step. Also answers `GET /health` (for the hosting
  * platform) and `GET /games` (what's on, and how many are playing).
  */
-const CONTENT_TYPES: Record<string, string> = {
-  '.js': 'text/javascript; charset=utf-8',
-  '.map': 'application/json',
-  '.json': 'application/json',
-  '.glb': 'model/gltf-binary',
-  '.gltf': 'model/gltf+json',
-  '.bin': 'application/octet-stream',
-  '.png': 'image/png',
-  '.webp': 'image/webp',
-  '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg',
-  '.ogg': 'audio/ogg',
-  '.mp3': 'audio/mpeg',
-  '.wav': 'audio/wav',
-  '.css': 'text/css; charset=utf-8',
-  '.txt': 'text/plain; charset=utf-8',
-};
-
 export function serve(o: ServeOptions): Promise<GameServer> {
   const log = o.log ?? (() => {});
   const limits = { ...LIMITS, ...o.limits };
   const rate = o.tickRate ?? 30;
   const defs = new Map([...(o.hidden ?? []), ...o.games].map((d) => [d.id, d]));
+  /** A game by id: compiled in, or the library's current version of it. */
+  const defOf = (id: string): GameDefinition | undefined => defs.get(id) ?? (defs.has(id) ? undefined : o.library?.definition(id));
   const rooms = new Map<string, Room>();
   /** Stores opened in this thread: one per game, shared by its rooms here. */
   const stores = new Map<string, Store>();
   const perAddress = new Map<string, number>();
   const clock = () => performance.now() / 1000;
   let nextClient = 1;
+  /** Every cosmetic on the platform: the games' (the library's too) and the platform's own. Kept up to date in place. */
+  const catalog = new Map<string, Cosmetic>();
+  const refreshCatalog = () => {
+    const all = cosmeticCatalog([...o.games, ...(o.hidden ?? []), ...(o.library?.records().flatMap((r) => (r.current ? [defOf(r.id)!] : [])) ?? [])].filter(Boolean));
+    catalog.clear();
+    for (const [k, v] of all) catalog.set(k, v);
+  };
+  refreshCatalog();
   /** Signed-in connections: their account's id. */
   const accountOf = new Map<string, { id: string; ws: WebSocket }>();
   const auth = o.accounts
-    ? new Auth({ accounts: o.accounts, discord: o.discord, sites: o.sites ?? [], dev: o.dev ?? false, onDelete: (a) => forget(a), catalog: cosmeticCatalog([...o.games, ...(o.hidden ?? [])]), log })
+    ? new Auth({ accounts: o.accounts, discord: o.discord, sites: o.sites ?? [], dev: o.dev ?? false, onDelete: (a) => forget(a), catalog, log })
     : null;
+  const uploads = o.library ? new Uploads({ library: o.library, accounts: o.accounts, auth, uploaders: o.uploaders ?? [], sites: o.sites ?? [], dev: o.dev ?? false, log }) : null;
+  // A game from the library changed (a new version, say): its cosmetics are what may be worn.
+  if (o.library) o.library.onChange = () => refreshCatalog();
   // Compiled once: each room's worker gets the module (no compiling per room).
   let engine: WebAssembly.Module | null = null;
 
@@ -242,8 +230,12 @@ export function serve(o: ServeOptions): Promise<GameServer> {
   /** Start a room's game: in a worker of its own, or here. */
   function start(room: Room): RoomLink {
     const spec: RoomSpec = { game: room.def.id, instance: room.own ? room.instance : 'public', ...(room.shard > 1 ? { shard: room.shard } : {}), tickRate: rate, cheats: o.cheats ?? false, dev: o.dev ?? false, seed: o.seed, saveEvery: o.saveEvery ?? 30 };
-    const pkg = o.packages?.games.get(room.def.id);
-    if (pkg) spec.package = { dir: pkg.dir, publicUrl: o.packages!.publicUrl };
+    // A game from the library: the version current now, until this run ends.
+    const version = defs.has(room.def.id) ? undefined : o.library?.current(room.def.id);
+    if (version) {
+      room.def = defOf(room.def.id) ?? room.def;
+      spec.package = o.library!.spec(version);
+    }
     if (o.worker) return inWorker(room, spec, room.stopping ?? Promise.resolve());
     let shared = stores.get(room.def.id);
     if (!shared && o.store) stores.set(room.def.id, (shared = o.store(room.def.id)));
@@ -339,7 +331,7 @@ export function serve(o: ServeOptions): Promise<GameServer> {
   function roomFor(req: IncomingMessage, address: string): Room | { code: number; reason: string } {
     const url = new URL(req.url ?? '/', 'http://server');
     const parts = url.pathname.split('/').filter(Boolean);
-    const def = parts.length ? defs.get(parts[0]) : o.games.length === 1 ? o.games[0] : undefined;
+    const def = parts.length ? defOf(parts[0]) : o.games.length === 1 ? o.games[0] : undefined;
     const code = parts[1];
     // Rooms of players' own need threads of their own (the games' module-level state).
     if (!def || parts.length > 2 || (code !== undefined && (!def.instances || !o.worker || !ROOM_CODE.test(code)))) return { code: CLOSE_UNKNOWN, reason: 'No such game on this server' };
@@ -364,7 +356,7 @@ export function serve(o: ServeOptions): Promise<GameServer> {
    * else a new copy (a game with `instances`: a copy runs in a thread of its own); or why not.
    */
   function publicRoom(def: GameDefinition, asked: number): Room | { code: number; reason: string } {
-    const copies = [...rooms.values()].filter((r) => r.def === def && !r.own);
+    const copies = [...rooms.values()].filter((r) => r.def.id === def.id && !r.own);
     const open = copies.filter((r) => r.link && r.sockets.size < limits.playersPerGame);
     const pick = open.find((r) => r.shard === asked) ?? open.sort((a, b) => b.sockets.size - a.sockets.size || a.shard - b.shard)[0];
     if (pick) return pick;
@@ -418,10 +410,12 @@ export function serve(o: ServeOptions): Promise<GameServer> {
     if (path === '/health') {
       res.writeHead(200, { 'Content-Type': 'text/plain' }).end('ok');
     } else if (path === '/games' || path === '/') {
-      const games = o.games.map((def) => {
+      // The library's listed games come after the ones compiled in.
+      const listed = (o.library?.records() ?? []).filter((r) => r.listed && r.current && !defs.has(r.id)).flatMap((r) => defOf(r.id) ?? []);
+      const games = [...o.games, ...listed].map((def) => {
         // The public game, in all its copies running.
-        const pub = [...rooms.values()].filter((r) => r.def === def && !r.own && r.link);
-        const own = [...rooms.values()].filter((r) => r.def === def && r.own && r.link);
+        const pub = [...rooms.values()].filter((r) => r.def.id === def.id && !r.own && r.link);
+        const own = [...rooms.values()].filter((r) => r.def.id === def.id && r.own && r.link);
         return {
           id: def.id,
           title: def.title,
@@ -433,47 +427,18 @@ export function serve(o: ServeOptions): Promise<GameServer> {
           // Rooms of players' own, and how many are playing in them.
           rooms: own.length,
           playingOwn: own.reduce((n, r) => n + r.playing, 0),
+          // From the library: its version (a screen loads its client code from here: `GET /g/<id>`).
+          ...(defs.has(def.id) ? {} : { packaged: o.library?.record(def.id)?.current }),
         };
       });
       res.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify({ games, rooms: running() }));
-    } else if (path.startsWith('/g/') && o.packages) {
-      void servePackage(o.packages, path, res);
+    } else if (uploads?.handle(req, res, path)) {
+      // (the library's games: their code and files, uploads)
     } else {
       res.writeHead(404, { 'Content-Type': 'text/plain' }).end('not found');
     }
   });
 
-  /**
-   * A built game for players' screens: `/g/<id>` (what to load: `PackageEntry`), then its client
-   * code by version and its files by name. Never its server code.
-   */
-  async function servePackage(p: Packages, path: string, res: ServerResponse) {
-    const parts = path.split('/').slice(2);
-    const pkg = p.games.get(parts[0]);
-    const def = pkg && defs.get(parts[0]);
-    const missing = () => res.writeHead(404, { 'Content-Type': 'text/plain' }).end('not found');
-    if (!pkg || !def) return missing();
-    const { id, version } = pkg.manifest;
-    if (parts.length === 1) {
-      const entry: PackageEntry = { id, version, meta: metaOf(def), modules: pkg.manifest.modules.client, client: p.publicUrl + packagePath.version(id, version, 'client.js') };
-      return res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' }).end(JSON.stringify(entry));
-    }
-    const file =
-      parts.length === 3 && parts[1] === 'assets' && /^[\w.-]+$/.test(parts[2]) && !parts[2].startsWith('.')
-        ? joinPath(p.root, id, 'assets', parts[2])
-        : parts.length === 3 && /^[0-9a-f]{12}$/.test(parts[1]) && ['client.js', 'client.js.map', 'game.json'].includes(parts[2])
-          ? joinPath(p.root, id, parts[1], parts[2])
-          : parts.length === 4 && /^[0-9a-f]{12}$/.test(parts[1]) && parts[2] === 'workers' && /^[\w-]+\.js(\.map)?$/.test(parts[3])
-            ? joinPath(p.root, id, parts[1], 'workers', parts[3])
-            : null;
-    if (!file) return missing();
-    try {
-      const body = await readFile(file);
-      res.writeHead(200, { 'Content-Type': CONTENT_TYPES[extname(file)] ?? 'application/octet-stream', 'Cache-Control': 'public, max-age=31536000, immutable' }).end(body);
-    } catch {
-      missing();
-    }
-  }
 
   // Compressed (permessage-deflate, which every browser speaks): one step's patch looks much like
   // the last, so keeping the compressor's window between messages shrinks them a few times over.

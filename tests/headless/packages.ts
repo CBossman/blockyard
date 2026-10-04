@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { Worker } from 'node:worker_threads';
+import { GameLibrary } from '../../src/platform/host/library';
 import { loadPackaged, smokeTest } from '../../src/platform/host/packaged';
 import { serve } from '../../src/platform/host/server';
 import { decode, encode } from '../../src/platform/net/codec';
@@ -101,11 +102,13 @@ export default async function packages() {
     const publicUrl = 'http://players.example';
     const def = await loadPackaged(obby.dir, publicUrl);
     check(def.id === 'obby-pkg' && def.cover?.startsWith(`${publicUrl}/g/obby-pkg/assets/`), `named by its hosted id, its cover by the server's address: ${def.id} ${def.cover}`);
+    const library = GameLibrary.open({ root: join(dir, 'library'), publicUrl, taken: () => false, build: (folder, to, id) => buildGame(folder, { out: to, id }), smoke: (d) => smokeTest(d, wasm, { publicUrl, seconds: 2 }) });
+    const installed = await library.install('src/games/obby', 'local', 'obby-pkg');
+    check(installed.ok && installed.version === obby.version, `installed in a library: ${installed.ok ? installed.version : installed.problems.join(' | ')}`);
     const threads: Worker[] = [];
     const srv = await serve({
       games: [],
-      hidden: [def],
-      packages: { root: out, publicUrl, games: new Map([[obby.id, { dir: obby.dir, manifest: obby.manifest }]]) },
+      library,
       port: 0,
       seed: 1,
       wasm,

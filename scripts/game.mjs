@@ -1,14 +1,25 @@
 #!/usr/bin/env node
 // Games outside the platform's build (docs/PROPOSAL-UPLOADS.md):
 //
-//   npm run game -- build <folder> [--id other-id] [--out data/games] [--no-smoke]
+//   npm run game -- build <folder> [--id other-id] [--out data/builds] [--no-smoke]
+//   npm run game -- push <folder> [--server https://play.blockyard.gg] [--id other-id] [--token byu_…]
+//   npm run game -- token <byu_…>
 //
 // `build` packages the game in <folder> (src/games/<id>, or anywhere) the way a game server does
 // for an upload: it checks the game's boundaries, bundles its server and client code with the
 // platform left out, writes <out>/<id>/<version>/, then smoke-tests it (its server code in a room
-// of its own with a player, for a few seconds of play). Vite's SSR loader runs the TypeScript, as
-// for the other scripts.
-import { readFileSync } from 'node:fs';
+// of its own with a player, for a few seconds of play).
+//
+// `push` uploads the folder (zipped) to a game server, which builds it, smoke-tests it and hosts it
+// (not listed: open it by id). The server is --server, else BLOCKYARD_SERVER, else the local
+// development one (http://localhost:8787). On a server that isn't one for development you need an
+// upload token: make one at <server>/uploads (signed in, and on its list of uploaders), then save
+// it with `token` (kept in ~/.config/blockyard/token) or pass it (--token, BLOCKYARD_TOKEN).
+//
+// Vite's SSR loader runs the TypeScript, as for the other scripts.
+import { chmodSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import { createServer } from 'vite';
 
 const args = process.argv.slice(2);
@@ -16,12 +27,28 @@ const flag = (name) => {
   const i = args.indexOf(`--${name}`);
   return i >= 0 ? args[i + 1] : undefined;
 };
-const valued = ['--id', '--out'];
+const valued = ['--id', '--out', '--server', '--token'];
 const [command, folder] = args.filter((a, i) => !a.startsWith('--') && !valued.includes(args[i - 1]));
+const tokenFile = join(homedir(), '.config', 'blockyard', 'token');
 
-if (command !== 'build' || !folder) {
-  console.error('usage: npm run game -- build <folder> [--id other-id] [--out data/games] [--no-smoke]');
+const usage = () => {
+  console.error('usage: npm run game -- build <folder> [--id other-id] [--out data/builds] [--no-smoke]');
+  console.error('       npm run game -- push <folder> [--server https://play.blockyard.gg] [--id other-id] [--token byu_…]');
+  console.error('       npm run game -- token <byu_…>');
   process.exit(2);
+};
+if (!['build', 'push', 'token'].includes(command) || !folder) usage();
+
+if (command === 'token') {
+  if (!folder.startsWith('byu_')) {
+    console.error("that isn't an upload token (they start byu_)");
+    process.exit(2);
+  }
+  mkdirSync(join(homedir(), '.config', 'blockyard'), { recursive: true });
+  writeFileSync(tokenFile, `${folder}\n`);
+  chmodSync(tokenFile, 0o600);
+  console.log(`saved in ${tokenFile}`);
+  process.exit(0);
 }
 
 const vite = await createServer({
@@ -32,8 +59,52 @@ const vite = await createServer({
 });
 let code = 0;
 try {
+  if (command === 'push') code = await push();
+  else code = await build();
+} finally {
+  await vite.close();
+}
+process.exit(code);
+
+/** Upload the folder to a game server: it builds and hosts it. */
+async function push() {
+  const { zipFolder } = await vite.ssrLoadModule('/src/platform/package/zip.ts');
+  const server = (flag('server') ?? process.env.BLOCKYARD_SERVER ?? 'http://localhost:8787').replace(/^ws(s?):/, 'http$1:').replace(/\/+$/, '');
+  let token = flag('token') ?? process.env.BLOCKYARD_TOKEN;
+  if (!token) {
+    try {
+      token = readFileSync(tokenFile, 'utf8').trim();
+    } catch {
+      // none saved: fine for a development server
+    }
+  }
+  const zip = zipFolder(folder);
+  const id = flag('id');
+  console.log(`uploading ${folder} (${(zip.length / 1024).toFixed(0)} KB) to ${server}…`);
+  let res;
+  try {
+    res = await fetch(`${server}/g${id ? `?id=${encodeURIComponent(id)}` : ''}`, { method: 'POST', body: zip, headers: { 'Content-Type': 'application/zip', ...(token ? { Authorization: `Bearer ${token}` } : {}) } });
+  } catch (err) {
+    console.error(`couldn't reach ${server}: ${err.cause?.message ?? err.message}`);
+    return 1;
+  }
+  const body = await res.json().catch(() => ({ error: `${res.status} ${res.statusText}` }));
+  if (!res.ok) {
+    console.error(`${body.error ?? res.status}${body.problems ? `:\n${body.problems.map((p) => `  ${p}`).join('\n')}` : ''}`);
+    if (res.status === 401) console.error(`make an upload token at ${server}/uploads, then: npm run game -- token <it>`);
+    return 1;
+  }
+  console.log(`${body.id} is up: version ${body.version} (built and checked in ${(body.ms / 1000).toFixed(1)} s; ${body.summary})`);
+  const local = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(server);
+  console.log(`  play it: ${body.play ?? (local ? `http://localhost:5173/?game=${body.id}${server === 'http://localhost:8787' ? '' : `&server=${server.replace(/^http/, 'ws')}`}` : `?game=${body.id}`)}${body.listed ? '' : ' (not listed: open it by its link)'}`);
+  return 0;
+}
+
+/** Build the folder here, as a server would, and smoke-test it. */
+async function build() {
+  let code = 0;
   const { buildGame, BuildError } = await vite.ssrLoadModule('/src/platform/package/build.ts');
-  const out = flag('out') ?? 'data/games';
+  const out = flag('out') ?? 'data/builds';
   let built;
   try {
     const t0 = performance.now();
@@ -58,7 +129,5 @@ try {
       code = 1;
     }
   }
-} finally {
-  await vite.close();
+  return code;
 }
-process.exit(code);

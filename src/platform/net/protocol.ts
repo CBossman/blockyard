@@ -10,6 +10,7 @@
  * sent as `{ $cb: id }` and the client answers with a `callback` message.
  */
 
+import type { PlatformModule } from '../package/link';
 import type { AtlasPixels, EntityDefinition, ItemDefinition, Vec3, ViewAnimation } from '../api/types';
 import type { BlueprintData } from '../api/blueprint';
 import type { SimFrame } from '../sim/sim';
@@ -311,6 +312,12 @@ export interface ServerWelcome {
   spawn: { x: number; y: number; z: number; yaw: number };
   /** Steps per second. */
   tickRate: number;
+  /**
+   * A game the server hosts built (not compiled into the page: uploaded, see host/library.ts): the
+   * version this room runs, and what the screen loads for it (its client code's address and the
+   * platform modules that imports). A room keeps its version while it runs, whatever's current.
+   */
+  package?: { version: string; client: string; modules: PlatformModule[] };
   /**
    * The game's own blocks' keys in id order (from the first game block id): the client gives the
    * blocks it defines the same ids, so edits and structures agree even if its copy of the game
