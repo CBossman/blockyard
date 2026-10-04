@@ -1,6 +1,6 @@
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 import { Worker } from 'node:worker_threads';
 import { Accounts } from '../../src/platform/host/accounts';
 import { GameLibrary } from '../../src/platform/host/library';
@@ -10,7 +10,7 @@ import { decode, encode } from '../../src/platform/net/codec';
 import type { ClientCommand, ServerWelcome } from '../../src/platform/net/protocol';
 import { buildGame } from '../../src/platform/package/build';
 import type { MyGames } from '../../src/platform/package/link';
-import { check } from './_harness';
+import { check, roomWorker } from './_harness';
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -52,6 +52,7 @@ export default async function rechecks() {
     const up = await p1.install('src/games/obby', 'local', 'obby-x');
     check(up.ok && p1.record('obby-x')?.versions[0].check?.platform === 'p1' && p1.record('obby-x')?.versions[0].check?.ok, 'checked on p1 as it was uploaded');
     p1.setListed('obby-x', true);
+    p1.setHome('obby-x', 'approved');
     check((await p1.recheck()).length === 0, 'the same build: nothing to check again');
 
     // An update to the platform (build p2) that breaks it: checked again on boot, broken.
@@ -66,7 +67,7 @@ export default async function rechecks() {
     const accounts = Accounts.open(':memory:');
     const threads: Worker[] = [];
     const srv = await serve({ games: [], library: p2, accounts, port: 0, seed: 1, wasm, dev: true, worker: (workerData) => {
-      const w = new Worker(resolve('scripts/room-worker-dev.mjs'), { workerData });
+      const w = roomWorker(workerData);
       threads.push(w);
       return w;
     }, log: () => {} });

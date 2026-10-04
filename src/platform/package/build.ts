@@ -18,7 +18,7 @@ import { tmpdir } from 'node:os';
 import { basename, extname, join, relative, resolve, sep } from 'node:path';
 import * as esbuild from 'esbuild';
 import { skipped } from './zip';
-import { BuildError, CLIENT_MODULES, GAME_ID, GLOBAL, nativeImport, SERVER_MODULES, WORKER_MODULES, type PackageManifest, type PlatformModule } from './link';
+import { BuildError, CLIENT_MODULES, GAME_ID, GLOBAL, SERVER_MODULES, WORKER_MODULES, type PackageManifest, type PlatformModule } from './link';
 
 export interface BuildOptions {
   /** Where built games go: `<out>/<id>/…`. */
@@ -124,24 +124,20 @@ async function buildFrom(root: string, o: BuildOptions): Promise<BuiltGame> {
   return { id, version, dir, manifest };
 }
 
-/** The game's meta (meta.ts's default export), run in Node with the platform stubbed. */
-async function readMeta(root: string): Promise<Record<string, unknown>> {
-  const out = await bundle({ root, id: 'meta', dev: false, assets: new Map(), workers: new Map() }, 'meta', join(root, 'meta.ts'));
-  const url = `data:text/javascript;base64,${Buffer.from(out.code).toString('base64')}`;
-  const g = globalThis as Record<string, unknown>;
-  const saved = g[GLOBAL];
-  // Only what a meta file uses: `defineMeta`, which hands back what it's given.
-  g[GLOBAL] = { modules: { '@platform': { defineMeta: (m: unknown) => m } }, asset: (_id: string, path: string) => path };
-  try {
-    const mod = (await nativeImport(url)) as { default?: Record<string, unknown> };
-    if (!mod.default || typeof mod.default !== 'object') throw new BuildError(["meta.ts: its default export must be the game's meta (`export default defineMeta({ … })`)"]);
-    return mod.default;
-  } catch (err) {
-    if (err instanceof BuildError) throw err;
-    throw new BuildError([`meta.ts: ${err instanceof Error ? err.message : String(err)}`]);
-  } finally {
-    g[GLOBAL] = saved;
-  }
+/**
+ * The game's id and title, read from meta.ts as text (`id: 'my-game'`, `title: 'My Game'`): a
+ * build never runs a game's code (its smoke test does, in a thread of its own). Bundled too, for
+ * its boundaries (meta.ts imports only '@platform' and pictures).
+ */
+async function readMeta(root: string): Promise<{ id?: string; title?: string }> {
+  await bundle({ root, id: 'meta', dev: false, assets: new Map(), workers: new Map() }, 'meta', join(root, 'meta.ts'));
+  const source = readFileSync(join(root, 'meta.ts'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+  const from = source.indexOf('defineMeta(');
+  if (from < 0) throw new BuildError(["meta.ts: its default export must be the game's meta (`export default defineMeta({ … })`)"]);
+  const field = (name: string) => new RegExp(`\\b${name}\\s*:\\s*(['"\`])([^'"\`\\n]+)\\1`).exec(source.slice(from))?.[2];
+  const id = field('id');
+  if (!id) throw new BuildError(["meta.ts: its id must be written as a string (`id: 'my-game'`), the first field of its meta"]);
+  return { id, title: field('title') };
 }
 
 /** One side's bundle: one ES module, the platform left out, its pictures and models alongside. */

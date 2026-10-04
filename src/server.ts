@@ -7,7 +7,8 @@
 // (`npm run game -- push`, by the accounts in UPLOADERS: their ids or Discord ids, comma-separated;
 // on a development server anyone), or built from a folder here with `--package <folder>` (anywhere:
 // src/games/<id>, or outside the repo; `--package <folder>=<id>` under another id). They name their
-// files by the server's public address (PUBLIC_URL, default http://localhost:<port>).
+// files by the server's public address (PUBLIC_URL, default http://localhost:<port>). ADMINS (account
+// or Discord ids) may manage every game: approve one for the home page, ban an uploader, see reports.
 //
 // It reaches the games only through their server registry (src/games/server.ts): their shared
 // definitions and rules. No game's client code, and nothing of the browser's, comes in here.
@@ -93,6 +94,7 @@ export async function main(args: string[], worker?: ServeOptions['worker'], mode
     hidden,
     library,
     uploaders: (process.env.UPLOADERS ?? '').split(',').map((u) => u.trim()).filter(Boolean),
+    admins: (process.env.ADMINS ?? '').split(',').map((u) => u.trim()).filter(Boolean),
     port,
     seed,
     wasm,

@@ -8,17 +8,24 @@
 //   GET    /g/<id>/manage                  its record (owners only)
 //   POST   /g/<id>/manage                  `{ current?, listed?, addOwner?, removeOwner?, recheck? }` (owners only)
 //   DELETE /g/<id>                         stop hosting it (its files and record stay)
+//   GET    /g/directory                    the community directory: hosted games in it, not on the home page
+//   POST   /g/<id>/report                  `{ reason }`: a player reports a game
 //   GET    /uploads                        a page for making an upload token (for `npm run game -- push`)
 //   POST   /uploads/token                  a new upload token
+//   GET    /admin                          every game, reports, bans, recent activity (admins only)
+//   POST   /admin/reports/<n>              resolve a report
+//   POST   /admin/bans                     `{ account (a name or id), banned, reason?, unhost? }`
 //
 // Who's asking: an upload token (`Authorization: Bearer byu_…`), else the signed-in account (a page
 // on the site, or this server's own). Who may upload: the accounts on the server's list of
-// uploaders (UPLOADERS: their ids or Discord ids); on a development server, anyone. Never a built
-// game's server code.
+// uploaders (UPLOADERS: their ids or Discord ids); on a development server, anyone. Admins (ADMINS)
+// may also manage every game: approve one for the home page, take one off, stop hosting it, ban an
+// account from uploading, resolve reports. A banned account may neither upload nor manage. Never a
+// built game's server code.
 import { readFile } from 'node:fs/promises';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { extname, join } from 'node:path';
-import { packagePath, type MyGame, type MyGames, type PackageEntry } from '../package/link';
+import { packagePath, type AdminView, type DirectoryGame, type MyGame, type MyGames, type PackageEntry } from '../package/link';
 import type { Account, Accounts } from './accounts';
 import type { Auth } from './auth';
 import type { GameLibrary, GameRecord } from './library';
@@ -29,6 +36,8 @@ export interface UploadsOptions {
   auth?: Auth | null;
   /** Accounts that may upload: their ids or Discord ids. */
   uploaders: string[];
+  /** Accounts that may manage every game (and upload): their ids or Discord ids. */
+  admins?: string[];
   /** The site's addresses: where a game's link points (the first), and the pages that may manage games. */
   sites: string[];
   /** A development server: anyone may upload and manage (a guest as `dev`). */
@@ -68,7 +77,7 @@ export class Uploads {
 
   /** Answer a `/g…` or `/uploads…` request: true if it was one. */
   handle(req: IncomingMessage, res: ServerResponse, path: string): boolean {
-    if (path !== '/g' && !path.startsWith('/g/') && path !== '/uploads' && path !== '/uploads/token') return false;
+    if (path !== '/g' && !path.startsWith('/g/') && path !== '/uploads' && path !== '/uploads/token' && path !== '/admin' && !path.startsWith('/admin/')) return false;
     const method = req.method ?? 'GET';
     // The site's pages ask with the player's sign-in (their games, uploads, changes).
     this.cors(req, res);
@@ -90,8 +99,11 @@ export class Uploads {
     if (path === '/uploads/token') return method === 'POST' ? this.newToken(req, res) : this.json(res, 405, { error: 'POST it' });
     if (path === '/g') return method === 'POST' ? this.upload(req, res, new URL(req.url ?? '/', 'http://server').searchParams.get('id') ?? undefined) : this.json(res, 405, { error: 'POST a zip' });
     if (path === '/g/mine') return method === 'GET' ? this.mine(req, res) : this.json(res, 405, { error: 'GET it' });
+    if (path === '/g/directory') return method === 'GET' ? this.directory(res) : this.json(res, 405, { error: 'GET it' });
+    if (path === '/admin' || path.startsWith('/admin/')) return this.admin(req, res, path, method);
     const parts = path.split('/').slice(2);
     const id = parts[0];
+    if (parts.length === 2 && parts[1] === 'report' && method === 'POST') return this.report(req, res, id);
     if (parts.length === 1 && method === 'DELETE') return this.manage(req, res, id, { current: null });
     if (parts.length === 2 && parts[1] === 'manage') {
       if (method === 'GET') return this.manage(req, res, id, null);
@@ -145,7 +157,7 @@ export class Uploads {
   private async upload(req: IncomingMessage, res: ServerResponse, asId: string | undefined) {
     const who = this.who(req);
     if (!who) return this.json(res, 401, { error: req.headers.authorization ? 'That upload token is unknown or revoked' : 'Sign in, or send an upload token (Authorization: Bearer …)' });
-    if (!this.mayUpload(who)) return this.json(res, 403, { error: `${who.account?.name ?? who.by} isn't one of this server's uploaders` });
+    if (!this.mayUpload(who)) return this.json(res, 403, { error: this.banned(who) ? "You're banned from uploading games here" : `${who.account?.name ?? who.by} isn't one of this server's uploaders` });
     const zip = await readBody(req, MAX_UPLOAD);
     if (!zip) return this.json(res, 413, { error: `Too big: ${MAX_UPLOAD / 1024 / 1024} MB at most` });
     if (!zip.length) return this.json(res, 400, { error: "Send the zip of a game's folder as the body" });
@@ -166,7 +178,9 @@ export class Uploads {
     if (!who) return this.json(res, 401, { error: 'Sign in, or send an upload token' });
     const record = lib.record(id);
     if (!record) return this.json(res, 404, { error: `No game "${id}" here` });
-    if (!this.o.dev && !record.owners.includes(who.by)) return this.json(res, 403, { error: `"${id}" isn't yours` });
+    const admin = this.isAdmin(who);
+    if (!admin && this.banned(who)) return this.json(res, 403, { error: "You're banned from managing games here" });
+    if (!this.o.dev && !admin && !record.owners.includes(who.by)) return this.json(res, 403, { error: `"${id}" isn't yours` });
     if (change?.recheck) {
       // Smoke-test its current version again now (after a fix to the platform, say).
       void lib.recheck({ force: true, only: id }).then(() => this.json(res, 200, { record: lib.record(id), broken: lib.broken(id) }));
@@ -183,8 +197,16 @@ export class Uploads {
         else if (!lib.setOwner(id, owner.id, true)) problems.push(`can't add ${owner.name}`);
       }
       if (change.removeOwner && !lib.setOwner(id, change.removeOwner, false)) problems.push(`can't remove ${change.removeOwner} (a game keeps an owner)`);
+      if (change.home) {
+        // Owners ask (or stop asking); admins approve, decline, or take it off.
+        const mine = change.home === 'ask' || change.home === 'withdraw';
+        if (!mine && !admin) problems.push('only an admin may do that');
+        else if (change.home === 'ask' && record.home === 'approved') problems.push("it's on the home page already");
+        else lib.setHome(id, { ask: 'asked', withdraw: null, approve: 'approved', decline: 'declined', remove: null }[change.home] as GameRecord['home'] | null);
+      }
       if (problems.length) return this.json(res, 400, { error: problems.join('; '), record: lib.record(id) });
       this.o.log?.(`[uploads] ${id}: ${JSON.stringify(change)} by ${who.account?.name ?? who.by}`);
+      lib.note(who.by, describeChange(change, (a) => this.name(a)), id);
     }
     this.json(res, 200, { record: lib.record(id) satisfies GameRecord | undefined, entry: packagePath.entry(id) });
   }
@@ -193,30 +215,125 @@ export class Uploads {
   private mine(req: IncomingMessage, res: ServerResponse) {
     const who = this.who(req);
     if (!who) return this.json(res, 401, { error: 'Sign in first' });
-    const lib = this.o.library;
-    const name = (id: string) => (id === 'local' ? 'this server' : id === 'dev' ? 'a guest' : (this.o.accounts?.get(id)?.name ?? 'someone gone'));
-    const games: MyGame[] = lib
+    const games = this.o.library
       .records()
       .filter((r) => this.o.dev || r.owners.includes(who.by))
-      .map((r) => {
-        const latest = r.versions[r.versions.length - 1];
-        const shown = r.versions.find((v) => v.version === r.current)?.meta ?? latest?.meta;
-        return {
-          id: r.id,
-          title: shown?.title ?? r.id,
-          accent: shown?.accent,
-          cover: shown?.cover,
-          listed: r.listed,
-          current: r.current,
-          created: r.created,
-          owners: r.owners.map((id) => ({ id, name: name(id) })),
-          versions: [...r.versions].reverse().map((v) => ({ version: v.version, built: v.built, by: name(v.by), title: v.meta.title })),
-          play: this.o.sites[0] ? `${this.o.sites[0]}/?game=${r.id}` : null,
-          broken: ((b) => (b ? { at: b.at, errors: b.errors ?? [] } : null))(lib.broken(r.id)),
-        };
-      })
+      .map((r) => this.myGame(r))
       .sort((a, b) => (b.versions[0]?.built ?? '').localeCompare(a.versions[0]?.built ?? ''));
-    this.json(res, 200, { uploader: this.mayUpload(who), account: who.account ? { id: who.account.id, name: who.account.name } : null, games } satisfies MyGames);
+    this.json(res, 200, { uploader: this.mayUpload(who), admin: this.isAdmin(who), account: who.account ? { id: who.account.id, name: who.account.name } : null, games } satisfies MyGames);
+  }
+
+  /** A game as its owners' page shows it. */
+  private myGame(r: GameRecord): MyGame {
+    const lib = this.o.library;
+    const latest = r.versions[r.versions.length - 1];
+    const shown = r.versions.find((v) => v.version === r.current)?.meta ?? latest?.meta;
+    return {
+      id: r.id,
+      title: shown?.title ?? r.id,
+      accent: shown?.accent,
+      cover: shown?.cover,
+      listed: r.listed,
+      current: r.current,
+      created: r.created,
+      owners: r.owners.map((id) => ({ id, name: this.name(id) })),
+      versions: [...r.versions].reverse().map((v) => ({ version: v.version, built: v.built, by: this.name(v.by), title: v.meta.title })),
+      play: this.o.sites[0] ? `${this.o.sites[0]}/?game=${r.id}` : null,
+      broken: ((b) => (b ? { at: b.at, errors: b.errors ?? [] } : null))(lib.broken(r.id)),
+      home: r.home ?? null,
+    };
+  }
+
+  /** Someone, by name: an account's, or what `local` and `dev` stand for. */
+  private name(id: string): string {
+    return id === 'local' ? 'this server' : id === 'dev' || id === 'guest' ? 'a guest' : id === 'server' ? 'the server' : (this.o.accounts?.get(id)?.name ?? 'someone gone');
+  }
+
+  /** The community directory: hosted games in it that aren't on the home page (nor broken). */
+  private directory(res: ServerResponse) {
+    const lib = this.o.library;
+    const games: DirectoryGame[] = lib.records().flatMap((r) => {
+      const v = r.listed && r.home !== 'approved' && !lib.broken(r.id) ? lib.current(r.id) : undefined;
+      if (!v) return [];
+      const spec = lib.spec(v);
+      const kept = r.versions.find((x) => x.version === v.version);
+      return [{ id: r.id, title: v.meta.title, tagline: v.meta.tagline, accent: v.meta.accent, cover: v.meta.cover, by: r.owners.map((o) => this.name(o)), updated: kept?.built ?? r.created, entry: { id: r.id, version: v.version, meta: { ...v.meta, id: r.id }, modules: spec.modules, client: spec.client } }];
+    });
+    games.sort((a, b) => b.updated.localeCompare(a.updated));
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' }).end(JSON.stringify({ games }));
+  }
+
+  /** A player reports a game (signed in, or a guest): kept for the admins. */
+  private async report(req: IncomingMessage, res: ServerResponse, id: string) {
+    const lib = this.o.library;
+    if (!lib.record(id) || !this.o.accounts) return this.json(res, 404, { error: `No game "${id}" here` });
+    const body = await readBody(req, 8 * 1024);
+    let reason = '';
+    try {
+      reason = String((JSON.parse(body?.toString() ?? '{}') as { reason?: unknown }).reason ?? '').trim();
+    } catch {
+      // not JSON: no reason
+    }
+    if (!reason) return this.json(res, 400, { error: 'Say what the problem is' });
+    // A few a while from each address (a guest's are as welcome, but not a flood).
+    const address = String(req.headers['fly-client-ip'] ?? req.socket.remoteAddress ?? '?');
+    const now = Date.now();
+    const recent = (this.reported.get(address) ?? []).filter((t) => now - t < 10 * 60_000);
+    if (recent.length >= 5) return this.json(res, 429, { error: 'Thanks: that is plenty for now' });
+    this.reported.set(address, [...recent, now]);
+    const account = this.o.auth?.who(req) ?? null;
+    const n = this.o.accounts.report(id, lib.record(id)?.current ?? null, account?.id ?? null, reason);
+    lib.note(account?.id ?? 'guest', `reported: ${reason.slice(0, 120)}`, id);
+    this.o.log?.(`[uploads] ${id} reported (#${n}) by ${account?.name ?? 'a guest'}`);
+    this.json(res, 201, { ok: true });
+  }
+
+  private reported = new Map<string, number[]>();
+
+  /** The admins' routes. */
+  private async admin(req: IncomingMessage, res: ServerResponse, path: string, method: string) {
+    const who = this.who(req);
+    if (!who) return this.json(res, 401, { error: 'Sign in first' });
+    if (!this.isAdmin(who)) return this.json(res, 403, { error: 'Admins only' });
+    const accounts = this.o.accounts;
+    const lib = this.o.library;
+    if (path === '/admin' && method === 'GET') {
+      const reports = accounts?.reports() ?? [];
+      const view: AdminView = {
+        games: lib
+          .records()
+          .map((r) => ({ ...this.myGame(r), reports: reports.filter((x) => x.game === r.id).length }))
+          .sort((a, b) => (b.versions[0]?.built ?? '').localeCompare(a.versions[0]?.built ?? '')),
+        reports: reports.map((r) => ({ id: r.id, game: r.game, version: r.version, name: r.name, reason: r.reason, at: r.at })),
+        bans: (accounts?.bans() ?? []).map((b) => ({ account: b.account, name: b.name, reason: b.reason, at: b.at })),
+        activity: lib.activity(100).map((a) => ({ ...a, by: this.name(a.by) })),
+      };
+      return this.json(res, 200, view);
+    }
+    const resolve = /^\/admin\/reports\/(\d+)$/.exec(path);
+    if (resolve && method === 'POST') {
+      const ok = !!accounts?.resolveReport(Number(resolve[1]), who.by);
+      return this.json(res, ok ? 200 : 404, ok ? { ok } : { error: 'No such report waiting' });
+    }
+    if (path === '/admin/bans' && method === 'POST' && accounts) {
+      const body = await readBody(req, 8 * 1024);
+      let ask: { account?: string; banned?: boolean; reason?: string; unhost?: boolean };
+      try {
+        ask = JSON.parse(body?.toString() ?? '') as typeof ask;
+      } catch {
+        return this.json(res, 400, { error: 'Send JSON: { account, banned, reason?, unhost? }' });
+      }
+      const target = ask.account ? (accounts.get(ask.account) ?? accounts.byName(ask.account)) : null;
+      if (!target) return this.json(res, 404, { error: `No account "${ask.account ?? ''}"` });
+      if (this.isAdmin({ account: target })) return this.json(res, 400, { error: "An admin can't be banned" });
+      const banned = ask.banned !== false;
+      accounts.ban(target.id, banned, who.by, ask.reason ?? '');
+      // Their games, stopped too (if asked): those they own alone.
+      const stopped = banned && ask.unhost ? lib.records().filter((r) => r.current && r.owners.length === 1 && r.owners[0] === target.id).map((r) => (lib.setCurrent(r.id, null), r.id)) : [];
+      lib.note(who.by, `${banned ? 'banned' : 'unbanned'} ${target.name}${ask.reason ? ` (${ask.reason})` : ''}${stopped.length ? `; stopped hosting ${stopped.join(', ')}` : ''}`);
+      return this.json(res, 200, { ok: true, stopped });
+    }
+    this.json(res, 404, { error: 'Not here' });
   }
 
   private newToken(req: IncomingMessage, res: ServerResponse) {
@@ -247,8 +364,20 @@ export class Uploads {
   }
 
   private mayUpload(who: { by: string; account: Account | null }): boolean {
+    if (this.isAdmin(who)) return true;
+    if (this.banned(who)) return false;
     if (this.o.dev) return true;
     return !!who.account && (this.o.uploaders.includes(who.account.id) || this.o.uploaders.includes(who.account.discord));
+  }
+
+  /** On the server's list of admins (by account id or Discord id). */
+  private isAdmin(who: { account: Account | null }): boolean {
+    const a = who.account;
+    return !!a && !!this.o.admins?.length && (this.o.admins.includes(a.id) || this.o.admins.includes(a.discord));
+  }
+
+  private banned(who: { account: Account | null }): boolean {
+    return !!who.account && !!this.o.accounts?.banned(who.account.id);
   }
 
   /** The site's pages (and this server's own) may manage games with the player's sign-in. */
@@ -275,6 +404,20 @@ interface Change {
   removeOwner?: string;
   /** Smoke-test its current version again now. */
   recheck?: boolean;
+  /** The home page: its owners ask (or withdraw); an admin approves, declines or takes it off (remove). */
+  home?: 'ask' | 'withdraw' | 'approve' | 'decline' | 'remove';
+}
+
+/** A change to a game, in words (the activity log). */
+function describeChange(c: Change, name: (account: string) => string): string {
+  const said: string[] = [];
+  if (c.current === null) said.push('stopped hosting it');
+  else if (c.current) said.push(`made version ${c.current} current`);
+  if (c.listed !== undefined) said.push(c.listed ? 'put it in the directory' : 'took it out of the directory');
+  if (c.addOwner) said.push(`added owner ${c.addOwner}`);
+  if (c.removeOwner) said.push(`removed owner ${name(c.removeOwner)}`);
+  if (c.home) said.push({ ask: 'asked for the home page', withdraw: 'stopped asking for the home page', approve: 'approved it for the home page', decline: 'declined it for the home page', remove: 'took it off the home page' }[c.home]);
+  return said.join('; ') || 'changed it';
 }
 
 /** A request's body, or null if it's longer than `limit`. */

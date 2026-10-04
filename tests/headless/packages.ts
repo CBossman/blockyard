@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 import { Worker } from 'node:worker_threads';
 import { GameLibrary } from '../../src/platform/host/library';
 import { loadPackaged, smokeTest } from '../../src/platform/host/packaged';
@@ -9,7 +9,7 @@ import { decode, encode } from '../../src/platform/net/codec';
 import type { ClientCommand, ServerWelcome } from '../../src/platform/net/protocol';
 import { BuildError, buildGame } from '../../src/platform/package/build';
 import type { PackageEntry } from '../../src/platform/package/link';
-import { check } from './_harness';
+import { check, roomWorker } from './_harness';
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -113,7 +113,7 @@ export default async function packages() {
       seed: 1,
       wasm,
       worker: (workerData) => {
-        const w = new Worker(resolve('scripts/room-worker-dev.mjs'), { workerData });
+        const w = roomWorker(workerData);
         threads.push(w);
         return w;
       },

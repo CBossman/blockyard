@@ -1,5 +1,5 @@
 import { h } from './dom';
-import type { MyGame, MyGames } from '../package/link';
+import type { AdminView, MyGame, MyGames } from '../package/link';
 
 /** What's never part of a game's folder (as the server's unpacking has it): hidden files, packages, macOS's leftovers. */
 const SKIPPED = (path: string) => path.split('/').some((part) => part.startsWith('.') || part === 'node_modules' || part === '__MACOSX');
@@ -31,6 +31,13 @@ export class MyGamesPanel {
   private drop = h('div.mygames-drop');
   private asId = h('input.mygames-id', { type: 'text', placeholder: 'its id (optional)', maxlength: '32', spellcheck: false, autocomplete: 'off' }) as HTMLInputElement;
   private token = h('div.mygames-token');
+  /** Your games, and (an admin's) every game. */
+  private tabs = h('div.mygames-tabs.hidden');
+  private mine = h('div.mygames-tab');
+  private adminView = h('div.mygames-tab.hidden');
+  private tab: 'mine' | 'admin' = 'mine';
+  /** What the admin tab has to say (a ban that didn't go). */
+  private adminNote = h('div.mygames-result');
   private http = '';
   private busy = false;
   private data: MyGames | null = null;
@@ -64,12 +71,12 @@ export class MyGamesPanel {
       this.drop.classList.remove('over');
       void this.fromDrop((e as DragEvent).dataTransfer);
     });
+    this.mine.append(this.drop, this.result, this.list, h('section.mygames-cli', {}, h('div.mygames-section', {}, 'From the command line'), this.token));
     this.panel.append(
       h('header.profile-head', {}, h('div.profile-who', {}, h('div.profile-name', {}, 'Your games'), h('div.profile-sub', {}, 'Games you host on Blockyard, built from their folders: no deploy needed')), close),
-      this.drop,
-      this.result,
-      this.list,
-      h('section.mygames-cli', {}, h('div.mygames-section', {}, 'From the command line'), this.token),
+      this.tabs,
+      this.mine,
+      this.adminView,
     );
     this.root.append(this.panel);
     this.root.addEventListener('pointerdown', (e) => e.target === this.root && this.close());
@@ -101,7 +108,9 @@ export class MyGamesPanel {
       return;
     }
     this.data = (await r.json()) as MyGames;
+    this.renderTabs();
     this.renderList();
+    if (this.data.admin && this.tab === 'admin') await this.refreshAdmin();
   }
 
   private renderList() {
@@ -117,10 +126,16 @@ export class MyGamesPanel {
     const hosted = g.current !== null;
     const cover = h('span.profile-cover.mygames-cover');
     if (g.cover) cover.style.backgroundImage = `url("${g.cover}")`;
-    const state = !hosted ? 'Not hosted' : g.broken ? 'Broken by an update' : g.listed ? 'On the home page' : 'Link only';
+    const state = gameState(g);
     const current = g.versions.find((v) => v.version === g.current);
     const open = h('a.mygames-button', { href: g.play ?? `?game=${g.id}`, onclick: (e: MouseEvent) => (e.preventDefault(), this.close(), this.onOpen?.(g.id)) }, 'Play');
-    const list = h('button.mygames-button', { onclick: () => void this.change(g.id, { listed: !g.listed }) }, g.listed ? 'Unlist' : 'List on the home page');
+    const list = g.home === 'approved' ? null : h('button.mygames-button', { onclick: () => void this.change(g.id, { listed: !g.listed }) }, g.listed ? 'Take out of the directory' : 'Put in the directory');
+    const home =
+      g.home === 'asked'
+        ? h('button.mygames-button', { onclick: () => void this.change(g.id, { home: 'withdraw' }) }, 'Stop asking for the home page')
+        : g.home === 'approved'
+          ? null
+          : h('button.mygames-button', { onclick: () => void this.change(g.id, { home: 'ask' }) }, g.home === 'declined' ? 'Ask for the home page again' : 'Ask for the home page');
     const host = hosted
       ? h('button.mygames-button.danger', { onclick: () => void this.change(g.id, { current: null }) }, 'Stop hosting')
       : h('button.mygames-button', { onclick: () => void this.change(g.id, { current: g.versions[0]?.version }) }, 'Host the newest version');
@@ -173,11 +188,12 @@ export class MyGamesPanel {
         {},
         cover,
         h('div.profile-game-title', {}, g.title),
-        h(`span.mygames-state.${!hosted ? 'off' : g.broken ? 'broken' : g.listed ? 'listed' : 'link'}`, {}, state),
+        h(`span.mygames-state.${stateClass(g)}`, {}, state),
         h('div.mygames-sub', {}, h('code', {}, g.id), current ? ` · version ${current.version}, ${ago(current.built)}` : ''),
       ),
       g.broken && hosted ? this.brokenNote(g) : null,
-      h('div.mygames-actions', {}, hosted && !g.broken ? open : null, hosted ? copy : null, hosted ? list : null, host),
+      g.home === 'declined' ? h('div.mygames-dim', {}, 'Not taken for the home page this time: it stays in the directory if you put it there.') : g.home === 'asked' ? h('div.mygames-dim', {}, 'Asked for the home page: an admin will have a look.') : null,
+      h('div.mygames-actions', {}, hosted && !g.broken ? open : null, hosted ? copy : null, hosted ? list : null, hosted && !g.broken ? home : null, host),
       versions,
       owners,
     );
@@ -198,6 +214,121 @@ export class MyGamesPanel {
       h('ul.mygames-problems', {}, ...g.broken!.errors.slice(0, 3).map((e) => h('li', {}, e.split('\n').slice(0, 4).join('\n')))),
       h('div.mygames-actions', {}, again),
     );
+  }
+
+  /** The tabs (an admin's only): their games, and every game. */
+  private renderTabs() {
+    const admin = !!this.data?.admin;
+    this.tabs.classList.toggle('hidden', !admin);
+    if (!admin) this.tab = 'mine';
+    const tab = (id: 'mine' | 'admin', label: string) =>
+      h(`button.mygames-tabbutton${this.tab === id ? '.on' : ''}`, {
+        onclick: () => {
+          this.tab = id;
+          this.renderTabs();
+          if (id === 'admin') void this.refreshAdmin();
+        },
+      }, label);
+    this.tabs.replaceChildren(tab('mine', 'Your games'), tab('admin', 'Admin'));
+    this.mine.classList.toggle('hidden', this.tab !== 'mine');
+    this.adminView.classList.toggle('hidden', this.tab !== 'admin');
+  }
+
+  private async refreshAdmin() {
+    const r = await fetch(`${this.http}/admin`, { credentials: 'include' }).catch(() => null);
+    if (!r?.ok) {
+      this.adminView.replaceChildren(h('div.mygames-empty', {}, "Couldn't load the admin view."));
+      return;
+    }
+    this.renderAdmin((await r.json()) as AdminView);
+  }
+
+  /** Everything an admin manages: requests for the home page, reports, every game, bans, what happened lately. */
+  private renderAdmin(v: AdminView) {
+    const act = (label: string, run: () => Promise<unknown>, danger = false) =>
+      h(`button.mygames-button.small${danger ? '.danger' : ''}`, {
+        onclick: async () => {
+          await run();
+          await this.refreshAdmin();
+        },
+      }, label);
+    const manage = (id: string, change: Record<string, unknown>) => this.post(`/g/${id}/manage`, change);
+    const play = (id: string) => h('a.mygames-button.small', { href: `?game=${id}`, onclick: (e: MouseEvent) => (e.preventDefault(), this.close(), this.onOpen?.(id)) }, 'Play');
+    const section = (title: string, rows: HTMLElement[], empty: string) => h('section.mygames-admin', {}, h('div.mygames-section', {}, title), ...(rows.length ? rows : [h('div.mygames-dim', {}, empty)]));
+    const asked = v.games.filter((g) => g.home === 'asked');
+    const row = (main: (Node | string)[], ...actions: (HTMLElement | null)[]) => h('div.mygames-row', {}, h('div.mygames-row-main', {}, ...main), h('div.mygames-row-actions', {}, ...actions));
+    const gameLine = (g: MyGame) => [h('strong', {}, g.title), ' ', h('code', {}, g.id), h('span.mygames-dim', {}, ` · by ${g.owners.map((o) => o.name).join(', ')}`)];
+    // Bans: by name.
+    const who = h('input.mygames-id', { type: 'text', placeholder: 'a player’s name', maxlength: '20' }) as HTMLInputElement;
+    const why = h('input.mygames-id', { type: 'text', placeholder: 'why (for the record)', maxlength: '200' }) as HTMLInputElement;
+    const unhost = h('input', { type: 'checkbox' }) as HTMLInputElement;
+    const banForm = h(
+      'form.mygames-row',
+      {
+        onsubmit: async (e: SubmitEvent) => {
+          e.preventDefault();
+          if (!who.value.trim()) return;
+          const r = await this.post('/admin/bans', { account: who.value.trim(), banned: true, reason: why.value.trim(), unhost: unhost.checked });
+          await this.refreshAdmin();
+          this.adminNote.className = r.ok ? 'mygames-result' : 'mygames-result error';
+          this.adminNote.textContent = r.ok ? '' : (r.error ?? "Couldn't ban them");
+        },
+      },
+      who,
+      why,
+      h('label.mygames-dim', {}, unhost, ' stop hosting their games'),
+      h('button.mygames-button.small.danger', { type: 'submit' }, 'Ban from uploading'),
+    );
+    this.adminView.replaceChildren(
+      this.adminNote,
+      section(
+        'Asking for the home page',
+        asked.map((g) => row(gameLine(g), play(g.id), act('Approve', () => manage(g.id, { home: 'approve' })), act('Decline', () => manage(g.id, { home: 'decline' }), true))),
+        'Nobody is asking.',
+      ),
+      section(
+        `Reports (${v.reports.length})`,
+        v.reports.map((r) =>
+          row(
+            [h('code', {}, r.game), h('span', {}, ` “${r.reason}”`), h('span.mygames-dim', {}, ` · ${r.name ?? 'a guest'}, ${ago(r.at.replace(' ', 'T') + 'Z')}`)],
+            play(r.game),
+            act('Resolve', () => this.post(`/admin/reports/${r.id}`, {})),
+            v.games.find((g) => g.id === r.game)?.current ? act('Stop hosting', () => manage(r.game, { current: null }), true) : null,
+          ),
+        ),
+        'No reports waiting.',
+      ),
+      section(
+        `Every game (${v.games.length})`,
+        v.games.map((g) =>
+          row(
+            [...gameLine(g), h(`span.mygames-state.${stateClass(g)}`, {}, gameState(g)), g.reports ? h('span.mygames-state.broken', {}, `${g.reports} reported`) : ''],
+            g.current && !g.broken ? play(g.id) : null,
+            g.home === 'approved' ? act('Take off the home page', () => manage(g.id, { home: 'remove' })) : null,
+            g.listed && g.home !== 'approved' ? act('Take out of the directory', () => manage(g.id, { listed: false })) : null,
+            g.current ? act('Stop hosting', () => manage(g.id, { current: null }), true) : g.versions[0] ? act('Host the newest', () => manage(g.id, { current: g.versions[0].version })) : null,
+          ),
+        ),
+        'No games uploaded yet.',
+      ),
+      section(
+        'Bans',
+        [banForm, ...v.bans.map((b) => row([h('strong', {}, b.name), h('span.mygames-dim', {}, ` · ${b.reason || 'no reason given'}, ${ago(b.at.replace(' ', 'T') + 'Z')}`)], act('Unban', () => this.post('/admin/bans', { account: b.account, banned: false }))))],
+        '',
+      ),
+      section(
+        'Lately',
+        v.activity.slice(0, 60).map((a) => h('div.mygames-activity', {}, h('span.mygames-dim', {}, ago(a.at)), ' ', h('strong', {}, a.by), a.game ? ' · ' : '', a.game ? h('code', {}, a.game) : null, ` · ${a.text}`)),
+        'Nothing yet.',
+      ),
+    );
+  }
+
+  /** POST JSON to the game server, with the player's sign-in: whether it went, and why not. */
+  private async post(path: string, body: unknown): Promise<{ ok: boolean; error?: string }> {
+    const r = await fetch(`${this.http}${path}`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).catch(() => null);
+    const said = (await r?.json().catch(() => ({}))) as { error?: string } | undefined;
+    return { ok: !!r?.ok, error: said?.error };
   }
 
   /** Change one of their games (`POST /g/<id>/manage`), then show it as it is. */
@@ -302,4 +433,19 @@ async function walk(dir: FileSystemDirectoryEntry, path: string, out: [string, F
       else out.push([at, await new Promise<File>((done, fail) => (e as FileSystemFileEntry).file(done, fail))]);
     }
   }
+}
+
+/** A game's state in words: not hosted, broken, on the home page, in the directory, link only. */
+function gameState(g: MyGame): string {
+  if (g.current === null) return 'Not hosted';
+  if (g.broken) return 'Broken by an update';
+  if (g.home === 'approved') return 'On the home page';
+  return g.listed ? 'In the directory' : 'Link only';
+}
+
+function stateClass(g: MyGame): string {
+  if (g.current === null) return 'off';
+  if (g.broken) return 'broken';
+  if (g.home === 'approved') return 'listed';
+  return g.listed ? 'directory' : 'link';
 }

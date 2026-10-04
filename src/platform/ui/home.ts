@@ -8,6 +8,7 @@ import { cosmeticCatalog, type Cosmetic } from '../cosmetics';
 import type { CosmeticDef } from '../api/types';
 import { hintChips, keyHints, type GameControls } from './controls';
 import { MyGamesPanel } from './mygames';
+import { DirectoryPanel } from './directory';
 import type { PackageEntry } from '../package/link';
 
 /** Playing on a game server: the home page asks for a name, and says who's on. */
@@ -47,6 +48,8 @@ export interface HomeGame extends GameControls {
   onPlay: () => void;
   onPick: (id: string) => void;
   online?: OnlineOptions | null;
+  /** Uploaded by a player (not built into the site): it may be reported. */
+  uploaded?: boolean;
 }
 
 /** A card on the shelf: the game's picture and name, and how many are playing it. */
@@ -86,6 +89,12 @@ export class TitleScreen {
   private locker: Locker;
   /** An uploader's games (the account menu's "Your games"). */
   private mygames = new MyGamesPanel();
+  /** The community directory: uploaded games not on the home page. */
+  private directory = new DirectoryPanel();
+  /** Under an uploaded game: report it. */
+  private report = h('div.home-report');
+  /** `?directory` opens the directory, once. */
+  private askedDirectory = new URL(location.href).searchParams.has('directory');
   /**
    * Games the server hosts built (uploaded) and lists, which the page wasn't built with: they've
    * joined the shelf (their entries, for the runtime's catalog).
@@ -151,6 +160,7 @@ export class TitleScreen {
     this.account.onLocker = () => this.openLocker();
     this.account.onGames = () => this.account.server && this.mygames.show(this.account.server);
     this.mygames.onOpen = (id) => this.game?.onPick(id);
+    this.directory.onPick = (id) => id !== this.game?.current && this.game?.onPick(id);
     const signIn = h('button.home-guest-signin', { onclick: () => this.account.signIn() }, 'Sign in with Discord');
     this.guest = h('div.home-guest.hidden', {}, 'Playing as a guest: what you earn lasts this visit. ', signIn, ' to keep it.');
     const faceButton = h('button.home-face-button', { onclick: () => this.openLocker(), title: 'Your look', 'aria-label': 'Your look' }, this.face);
@@ -166,11 +176,12 @@ export class TitleScreen {
       this.cover,
       h('div.home-scrim'),
       h('header.home-top', {}, h('div.home-brand', {}, mark, h('span.home-logo', {}, 'Blockyard'), h('span.home-pitch', {}, 'Block games anyone can build, played together')), h('div.home-top-right', {}, this.online, this.account.root)),
-      h('main.home-hero', {}, this.kicker, this.heading, this.tagline, this.feats, this.status, this.actions, this.guest, this.rooms, this.hints),
+      h('main.home-hero', {}, this.kicker, this.heading, this.tagline, this.feats, this.status, this.actions, this.guest, this.rooms, this.hints, this.report),
       this.shelf,
       this.profile.root,
       this.locker.root,
       this.mygames.root,
+      this.directory.root,
     );
     // The mouse wheel runs the shelf sideways, when there are more games than fit.
     this.shelf.addEventListener('wheel', (e) => {
@@ -196,6 +207,51 @@ export class TitleScreen {
     this.here = null;
     window.clearInterval(this.poll);
     if (g.online) this.watchCounts(g.online);
+    this.renderReport(g);
+    if (this.askedDirectory && g.online) {
+      this.askedDirectory = false;
+      this.openDirectory();
+    }
+  }
+
+  /** The game server's web address (online), for the directory and reports. */
+  private get http(): string | null {
+    return this.game?.online ? this.game.online.server.replace(/^ws/, 'http').replace(/\/+$/, '') : null;
+  }
+
+  private openDirectory() {
+    if (this.http) void this.directory.show(this.http);
+  }
+
+  /** Under an uploaded game: "Report this game", which opens a line to say what's wrong. */
+  private renderReport(g: HomeGame) {
+    this.report.replaceChildren();
+    if (!g.uploaded || !g.online) return;
+    const id = g.current;
+    const open = h('button.home-report-link', {}, 'Report this game') as HTMLButtonElement;
+    open.onclick = () => {
+      const text = h('input.mygames-id.home-report-text', { type: 'text', maxlength: '500', placeholder: 'What’s wrong with it?' }) as HTMLInputElement;
+      const send = h('button.mygames-button.small', { type: 'submit' }, 'Send');
+      const form = h(
+        'form.home-report-form',
+        {
+          onsubmit: async (e: SubmitEvent) => {
+            e.preventDefault();
+            if (!text.value.trim() || !this.http) return;
+            const r = await fetch(`${this.http}/g/${id}/report`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: text.value.trim() }) }).catch(() => null);
+            const body = (await r?.json().catch(() => ({}))) as { error?: string } | undefined;
+            this.report.replaceChildren(h('span.home-report-done', {}, r?.ok ? 'Thanks: the admins will look at it.' : (body?.error ?? "Couldn't send it")));
+          },
+        },
+        text,
+        send,
+        h('button.mygames-button.small', { type: 'button', onclick: () => this.renderReport(g) }, 'Cancel'),
+      );
+      this.report.replaceChildren(form);
+      text.focus();
+      text.addEventListener('keydown', (e) => e.stopPropagation());
+    };
+    this.report.append(open);
   }
 
   /** Ask again what the player has earned (signed in), and show it. */
@@ -325,6 +381,8 @@ export class TitleScreen {
         this.cards.set(x.id, { el, live });
         return el;
       }),
+      // Last: the community's games, not on the home page.
+      h('button.home-card.home-card-community', { title: 'Games made and uploaded by players', onclick: () => this.openDirectory() }, h('span.home-card-art.blank'), h('span.home-card-name', {}, 'Community games')),
     );
   }
 

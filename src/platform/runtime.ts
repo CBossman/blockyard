@@ -270,7 +270,8 @@ export class Runtime {
     this.room = room;
     const online = { server: new URL(link.url).origin, game: def.id, room, onRoom: def.instances ? (own: boolean) => this.switchGame(def.id, own ? newRoomCode() : null) : undefined };
     this.title = title;
-    this.title.show({ current: def.id, title: def.title, onPlay: () => this.play(), onPick: (id) => this.switchGame(id), controls: def.controls, pad: padHints(def, this.walker, keys), walks: this.walker, keys: { bound: this.settings.keys, game: keys }, online });
+    const uploaded = !!packagedVersion([...this.games, ...this.hidden].find((g) => g.meta.id === def.id));
+    this.title.show({ current: def.id, title: def.title, onPlay: () => this.play(), onPick: (id) => this.switchGame(id), controls: def.controls, pad: padHints(def, this.walker, keys), walks: this.walker, keys: { bound: this.settings.keys, game: keys }, online, uploaded });
   }
 
   /**

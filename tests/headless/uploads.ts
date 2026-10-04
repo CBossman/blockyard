@@ -1,6 +1,6 @@
 import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 import { Worker } from 'node:worker_threads';
 import { Accounts } from '../../src/platform/host/accounts';
 import { GameLibrary, smokeInThread } from '../../src/platform/host/library';
@@ -9,10 +9,10 @@ import { CLOSE_UNKNOWN, serve } from '../../src/platform/host/server';
 import { decode, encode } from '../../src/platform/net/codec';
 import type { ClientCommand, ServerWelcome } from '../../src/platform/net/protocol';
 import { buildGame } from '../../src/platform/package/build';
-import type { MyGames, PackageEntry } from '../../src/platform/package/link';
+import type { DirectoryGame, MyGames, PackageEntry } from '../../src/platform/package/link';
 import { zipFolder } from '../../src/platform/package/zip';
 
-import { check } from './_harness';
+import { check, roomWorker } from './_harness';
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const SITE = 'https://blockyard.example';
@@ -53,15 +53,18 @@ export default async function uploads() {
   const annToken = accounts.newUploadToken(ann.id);
   const bobToken = accounts.newUploadToken(bob.id);
   const cyToken = accounts.newUploadToken(cy.id);
+  // Dee is an admin (by Discord id), not on the list of uploaders.
+  const dee = accounts.fromDiscord({ id: '444', username: 'dee' });
+  const deeToken = accounts.newUploadToken(dee.id);
   const publicUrl = 'http://players.example';
-  const startWorker = (workerData: unknown) => new Worker(resolve('scripts/room-worker-dev.mjs'), { workerData });
+  const startWorker = (workerData: unknown) => roomWorker(workerData);
   const libraryAt = join(dir, 'games');
   const open = () =>
     GameLibrary.open({ root: libraryAt, publicUrl, platform: 'test', taken: (id) => id === 'obby', build: (folder, out, id) => buildGame(folder, { out, id }), smoke: smokeInThread(startWorker as (d: SmokeWorkerData) => Worker, wasm, publicUrl) });
   const library = open();
   const logs: string[] = [];
   // Ann by her account's id, Bob by his Discord id; Cy isn't an uploader.
-  const srv = await serve({ games: [], library, uploaders: [ann.id, '222'], accounts, sites: [SITE], port: 0, seed: 1, wasm, worker: startWorker, idleStop: 0.3, log: (l) => logs.push(l) });
+  const srv = await serve({ games: [], library, uploaders: [ann.id, '222'], admins: ['444'], accounts, sites: [SITE], port: 0, seed: 1, wasm, worker: startWorker, idleStop: 0.3, log: (l) => logs.push(l) });
   const base = `http://localhost:${srv.port}`;
   const post = (path: string, body: Uint8Array | string, token?: string) =>
     fetch(`${base}${path}`, { method: 'POST', body: body as BodyInit, headers: token ? { Authorization: `Bearer ${token}` } : {} }).then(async (r) => ({ status: r.status, body: (await r.json()) as Record<string, unknown> }));
@@ -135,7 +138,16 @@ export default async function uploads() {
     check((await manage(bobToken)).status === 403, "Bob can't manage Ann's game");
     const rec = await manage(annToken);
     check(rec.status === 200 && rec.body.record?.versions.length === 2 && rec.body.record.owners.join() === ann.id, `her record: ${JSON.stringify(rec.body.record?.versions.map((v) => v.version))}`);
-    check((await manage(annToken, { listed: true })).body.record?.listed === true, 'listed');
+    // In the directory (anyone may find it there), but on the home page only once an admin approves.
+    check((await manage(annToken, { listed: true })).body.record?.listed === true, 'in the directory');
+    const directory = (await (await fetch(`${base}/g/directory`)).json()) as { games: DirectoryGame[] };
+    check(directory.games.length === 1 && directory.games[0].id === 'sky' && directory.games[0].by[0] === 'ann' && directory.games[0].entry.version === v2, `the directory: ${JSON.stringify(directory.games.map((g) => g.id))}`);
+    const notYet = (await (await fetch(`${base}/games`)).json()) as { games: { id: string }[] };
+    check(!notYet.games.some((g) => g.id === 'sky'), 'not on the home page unapproved');
+    check((await manage(annToken, { home: 'approve' })).status === 400, "an owner can't approve her own");
+    check((await manage(annToken, { home: 'ask' })).body.record && library.record('sky')?.home === 'asked', 'asked for the home page');
+    check((await manage(deeToken, { home: 'approve' })).status === 200 && library.record('sky')?.home === 'approved', 'the admin approves');
+    check(!((await (await fetch(`${base}/g/directory`)).json()) as { games: DirectoryGame[] }).games.length, 'on the home page now, so not in the directory');
     const listed = (await (await fetch(`${base}/games`)).json()) as { games: { id: string; title: string; packaged?: PackageEntry }[] };
     const sky = listed.games.find((g) => g.id === 'sky');
     check(sky?.packaged?.version === v2 && sky.title === 'Sky Obby II' && sky.packaged.meta.title === 'Sky Obby II' && sky.packaged.client.endsWith(`/g/sky/${v2}/client.js`), `on /games, with what a screen loads: ${JSON.stringify({ ...sky, packaged: sky?.packaged?.version })}`);
@@ -143,7 +155,7 @@ export default async function uploads() {
     const mine = (await (await fetch(`${base}/g/mine`, { headers: { Authorization: `Bearer ${annToken}` } })).json()) as MyGames;
     check(mine.uploader && mine.games.length === 1 && mine.games[0].id === 'sky' && mine.games[0].versions[0].version === v2 && mine.games[0].versions[0].by === 'ann' && mine.games[0].owners[0].name === 'ann', `her games: ${JSON.stringify(mine.games.map((g) => [g.id, g.versions.length]))}`);
     const cys = (await (await fetch(`${base}/g/mine`, { headers: { Authorization: `Bearer ${cyToken}` } })).json()) as MyGames;
-    check(!cys.uploader && cys.games.length === 0, "Cy's: none, and not an uploader");
+    check(!cys.uploader && !cys.admin && cys.games.length === 0, "Cy's: none, and not an uploader");
     // The site's pages may ask with her sign-in.
     const pre = await fetch(`${base}/g/mine`, { headers: { Origin: SITE, Cookie: `session=${accounts.startSession(ann.id)}` } });
     check(pre.ok && pre.headers.get('access-control-allow-origin') === SITE && pre.headers.get('access-control-allow-credentials') === 'true', 'credentialed CORS for the site');

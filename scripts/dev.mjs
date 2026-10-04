@@ -8,7 +8,7 @@
 // The server's options past the ports are `npm run server`'s (src/server.ts). Its rooms run in
 // worker threads that compile their game when they start: after changing a game's server code,
 // a room started afresh (a new room of one's own, or once the public one has stopped) runs it.
-import { Worker } from 'node:worker_threads';
+import { devWorker } from './dev-worker.mjs';
 import { createServer } from 'vite';
 
 const args = process.argv.slice(2);
@@ -29,7 +29,7 @@ const ssr = await createServer({
   optimizeDeps: { noDiscovery: true, include: [] },
 });
 const { main } = await ssr.ssrLoadModule('/src/server.ts');
-const worker = (workerData) => new Worker(new URL('./room-worker-dev.mjs', import.meta.url), { workerData });
+const worker = devWorker(ssr);
 const start = (port) => main(['--port', String(port), ...rest], worker, { dev: true });
 let server;
 try {

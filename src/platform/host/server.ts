@@ -17,6 +17,11 @@ import type { PackageEntry } from '../package/link';
 import type { GameLibrary } from './library';
 import { Uploads } from './uploads';
 
+/** Seconds a room's thread may go without a word (it says it's alive every 2) before it's stopped as stuck. */
+const STUCK = 30;
+/** Seconds a room's thread may take to start (build its world). */
+const STARTING = 120;
+
 export interface ServeOptions {
   /**
    * The games on offer. A client joins a game's public room at `/<id>` (with a single game, also
@@ -39,6 +44,8 @@ export interface ServeOptions {
   library?: GameLibrary;
   /** Accounts that may upload games (their ids or Discord ids; a development server: anyone). */
   uploaders?: string[];
+  /** Accounts that may manage every game (approve for the home page, ban…): their ids or Discord ids. */
+  admins?: string[];
   port: number;
   /** The engine's compiled `.wasm`. */
   wasm: BufferSource;
@@ -73,6 +80,8 @@ export interface ServeOptions {
   store?: (game: string) => Store;
   storeFile?: (game: string) => string;
   saveEvery?: number;
+  /** Seconds a room's thread may go quiet before it's stopped as stuck (default 30). */
+  stuckAfter?: number;
   /** Seconds a public room runs with nobody in it before it's saved and stopped (default 300). */
   idleStop?: number;
   /** And a room of a player's own, or a copy of a public one, which then goes (default 60). */
@@ -227,7 +236,7 @@ export function serve(o: ServeOptions): Promise<GameServer> {
   const auth = o.accounts
     ? new Auth({ accounts: o.accounts, discord: o.discord, sites: o.sites ?? [], dev: o.dev ?? false, onDelete: (a) => forget(a), catalog, log })
     : null;
-  const uploads = o.library ? new Uploads({ library: o.library, accounts: o.accounts, auth, uploaders: o.uploaders ?? [], sites: o.sites ?? [], dev: o.dev ?? false, log }) : null;
+  const uploads = o.library ? new Uploads({ library: o.library, accounts: o.accounts, auth, uploaders: o.uploaders ?? [], admins: o.admins ?? [], sites: o.sites ?? [], dev: o.dev ?? false, log }) : null;
   // A game from the library changed (a new version, say): its cosmetics are what may be worn.
   if (o.library) o.library.onChange = () => refreshCatalog();
   // Compiled once: each room's worker gets the module (no compiling per room).
@@ -277,7 +286,22 @@ export function serve(o: ServeOptions): Promise<GameServer> {
       void after.then(() => {
         engine ??= new WebAssembly.Module(o.wasm);
         worker = o.worker!({ spec, wasm: engine, storeFile: o.storeFile?.(room.def.id) ?? null, own: !room.keeps });
+        // The watchdog: a room that hasn't started in STARTING seconds, or has gone quiet for STUCK
+        // (its game in a loop that never ends, say), is stopped, and its players told.
+        const born = performance.now();
+        let heard = 0;
+        const watchdog = setInterval(() => {
+          const now = performance.now();
+          const quiet = heard ? (now - heard) / 1000 > (o.stuckAfter ?? STUCK) : (now - born) / 1000 > STARTING;
+          if (!quiet || exited) return;
+          clearInterval(watchdog);
+          failed(room, link, heard ? 'it stopped responding (stuck in a loop?)' : "it didn't start in time", 'The game stopped responding');
+          void worker?.terminate();
+        }, 1000);
+        worker.on('exit', () => clearInterval(watchdog));
         worker.on('message', (m: FromRoom) => {
+          heard = performance.now();
+          if (m.t === 'alive') return;
           if (m.t === 'send') room.send(m.client, m.text);
           else if (m.t === 'counts') {
             room.playing = m.playing;
@@ -313,11 +337,11 @@ export function serve(o: ServeOptions): Promise<GameServer> {
   }
 
   /** Something went wrong with a room itself (not a game's error, which it logs and carries on from): everyone in it is let go. */
-  function failed(room: Room, link: RoomLink, reason: string) {
+  function failed(room: Room, link: RoomLink, reason: string, told = 'The game stopped unexpectedly') {
     room.log(`failed: ${reason}`);
     if (room.link !== link) return;
     void stop(room);
-    for (const ws of room.sockets.values()) ws.close(1011, 'The game stopped unexpectedly');
+    for (const ws of room.sockets.values()) ws.close(1011, told);
   }
 
   /** Save and stop a room (nobody's in it, or the server is closing); a copy of the public one, or a room of a player's own, then goes. */
@@ -420,8 +444,8 @@ export function serve(o: ServeOptions): Promise<GameServer> {
     if (path === '/health') {
       res.writeHead(200, { 'Content-Type': 'text/plain' }).end('ok');
     } else if (path === '/games' || path === '/') {
-      // The library's listed games come after the ones compiled in.
-      const listed = (o.library?.records() ?? []).filter((r) => r.listed && r.current && !defs.has(r.id) && !o.library!.broken(r.id)).flatMap((r) => defOf(r.id) ?? []);
+      // The library's games approved for the home page come after the ones compiled in.
+      const listed = (o.library?.records() ?? []).filter((r) => r.home === 'approved' && r.current && !defs.has(r.id) && !o.library!.broken(r.id)).flatMap((r) => defOf(r.id) ?? []);
       const games = [...o.games, ...listed].map((def) => {
         // The public game, in all its copies running.
         const pub = [...rooms.values()].filter((r) => r.def.id === def.id && !r.own && r.link);

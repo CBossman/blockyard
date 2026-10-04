@@ -7,6 +7,7 @@
 import { readdirSync } from 'node:fs';
 import path from 'node:path';
 import { createServer } from 'vite';
+import { devWorker } from './dev-worker.mjs';
 
 const dir = 'tests/headless';
 const files = process.argv.slice(2).length
@@ -21,6 +22,8 @@ const vite = await createServer({
   server: { middlewareMode: true, hmr: false, ws: false, watch: null },
   optimizeDeps: { noDiscovery: true, include: [] },
 });
+// Tests' rooms in worker threads compile their modules through this Vite (see dev-worker.mjs).
+globalThis.__blockyardDevWorker = devWorker(vite);
 
 let failed = 0;
 try {

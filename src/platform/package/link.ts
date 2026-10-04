@@ -108,11 +108,50 @@ export interface MyGame {
    * or played until it passes again (or a new version is uploaded). When, and what went wrong.
    */
   broken: { at: string; errors: string[] } | null;
+  /** The home page: asked for (waiting for an admin), approved (on the shelf), declined; null: not asked. */
+  home: 'asked' | 'approved' | 'declined' | null;
+}
+
+/** A game in the community directory (`GET /g/directory`): hosted, in the directory, not on the home page. */
+export interface DirectoryGame {
+  id: string;
+  title: string;
+  tagline?: string;
+  accent?: string;
+  cover?: string;
+  /** Its owners' names. */
+  by: string[];
+  /** When its current version went up (ISO time). */
+  updated: string;
+  /** What a screen loads to play it. */
+  entry: PackageEntry;
+}
+
+/** A player's report of a game, as the admin sees it. */
+export interface AdminReport {
+  id: number;
+  game: string;
+  version: string | null;
+  /** The reporter's name (null: a guest). */
+  name: string | null;
+  reason: string;
+  at: string;
+}
+
+/** What an admin sees (`GET /admin`). */
+export interface AdminView {
+  games: (MyGame & { reports: number })[];
+  /** Waiting: not resolved yet. */
+  reports: AdminReport[];
+  bans: { account: string; name: string; reason: string; at: string }[];
+  activity: { at: string; by: string; game?: string; text: string }[];
 }
 
 /** What `GET /g/mine` answers. */
 export interface MyGames {
   uploader: boolean;
+  /** May manage every game (the server's `ADMINS`): `GET /admin`. */
+  admin: boolean;
   account: { id: string; name: string } | null;
   games: MyGame[];
 }

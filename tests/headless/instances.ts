@@ -1,6 +1,6 @@
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 import { Worker } from 'node:worker_threads';
 import { CLOSE_LIMIT, CLOSE_UNKNOWN, serve } from '../../src/platform/host/server';
 import { SqliteStore } from '../../src/platform/host/sqlite';
@@ -8,7 +8,7 @@ import { decode, encode } from '../../src/platform/net/codec';
 import { FrameReader } from '../../src/platform/net/delta';
 import type { ClientCommand, ServerWelcome, TimedBatch, WireBatch } from '../../src/platform/net/protocol';
 import type { SimFrame } from '../../src/platform/sim/sim';
-import { check, games } from './_harness';
+import { check, games, roomWorker } from './_harness';
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -62,7 +62,7 @@ export default async function instances() {
     seed: 3,
     wasm: readFileSync('engine/pkg/voxel_engine_bg.wasm'),
     worker: (workerData) => {
-      const w = new Worker(resolve('scripts/room-worker-dev.mjs'), { workerData });
+      const w = roomWorker(workerData);
       threads.push(w);
       return w;
     },

@@ -14,6 +14,20 @@ export interface Account {
   avatar: string | null;
 }
 
+/** A player's report of a game. */
+export interface Report {
+  id: number;
+  game: string;
+  version: string | null;
+  /** The reporter's account (null: a guest) and name. */
+  account: string | null;
+  name: string | null;
+  reason: string;
+  at: string;
+  resolved: string | null;
+  resolvedBy: string | null;
+}
+
 /** What Discord says of a user (`GET /users/@me`, scope `identify`). */
 export interface DiscordUser {
   id: string;
@@ -59,6 +73,22 @@ const SETUP = `
     id TEXT NOT NULL,
     at TEXT NOT NULL DEFAULT (datetime('now')),
     PRIMARY KEY (account, game, id)
+  );
+  CREATE TABLE IF NOT EXISTS bans (
+    account TEXT PRIMARY KEY REFERENCES accounts (id) ON DELETE CASCADE,
+    by TEXT NOT NULL,
+    reason TEXT NOT NULL DEFAULT '',
+    at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE TABLE IF NOT EXISTS reports (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    game TEXT NOT NULL,
+    version TEXT,
+    account TEXT,
+    reason TEXT NOT NULL,
+    at TEXT NOT NULL DEFAULT (datetime('now')),
+    resolved TEXT,
+    resolved_by TEXT
   );
   CREATE TABLE IF NOT EXISTS upload_tokens (
     hash TEXT PRIMARY KEY,
@@ -201,6 +231,35 @@ export class Accounts {
   /** Revoke all of an account's upload tokens: how many there were. */
   revokeUploadTokens(account: string): number {
     return Number(this.db.prepare('DELETE FROM upload_tokens WHERE account = ?').run(account).changes);
+  }
+
+  /** Ban an account from uploading and managing games (or lift it: `banned` false). */
+  ban(account: string, banned: boolean, by: string, reason = '') {
+    if (banned) this.db.prepare('INSERT INTO bans (account, by, reason) VALUES (?, ?, ?) ON CONFLICT (account) DO UPDATE SET by = excluded.by, reason = excluded.reason').run(account, by, reason);
+    else this.db.prepare('DELETE FROM bans WHERE account = ?').run(account);
+  }
+
+  banned(account: string): boolean {
+    return !!this.db.prepare('SELECT 1 FROM bans WHERE account = ?').get(account);
+  }
+
+  /** Every ban, newest first, with the banned account's name. */
+  bans(): { account: string; name: string; by: string; reason: string; at: string }[] {
+    return this.db.prepare('SELECT b.account, a.name, b.by, b.reason, b.at FROM bans b JOIN accounts a ON a.id = b.account ORDER BY b.at DESC').all() as { account: string; name: string; by: string; reason: string; at: string }[];
+  }
+
+  /** A player reports a game (an account's id, or null for a guest): its number. */
+  report(game: string, version: string | null, account: string | null, reason: string): number {
+    return Number(this.db.prepare('INSERT INTO reports (game, version, account, reason) VALUES (?, ?, ?, ?)').run(game, version, account, reason.slice(0, 1000)).lastInsertRowid);
+  }
+
+  /** Reports, newest first: those not resolved yet (or all). */
+  reports(all = false): Report[] {
+    return this.db.prepare(`SELECT r.id, r.game, r.version, r.account, a.name, r.reason, r.at, r.resolved, r.resolved_by AS resolvedBy FROM reports r LEFT JOIN accounts a ON a.id = r.account ${all ? '' : 'WHERE r.resolved IS NULL'} ORDER BY r.id DESC LIMIT 200`).all() as unknown as Report[];
+  }
+
+  resolveReport(id: number, by: string): boolean {
+    return this.db.prepare(`UPDATE reports SET resolved = datetime('now'), resolved_by = ? WHERE id = ? AND resolved IS NULL`).run(by, id).changes > 0;
   }
 
   /** What an account wears: its avatar's code (null: none chosen yet) and the cosmetics it has on. */

@@ -1,6 +1,4 @@
 import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
-import { Worker } from 'node:worker_threads';
 import { WebSocket } from 'ws';
 import { normalAvatar } from '../../src/platform/avatar';
 import { Accounts } from '../../src/platform/host/accounts';
@@ -10,7 +8,7 @@ import { decode, encode } from '../../src/platform/net/codec';
 import { FrameReader } from '../../src/platform/net/delta';
 import type { ClientCommand, ServerWelcome, WireBatch } from '../../src/platform/net/protocol';
 import type { SimFrame } from '../../src/platform/sim/sim';
-import { check, games } from './_harness';
+import { check, games, roomWorker } from './_harness';
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const SITE = 'https://blockyard.example';
@@ -331,7 +329,7 @@ async function inWorker() {
     port: 0,
     seed: 1,
     wasm: readFileSync('engine/pkg/voxel_engine_bg.wasm'),
-    worker: (workerData) => new Worker(resolve('scripts/room-worker-dev.mjs'), { workerData }),
+    worker: (workerData) => roomWorker(workerData),
     accounts: Accounts.open(':memory:'),
     sites: [SITE],
     dev: true,

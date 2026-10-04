@@ -10,7 +10,7 @@
 // its own (the server's main thread never runs a built game's code), and only then moved in and
 // made current. Rooms already running keep the version they started with.
 import { randomBytes } from 'node:crypto';
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, cpSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { GameDefinition, GameMeta } from '../api/types';
 import type { BuiltGame } from '../package/build';
@@ -50,8 +50,13 @@ export interface GameRecord {
   owners: string[];
   /** The version new rooms run (null: not hosted). */
   current: string | null;
-  /** On the home page (else open by link only). */
+  /** In the community directory (else found by its link only). */
   listed: boolean;
+  /**
+   * The home page: its owners asked for it, an admin approved (it's on the shelf) or declined it
+   * (absent: nobody asked). Approval is for the game, its new versions too, until taken back.
+   */
+  home?: 'asked' | 'approved' | 'declined';
   /** Its versions, oldest first (the last `KEEP_VERSIONS`). */
   versions: VersionRecord[];
   created: string;
@@ -87,8 +92,17 @@ export interface LibraryOptions {
   log?(line: string): void;
 }
 
-/** Ids no game may have: the server's own routes (`/g/mine`). */
-const RESERVED = new Set(['mine']);
+/** Ids no game may have: the server's own routes (`/g/mine`, `/g/directory`). */
+const RESERVED = new Set(['mine', 'directory', 'admin']);
+
+/** Something that happened in the library (the admin's recent activity). */
+export interface Activity {
+  at: string;
+  /** Who did it (an account's id, `local`, `dev`, `server`). */
+  by: string;
+  game?: string;
+  text: string;
+}
 
 /** Versions kept of each game (with their files): older ones go. */
 export const KEEP_VERSIONS = 10;
@@ -200,6 +214,7 @@ export class GameLibrary {
         kept.check = { platform: this.o.platform, ok, at: new Date().toISOString(), ...(ok ? {} : { errors: smoke.errors.slice(0, 10) }) };
         this.save(r);
         found.push({ id: r.id, ok });
+        if (!ok) this.note('server', `broken by a platform update (${this.o.platform}): ${smoke.errors[0]?.split('\n')[0]}`, r.id);
         this.o.log?.(`[library] ${r.id}: version ${v.version} ${ok ? 'passes' : 'FAILS'} its smoke test on platform ${this.o.platform}${ok ? '' : `: ${smoke.errors[0]?.split('\n')[0]}`}`);
       }
       return found;
@@ -249,6 +264,42 @@ export class GameLibrary {
     return true;
   }
 
+  /** A game's home page state (see `GameRecord.home`; null: none). */
+  setHome(id: string, home: GameRecord['home'] | null): boolean {
+    const r = this.games.get(id);
+    if (!r) return false;
+    if (home) r.home = home;
+    else delete r.home;
+    this.save(r);
+    return true;
+  }
+
+  /** Note something that happened (kept in `<root>/activity.jsonl`). */
+  note(by: string, text: string, game?: string) {
+    const entry: Activity = { at: new Date().toISOString(), by, ...(game ? { game } : {}), text };
+    try {
+      appendFileSync(join(this.o.root, 'activity.jsonl'), `${JSON.stringify(entry)}\n`);
+    } catch {
+      // (the activity log is a convenience)
+    }
+  }
+
+  /** What happened lately, newest first. */
+  activity(limit = 200): Activity[] {
+    try {
+      const lines = readFileSync(join(this.o.root, 'activity.jsonl'), 'utf8').trim().split('\n').slice(-limit).reverse();
+      return lines.flatMap((l) => {
+        try {
+          return [JSON.parse(l) as Activity];
+        } catch {
+          return [];
+        }
+      });
+    } catch {
+      return [];
+    }
+  }
+
   setListed(id: string, listed: boolean): boolean {
     const r = this.games.get(id);
     if (!r) return false;
@@ -286,15 +337,22 @@ export class GameLibrary {
     try {
       built = await this.o.build(folder, join(work, 'out'), asId);
     } catch (err) {
-      if (err instanceof BuildError) return { ok: false, status: 400, problems: err.problems };
+      if (err instanceof BuildError) {
+        this.note(by, `upload refused: ${err.problems[0]}`, asId);
+        return { ok: false, status: 400, problems: err.problems };
+      }
       throw err;
     }
     const { id, version } = built;
-    if (RESERVED.has(id)) return { ok: false, status: 409, problems: [`"${id}" is a word the server keeps for itself: give your game another id`] };
-    if (this.o.taken(id)) return { ok: false, status: 409, problems: [`"${id}" is a game this server has built in: give yours another id`] };
-    if (!this.mayManage(id, by)) return { ok: false, status: 403, problems: [`"${id}" is someone else's game: ask one of its owners to add you, or give yours another id`] };
+    const refuse = (status: number, problems: string[]): UploadResult => {
+      this.note(by, `upload refused: ${problems[0]}`, id);
+      return { ok: false, status, problems };
+    };
+    if (RESERVED.has(id)) return refuse(409, [`"${id}" is a word the server keeps for itself: give your game another id`]);
+    if (this.o.taken(id)) return refuse(409, [`"${id}" is a game this server has built in: give yours another id`]);
+    if (!this.mayManage(id, by)) return refuse(403, [`"${id}" is someone else's game: ask one of its owners to add you, or give yours another id`]);
     const smoke = await this.o.smoke(built.dir);
-    if (!smoke.ok || !smoke.meta) return { ok: false, status: 400, problems: [`it failed its smoke test (${smoke.summary}):`, ...smoke.errors] };
+    if (!smoke.ok || !smoke.meta) return refuse(400, [`it failed its smoke test (${smoke.summary}):`, ...smoke.errors]);
     // Moved in: the version, its new files, its source.
     const home = this.folder(id);
     mkdirSync(join(home, 'assets'), { recursive: true });
@@ -315,6 +373,7 @@ export class GameLibrary {
     this.games.set(id, r);
     this.save(r);
     this.o.log?.(`[library] ${id}: version ${version} by ${by} (${smoke.summary})`);
+    this.note(by, `uploaded version ${version} (${smoke.meta.title})`, id);
     return { ok: true, id, version, record: r, summary: smoke.summary };
   }
 

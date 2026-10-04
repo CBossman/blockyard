@@ -4,7 +4,7 @@
 //
 //   npm run server -- sandbox --port 8787
 //   npm run server -- --dev          development mode (what `npm run dev` runs: see src/server.ts)
-import { Worker } from 'node:worker_threads';
+import { devWorker } from './dev-worker.mjs';
 import { createServer } from 'vite';
 
 const args = process.argv.slice(2);
@@ -16,7 +16,7 @@ const vite = await createServer({
 });
 const { main } = await vite.ssrLoadModule('/src/server.ts');
 // Each room runs in a worker thread of its own (compiling its game there too).
-const worker = (workerData) => new Worker(new URL('./room-worker-dev.mjs', import.meta.url), { workerData });
+const worker = devWorker(vite);
 const server = await main(args, worker, { dev: args.includes('--dev') });
 const stop = async () => {
   await server.close();

@@ -1,4 +1,6 @@
 import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { Worker } from 'node:worker_threads';
 import type { GameDefinition } from '../../src/platform/api/types';
 import { devGames, games } from '../../src/games/server';
 import { Headless, type HeadlessOptions } from '../../src/platform/host/headless';
@@ -44,4 +46,13 @@ function mulberry32(seed: number): () => number {
     t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
+}
+
+/**
+ * A room's worker thread, as the development servers start them: its modules compiled by the test
+ * runner's Vite (scripts/dev-worker.mjs), or by a Vite of its own when run some other way.
+ */
+export function roomWorker(workerData: unknown): Worker {
+  const make = (globalThis as { __blockyardDevWorker?: (data: unknown) => Worker }).__blockyardDevWorker;
+  return make ? make(workerData) : new Worker(resolve('scripts/room-worker-dev.mjs'), { workerData });
 }

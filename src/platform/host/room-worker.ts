@@ -40,7 +40,12 @@ export type FromRoom =
   | { t: 'log'; line: string }
   | { t: 'achieve'; account: string; id: string }
   | { t: 'grant'; account: string; id: string }
-  | { t: 'failed'; text: string };
+  | { t: 'failed'; text: string }
+  /** Still going: a room's thread says so every `ALIVE_EVERY` seconds (a room that stops saying it is stuck). */
+  | { t: 'alive' };
+
+/** How often a room's thread says it's alive (seconds). */
+export const ALIVE_EVERY = 2;
 
 /**
  * Run one room in this worker thread (the app's room worker calls this; `find` looks its game
@@ -85,6 +90,10 @@ export async function serveRoomWorker(find: (id: string, dev: boolean) => GameDe
     return;
   }
   const ended = new Promise<void>((done) => port.on('close', done));
+  // Alive, as long as its event loop turns (a game stuck in a loop stops it: the server notices).
+  post({ t: 'alive' });
+  const alive = setInterval(() => post({ t: 'alive' }), ALIVE_EVERY * 1000);
+  void ended.then(() => clearInterval(alive));
   port.on('message', (m: ToRoom) => {
     try {
       if (m.t === 'connect') core.connect(m.client, m.who);
