@@ -53,6 +53,7 @@ import { sanitizeGameMessage } from './net/validate';
 import { clipFrame, type ClipFrame } from './sim/entities';
 import { Inventory as BlockPicker } from './ui/screens';
 import { cosmeticCatalog } from './cosmetics';
+import { packagedEntry, webOrigin } from './client/packaged';
 import { TitleScreen } from './ui/home';
 import { PauseMenu } from './ui/pause';
 import { blockIcon } from './ui/icons';
@@ -290,6 +291,14 @@ export class Runtime {
     // Development games open by id but aren't listed in the launcher (a server names one too:
     // `?server=ws://host&game=highnoon`).
     const find = (id: string | null) => [...games, ...hidden].find((g) => g.meta.id === id);
+    // A game this page wasn't built with may be one the server hosts built (uploaded: see
+    // client/packaged.ts), open by id; it stays in the catalog, not listed, while the page is open.
+    const fetchPackaged = async (origin: string, id: string) => {
+      const entry = await packagedEntry(origin, id).catch((err: unknown) => (console.warn(err), null));
+      if (entry && !find(id)) hidden.push(entry);
+      return entry;
+    };
+    if (picked && !find(picked) && base) await fetchPackaged(webOrigin(base), picked);
     let listed = find(picked) ?? games[0];
     const room = url.searchParams.get('room');
     let own = room && listed.meta.instances && ROOM_CODE.test(room) ? room : null;
@@ -342,7 +351,7 @@ export class Runtime {
     }
     let game: ClientGame;
     try {
-      const entry = find(link.welcome.game);
+      const entry = find(link.welcome.game) ?? (await fetchPackaged(webOrigin(link.url), link.welcome.game));
       if (!entry) throw new Error(`The server is running "${link.welcome.game}", which this client doesn't have.`);
       game = await (entry === listed && early ? early : entry.load());
     } catch (err) {

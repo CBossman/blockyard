@@ -24,6 +24,11 @@ export interface RoomSpec {
   seed?: number;
   /** Seconds between saves. */
   saveEvery: number;
+  /**
+   * A built game's (not compiled into the server; see package/build.ts): the built version's
+   * folder, which the room's worker imports, and the server's public address its files are at.
+   */
+  package?: { dir: string; publicUrl: string };
 }
 
 /** What a room says back: text for a client's socket, how many are in it, log lines. */

@@ -1647,6 +1647,27 @@ export default function myGame() {
 
 For online play there are probes rather than tests: `tests/headless/_netprobe.ts` measures what each game sends a player each second (`GAME=starfighter PLAYERS=4`), `tests/headless/_roomcost.ts` what a room costs a server each step (`COMMAND='mode tdm kahuna'` runs a command first), `tests/headless/_ghost.ts` is a player with no screen that joins a server and flies circles (to watch how smoothly others move), and `scripts/lagproxy.mjs` puts a bad network between a browser and a server.
 
+## Games outside the platform's build
+
+A game doesn't have to be compiled into the platform. A server can build one from its folder and host it, and players' screens load its client code from that server (the design: `docs/PROPOSAL-UPLOADS.md`; uploading is the next step).
+
+```sh
+npm run game -- build src/games/obby --id obby-copy     # build and smoke-test it: data/games/obby-copy/<version>/
+npm run dev -- --package src/games/obby=obby-copy       # host it too: http://localhost:5173/?game=obby-copy
+npm run dev -- --package ../my-game                     # any folder, under its meta's id
+```
+
+The folder is the game exactly as it sits in `src/games/<id>/`. Building it:
+
+- **Holds it to its boundaries**, as `npm run check:boundaries` does for the games in the repo: only its own files (nothing outside its folder) and the public API, server code only `@platform`, `/art`, `/kits` and `/items`, client code only `@platform`, `/art`, `/items`, `/client`, `/client/kits` and `/client/math`, and neither side's code reaching the other's.
+- **Bundles each side** into one ES module (`server.js`, `client.js`) with the platform left out: each `@platform…` import reads the running platform's module, so the game binds to whatever platform loads it.
+- **Keeps its files** (`?url`: models, pictures, sounds) by content in `<id>/assets/`, and inlines `?raw` text.
+- **Bundles its client's Web Workers** (`new Worker(new URL('./x.ts', import.meta.url), { type: 'module' })`) on their own. The platform starts them, and they get `@platform`, `/art`, `/items` and `/client/math` too.
+- **Gives it Vite's `import.meta.env`**: `DEV` is true only when built for a development server.
+- **Smoke-tests it**: its server code loads as plain Node runs it, a room starts, a player joins and plays for a few seconds, and nothing may throw.
+
+A server hosts a built game like any other, but not listed: open it by id (`?game=<id>`). It serves screens `/g/<id>` (what to load), the client code by version (`/g/<id>/<version>/client.js`) and the files (`/g/<id>/assets/…`), never the server code. The files the server code names by URL (models it sends players) are addressed by the server's public address (`PUBLIC_URL`, default `http://localhost:<port>`).
+
 ## Architecture and the road to multiplayer
 
 ```

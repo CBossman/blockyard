@@ -1,7 +1,13 @@
 // The game server: hosts the app's games for players who join from the browser.
 //
 //   npm run server -- [games…] [--port 8787] [--data data] [--seed 1234] [--rooms 8] [--room-size 16] [--new] [--cheats] [--dev]
+//                      [--package <folder>]…
 //
+// `--package <folder>` builds the game in that folder (anywhere: src/games/<id>, or outside the
+// repo) the way an upload is built (docs/PROPOSAL-UPLOADS.md) and hosts it, not listed: open it
+// with `?game=<id>`. `--package <folder>=<id>` hosts it under another id (a second copy of a game
+// that's compiled in). Built games are kept in <data>/games, and name their files by the server's
+// public address (PUBLIC_URL, default http://localhost:<port>).
 // Games default to all of them; each keeps its world, players and data in <data>/<game>.sqlite
 // (--db path for a single game). --new sets the kept worlds aside and starts fresh. `npm run dev`
 // runs this in development mode, next to Vite.
@@ -18,7 +24,7 @@ import { join } from 'node:path';
 import { devGames, games } from './games/server';
 import type { GameDefinition } from './platform/api/types';
 import { Accounts } from './platform/host/accounts';
-import { serve, type ServeOptions } from './platform/host/server';
+import { serve, type Packages, type ServeOptions } from './platform/host/server';
 import { SqliteStore } from './platform/host/sqlite';
 
 /** What only the program that starts the server decides (never a flag a production server reads). */
@@ -47,7 +53,7 @@ export async function main(args: string[], worker?: ServeOptions['worker'], mode
     const i = args.indexOf(`--${name}`);
     return i >= 0 ? args[i + 1] : undefined;
   };
-  const valued = ['--port', '--seed', '--db', '--data', '--rooms', '--room-size', '--wasm'];
+  const valued = ['--port', '--seed', '--db', '--data', '--rooms', '--room-size', '--wasm', '--package'];
   const named = args.filter((a, i) => !a.startsWith('--') && !valued.includes(args[i - 1])).flatMap((a) => a.split(','));
   // Named games may include development games (`gallery`), in development mode only.
   const extra = dev ? await devGames() : [];
@@ -69,9 +75,13 @@ export async function main(args: string[], worker?: ServeOptions['worker'], mode
       console.log(`[${d.id}] the old world is in ${db}.${stamp}`);
     }
   }
+  const packages = await buildPackages(args.flatMap((a, i) => (args[i - 1] === '--package' ? [a] : [])), join(data, 'games'), process.env.PUBLIC_URL ?? `http://localhost:${port}`, dev);
+  for (const id of packages?.games.keys() ?? []) if (known.some((g) => g.id === id)) fail(`--package: "${id}" is a game that's compiled in (give it another id: --package <folder>=<id>)`);
+  if (packages) hidden.push(...(await packages.defs));
   const server = await serve({
     games: defs,
     hidden,
+    packages: packages ?? undefined,
     port,
     seed,
     wasm: readFileSync(flag('wasm') ?? 'engine/pkg/voxel_engine_bg.wasm'),
@@ -92,6 +102,27 @@ export async function main(args: string[], worker?: ServeOptions['worker'], mode
   console.log(`serving ${defs.map((d) => d.id).join(', ')} on port ${server.port}${how}; kept in ${defs.length === 1 && flag('db') ? flag('db') : `${data}/`}`);
   if (!dev) for (const d of defs) console.log(`  ${d.id.padEnd(12)} http://localhost:5173/?server=ws://localhost:${server.port}&game=${d.id}`);
   return server;
+}
+
+/** Build and load the games named by `--package` (the packager only when there are any). */
+async function buildPackages(folders: string[], root: string, publicUrl: string, dev: boolean): Promise<(Packages & { defs: Promise<GameDefinition[]> }) | null> {
+  if (!folders.length) return null;
+  const { buildGame, BuildError } = await import('./platform/package/build');
+  const { loadPackaged } = await import('./platform/host/packaged');
+  const games: Packages['games'] = new Map();
+  for (const spec of folders) {
+    const [folder, id] = spec.split('=');
+    try {
+      const built = await buildGame(folder, { out: root, id, dev });
+      games.set(built.id, { dir: built.dir, manifest: built.manifest });
+      console.log(`[${built.id}] built ${folder} as version ${built.version}`);
+    } catch (err) {
+      if (err instanceof BuildError) fail(`--package ${folder}: can't build it:\n${err.problems.map((p) => `  ${p}`).join('\n')}`);
+      throw err;
+    }
+  }
+  const defs = Promise.all([...games.values()].map((g) => loadPackaged(g.dir, publicUrl)));
+  return { root, publicUrl, games, defs };
 }
 
 function fail(message: string): never {

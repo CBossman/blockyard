@@ -1,4 +1,6 @@
-import { createServer, type IncomingMessage } from 'node:http';
+import { readFile } from 'node:fs/promises';
+import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import { extname, join as joinPath } from 'node:path';
 import type { Worker } from 'node:worker_threads';
 import { WebSocketServer, type WebSocket } from 'ws';
 import type { GameDefinition } from '../api/types';
@@ -13,6 +15,17 @@ import type { GameHost, Who } from './game';
 import { PrivateStore, RoomCore, type RoomSpec } from './room';
 import type { FromRoom, RoomWorkerData, ToRoom } from './room-worker';
 import type { Store } from './store';
+import { packagePath, type PackageEntry, type PackageManifest } from '../package/link';
+import { metaOf } from './packaged';
+
+/** Built games a server hosts (see `ServeOptions.packages`). */
+export interface Packages {
+  /** Where built games are kept: `<root>/<id>/<version>/`, `<root>/<id>/assets/`. */
+  root: string;
+  /** The server's address as players reach it (`https://play.blockyard.gg`). */
+  publicUrl: string;
+  games: Map<string, { dir: string; manifest: PackageManifest }>;
+}
 
 export interface ServeOptions {
   /**
@@ -27,6 +40,12 @@ export interface ServeOptions {
    * games, on a development server.
    */
   hidden?: GameDefinition[];
+  /**
+   * The built games among them (see package/build.ts), by id: the version each runs. A room of one
+   * imports that version in its worker. The server serves their screens' code and files at
+   * `/g/<id>/…` (see `packagePath`), from `root`, and names those files by `publicUrl`.
+   */
+  packages?: Packages;
   port: number;
   /** The engine's compiled `.wasm`. */
   wasm: BufferSource;
@@ -181,6 +200,24 @@ class Room {
  * batch that catches them up, then a batch per step. Also answers `GET /health` (for the hosting
  * platform) and `GET /games` (what's on, and how many are playing).
  */
+const CONTENT_TYPES: Record<string, string> = {
+  '.js': 'text/javascript; charset=utf-8',
+  '.map': 'application/json',
+  '.json': 'application/json',
+  '.glb': 'model/gltf-binary',
+  '.gltf': 'model/gltf+json',
+  '.bin': 'application/octet-stream',
+  '.png': 'image/png',
+  '.webp': 'image/webp',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.ogg': 'audio/ogg',
+  '.mp3': 'audio/mpeg',
+  '.wav': 'audio/wav',
+  '.css': 'text/css; charset=utf-8',
+  '.txt': 'text/plain; charset=utf-8',
+};
+
 export function serve(o: ServeOptions): Promise<GameServer> {
   const log = o.log ?? (() => {});
   const limits = { ...LIMITS, ...o.limits };
@@ -205,6 +242,8 @@ export function serve(o: ServeOptions): Promise<GameServer> {
   /** Start a room's game: in a worker of its own, or here. */
   function start(room: Room): RoomLink {
     const spec: RoomSpec = { game: room.def.id, instance: room.own ? room.instance : 'public', ...(room.shard > 1 ? { shard: room.shard } : {}), tickRate: rate, cheats: o.cheats ?? false, dev: o.dev ?? false, seed: o.seed, saveEvery: o.saveEvery ?? 30 };
+    const pkg = o.packages?.games.get(room.def.id);
+    if (pkg) spec.package = { dir: pkg.dir, publicUrl: o.packages!.publicUrl };
     if (o.worker) return inWorker(room, spec, room.stopping ?? Promise.resolve());
     let shared = stores.get(room.def.id);
     if (!shared && o.store) stores.set(room.def.id, (shared = o.store(room.def.id)));
@@ -397,10 +436,44 @@ export function serve(o: ServeOptions): Promise<GameServer> {
         };
       });
       res.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify({ games, rooms: running() }));
+    } else if (path.startsWith('/g/') && o.packages) {
+      void servePackage(o.packages, path, res);
     } else {
       res.writeHead(404, { 'Content-Type': 'text/plain' }).end('not found');
     }
   });
+
+  /**
+   * A built game for players' screens: `/g/<id>` (what to load: `PackageEntry`), then its client
+   * code by version and its files by name. Never its server code.
+   */
+  async function servePackage(p: Packages, path: string, res: ServerResponse) {
+    const parts = path.split('/').slice(2);
+    const pkg = p.games.get(parts[0]);
+    const def = pkg && defs.get(parts[0]);
+    const missing = () => res.writeHead(404, { 'Content-Type': 'text/plain' }).end('not found');
+    if (!pkg || !def) return missing();
+    const { id, version } = pkg.manifest;
+    if (parts.length === 1) {
+      const entry: PackageEntry = { id, version, meta: metaOf(def), modules: pkg.manifest.modules.client, client: p.publicUrl + packagePath.version(id, version, 'client.js') };
+      return res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' }).end(JSON.stringify(entry));
+    }
+    const file =
+      parts.length === 3 && parts[1] === 'assets' && /^[\w.-]+$/.test(parts[2]) && !parts[2].startsWith('.')
+        ? joinPath(p.root, id, 'assets', parts[2])
+        : parts.length === 3 && /^[0-9a-f]{12}$/.test(parts[1]) && ['client.js', 'client.js.map', 'game.json'].includes(parts[2])
+          ? joinPath(p.root, id, parts[1], parts[2])
+          : parts.length === 4 && /^[0-9a-f]{12}$/.test(parts[1]) && parts[2] === 'workers' && /^[\w-]+\.js(\.map)?$/.test(parts[3])
+            ? joinPath(p.root, id, parts[1], 'workers', parts[3])
+            : null;
+    if (!file) return missing();
+    try {
+      const body = await readFile(file);
+      res.writeHead(200, { 'Content-Type': CONTENT_TYPES[extname(file)] ?? 'application/octet-stream', 'Cache-Control': 'public, max-age=31536000, immutable' }).end(body);
+    } catch {
+      missing();
+    }
+  }
 
   // Compressed (permessage-deflate, which every browser speaks): one step's patch looks much like
   // the last, so keeping the compressor's window between messages shrinks them a few times over.

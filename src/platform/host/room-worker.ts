@@ -2,6 +2,7 @@ import { parentPort, workerData } from 'node:worker_threads';
 import type { GameDefinition } from '../api/types';
 import type { ClientCommand } from '../net/protocol';
 import type { Who } from './game';
+import { loadPackaged } from './packaged';
 import { PrivateStore, RoomCore, type RoomSpec } from './room';
 import { SqliteStore } from './sqlite';
 import type { Store } from './store';
@@ -44,7 +45,9 @@ export async function serveRoomWorker(find: (id: string, dev: boolean) => GameDe
   let core: RoomCore;
   let store: Store | undefined;
   try {
-    const def = await find(data.spec.game, data.spec.dev);
+    // A built game is imported from its folder; the others are compiled in.
+    const pkg = data.spec.package;
+    const def = pkg ? await loadPackaged(pkg.dir, pkg.publicUrl) : await find(data.spec.game, data.spec.dev);
     if (!def) throw new Error(`no game "${data.spec.game}"`);
     const own = data.storeFile ? SqliteStore.open(data.storeFile, data.spec.game) : undefined;
     store = own && data.own ? new PrivateStore(own, true) : own;
