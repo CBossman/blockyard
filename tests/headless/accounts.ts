@@ -306,7 +306,8 @@ async function achievements() {
     a.close();
     await until('Ann gone', () => !host.sim.players.some((p) => p.name === 'Ann' && !p.vacant));
     a = player(srv.port, 'x', SITE, cookie);
-    await until('Ann back', () => g.names().includes('Ann'));
+    // Her new socket welcomed and her place taken again (the vacant one is listed while she's away).
+    await until('Ann back', () => a.welcomed() && host.sim.players.some((p) => p.name === 'Ann' && !p.vacant) && g.names().includes('Ann'));
     check(ann().achieved('t_found') && ann().achieved('t_secret') && !ann().achieve('t_found'), 'back again, she has them');
 
     // Deleting her account takes them.
