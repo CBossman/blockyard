@@ -63,13 +63,8 @@ main server's games stay where they are.
 
 ### The browser sandbox (stage 3)
 
-An uploaded game's screen runs in an iframe on another domain (`blockyard-usercontent.com`, a
-subdomain per game), sandboxed (no navigating the page, no popups; a content security policy that
-lets it reach only the game server). blockyard.gg keeps the home page, the account and sign-in.
-The game connects with a **room ticket** the page asks the server for (playing that game only),
-never the sign-in cookie. This means splitting today's single page (runtime, home page and pause
-menu together, games switching in place) into a shell and a game frame talking by `postMessage`:
-the biggest job here.
+See "Stage 3 in detail" below: an uploaded game's screen runs in a sandboxed iframe with an opaque
+origin, served from blockyard.gg itself (no second domain needed); it joins with a room ticket.
 
 ### Opening up (stage 4)
 
@@ -137,4 +132,82 @@ takedown route.
   environment; Call of Blocky played through it (bots, the killcam). `tests/headless/
   sandboxed-rooms.ts` runs the real bundle at `permission` isolation (any machine).
 - Without `SANDBOX_URL` (development), uploaded rooms run in worker threads as before.
+
+## Stage 3 in detail: the browser sandbox
+
+### What a spike in Chrome showed (2026-10-04)
+
+A page with `<iframe sandbox="allow-scripts allow-pointer-lock">` (no `allow-same-origin`), its
+frame served from the page's own site, and a "game server" on another port that had set a session
+cookie (`HttpOnly; SameSite=Lax`, as play.blockyard.gg's is):
+
+| In the frame | Result |
+|---|---|
+| its origin | `null` (opaque): it's no page of the site's, whatever its URL |
+| `document.cookie`, `localStorage`, `parent.document` | `SecurityError` each |
+| `top.location = …`, `window.open(…)` | refused, blocked |
+| a request to the game server with credentials | sent with `Origin: null` and **no cookie** (the page's own request carried it) |
+| `import()` of a module from the site (served with `Access-Control-Allow-Origin: *`) | works |
+| WebGL2 | works |
+| `new Worker(url)` | `SecurityError` (not same-origin) |
+| a module worker from a `blob:` URL (importing, inline or fetched code) | fails |
+| a module worker from a `data:` URL that imports the worker's code | **works** |
+
+So the sandbox attribute alone gives the isolation needed, and the frame can come from
+blockyard.gg (`/frame.html`): **no second domain**. The one change for workers: start them from a
+`data:` URL (`import "<the worker's address>"`) rather than by URL or blob, the platform's engine
+workers and games' workers alike.
+
+### The shape
+
+- **Built-in games stay as they are**: in the page, switching in place.
+- **An uploaded game runs in a frame**: the home page (the shell) stays in the page, with the
+  account, sign-in, Your games, the directory and the locker; behind it, where the canvas is, an
+  iframe (`/frame.html`, sandboxed: `allow-scripts allow-pointer-lock`; `allow="pointer-lock;
+  gamepad; fullscreen; autoplay; clipboard-write"`) runs the runtime: the world, the game's client
+  code, its HUD, the pause menu. A new frame for each uploaded game (switching away destroys it),
+  so nothing an uploaded game leaves behind reaches the next game.
+- **The home page talks to the frame by `postMessage`**, through an interface both sides share:
+  today's `TitleScreen` calls (`show`, `select`, `progress`, `setReady`, `present`, `busy`,
+  `failed`, `hide`, `name`, `avatar`) become messages from the frame; the shell answers with Play,
+  a pick (another game: the shell switches), a room of one's own, the name and avatar typed. The
+  runtime gets a `RemoteTitle` with the same methods, so its code barely changes.
+- **Identity by room ticket**: the shell asks the game server (`POST /tickets {game, room}`, with
+  the sign-in cookie) for a ticket good for one connection to that game's room, for a minute; the
+  frame connects with `?ticket=…`. The server accepts a ticket instead of the cookie (a frame's
+  `Origin: null` gets no account otherwise). Guests need none.
+- **Settings without storage**: the frame can't use `localStorage`. The shell sends the settings
+  (keys, quality, volume) when it starts the frame and keeps the changes the pause menu sends back.
+  `settings.ts` and `quality.ts` read and write through a store the frame is given.
+- **The page's address**: the frame reports the game, room and copy it's in; the shell keeps them
+  in its address (invite links). "Copy invite link" in the pause menu asks the shell for the link.
+- **Play with one click**: pointer lock needs a click in the frame itself (a click on the shell's
+  button doesn't count). So, for an uploaded game, the shell's Play button lets clicks through
+  (`pointer-events: none`) and the frame, which knows where the button is, takes the click: it
+  locks the pointer and starts. Enter in the name box (no click) shows "click to play" in the
+  frame. Controllers need no lock.
+- **A content security policy on `/frame.html`**: scripts from the site, the game server and
+  `data:` (workers), `'wasm-unsafe-eval'`; connections only to the game server; pictures, sounds and
+  fonts from the site, the game server and Google Fonts. An uploaded game can't send anything
+  anywhere but the game server.
+- **The site serves its assets with `Access-Control-Allow-Origin: *`** (the frame's module loads
+  are cross-origin now); the dev server allows the `null` origin.
+
+### Plan
+
+1. **Workers by `data:` URL** (platform pool and game workers), and settings through a given
+   store. Safe on their own; built-in games unchanged.
+2. **Tickets**: `POST /tickets`, `?ticket=` on the socket, one use, a minute.
+3. **The frame**: `/frame.html` and its entry (runtime with `RemoteTitle`), the shell's
+   `FrameHost` (drives the real home page from the frame's messages, starts and destroys frames),
+   uploaded games routed to it; the CSP and CORS headers; Play's click-through.
+4. **Checks**: a browser test (an uploaded game plays in the frame; it can't read the cookie, the
+   parent, storage; its requests carry no cookie; it can't reach another address), plus the usual.
+
+### Decisions to make
+
+1. **Built-in games stay in the page** (recommended): only uploaded games pay for the frame. All
+   games in frames would be one path, but a riskier change for no security gain.
+2. **A switch to or from an uploaded game loads a fresh frame** (about a second, from cache)
+   rather than switching in place: recommended, for the isolation between games.
 
