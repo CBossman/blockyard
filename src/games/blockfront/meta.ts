@@ -36,6 +36,8 @@ export default defineMeta({
     Down: ['KeyH', 'spawn menu'],
     Y: ['KeyN', 'vote to skip'],
   },
+  // Touch: the first hero power at hand (the others in the drawer).
+  touch: { LB: ['KeyQ', 'power 1'], Left: null },
   // Awarded by the server (`player.achieve`, server.ts).
   achievements: {
     dont_get_cocky: { title: "Don't Get Cocky", description: 'Get your first kill' },

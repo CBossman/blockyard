@@ -17,6 +17,8 @@ export default defineMeta({
     ['Q / E', 'barrel roll'],
     ['A / D', 'bank'],
   ],
+  // Touch: barrel rolls at hand; nothing to switch.
+  touch: { X: ['KeyQ', 'roll left'], RB: ['KeyE', 'roll right'], LB: null, Y: null, Left: null, Right: null },
   achievements: {
     first_kill: { title: 'Scratch One', description: 'Shoot down a Bowtie' },
     barrel_roll: { title: 'Do a Barrel Roll!', description: 'Deflect an enemy laser with a barrel roll (Q or E)' },

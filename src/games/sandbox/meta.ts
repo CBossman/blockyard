@@ -15,6 +15,8 @@ export default defineMeta({
     ['E', 'blocks'],
     ['MMB', 'pick the block you look at'],
   ],
+  // Touch: the block picker at hand.
+  touch: { X: ['KeyE', 'blocks'], Up: null },
   achievements: {
     first_block: { title: 'Groundbreaker', description: 'Place your first block' },
     picker: { title: 'Fresh from the Picker', description: 'Place one of Sandbox’s own blocks: a crate, marble, a paper lantern… (E opens the picker)' },

@@ -16,6 +16,8 @@ export default defineMeta({
     ['Space / Shift', 'climb / sink'],
     ['Wheel', 'zoom out from the helm'],
   ],
+  // Touch: the helm at hand (a button, not in the drawer).
+  touch: { X: ['KeyE', 'helm'], Up: null },
   achievements: {
     helmsman: { title: 'Captain', description: 'Take the helm of the airship', reward: 'captain' },
     first_beacon: { title: 'Firelighter', description: 'Light a beacon' },

@@ -58,6 +58,10 @@ const CSS = `
   gap: 10px;
   pointer-events: none;
 }
+/* On a touch screen: drawn to fit it, like the platform's HUD. */
+body.touch-mode .xp-bar {
+  zoom: var(--hud-zoom, 1);
+}
 .xp-badge {
   position: relative;
   min-width: 42px;

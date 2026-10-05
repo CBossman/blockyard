@@ -31,6 +31,8 @@ type Phase = 'idle' | 'aim' | 'back' | 'down' | 'sent' | 'watch';
 
 /** The mouse's swing: a full backswing is this much of the view's turn (about 250 pixels at the usual sensitivity). */
 const FULL = 0.55;
+/** A finger's swing on the touch controls (holding swing, pull down, flick up): a thumb's reach, about 80 pixels, is a full backswing. */
+const FULL_TOUCH = 0.26;
 /** How far off straight (radians) the downswing's path is for an accuracy of 1. */
 const PATH_WINDOW = 0.11;
 
@@ -280,8 +282,9 @@ export function swingKit(st: GolfState): ClientKit {
         const dPitch = sw.pitch - c.pitch;
         const dYaw = sw.yaw - c.yaw;
         c.turn(dPitch, dYaw);
-        sw.y += dPitch / FULL;
-        sw.x += dYaw / FULL;
+        const full = client.input.device === 'touch' ? FULL_TOUCH : FULL;
+        sw.y += dPitch / full;
+        sw.x += dYaw / full;
         sw.trail.push([sw.x, sw.y]);
         if (phase === 'back') {
           if (sw.y > sw.peak) {
@@ -467,7 +470,9 @@ export function swingKit(st: GolfState): ClientKit {
     q('.gs-power').style.display = phase === 'down' || phase === 'sent' ? 'block' : 'none';
     q('.gs-help').textContent =
       phase === 'aim'
-        ? 'HOLD CLICK, PULL BACK, SWING UP THROUGH THE BALL · MOUSE / A D AIM · WHEEL CLUB · ARROWS STRIKE POINT · Q LOOK · E STEP AWAY'
+        ? client.input.device === 'touch'
+          ? 'HOLD SWING, PULL DOWN, FLICK UP THROUGH THE BALL · DRAG OR THE STICK TO AIM · TAP A CLUB'
+          : 'HOLD CLICK, PULL BACK, SWING UP THROUGH THE BALL · MOUSE / A D AIM · WHEEL CLUB · ARROWS STRIKE POINT · Q LOOK · E STEP AWAY'
         : mode === 'mouse'
           ? phase === 'back'
             ? 'PULL BACK FOR POWER · THEN SWING UP, STRAIGHT'
@@ -632,6 +637,10 @@ const CSS = `
 .gs-ball { width: 54px; height: 54px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff, #d9dde2 70%, #aab0b8); position: relative; box-shadow: 0 2px 8px #0009; }
 .gs-dot { position: absolute; width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 50%; background: #e8322b; box-shadow: 0 0 0 2px #fff8; }
 .gs-strike-label { font: 600 11px/1.2 var(--sans); text-align: center; max-width: 110px; text-shadow: 0 1px 2px #000a; }
+body.touch-mode :is(.gs-info, .gs-meter, .gs-help, .gs-path, .gs-strike, .gs-quality) { zoom: var(--hud-zoom, 1); }
+body.touch-playing .gs-strike { bottom: auto; top: calc((env(safe-area-inset-top, 0px) + 60px) / var(--hud-zoom, 1)); right: calc((env(safe-area-inset-right, 0px) + 12px) / var(--hud-zoom, 1)); }
+body.touch-playing .gs-path { left: auto; bottom: auto; top: calc((env(safe-area-inset-top, 0px) + 60px) / var(--hud-zoom, 1)); right: calc((env(safe-area-inset-right, 0px) + 92px) / var(--hud-zoom, 1)); }
+body.touch-playing .gs-info { left: calc((env(safe-area-inset-left, 0px) + 12px) / var(--hud-zoom, 1)); bottom: calc(150px / var(--hud-zoom, 1)); }
 .gs-quality { position: absolute; left: 50%; top: 22%; transform: translateX(-50%); font: 700 28px/1 var(--pixel); letter-spacing: 0.12em; opacity: 0; transition: opacity 0.3s; text-shadow: 0 2px 6px #000c; white-space: nowrap; }
 .gs-quality.on { opacity: 1; }
 .gs-quality.pure { color: #ffd84d; }

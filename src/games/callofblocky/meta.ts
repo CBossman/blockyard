@@ -40,6 +40,8 @@ export default defineMeta({
     Right: ['KeyM', 'mode and map'],
     Y: ['KeyV', 'vote to skip'],
   },
+  // Touch: the katana's a hotbar slot to tap.
+  touch: { R3: null },
   // Awarded by the server (`player.achieve`): server.ts, briefcase.ts, progression.ts.
   achievements: {
     made_your_bones: { title: 'Made Your Bones', description: 'Get your first kill' },

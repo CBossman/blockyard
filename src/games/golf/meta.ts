@@ -24,6 +24,8 @@ export default defineMeta({
     ['F', 'caddie: take me to my ball'],
     ['Tab', 'scores'],
   ],
+  // Touch: hold swing and drag (pull back, swing up), as the mouse does; the cart and the caddie at hand.
+  touch: { RT: ['LMB', 'swing'], X: ['KeyE', 'cart · ball'], RB: ['KeyF', 'caddie'], LB: ['KeyC', 'call cart'], B: null, Up: null, Down: null, Back: ['Tab', 'scores'] },
   achievements: {
     par: { title: 'Par for the Course', description: 'Make a par' },
     birdie: { title: 'Birdie', description: 'Make a birdie' },

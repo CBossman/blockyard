@@ -22,6 +22,8 @@ export default defineMeta({
     ['F', 'hold over a downed teammate to revive them'],
     ['Right-click the quartermaster, or /shop', 'weapons, ammo, materials, turrets'],
   ],
+  // Touch: revive at hand; leaning in the drawer.
+  touch: { RB: ['KeyF', 'revive'], Up: ['KeyQ', 'lean left'], Right: ['KeyE', 'lean right'], Down: null },
   achievements: {
     first_night: { title: 'First Light', description: 'Keep the VIP alive through your first night' },
     all_nights: { title: 'Extraction', description: 'Keep the VIP alive through all five nights' },

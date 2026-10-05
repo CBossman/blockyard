@@ -3978,8 +3978,14 @@ body.touch-mode :is(.hotbar, .toast, .hearts, .banner, .objective, .stats, .boss
 body.touch-playing :is(.feed, .gw-top-left) {
   left: calc((env(safe-area-inset-left, 0px) + 62px) / var(--hud-zoom, 1));
 }
-body.touch-playing .gw-top-right {
+body.touch-playing :is(.gw-top-right, .stats) {
   right: calc((env(safe-area-inset-right, 0px) + 62px) / var(--hud-zoom, 1));
+}
+/* A radar of the HUD's own (not in a widget's slot): under the "more" button, off the jump button. */
+body.touch-playing .radar:not(.in-slot) {
+  bottom: auto;
+  top: calc((env(safe-area-inset-top, 0px) + 60px) / var(--hud-zoom, 1));
+  right: calc((env(safe-area-inset-right, 0px) + 12px) / var(--hud-zoom, 1));
 }
 /* The hotbar between the stick and the buttons, a little smaller; the rounds and throwables by the buttons. */
 body.touch-playing .hotbar {
