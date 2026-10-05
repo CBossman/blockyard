@@ -1,3 +1,4 @@
+import { kept } from './client/storage';
 import { sanitize, type KeyBindings } from './player/keys';
 import type { RenderSettings } from './render/pipeline';
 
@@ -63,7 +64,7 @@ export function defaultSettings(): Settings {
 export function loadSettings(): Settings {
   const d = defaultSettings();
   try {
-    const raw = localStorage.getItem(KEY);
+    const raw = kept.get(KEY);
     if (raw) {
       const saved = JSON.parse(raw);
       return { ...d, ...saved, keys: sanitize(saved?.keys) };
@@ -78,11 +79,7 @@ export function loadSettings(): Settings {
 export const GRAPHICS: (keyof Settings)[] = ['shadows', 'msaa', 'bloom', 'godrays', 'ssr', 'clouds', 'renderScale', 'autoQuality'];
 
 export function saveSettings(s: Settings) {
-  try {
-    localStorage.setItem(KEY, JSON.stringify(s));
-  } catch {
-    // Ignore quota / privacy errors.
-  }
+  kept.set(KEY, JSON.stringify(s));
 }
 
 const SHADOW: Record<ShadowQuality, [number, number]> = {

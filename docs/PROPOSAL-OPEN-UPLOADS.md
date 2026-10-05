@@ -1,7 +1,7 @@
 # Proposal: open uploads (anyone may upload a game)
 
-Status: **stages 1 and 2 built** (2026-10-04; see "Stage 1: what was built" and "Stage 2: the
-sandbox machine"); stages 3 and 4 to come. Follows `PROPOSAL-UPLOADS.md`, which built
+Status: **stages 1 to 3 built** (2026-10-04; see "Stage 1: what was built", "Stage 2: the sandbox
+machine" and "Stage 3: what was built"); stage 4 to come. Follows `PROPOSAL-UPLOADS.md`, which built
 uploads for trusted people only.
 
 ## Why it's not open yet
@@ -210,4 +210,38 @@ workers and games' workers alike.
    games in frames would be one path, but a riskier change for no security gain.
 2. **A switch to or from an uploaded game loads a fresh frame** (about a second, from cache)
    rather than switching in place: recommended, for the isolation between games.
+
+## Stage 3: what was built
+
+- **The frame**: `frame.html` + `src/frame.ts` (a second page in the site's build), shown in
+  `<iframe sandbox="allow-scripts allow-pointer-lock">` by `ui/frame-host.ts` for an uploaded game
+  (`Runtime.frames`: `Runtime.start` hands such a game over instead of running its code in the
+  page; the busy loop too). Built-in games run in the page as before. A fresh frame per uploaded
+  game; picking another game closes it (a built-in one runs in the page with the renderer it left:
+  `Carry`'s renderer is optional now). A frame that loads a second page (the game navigated it) is
+  closed and the home page says "The game left its page".
+- **The bridge** (`client/frame-protocol.ts`): the runtime's home page is a `HomeScreen` now
+  (`TitleScreen` in the page, `client/remote-title.ts` in the frame); the frame's calls drive the
+  real one; Play, rooms of one's own, the name to play as, settings (`client/storage.ts`: what the
+  page gave, changes sent back), invite links and the page's address cross by message.
+- **Room tickets**: `POST /tickets {game}` (the site's pages, signed in), `?ticket=` on the socket
+  (once, a minute, that game); `Runtime.ticket` asks the page for one before each connection.
+- **Workers by `data:` URL** in a frame (`startWorker`: the engine's pool; games' workers too).
+- **Play's click-through**: the page's Play button lets clicks through to the frame (CSS while
+  `body.framed`); the frame, told where the button is while it may be pressed, sends `press`; the
+  page presses it (its rename flow and all) and the frame's runtime locks the pointer within the
+  click's activation. While the home page is up the frame takes no other click.
+- **Production headers** (`scripts/deploy-site.mjs`): assets with `Access-Control-Allow-Origin: *`;
+  `frame.html` with a content security policy (scripts from the site and the game server,
+  `'wasm-unsafe-eval'`; workers from `data:`/`blob:`; connections, pictures and sounds only to the
+  site and the game server; Google Fonts; `frame-ancestors` the site). The dev server allows the
+  `null` origin.
+- **Checked** in Chrome: an uploaded Golf plays in the frame (its terrain workers too); signed in,
+  it joins as the player through a ticket; inside the frame `document.cookie`, `localStorage` and
+  `parent.document` throw, and its credentialed requests to `/me` and `/tickets` are refused;
+  switching frame → built-in and built-in → frame (from the directory) works; a frame navigating
+  itself is closed. On the production build with the CSP, the game loads and runs, and the frame's
+  `fetch`, WebSocket and image beacon to another site are all blocked (`connect-src`, `img-src`).
+  Pointer lock itself couldn't be exercised from CDP (synthetic clicks don't get it, in a frame or
+  not): to check by hand. `tests/headless/tickets.ts` covers tickets.
 

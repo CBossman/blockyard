@@ -87,7 +87,7 @@ const byGame = games.map((name) => {
 });
 // What the browser legitimately reaches: its own code (not following into the games: the
 // registry's imports are what's being checked), and every game's client code, shared code and meta.
-const browser = graph.reach([at('src/main.ts')], { within: (f) => !under(f, gamesDir) });
+const browser = graph.reach([at('src/main.ts'), at('src/frame.ts')], { within: (f) => !under(f, gamesDir) });
 const clients = graph.reach(byGame.flatMap((g) => g.client));
 const client = new Set([...browser.keys(), ...clients.keys()]);
 

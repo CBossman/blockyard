@@ -1,3 +1,4 @@
+import { kept } from './client/storage';
 import type { Settings, ShadowQuality } from './settings';
 
 /** Graphics as drawn: the settings, and the pixel ratio the canvas is drawn at. */
@@ -175,19 +176,11 @@ const KEY = 'voxel.quality.v1';
 
 /** The level auto quality settled on last time on this machine (0 if none). */
 export function savedQuality(): number {
-  try {
-    return Number(localStorage.getItem(KEY)) || 0;
-  } catch {
-    return 0;
-  }
+  return Number(kept.get(KEY)) || 0;
 }
 
 export function saveQuality(level: number) {
-  try {
-    localStorage.setItem(KEY, String(level));
-  } catch {
-    // Storage unavailable: it measures afresh next time.
-  }
+  kept.set(KEY, String(level));
 }
 
 /** The mean with the slowest tenth left out (hitches: loading a chunk, a garbage collection). */

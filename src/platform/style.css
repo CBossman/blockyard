@@ -44,6 +44,27 @@ body {
   transition: opacity 0.45s ease;
 }
 
+/* An uploaded game's screen, in a sandboxed frame where the canvas is (ui/frame-host.ts): the page's
+   home page over it lets clicks through but on its controls, and through the Play button to the frame. */
+.game-frame {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+  background: transparent;
+}
+#view.framed-away {
+  visibility: hidden;
+}
+body.framed #ui .home {
+  pointer-events: none;
+}
+body.framed #ui .home .home-play {
+  pointer-events: none;
+}
+
 /* Switching games: the old world fades out, the new one fades in once it's built. */
 #view.fading {
   opacity: 0;

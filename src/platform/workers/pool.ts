@@ -1,4 +1,6 @@
 import type { WorkerRequest, WorkerResponse, WorldGenConfig } from './protocol';
+import { startWorker } from '../client/storage';
+import engineWorker from './engine.worker?worker&url';
 
 type Handler = (res: WorkerResponse) => void;
 
@@ -26,7 +28,7 @@ export class WorkerPool {
     const pool = new WorkerPool(size);
     const ready: Promise<void>[] = [];
     for (let i = 0; i < size; i++) {
-      const worker = new Worker(new URL('./engine.worker.ts', import.meta.url), { type: 'module', name: `engine-${i}` });
+      const worker = startWorker(engineWorker, { name: `engine-${i}` });
       const slot: Slot = { worker, inflight: 0 };
       pool.slots.push(slot);
       ready.push(

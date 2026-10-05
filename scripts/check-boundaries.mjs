@@ -128,15 +128,15 @@ function never(side, entries, forbidden) {
 
 const serverParts = new Set(parts.server);
 const clientParts = new Set(parts.client);
-never('the browser (src/main.ts)', ['src/main.ts'], (f) => {
+never('the browser (src/main.ts, src/frame.ts)', ['src/main.ts', 'src/frame.ts'], (f) => {
   if (under(f, at('src/platform/host'))) return 'the server host';
   if (f === at('src/platform/sim/sim.ts')) return 'the whole simulation';
-  if (f === at('src/games/server.ts') || f === at('src/server.ts') || f === at('src/serve.ts')) return 'the server';
+  if (f === at('src/games/server.ts') || f === at('src/server.ts') || f === at('src/serve.ts') || f === at('src/sandbox.ts') || under(f, at('src/platform/sandbox'))) return 'the server';
   if (serverParts.has(f)) return "a game's server code";
   return null;
 });
-never('the server (src/serve.ts)', ['src/serve.ts', 'src/server.ts', ...sourceFiles(at('src/platform/host')).map(rel)], (f) => {
-  if (f === at('src/main.ts') || f === at('src/games/browser.ts') || f === at('src/platform/runtime.ts')) return "the browser's code";
+never('the server (src/serve.ts, src/sandbox.ts)', ['src/serve.ts', 'src/server.ts', 'src/sandbox.ts', ...sourceFiles(at('src/platform/host')).map(rel), ...sourceFiles(at('src/platform/sandbox')).map(rel)], (f) => {
+  if (f === at('src/main.ts') || f === at('src/frame.ts') || f === at('src/games/browser.ts') || f === at('src/platform/runtime.ts')) return "the browser's code";
   if (under(f, at('src/platform/client')) || under(f, at('src/platform/render'))) return "the browser's code";
   if (f === at('src/platform/api/client.ts') || under(f, at('src/platform/api/client')) || under(f, at('src/platform/client-kits'))) return "'@platform/client'";
   if (clientParts.has(f)) return "a game's client code";

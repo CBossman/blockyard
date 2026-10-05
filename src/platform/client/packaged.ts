@@ -67,7 +67,7 @@ async function link(modules: PlatformModule[]) {
     asset: () => {
       throw new Error('a screen has no asset addresses');
     },
-    worker: startWorker,
+    worker: startGameWorker,
   });
   await Promise.all(
     modules.map(async (name) => {
@@ -85,8 +85,10 @@ async function link(modules: PlatformModule[]) {
  * platform's worker link (the public API in there) and then the game's worker code (the game
  * server allows that: CORS).
  */
-function startWorker(url: string, options?: WorkerOptions): Worker {
+function startGameWorker(url: string, options?: WorkerOptions): Worker {
   const script = `import ${JSON.stringify(new URL(workerLink, location.href).href)};\nimport ${JSON.stringify(url)};\n`;
+  // In a sandboxed frame (an uploaded game's screen: an opaque origin) only a `data:` worker starts.
+  if (self.origin === 'null') return new Worker(`data:text/javascript,${encodeURIComponent(script)}`, { ...options, type: 'module' });
   const src = URL.createObjectURL(new Blob([script], { type: 'text/javascript' }));
   const worker = new Worker(src, { ...options, type: 'module' });
   // The worker has fetched its script once it's said anything (or failed): the address can go.

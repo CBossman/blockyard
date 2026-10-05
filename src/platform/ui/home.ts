@@ -52,6 +52,26 @@ export interface HomeGame extends GameControls {
   uploaded?: boolean;
 }
 
+/**
+ * What a game's runtime needs of the home page: `TitleScreen` in a page of the site's own, and in
+ * an uploaded game's sandboxed frame a stand-in that passes each call to the page around it
+ * (client/remote-title.ts).
+ */
+export interface HomeScreen {
+  readonly root: HTMLElement;
+  onListed: ((entries: PackageEntry[]) => void) | null;
+  show(g: HomeGame): void;
+  select(id: string, title?: string): void;
+  progress(fraction: number, text: string): void;
+  setReady(): void;
+  present(names: string[]): void;
+  failed(text: string, onPick: (id: string) => void): void;
+  busy(text: string, seconds: number): Promise<string | null>;
+  hide(): void;
+  name(): string;
+  avatar(): string;
+}
+
 /** A card on the shelf: the game's picture and name, and how many are playing it. */
 interface Card {
   el: HTMLButtonElement;
@@ -66,7 +86,7 @@ interface Card {
  * (with how many are playing each). It outlives a game: picking another switches in place
  * (`select`, then `show` for the new game), with the page staying put.
  */
-export class TitleScreen {
+export class TitleScreen implements HomeScreen {
   readonly root: HTMLElement;
   private nameInput: HTMLInputElement;
   private cover: HTMLElement;
@@ -434,6 +454,18 @@ export class TitleScreen {
    * Play (the button, or Enter in the name box): signed in with a new name typed, that's saved
    * first (and if it can't be, why not is said instead).
    */
+  /** Press Play (an uploaded game's frame took the click on the button: ui/frame-host.ts). */
+  press() {
+    void this.play();
+  }
+
+  /** Where the Play button is, while it may be pressed and the page is up (null: not now). */
+  playRect(): DOMRect | null {
+    if (!this.ready || this.button.disabled || this.root.classList.contains('hidden')) return null;
+    const r = this.button.getBoundingClientRect();
+    return r.width ? r : null;
+  }
+
   private async play() {
     if (!this.ready || !this.game) return;
     const me = this.account.me;
@@ -582,8 +614,11 @@ export class TitleScreen {
 }
 
 /** Copy the link to this game (and room) for a friend: `said` gets what to show on the button. */
-export function copyInvite(said: (text: string) => void) {
-  const link = new URL(location.href);
+/** The page's address for an invite link (an uploaded game's sandboxed frame asks the page around it). */
+export const invite = { address: async (): Promise<string> => location.href };
+
+export async function copyInvite(said: (text: string) => void) {
+  const link = new URL(await invite.address());
   for (const p of ['server', 'name', 'seed']) link.searchParams.delete(p);
   const done = navigator.clipboard?.writeText(link.href).then(
     () => said('Link copied'),

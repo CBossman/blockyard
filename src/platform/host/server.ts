@@ -1,4 +1,5 @@
-import { createServer, type IncomingMessage } from 'node:http';
+import { randomBytes } from 'node:crypto';
+import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { Worker } from 'node:worker_threads';
 import { WebSocketServer, type WebSocket } from 'ws';
 import type { GameDefinition } from '../api/types';
@@ -345,6 +346,29 @@ export function serve(o: ServeOptions): Promise<GameServer> {
     return link;
   }
 
+  /**
+   * Room tickets: what a page of the site asks for (`POST /tickets {game}`, signed in) for a screen
+   * of its own that can't carry the sign-in (an uploaded game's, in a sandboxed frame), to connect
+   * as the player: once, to that game, within a minute.
+   */
+  const tickets = new Map<string, { account: string; game: string; until: number }>();
+  /** The account a socket's `?ticket=` stands for (used up), if it's good for `game`. */
+  function ticketed(req: IncomingMessage, game: string): Account | null {
+    const ticket = new URL(req.url ?? '/', 'http://server').searchParams.get('ticket');
+    if (!ticket) return null;
+    const t = tickets.get(ticket);
+    tickets.delete(ticket);
+    if (!t || t.until < Date.now() || t.game !== game) return null;
+    return o.accounts?.get(t.account) ?? null;
+  }
+  function newTicket(account: Account, game: string): string {
+    const now = Date.now();
+    for (const [k, t] of tickets) if (t.until < now) tickets.delete(k);
+    const ticket = randomBytes(24).toString('base64url');
+    tickets.set(ticket, { account: account.id, game, until: now + 60_000 });
+    return ticket;
+  }
+
   /** This thread's store for a game (opened the first time): what sandboxed rooms read from and write to. */
   function storeOf(game: string): Store | undefined {
     let shared = stores.get(game);
@@ -551,6 +575,7 @@ export function serve(o: ServeOptions): Promise<GameServer> {
   const http = createServer((req, res) => {
     const path = new URL(req.url ?? '/', 'http://server').pathname;
     res.setHeader('Access-Control-Allow-Origin', '*');
+    if (path === '/tickets' && auth) return void ticketRoute(req, res);
     if (auth?.handle(req, res, path)) return;
     if (path === '/health') {
       res.writeHead(200, { 'Content-Type': 'text/plain' }).end('ok');
@@ -585,6 +610,32 @@ export function serve(o: ServeOptions): Promise<GameServer> {
   });
 
 
+  /** `POST /tickets {game}`: a room ticket for the signed-in player (the site's pages only). */
+  async function ticketRoute(req: IncomingMessage, res: ServerResponse) {
+    const origin = req.headers.origin;
+    res.setHeader('Vary', 'Origin');
+    if (origin && auth!.allowed(origin)) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+    }
+    if (req.method === 'OPTIONS') return res.writeHead(204, { 'Access-Control-Allow-Methods': 'POST', 'Access-Control-Allow-Headers': 'Content-Type', 'Access-Control-Max-Age': '600' }).end();
+    const json = (status: number, body: unknown) => res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }).end(JSON.stringify(body));
+    if (req.method !== 'POST') return json(405, { error: 'POST it' });
+    // Only a page of the site's (a sandboxed frame's `Origin: null` isn't one).
+    const account = origin && auth!.allowed(origin) ? auth!.who(req) : null;
+    if (!account) return json(401, { error: 'Not signed in' });
+    const chunks: Buffer[] = [];
+    for await (const c of req) if ((chunks.push(c as Buffer), chunks.length) > 64) return json(413, { error: 'Too big' });
+    let game = '';
+    try {
+      game = String((JSON.parse(Buffer.concat(chunks).toString() || '{}') as { game?: unknown }).game ?? '');
+    } catch {
+      // no game
+    }
+    if (!defOf(game)) return json(404, { error: `No game "${game}" here` });
+    json(200, { ticket: newTicket(account, game) });
+  }
+
   // Compressed (permessage-deflate, which every browser speaks): one step's patch looks much like
   // the last, so keeping the compressor's window between messages shrinks them a few times over.
   const wss = new WebSocketServer({
@@ -612,7 +663,9 @@ export function serve(o: ServeOptions): Promise<GameServer> {
     // They watch until their client says `start` (with a name): then they're in the game, as
     // their account if they're signed in.
     const id = `c${nextClient++}`;
-    let account = auth?.who(req) ?? null;
+    // Signed in: by the session cookie (a page of the site's), or by a room ticket (an uploaded
+    // game's screen, in a sandboxed frame that has no cookie: see `tickets`).
+    let account = ticketed(req, room.def.id) ?? auth?.who(req) ?? null;
     const who: Who = account ? { account: { id: account.id, name: account.name, avatar: account.avatar }, achieved: o.accounts!.achievedIn(account.id, room.def.id), look: o.accounts!.look(account.id), owned: ownedIn(account.id, room.def.id) } : { account: null };
     if (account) accountOf.set(id, { id: account.id, ws });
     room.sockets.set(id, ws);

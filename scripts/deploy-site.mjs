@@ -34,12 +34,39 @@ if (!flag('--deploy-only')) {
   // The old addresses redirect home, keeping the path and query (an invite link still lands in its
   // room). Hashed assets never change: cache them for good. The page itself is always checked.
   const redirects = moved.map((host) => ({ src: '/(.*)', has: [{ type: 'host', value: host }], status: 308, headers: { Location: `https://${home}/$1` } }));
-  const routes = [...redirects, { src: '/assets/(.*)', headers: { 'cache-control': 'public, max-age=31536000, immutable' }, continue: true }];
+  // Assets for any origin too: an uploaded game's screen is a sandboxed frame (an opaque origin) that
+  // loads the platform's code from here. Its page, frame.html, gets a content security policy: it
+  // reaches only this site, the game server and Google's fonts, and only this site may frame it.
+  const routes = [
+    ...redirects,
+    { src: '/assets/(.*)', headers: { 'cache-control': 'public, max-age=31536000, immutable', 'access-control-allow-origin': '*' }, continue: true },
+    { src: '/frame.html', headers: { 'content-security-policy': framePolicy(), 'cache-control': 'no-cache' }, continue: true },
+  ];
   writeFileSync(`${out}/config.json`, JSON.stringify({ version: 3, routes }, null, 2));
   const build = buildHash([`${out}/static`, `${out}/config.json`]);
   routes.push({ src: '/(.*)', headers: { 'x-blockyard-build': build }, continue: true });
   writeFileSync(`${out}/config.json`, JSON.stringify({ version: 3, routes }, null, 2));
   console.log(`Built the site: ${build}`);
+}
+
+/** The content security policy of an uploaded game's frame (frame.html): where it may reach. */
+function framePolicy() {
+  const site = `https://${home}`;
+  const play = new URL(server.replace(/^ws/, 'http')).origin;
+  const socket = new URL(server).origin;
+  return [
+    "default-src 'none'",
+    `script-src ${site} ${play} 'wasm-unsafe-eval'`,
+    `worker-src ${site} ${play} data: blob:`,
+    `connect-src ${site} ${play} ${socket} data: blob:`,
+    `img-src ${site} ${play} data: blob:`,
+    `media-src ${site} ${play} data: blob:`,
+    `style-src ${site} 'unsafe-inline' https://fonts.googleapis.com`,
+    `font-src ${site} https://fonts.gstatic.com data:`,
+    "base-uri 'none'",
+    "form-action 'none'",
+    `frame-ancestors ${site}`,
+  ].join('; ');
 }
 
 if (!flag('--build-only')) {

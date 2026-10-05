@@ -54,7 +54,7 @@ import { clipFrame, type ClipFrame } from './sim/entities';
 import { Inventory as BlockPicker } from './ui/screens';
 import { cosmeticCatalog } from './cosmetics';
 import { entryOf, packagedEntry, packagedVersion, webOrigin } from './client/packaged';
-import { TitleScreen } from './ui/home';
+import { TitleScreen, type HomeScreen } from './ui/home';
 import { PauseMenu } from './ui/pause';
 import { blockIcon } from './ui/icons';
 import { GRAPHICS, loadSettings, saveSettings, toRenderSettings, type Settings } from './settings';
@@ -73,10 +73,26 @@ type Mode = 'title' | 'playing' | 'paused' | 'picker' | 'console';
  * renderer with its textures (the WebGL context and compiled shaders don't need redoing).
  */
 interface Carry {
-  title: TitleScreen;
-  renderer: Renderer;
-  textures: TextureSet;
-  biome: BiomeMap;
+  title: HomeScreen;
+  /** The renderer and its textures (none: a game that ran in a frame left them; a new one's made). */
+  renderer?: Renderer;
+  textures?: TextureSet;
+  biome?: BiomeMap;
+}
+
+/** An uploaded game to run in a sandboxed frame instead of in this page (see `Runtime.frames`). */
+export interface FrameOpen {
+  id: string;
+  room: string | null;
+  shard: number;
+  /** The game server (its socket address). */
+  server: string;
+  /** What this page keeps for the next game it runs itself: the home page, the renderer if any. */
+  carry: Carry;
+  canvas: HTMLCanvasElement;
+  ui: HTMLElement;
+  games: GameEntry[];
+  hidden: GameEntry[];
 }
 
 /** Free a finished game's meshes: geometry and materials (shared block textures stay). */
@@ -148,7 +164,7 @@ export class Runtime {
   private gameHud!: GameHud;
   /** The F3 overlay, `__game.debugInfo()` and `__game.dev`. */
   private devTools!: DevTools;
-  private title: TitleScreen;
+  private title: HomeScreen;
   private pause!: PauseMenu;
   private picker: BlockPicker | null = null;
   private hooks!: FrameHooks;
@@ -246,7 +262,7 @@ export class Runtime {
     /** The connection to the game's server, where the game runs. */
     private link: SocketLink,
     /** The home page (up already, showing the game loading). */
-    title: TitleScreen,
+    title: HomeScreen,
     /** What the previous game left for this one (switching in place). */
     private carried: Carry | null = null,
   ) {
@@ -283,7 +299,7 @@ export class Runtime {
    * game with `instances`). The game's client code (its own chunk) loads while the connection
    * opens; the home page shows it loading meanwhile.
    */
-  static async start(canvas: HTMLCanvasElement, ui: HTMLElement, games: GameEntry[], hidden: GameEntry[] = [], carried: Carry | null = null): Promise<Runtime> {
+  static async start(canvas: HTMLCanvasElement, ui: HTMLElement, games: GameEntry[], hidden: GameEntry[] = [], carried: Carry | null = null): Promise<Runtime | null> {
     const url = new URL(location.href);
     const picked = url.searchParams.get('game');
     const given = url.searchParams.get('server');
@@ -319,6 +335,11 @@ export class Runtime {
       }
     };
     title.select(listed.meta.id, listed.meta.title);
+    // An uploaded game, on a page that runs those in a sandboxed frame: the frame takes it from here.
+    if (Runtime.frames && base && packagedVersion(listed)) {
+      Runtime.frames({ id: listed.meta.id, room: own, shard, server: base, carry: carried ?? { title }, canvas, ui, games, hidden });
+      return null;
+    }
     // Its client code loads while the connection opens (a server's own address names the game
     // only in its welcome).
     let early = base ? listed.load() : null;
@@ -328,7 +349,7 @@ export class Runtime {
     let link: SocketLink | null = null;
     for (let wait = 5; !link; ) {
       try {
-        link = await SocketLink.connect(address()!);
+        link = await SocketLink.connect(await Runtime.ticketed(address()!, listed.meta.id));
       } catch (err) {
         // Turned away for good (no such game, or one an update broke): the home page says why, and
         // another game may be picked (a fresh start, on the first page; switching games handles its own).
@@ -355,6 +376,10 @@ export class Runtime {
         for (const p of ['room', 'shard']) to.searchParams.delete(p);
         history.replaceState(null, '', to);
         title.select(entry.meta.id, entry.meta.title);
+        if (Runtime.frames && base && packagedVersion(entry)) {
+          Runtime.frames({ id: entry.meta.id, room: null, shard: 0, server: base, carry: carried ?? { title }, canvas, ui, games, hidden });
+          return null;
+        }
         early = base ? entry.load() : null;
         early?.catch(() => {});
       }
@@ -391,6 +416,27 @@ export class Runtime {
     await rt.init();
     Runtime.onStart?.(rt);
     return rt;
+  }
+
+  /**
+   * Run uploaded games in a sandboxed frame (the site's page sets this: ui/frame-host.ts): `start`
+   * hands such a game over instead of running its code here.
+   */
+  static frames: ((o: FrameOpen) => void) | null = null;
+
+  /**
+   * A room ticket for `game` (a sandboxed frame, which can't carry the sign-in, asks the page around
+   * it: client/frame.ts); null: none (a page of the site's own connects with its cookie).
+   */
+  static ticket: ((game: string) => Promise<string | null>) | null = null;
+
+  /** A game's socket address with a room ticket on, if there's a way to get one. */
+  private static async ticketed(address: string, game: string): Promise<string> {
+    const ticket = await Runtime.ticket?.(game);
+    if (!ticket) return address;
+    const url = new URL(address);
+    url.searchParams.set('ticket', ticket);
+    return url.href;
   }
 
   /**
@@ -443,7 +489,7 @@ export class Runtime {
     // The renderer and block textures carry over from the previous game, if there was one (the
     // textures only if its own blocks were this one's).
     const c = this.carried;
-    if (c) {
+    if (c?.renderer && c.textures && c.biome) {
       this.renderer = c.renderer;
       this.textures = c.textures;
       this.biome = c.biome;

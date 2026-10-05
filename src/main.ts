@@ -1,5 +1,6 @@
 import { Refused } from './platform/client/link';
 import { Runtime } from './platform/runtime';
+import { FrameHost } from './platform/ui/frame-host';
 import { devGames, games } from './games/browser';
 
 const canvas = document.getElementById('view') as HTMLCanvasElement;
@@ -7,6 +8,10 @@ const ui = document.getElementById('ui') as HTMLElement;
 
 // In development, `__game` is the running game (tests reach in); switching games replaces it.
 if (import.meta.env.DEV) Runtime.onStart = (rt) => ((window as unknown as { __game: Runtime }).__game = rt);
+
+// Uploaded games run in a sandboxed frame (their code never runs in this page: ui/frame-host.ts).
+const frames = new FrameHost();
+Runtime.frames = (o) => frames.start(o);
 
 // The catalog: each game's meta, and its client code loaded when it's picked. Development games
 // open by id (`?game=gallery`) and aren't in a production build at all.
