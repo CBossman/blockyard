@@ -356,6 +356,6 @@ body.touch-mode .bf-heat {
   zoom: var(--hud-zoom, 1);
 }
 body.touch-playing .bf-heat {
-  right: calc((env(safe-area-inset-right, 0px) + 172px) / var(--hud-zoom, 1));
-  bottom: calc((env(safe-area-inset-bottom, 0px) + 10px) / var(--hud-zoom, 1));
+  right: calc((env(safe-area-inset-right, 0px) + 172px * var(--touch-zoom, 1)) / var(--hud-zoom, 1));
+  bottom: calc((env(safe-area-inset-bottom, 0px) + 10px * var(--touch-zoom, 1)) / var(--hud-zoom, 1));
 }

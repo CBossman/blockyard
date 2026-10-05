@@ -3768,13 +3768,13 @@ body.touch-playing .touch {
   position: absolute;
   left: 0;
   top: 0;
-  width: 116px;
-  height: 116px;
-  margin: -58px 0 0 -58px;
+  width: calc(116px * var(--touch-zoom, 1));
+  height: calc(116px * var(--touch-zoom, 1));
+  margin: calc(-58px * var(--touch-zoom, 1)) 0 0 calc(-58px * var(--touch-zoom, 1));
   border-radius: 50%;
   border: 2px solid rgba(255, 255, 255, 0.28);
   background: radial-gradient(circle, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.02) 70%);
-  transform: translate(calc(var(--l) + 104px), calc(100dvh - var(--b) - 96px));
+  transform: translate(calc(var(--l) + 104px * var(--touch-zoom, 1)), calc(100dvh - var(--b) - 96px * var(--touch-zoom, 1)));
   opacity: 0.45;
   transition: opacity 0.15s;
   pointer-events: none;
@@ -3787,9 +3787,9 @@ body.touch-playing .touch {
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 52px;
-  height: 52px;
-  margin: -26px 0 0 -26px;
+  width: calc(52px * var(--touch-zoom, 1));
+  height: calc(52px * var(--touch-zoom, 1));
+  margin: calc(-26px * var(--touch-zoom, 1)) 0 0 calc(-26px * var(--touch-zoom, 1));
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.55);
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
@@ -3974,17 +3974,17 @@ body.touch-mode :is(.hotbar, .toast, .hearts, .banner, .objective, .stats, .boss
 }
 /* Round the touch controls (a zoomed element's own lengths are drawn zoomed: hence the divisions). */
 body.touch-playing :is(.feed, .gw-top-left) {
-  left: calc((env(safe-area-inset-left, 0px) + 62px) / var(--hud-zoom, 1));
+  left: calc((env(safe-area-inset-left, 0px) + 62px * var(--touch-zoom, 1)) / var(--hud-zoom, 1));
 }
 body.touch-playing :is(.gw-top-right, .stats) {
-  right: calc((env(safe-area-inset-right, 0px) + 62px) / var(--hud-zoom, 1));
+  right: calc((env(safe-area-inset-right, 0px) + 62px * var(--touch-zoom, 1)) / var(--hud-zoom, 1));
 }
 /* A radar of the HUD's own (not in a widget's slot): under the "more" button, off the jump button. */
 body.touch-playing .radar:not(.in-slot) {
   left: auto;
   bottom: auto;
-  top: calc((env(safe-area-inset-top, 0px) + 52px) / var(--hud-zoom, 1));
-  right: calc((env(safe-area-inset-right, 0px) + 12px) / var(--hud-zoom, 1));
+  top: calc((env(safe-area-inset-top, 0px) + 52px * var(--touch-zoom, 1)) / var(--hud-zoom, 1));
+  right: calc((env(safe-area-inset-right, 0px) + 12px * var(--touch-zoom, 1)) / var(--hud-zoom, 1));
 }
 /* The hotbar between the stick and the buttons, a little smaller; the rounds and throwables by the buttons. */
 body.touch-playing .hotbar {
@@ -3993,12 +3993,12 @@ body.touch-playing .hotbar {
   bottom: calc((env(safe-area-inset-bottom, 0px) + 10px) / (var(--hud-zoom, 1) * 0.85));
 }
 body.touch-playing .ammo {
-  right: calc((env(safe-area-inset-right, 0px) + 172px) / var(--hud-zoom, 1));
-  bottom: calc((env(safe-area-inset-bottom, 0px) + 12px) / var(--hud-zoom, 1));
+  right: calc((env(safe-area-inset-right, 0px) + 172px * var(--touch-zoom, 1)) / var(--hud-zoom, 1));
+  bottom: calc((env(safe-area-inset-bottom, 0px) + 12px * var(--touch-zoom, 1)) / var(--hud-zoom, 1));
 }
 body.touch-playing .throwables {
-  right: calc((env(safe-area-inset-right, 0px) + 172px) / var(--hud-zoom, 1));
-  bottom: calc((env(safe-area-inset-bottom, 0px) + 66px) / var(--hud-zoom, 1));
+  right: calc((env(safe-area-inset-right, 0px) + 172px * var(--touch-zoom, 1)) / var(--hud-zoom, 1));
+  bottom: calc((env(safe-area-inset-bottom, 0px) + 66px * var(--touch-zoom, 1)) / var(--hud-zoom, 1));
 }
 
 /* A short screen (a phone on its side): the pause menu tighter, so it all fits. */
@@ -4210,4 +4210,29 @@ body.touch-mode canvas {
     width: 110px;
     height: 180px;
   }
+}
+
+.home-tip {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--muted);
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.7);
+}
+@media (max-height: 520px) {
+  .home-tip {
+    margin-top: 4px;
+    font-size: 11px;
+  }
+}
+
+/* A tablet: the buttons bigger, with the screen (--touch-zoom: the runtime's, 1 on a phone). */
+.touch-buttons,
+.touch-drawer,
+.touch-more,
+.touch-pause {
+  zoom: var(--touch-zoom, 1);
+}
+.touch-buttons {
+  position: absolute;
+  inset: 0;
 }

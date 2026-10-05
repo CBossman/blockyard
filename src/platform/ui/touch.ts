@@ -2,8 +2,10 @@ import type { PadAction } from '../api/types';
 import type { TouchButton, TouchState } from '../player/touch';
 import { h } from './dom';
 
-/** The stick's reach from where the finger came down (CSS pixels): pushed this far, it's all the way. */
-const REACH = 56;
+/** The stick's reach from where the finger came down (CSS pixels, on a phone: a tablet's is bigger, `--touch-zoom`): pushed this far, it's all the way. */
+const REACH_PHONE = 56;
+/** The stick's reach now (its size goes with the screen's). */
+let REACH = REACH_PHONE;
 /** Pushed ahead this far (0..1, forward) and all the way out for `SPRINT_HOLD` seconds, the stick sprints... */
 const SPRINT_AHEAD = 0.9;
 const SPRINT_HOLD = 0.7;
@@ -91,6 +93,8 @@ export class TouchControls {
     // No scrolling, zooming or the long-press menu over the game.
     this.root.addEventListener('touchstart', (e) => e.preventDefault(), { passive: false, signal });
     this.root.addEventListener('contextmenu', (e) => e.preventDefault(), opts);
+    // Safari's own pinch (its gesture events) while the game has the touch controls.
+    document.addEventListener('gesturestart', (e) => document.body.classList.contains('touch-playing') && e.preventDefault(), { passive: false, signal });
     this.rest();
   }
 
@@ -122,6 +126,7 @@ export class TouchControls {
   /** Shown (the touch controls have the game) or not: hidden, every finger lets go. */
   setActive(on: boolean) {
     if (!on) this.release();
+    else REACH = REACH_PHONE * (Number(getComputedStyle(document.documentElement).getPropertyValue('--touch-zoom')) || 1);
   }
 
   /**

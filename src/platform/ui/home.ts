@@ -196,7 +196,7 @@ export class TitleScreen implements HomeScreen {
       this.cover,
       h('div.home-scrim'),
       h('header.home-top', {}, h('div.home-brand', {}, mark, h('span.home-logo', {}, 'Blockyard'), h('span.home-pitch', {}, 'Block games anyone can build, played together')), h('div.home-top-right', {}, this.online, this.account.root)),
-      h('main.home-hero', {}, this.kicker, this.heading, this.tagline, this.feats, this.status, this.actions, this.guest, this.rooms, this.hints, this.report),
+      h('main.home-hero', {}, this.kicker, this.heading, this.tagline, this.feats, this.status, this.actions, this.guest, homeScreenTip(), this.rooms, this.hints, this.report),
       this.shelf,
       this.profile.root,
       this.locker.root,
@@ -648,4 +648,16 @@ function saveLocalLook(look: Look) {
   } catch {
     // not kept
   }
+}
+
+/**
+ * On an iPhone in Safari (which can't put a page full screen): a line saying the game plays full
+ * screen from the home screen (Share, then Add to Home Screen: the site's manifest opens it with
+ * no bars). Nothing elsewhere, or once it's been opened from there.
+ */
+function homeScreenTip(): HTMLElement | null {
+  const nav = navigator as Navigator & { standalone?: boolean };
+  const iphone = /iPhone|iPod/.test(navigator.userAgent);
+  const installed = nav.standalone === true || (typeof matchMedia === 'function' && matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches);
+  return iphone && !installed ? h('div.home-tip', {}, 'Full screen on an iPhone: Share, then Add to Home Screen, and play from there.') : null;
 }

@@ -133,7 +133,7 @@ const CSS = `
 .gp-card table { border-collapse: collapse; font: 600 13px/1 var(--sans); }
 .gp-card th, .gp-card td { padding: 5px 6px; text-align: center; min-width: 24px; border-bottom: 1px solid #1d2a1f22; }
 body.touch-mode :is(.gp, .gp-hint, .gp-card) { zoom: var(--hud-zoom, 1); }
-body.touch-playing .gp { left: calc((env(safe-area-inset-left, 0px) + 62px) / var(--hud-zoom, 1)); }
+body.touch-playing .gp { left: calc((env(safe-area-inset-left, 0px) + 62px * var(--touch-zoom, 1)) / var(--hud-zoom, 1)); }
 body.touch-playing .gp-hint { bottom: calc(66px / var(--hud-zoom, 1)); }
 .gp-card th { text-align: left; font-family: var(--pixel); letter-spacing: 0.06em; }
 .gp-card tr.n td { color: #2f6b2a; font-weight: 700; }

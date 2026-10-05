@@ -798,6 +798,6 @@
 
 /* ---------- On a touch screen: the detonators by the buttons ---------- */
 body.touch-playing .throwables {
-  right: calc((env(safe-area-inset-right, 0px) + 172px) / var(--hud-zoom, 1));
-  bottom: calc((env(safe-area-inset-bottom, 0px) + 66px) / var(--hud-zoom, 1));
+  right: calc((env(safe-area-inset-right, 0px) + 172px * var(--touch-zoom, 1)) / var(--hud-zoom, 1));
+  bottom: calc((env(safe-area-inset-bottom, 0px) + 66px * var(--touch-zoom, 1)) / var(--hud-zoom, 1));
 }

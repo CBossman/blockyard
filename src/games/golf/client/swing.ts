@@ -638,9 +638,9 @@ const CSS = `
 .gs-dot { position: absolute; width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 50%; background: #e8322b; box-shadow: 0 0 0 2px #fff8; }
 .gs-strike-label { font: 600 11px/1.2 var(--sans); text-align: center; max-width: 110px; text-shadow: 0 1px 2px #000a; }
 body.touch-mode :is(.gs-info, .gs-meter, .gs-help, .gs-path, .gs-strike, .gs-quality) { zoom: var(--hud-zoom, 1); }
-body.touch-playing .gs-strike { bottom: auto; top: calc((env(safe-area-inset-top, 0px) + 60px) / var(--hud-zoom, 1)); right: calc((env(safe-area-inset-right, 0px) + 12px) / var(--hud-zoom, 1)); }
-body.touch-playing .gs-path { left: auto; bottom: auto; top: calc((env(safe-area-inset-top, 0px) + 60px) / var(--hud-zoom, 1)); right: calc((env(safe-area-inset-right, 0px) + 92px) / var(--hud-zoom, 1)); }
-body.touch-playing .gs-info { left: calc((env(safe-area-inset-left, 0px) + 12px) / var(--hud-zoom, 1)); bottom: calc(150px / var(--hud-zoom, 1)); }
+body.touch-playing .gs-strike { bottom: auto; top: calc((env(safe-area-inset-top, 0px) + 60px * var(--touch-zoom, 1)) / var(--hud-zoom, 1)); right: calc((env(safe-area-inset-right, 0px) + 12px * var(--touch-zoom, 1)) / var(--hud-zoom, 1)); }
+body.touch-playing .gs-path { left: auto; bottom: auto; top: calc((env(safe-area-inset-top, 0px) + 60px * var(--touch-zoom, 1)) / var(--hud-zoom, 1)); right: calc((env(safe-area-inset-right, 0px) + 92px * var(--touch-zoom, 1)) / var(--hud-zoom, 1)); }
+body.touch-playing .gs-info { left: calc((env(safe-area-inset-left, 0px) + 12px * var(--touch-zoom, 1)) / var(--hud-zoom, 1)); bottom: calc(150px / var(--hud-zoom, 1)); }
 .gs-quality { position: absolute; left: 50%; top: 22%; transform: translateX(-50%); font: 700 28px/1 var(--pixel); letter-spacing: 0.12em; opacity: 0; transition: opacity 0.3s; text-shadow: 0 2px 6px #000c; white-space: nowrap; }
 .gs-quality.on { opacity: 1; }
 .gs-quality.pure { color: #ffd84d; }

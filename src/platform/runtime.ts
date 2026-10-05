@@ -493,7 +493,8 @@ export class Runtime {
     this.carving = destructible ? { ids: destructibleIds(this.registry, destructible), above: destructible.above ?? -1 } : null;
     this.title.progress(0.06, 'Generating textures…');
     const worldCfg = worldGenConfig(def, (b) => this.blockId(b));
-    const workers = Math.max(2, Math.min(8, (navigator.hardwareConcurrency || 4) - 2));
+    // (A phone or tablet: three at most, each a copy of the engine in memory it has little of.)
+    const workers = Math.max(2, Math.min(isHandheld() ? 3 : 8, (navigator.hardwareConcurrency || 4) - 2));
     const poolPromise = WorkerPool.create(module, this.seed, workers, worldCfg, this.blocks.json);
     // The game's own block textures after the built-in ones (images fetched meanwhile).
     const own = this.blocks.textures.length ? { ...(await paintGameTextures(this.blocks.textures, builtinTextures(), this.blocks.textureNames)), key: this.blocks.textureKey } : undefined;
@@ -1516,6 +1517,8 @@ export class Runtime {
     this.particles?.setViewport(h * dpr * (this.look?.settings ?? this.settings).renderScale, this.camera.fov);
     // On a touch screen the HUD's drawn to fit it (style.css: body.touch-mode), a phone's at about half size.
     document.documentElement.style.setProperty('--hud-zoom', String(Math.round(Math.min(1, Math.max(0.5, Math.min(w / 1180, h / 760))) * 100) / 100));
+    // And the touch controls bigger on a tablet (a phone's are sized for its thumbs).
+    document.documentElement.style.setProperty('--touch-zoom', String(Math.round(Math.min(1.4, Math.max(1, Math.min(w, h) / 480)) * 100) / 100));
   }
 
   /** Auto quality moved a notch: draw the settings as it has them now. */
