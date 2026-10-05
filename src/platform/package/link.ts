@@ -110,6 +110,22 @@ export interface MyGame {
   broken: { at: string; errors: string[] } | null;
   /** The home page: asked for (waiting for an admin), approved (on the shelf), declined; null: not asked. */
   home: 'asked' | 'approved' | 'declined' | null;
+  /** Error issues of its not resolved (`GET /g/<id>/errors`). */
+  errors: number;
+}
+
+/** An error issue (reports alike, grouped), as an owner or the admin sees it. */
+export interface ErrorIssueView {
+  id: string;
+  source: 'room' | 'server' | 'page' | 'frame';
+  game: string | null;
+  version: string | null;
+  message: string;
+  stack: string;
+  context: Record<string, string>;
+  count: number;
+  first: string;
+  last: string;
 }
 
 /** A game in the community directory (`GET /g/directory`): hosted, in the directory, not on the home page. */

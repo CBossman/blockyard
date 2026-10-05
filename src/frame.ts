@@ -5,6 +5,7 @@
 // the page asks for, and it tells the page its address. See ui/frame-host.ts for the page's side.
 import type { FrameToShell, ShellToFrame } from './platform/client/frame-protocol';
 import { RemoteTitle } from './platform/client/remote-title';
+import { reportErrors } from './platform/client/errors';
 import { keepWith } from './platform/client/storage';
 import { Runtime } from './platform/runtime';
 import { invite } from './platform/ui/home';
@@ -12,6 +13,9 @@ import { games } from './games/browser';
 
 // In development, `__game` is the frame's runtime (tests reach in), as in a page of the site's.
 if (import.meta.env.DEV) Runtime.onStart = (rt) => ((window as unknown as { __game: Runtime }).__game = rt);
+
+// What goes wrong in the game here is reported to the game server, as its own (client/errors.ts).
+reportErrors('frame');
 
 const canvas = document.getElementById('view') as HTMLCanvasElement;
 const ui = document.getElementById('ui') as HTMLElement;

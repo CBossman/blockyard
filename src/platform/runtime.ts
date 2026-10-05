@@ -54,6 +54,7 @@ import { clipFrame, type ClipFrame } from './sim/entities';
 import { Inventory as BlockPicker } from './ui/screens';
 import { cosmeticCatalog } from './cosmetics';
 import { entryOf, packagedEntry, packagedVersion, webOrigin } from './client/packaged';
+import { errorContext } from './client/errors';
 import { TitleScreen, type HomeScreen } from './ui/home';
 import { PauseMenu } from './ui/pause';
 import { blockIcon } from './ui/icons';
@@ -335,6 +336,10 @@ export class Runtime {
       }
     };
     title.select(listed.meta.id, listed.meta.title);
+    // What an error report says (client/errors.ts): where to send it, the game on screen.
+    if (base) errorContext.server = webOrigin(base);
+    errorContext.game = listed.meta.id;
+    errorContext.version = packagedVersion(listed) ?? null;
     // An uploaded game, on a page that runs those in a sandboxed frame: the frame takes it from here.
     if (Runtime.frames && base && packagedVersion(listed)) {
       Runtime.frames({ id: listed.meta.id, room: own, shard, server: base, carry: carried ?? { title }, canvas, ui, games, hidden });
@@ -407,6 +412,8 @@ export class Runtime {
         entry = pinned;
       }
       if (!entry) throw new Error(`The server is running "${link.welcome.game}", which this client doesn't have.`);
+      errorContext.game = w.game;
+      errorContext.version = w.package?.version ?? null;
       game = await (entry === listed && early ? early : entry.load());
     } catch (err) {
       link.close();

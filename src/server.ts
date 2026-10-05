@@ -10,6 +10,7 @@
 // files by the server's public address (PUBLIC_URL, default http://localhost:<port>). ADMINS (account
 // or Discord ids) may manage every game: approve one for the home page, ban an uploader, see reports.
 // SANDBOX_URL and SANDBOX_TOKEN: the sandbox machine uploaded games' rooms run on (src/sandbox.ts).
+// Errors are kept in <data>/errors.sqlite (ERRORS_WEBHOOK: a Discord webhook told of new ones).
 // UPLOADERS=* lets anyone signed in upload (a Discord account a week old), within the limits
 // (host/uploads.ts) and once they've accepted the upload terms; UPLOADED_ROOMS sizes their pool.
 //
@@ -22,6 +23,7 @@ import { fileURLToPath } from 'node:url';
 import { devGames, games } from './games/server';
 import type { GameDefinition } from './platform/api/types';
 import { Accounts } from './platform/host/accounts';
+import { ErrorLog } from './platform/host/errors';
 import { GameLibrary, smokeInThread } from './platform/host/library';
 import { gameFiles, SandboxLink } from './platform/host/sandbox-link';
 import { serve, type ServeOptions } from './platform/host/server';
@@ -98,7 +100,13 @@ export async function main(args: string[], worker?: ServeOptions['worker'], mode
     console.log(`[${built.id}] built ${folder} as version ${built.version}: ?game=${built.id}`);
   }
   const sites = (process.env.SITE_ORIGINS ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+  // Error tracking (host/errors.ts): rooms' errors and screens' reports, kept 30 days; a Discord
+  // webhook (ERRORS_WEBHOOK) hears of each new one. The server's own crash is kept on its way down.
+  const errors = ErrorLog.open(join(data, 'errors.sqlite'), { library, sites, webhook: process.env.ERRORS_WEBHOOK || null, log: (line) => console.log(line) });
+  setInterval(() => errors.prune(), 24 * 3600_000).unref();
+  process.on('uncaughtExceptionMonitor', (err) => void errors.record({ source: 'server', message: err.message, stack: err.stack }));
   const server = await serve({
+    errors,
     games: defs,
     hidden,
     library,

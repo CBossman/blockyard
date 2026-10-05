@@ -168,6 +168,7 @@ export class AccountCorner {
       h('button.home-menu-item', { onclick: () => (this.toggleMenu(false), this.onLocker?.()) }, 'Your look'),
       h('button.home-menu-item', { onclick: () => (this.toggleMenu(false), this.onProfile?.()) }, 'Your achievements'),
       this.uploader ? h('button.home-menu-item', { onclick: () => (this.toggleMenu(false), this.onGames?.()) }, 'Your games') : null,
+      h('a.home-menu-item', { href: '/privacy.html', target: '_blank', rel: 'noopener' }, 'Privacy'),
       h('button.home-menu-item', { onclick: () => void this.signOut() }, 'Sign out'),
       remove,
     );

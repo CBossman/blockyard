@@ -1,6 +1,7 @@
 import { Refused } from './platform/client/link';
 import { Runtime } from './platform/runtime';
 import { FrameHost } from './platform/ui/frame-host';
+import { reportErrors } from './platform/client/errors';
 import { devGames, games } from './games/browser';
 
 const canvas = document.getElementById('view') as HTMLCanvasElement;
@@ -8,6 +9,9 @@ const ui = document.getElementById('ui') as HTMLElement;
 
 // In development, `__game` is the running game (tests reach in); switching games replaces it.
 if (import.meta.env.DEV) Runtime.onStart = (rt) => ((window as unknown as { __game: Runtime }).__game = rt);
+
+// What goes wrong here is reported to the game server (client/errors.ts).
+reportErrors('page');
 
 // Uploaded games run in a sandboxed frame (their code never runs in this page: ui/frame-host.ts).
 const frames = new FrameHost();

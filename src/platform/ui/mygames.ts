@@ -1,5 +1,5 @@
 import { h } from './dom';
-import type { AdminView, MyGame, MyGames } from '../package/link';
+import type { AdminView, ErrorIssueView, MyGame, MyGames } from '../package/link';
 
 /** What's never part of a game's folder (as the server's unpacking has it): hidden files, packages, macOS's leftovers. */
 const SKIPPED = (path: string) => path.split('/').some((part) => part.startsWith('.') || part === 'node_modules' || part === '__MACOSX');
@@ -236,7 +236,43 @@ export class MyGamesPanel {
       h('div.mygames-actions', {}, hosted && !g.broken ? open : null, hosted ? copy : null, hosted ? list : null, hosted && !g.broken ? home : null, host),
       versions,
       owners,
+      g.errors ? this.errorList(g) : null,
       this.deleteForGood(g),
+    );
+  }
+
+  /** A game's errors, loaded when opened. */
+  private errorList(g: MyGame): HTMLElement {
+    const list = h('div.mygames-errors');
+    const details = h('details.mygames-versions', {}, h('summary', {}, `Errors (${g.errors})`), list) as HTMLDetailsElement;
+    const load = async () => {
+      list.replaceChildren(h('div.mygames-dim', {}, 'Looking…'));
+      const r = await fetch(`${this.http}/g/${g.id}/errors`, { credentials: 'include' }).catch(() => null);
+      const issues = r?.ok ? ((await r.json()) as { issues: ErrorIssueView[] }).issues : null;
+      if (!issues) return list.replaceChildren(h('div.mygames-dim', {}, "Couldn't load them."));
+      if (!issues.length) return list.replaceChildren(h('div.mygames-dim', {}, 'None left.'));
+      list.replaceChildren(...issues.map((i) => this.issue(i, () => this.post(`/g/${g.id}/errors/${i.id}`, {}).then(load))));
+    };
+    details.addEventListener('toggle', () => details.open && void load());
+    return details;
+  }
+
+  /** One error issue: what, where, how often, its stack, and resolving it. */
+  private issue(i: ErrorIssueView, resolve: () => Promise<unknown>): HTMLElement {
+    const where = { room: 'in a room (server)', server: 'the server', page: 'on the page', frame: "on players' screens" }[i.source];
+    const done = h('button.mygames-button.small', { onclick: () => void resolve() }, 'Resolve');
+    return h(
+      'details.mygames-issue',
+      {},
+      h(
+        'summary',
+        {},
+        h('span.mygames-issue-message', {}, i.message),
+        h('span.mygames-dim', {}, ` · ${where}${i.game ? ` · ${i.game}` : ''} · ${i.count === 1 ? 'once' : `${i.count} times`}, last ${ago(i.last.replace(' ', 'T') + 'Z')}`),
+      ),
+      h('pre.mygames-pre.mygames-stack', {}, i.stack || '(no stack)'),
+      Object.keys(i.context).length ? h('div.mygames-dim', {}, Object.entries(i.context).filter(([, v]) => v).map(([k, v]) => `${k}: ${v}`).join(' · ')) : null,
+      h('div.mygames-actions', {}, done),
     );
   }
 
@@ -297,16 +333,17 @@ export class MyGamesPanel {
   }
 
   private async refreshAdmin() {
-    const r = await fetch(`${this.http}/admin`, { credentials: 'include' }).catch(() => null);
+    const [r, e] = await Promise.all([fetch(`${this.http}/admin`, { credentials: 'include' }).catch(() => null), fetch(`${this.http}/admin/errors`, { credentials: 'include' }).catch(() => null)]);
     if (!r?.ok) {
       this.adminView.replaceChildren(h('div.mygames-empty', {}, "Couldn't load the admin view."));
       return;
     }
-    this.renderAdmin((await r.json()) as AdminView);
+    const issues = e?.ok ? ((await e.json()) as { issues: ErrorIssueView[] }).issues : [];
+    this.renderAdmin((await r.json()) as AdminView, issues);
   }
 
   /** Everything an admin manages: requests for the home page, reports, every game, bans, what happened lately. */
-  private renderAdmin(v: AdminView) {
+  private renderAdmin(v: AdminView, issues: ErrorIssueView[] = []) {
     const act = (label: string, run: () => Promise<unknown>, danger = false) =>
       h(`button.mygames-button.small${danger ? '.danger' : ''}`, {
         onclick: async () => {
@@ -360,6 +397,7 @@ export class MyGamesPanel {
         ),
         'No reports waiting.',
       ),
+      section(`Errors (${issues.length})`, issues.slice(0, 60).map((i) => this.issue(i, () => this.post(`/admin/errors/${i.id}`, {}).then(() => this.refreshAdmin()))), 'No errors. Nice.'),
       section(
         `Every game (${v.games.length})`,
         v.games.map((g) =>
@@ -475,7 +513,7 @@ export class MyGamesPanel {
       }
       this.token.replaceChildren(
         h('div.mygames-dim', {}, 'Your token, shown this once. Keep it to yourself; then, in the repo:'),
-        h('pre.mygames-pre', {}, `npm run game -- token ${body.token}\nnpm run game -- push src/games/<your game> --server ${this.http}`),
+        h('pre.mygames-pre', {}, `npm run game -- token ${body.token} --server ${this.http}\nnpm run game -- push src/games/<your game> --server ${this.http}`),
       );
     };
     this.token.replaceChildren(h('div.mygames-dim', {}, 'Push a game from your machine with npm run game -- push. It needs an upload token:'), make);

@@ -26,6 +26,7 @@
   "dependencies": {
     "esbuild": "^0.28.2",
     "fflate": "^0.8.3",
+    "source-map-js": "^1.2.2",
     "three": "^0.186.0",
     "ws": "^8.21.3"
   },

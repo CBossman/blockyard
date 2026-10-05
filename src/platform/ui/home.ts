@@ -182,7 +182,7 @@ export class TitleScreen implements HomeScreen {
     this.mygames.onOpen = (id) => this.game?.onPick(id);
     this.directory.onPick = (id) => id !== this.game?.current && this.game?.onPick(id);
     const signIn = h('button.home-guest-signin', { onclick: () => this.account.signIn() }, 'Sign in with Discord');
-    this.guest = h('div.home-guest.hidden', {}, 'Playing as a guest: what you earn lasts this visit. ', signIn, ' to keep it.');
+    this.guest = h('div.home-guest.hidden', {}, 'Playing as a guest: what you earn lasts this visit. ', signIn, ' to keep it. ', h('a.home-guest-privacy', { href: '/privacy.html', target: '_blank', rel: 'noopener' }, 'Privacy'));
     const faceButton = h('button.home-face-button', { onclick: () => this.openLocker(), title: 'Your look', 'aria-label': 'Your look' }, this.face);
     this.actions = h('div.home-actions', {}, faceButton, h('label.home-name', {}, h('span', {}, 'Playing as'), this.nameInput), this.button);
     this.drawFace();

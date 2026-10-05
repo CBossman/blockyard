@@ -16,6 +16,7 @@ import type { FromRoom, RoomWorkerData, SmokeWorkerData, ToRoom } from './room-w
 import type { Store } from './store';
 import type { PackageEntry } from '../package/link';
 import type { GameLibrary } from './library';
+import type { ErrorLog, ErrorSource } from './errors';
 import { gameFiles, type SandboxLink } from './sandbox-link';
 import type { StoreSnapshot } from '../sandbox/protocol';
 import { Uploads, type UploadLimits, type UploadTerms } from './uploads';
@@ -53,6 +54,8 @@ export interface ServeOptions {
   uploadLimits?: Partial<UploadLimits>;
   /** The terms uploaders accept before their first upload (none: not asked). */
   uploadTerms?: UploadTerms | null;
+  /** Error tracking (host/errors.ts): rooms' errors are kept there, and screens report theirs (`POST /errors`). */
+  errors?: ErrorLog;
   /**
    * The sandbox (see sandbox/protocol.ts): uploaded games' rooms run there, not in this machine's
    * threads. Without it they run in worker threads like the others (trusted uploaders only).
@@ -256,7 +259,7 @@ export function serve(o: ServeOptions): Promise<GameServer> {
   const auth = o.accounts
     ? new Auth({ accounts: o.accounts, discord: o.discord, sites: o.sites ?? [], dev: o.dev ?? false, onDelete: (a) => forget(a), catalog, log })
     : null;
-  const uploads = o.library ? new Uploads({ library: o.library, accounts: o.accounts, auth, uploaders: o.uploaders ?? [], admins: o.admins ?? [], limits: o.uploadLimits, terms: o.uploadTerms, sites: o.sites ?? [], dev: o.dev ?? false, log }) : null;
+  const uploads = o.library ? new Uploads({ library: o.library, errors: o.errors, accounts: o.accounts, auth, uploaders: o.uploaders ?? [], admins: o.admins ?? [], limits: o.uploadLimits, terms: o.uploadTerms, sites: o.sites ?? [], dev: o.dev ?? false, log }) : null;
   // A game from the library changed (a new version, say): its cosmetics are what may be worn.
   if (o.library) o.library.onChange = () => refreshCatalog();
   // Compiled once: each room's worker gets the module (no compiling per room).
@@ -393,6 +396,53 @@ export function serve(o: ServeOptions): Promise<GameServer> {
     const ticket = randomBytes(24).toString('base64url');
     tickets.set(ticket, { account: account.id, game, until: now + 60_000 });
     return ticket;
+  }
+
+  /** A room's log: the server's, and its errors (a game's that it carried on from, or the room failing) kept. */
+  function roomLog(key: string, def: GameDefinition) {
+    return (line: string) => {
+      log(`[${key}] ${line}`);
+      const m = /^(error|failed): ([\s\S]*)$/.exec(line);
+      if (!m || !o.errors) return;
+      const first = m[2].split('\n')[0];
+      const version = defs.has(def.id) ? null : (o.library?.record(def.id)?.current ?? null);
+      void o.errors.record({ source: 'room', game: def.id, version, message: m[1] === 'failed' ? `The room failed: ${first}` : first, stack: m[2], context: { room: key } });
+    };
+  }
+
+  /** `POST /errors`: a screen's error report (any page: no sign-in needed; a few a minute from each address). */
+  const reported = new Map<string, number[]>();
+  async function errorRoute(req: IncomingMessage, res: ServerResponse) {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    if (req.method === 'OPTIONS') return res.writeHead(204, { 'Access-Control-Allow-Methods': 'POST', 'Access-Control-Allow-Headers': 'Content-Type', 'Access-Control-Max-Age': '600' }).end();
+    const done = (status: number) => res.writeHead(status, { 'Content-Type': 'text/plain' }).end();
+    if (req.method !== 'POST' || !o.errors) return done(405);
+    const address = addressOf(req);
+    const now = Date.now();
+    const recent = (reported.get(address) ?? []).filter((t) => now - t < 60_000);
+    if (recent.length >= 30) return done(429);
+    reported.set(address, [...recent, now]);
+    if (reported.size > 5000) reported.clear();
+    const chunks: Buffer[] = [];
+    let size = 0;
+    for await (const c of req) {
+      size += (c as Buffer).length;
+      if (size > 32 * 1024) return done(413);
+      chunks.push(c as Buffer);
+    }
+    let r: Record<string, unknown>;
+    try {
+      r = JSON.parse(Buffer.concat(chunks).toString()) as Record<string, unknown>;
+    } catch {
+      return done(400);
+    }
+    const text = (v: unknown, max: number) => (typeof v === 'string' ? v.slice(0, max) : '');
+    const source: ErrorSource = r.source === 'frame' ? 'frame' : 'page';
+    const game = /^[a-z][a-z0-9-]{1,31}$/.test(text(r.game, 40)) ? text(r.game, 40) : null;
+    const version = /^[0-9a-f]{12}$/.test(text(r.version, 12)) ? text(r.version, 12) : null;
+    // (A frame's report names its game; only an uploaded game's own errors reach its owners.)
+    void o.errors.record({ source, message: text(r.message, 500), stack: text(r.stack, 8000), game, version, context: { url: text(r.url, 300), build: text(r.build, 100), browser: String(req.headers['user-agent'] ?? '').slice(0, 200) } });
+    done(204);
   }
 
   /** This thread's store for a game (opened the first time): what sandboxed rooms read from and write to. */
@@ -540,7 +590,7 @@ export function serve(o: ServeOptions): Promise<GameServer> {
     const busy = full(def);
     if (busy) return busy;
     if (room) return room;
-    const made = new Room(def, code, address, (line) => log(`[${key}] ${line}`));
+    const made = new Room(def, code, address, roomLog(key, def));
     rooms.set(key, made);
     return made;
   }
@@ -564,7 +614,7 @@ export function serve(o: ServeOptions): Promise<GameServer> {
     let shard = first ? 2 : 1;
     while (copies.some((r) => r.shard === shard)) shard++;
     const instance = shard === 1 ? 'public' : `public-${shard}`;
-    const made = new Room(def, instance, null, (line) => log(`[${def.id}/${instance}] ${line}`), shard);
+    const made = new Room(def, instance, null, roomLog(`${def.id}/${instance}`, def), shard);
     rooms.set(made.key, made);
     return made;
   }
@@ -583,9 +633,10 @@ export function serve(o: ServeOptions): Promise<GameServer> {
       a.ws.close(4003, 'Your account was deleted');
     }
     if (!o.store) return;
-    for (const def of defs.values()) {
-      let store = stores.get(def.id);
-      if (!store) stores.set(def.id, (store = o.store(def.id)));
+    // Every game's data: the built-in ones' and the uploaded ones' (kept here too).
+    for (const id of new Set([...defs.keys(), ...(o.library?.records().map((r) => r.id) ?? [])])) {
+      let store = stores.get(id);
+      if (!store) stores.set(id, (store = o.store(id)));
       const data = store.data();
       for (const key of [...data.keys()]) {
         if (!key.startsWith(`${PLAYER_DATA}${account.id}:`) && key !== `${ADOPTED}${account.id}`) continue;
@@ -604,6 +655,7 @@ export function serve(o: ServeOptions): Promise<GameServer> {
     const path = new URL(req.url ?? '/', 'http://server').pathname;
     res.setHeader('Access-Control-Allow-Origin', '*');
     if (path === '/tickets' && auth) return void ticketRoute(req, res);
+    if (path === '/errors') return void errorRoute(req, res);
     if (auth?.handle(req, res, path)) return;
     if (path === '/health') {
       res.writeHead(200, { 'Content-Type': 'text/plain' }).end('ok');

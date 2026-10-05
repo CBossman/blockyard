@@ -16,6 +16,8 @@
 //   GET    /admin                          every game, reports, bans, recent activity (admins only)
 //   POST   /admin/reports/<n>              resolve a report
 //   POST   /admin/bans                     `{ account (a name or id), banned, reason?, unhost? }`
+//   GET    /admin/errors                   every error issue not resolved (POST /admin/errors/<id>: resolve it)
+//   GET    /g/<id>/errors                  an uploaded game's error issues (owners; POST …/errors/<n>: resolve)
 //
 // Who's asking: an upload token (`Authorization: Bearer byu_…`), else the signed-in account (a page
 // on the site, or this server's own). Who may upload: the accounts on the server's list of
@@ -29,6 +31,7 @@ import { extname, join } from 'node:path';
 import { packagePath, type AdminView, type DirectoryGame, type MyGame, type MyGames, type PackageEntry } from '../package/link';
 import { discordCreated, type Account, type Accounts } from './accounts';
 import type { Auth } from './auth';
+import type { ErrorLog } from './errors';
 import type { GameLibrary, GameRecord } from './library';
 
 /** What an uploader may do (admins: anything). */
@@ -55,6 +58,8 @@ export interface UploadTerms {
 
 export interface UploadsOptions {
   library: GameLibrary;
+  /** Error tracking: the admin sees every issue, an uploaded game's owners its own. */
+  errors?: ErrorLog;
   accounts?: Accounts;
   auth?: Auth | null;
   /** Accounts that may upload: their ids or Discord ids; `*`: anyone signed in (old enough: `limits.minAgeDays`). */
@@ -136,6 +141,7 @@ export class Uploads {
     const parts = path.split('/').slice(2);
     const id = parts[0];
     if (parts.length === 2 && parts[1] === 'report' && method === 'POST') return this.report(req, res, id);
+    if (parts[1] === 'errors' && (parts.length === 2 || parts.length === 3)) return this.gameErrors(req, res, id, method === 'POST' ? parts[2] : undefined);
     if (parts.length === 1 && method === 'DELETE') return this.manage(req, res, id, new URL(req.url ?? '/', 'http://server').searchParams.get('forever') ? { forever: true } : { current: null });
     if (parts.length === 2 && parts[1] === 'manage') {
       if (method === 'GET') return this.manage(req, res, id, null);
@@ -309,6 +315,7 @@ export class Uploads {
       play: this.o.sites[0] ? `${this.o.sites[0]}/?game=${r.id}` : null,
       broken: ((b) => (b ? { at: b.at, errors: b.errors ?? [] } : null))(lib.broken(r.id)),
       home: r.home ?? null,
+      errors: this.o.errors?.counts().get(r.id) ?? 0,
     };
   }
 
@@ -329,6 +336,22 @@ export class Uploads {
     });
     games.sort((a, b) => b.updated.localeCompare(a.updated));
     res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' }).end(JSON.stringify({ games }));
+  }
+
+  /** An uploaded game's errors, for its owners (and admins): what's not resolved; or resolve one. */
+  private gameErrors(req: IncomingMessage, res: ServerResponse, id: string, resolve?: string) {
+    const who = this.who(req);
+    if (!who) return this.json(res, 401, { error: 'Sign in first' });
+    const record = this.o.library.record(id);
+    if (!record) return this.json(res, 404, { error: `No game "${id}" here` });
+    if (!this.o.dev && !this.isAdmin(who) && !record.owners.includes(who.by)) return this.json(res, 403, { error: `"${id}" isn't yours` });
+    if (!this.o.errors) return this.json(res, 200, { issues: [] });
+    if (resolve) {
+      const done = this.o.errors.resolve(resolve);
+      if (!done || done.game !== id) return this.json(res, 404, { error: 'No such error' });
+      return this.json(res, 200, { ok: true });
+    }
+    this.json(res, 200, { issues: this.o.errors.issues({ game: id, own: true }) });
   }
 
   /** A player reports a game (signed in, or a guest): kept for the admins. */
@@ -378,6 +401,9 @@ export class Uploads {
       };
       return this.json(res, 200, view);
     }
+    if (path === '/admin/errors' && method === 'GET') return this.json(res, 200, { issues: this.o.errors?.issues({ limit: 200 }) ?? [] });
+    const fixed = /^\/admin\/errors\/([0-9a-f]{16})$/.exec(path);
+    if (fixed && method === 'POST') return this.json(res, this.o.errors?.resolve(fixed[1]) ? 200 : 404, {});
     const resolve = /^\/admin\/reports\/(\d+)$/.exec(path);
     if (resolve && method === 'POST') {
       const ok = !!accounts?.resolveReport(Number(resolve[1]), who.by);
@@ -574,7 +600,7 @@ const TOKEN_PAGE = `<!doctype html>
     out.innerHTML = '<p>Your token, shown this once (as ' + body.account.name.replace(/[<>&]/g, '') + '):</p><pre></pre><p>Then, in the repo:</p><pre></pre>';
     const pres = out.querySelectorAll('pre');
     pres[0].textContent = body.token;
-    pres[1].textContent = 'npm run game -- token ' + body.token + '\\nnpm run game -- push src/games/<your game> --server ' + location.origin;
+    pres[1].textContent = 'npm run game -- token ' + body.token + ' --server ' + location.origin + '\\nnpm run game -- push src/games/<your game> --server ' + location.origin;
   };
 </script>
 </body></html>`;

@@ -939,6 +939,44 @@ body.framed #ui .home .home-play {
 .mygames-result .mygames-actions {
   margin-top: 8px;
 }
+a.home-menu-item {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+}
+.home-guest-privacy {
+  color: var(--muted);
+}
+.mygames-errors {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 0 0 14px;
+}
+.mygames-issue {
+  padding: 6px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  font-size: 13px;
+}
+.mygames-issue summary {
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.mygames-issue-message {
+  font: 12.5px ui-monospace, 'SF Mono', Menlo, monospace;
+  color: #ff9a90;
+}
+.mygames-issue[open] {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.mygames-stack {
+  max-height: 260px;
+  overflow: auto;
+  white-space: pre;
+  user-select: text;
+}
 .mygames-gate:empty {
   display: none;
 }
