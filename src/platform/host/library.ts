@@ -10,7 +10,7 @@
 // its own (the server's main thread never runs a built game's code), and only then moved in and
 // made current. Rooms already running keep the version they started with.
 import { randomBytes } from 'node:crypto';
-import { appendFileSync, cpSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, cpSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { GameDefinition, GameMeta } from '../api/types';
 import type { BuiltGame } from '../package/build';
@@ -70,6 +70,9 @@ export interface HostedVersion {
   manifest: PackageManifest;
   meta: GameMeta;
 }
+
+/** An uploader's limits, asked once a game's id is known: why it may not go up (or null). */
+export type Admit = (id: string, isNew: boolean, bytes: number) => string | null;
 
 export type UploadResult = { ok: true; id: string; version: string; record: GameRecord; summary: string } | { ok: false; status: number; problems: string[] };
 
@@ -229,8 +232,12 @@ export class GameLibrary {
     return !r || r.owners.includes(who);
   }
 
-  /** Build and host an uploaded zip of a game's folder, by `by`. `id`: under another id than its meta's. */
-  upload(zip: Uint8Array, by: string, id?: string): Promise<UploadResult> {
+  /**
+   * Build and host an uploaded zip of a game's folder, by `by`. `id`: under another id than its
+   * meta's. `admit`: the uploader's limits, asked once the game's id is known (whether it's a new
+   * game of theirs): why not, or null.
+   */
+  upload(zip: Uint8Array, by: string, id?: string, admit?: Admit): Promise<UploadResult> {
     return this.serially(async (work) => {
       let folder: string;
       try {
@@ -238,7 +245,7 @@ export class GameLibrary {
       } catch (err) {
         return { ok: false, status: 400, problems: [err instanceof Error ? err.message : String(err)] };
       }
-      return this.add(folder, zip, by, id, work);
+      return this.add(folder, zip, by, id, work, admit);
     });
   }
 
@@ -308,6 +315,16 @@ export class GameLibrary {
     return true;
   }
 
+  /** Delete a game for good: its versions, files, source and record (its data in its own database stays). */
+  remove(id: string): boolean {
+    if (!this.games.has(id)) return false;
+    this.games.delete(id);
+    this.sizes.delete(id);
+    rmSync(this.folder(id), { recursive: true, force: true });
+    this.onChange?.(id);
+    return true;
+  }
+
   /** Add or remove an owner (a game keeps at least one). */
   setOwner(id: string, account: string, owner: boolean): boolean {
     const r = this.games.get(id);
@@ -317,13 +334,40 @@ export class GameLibrary {
     return true;
   }
 
+  /** Builds waiting or under way. */
+  get waiting(): number {
+    return this.queued;
+  }
+  private queued = 0;
+
+  /**
+   * What the games `by` created (whose first owner they are) take: how many, and their bytes on disk
+   * (their versions, sources and files).
+   */
+  usage(by: string): { games: number; bytes: number } {
+    const mine = [...this.games.values()].filter((r) => r.owners[0] === by);
+    return { games: mine.length, bytes: mine.reduce((n, r) => n + this.size(r.id), 0) };
+  }
+
+  /** A game's bytes on disk (counted once, again after it changes). */
+  private size(id: string): number {
+    const known = this.sizes.get(id);
+    if (known !== undefined) return known;
+    const bytes = existsSync(this.folder(id)) ? dirBytes(this.folder(id)) : 0;
+    this.sizes.set(id, bytes);
+    return bytes;
+  }
+  private sizes = new Map<string, number>();
+
   private serially(run: (work: string) => Promise<UploadResult>): Promise<UploadResult> {
+    this.queued++;
     const next = this.queue.then(async () => {
       const work = join(this.o.root, '.incoming', randomBytes(6).toString('hex'));
       mkdirSync(work, { recursive: true });
       try {
         return await run(work);
       } finally {
+        this.queued--;
         rmSync(work, { recursive: true, force: true });
       }
     });
@@ -332,7 +376,7 @@ export class GameLibrary {
   }
 
   /** Build `folder` in `work`, check it may be hosted, smoke-test it, move it in and make it current. */
-  private async add(folder: string, zip: Uint8Array, by: string, asId: string | undefined, work: string): Promise<UploadResult> {
+  private async add(folder: string, zip: Uint8Array, by: string, asId: string | undefined, work: string, admit?: Admit): Promise<UploadResult> {
     let built: BuiltGame;
     try {
       built = await this.o.build(folder, join(work, 'out'), asId);
@@ -351,10 +395,14 @@ export class GameLibrary {
     if (RESERVED.has(id)) return refuse(409, [`"${id}" is a word the server keeps for itself: give your game another id`]);
     if (this.o.taken(id)) return refuse(409, [`"${id}" is a game this server has built in: give yours another id`]);
     if (!this.mayManage(id, by)) return refuse(403, [`"${id}" is someone else's game: ask one of its owners to add you, or give yours another id`]);
+    // What it would add on disk: its built code, its files not kept yet, its source.
+    const home = this.folder(id);
+    const adds = zip.length + dirBytes(built.dir) + built.manifest.assets.filter((a) => !existsSync(join(home, 'assets', a))).reduce((n, a) => n + statSync(join(work, 'out', id, 'assets', a)).size, 0);
+    const over = admit?.(id, !this.games.has(id), adds);
+    if (over) return refuse(403, [over]);
     const smoke = await this.o.smoke(built.dir);
     if (!smoke.ok || !smoke.meta) return refuse(400, [`it failed its smoke test (${smoke.summary}):`, ...smoke.errors]);
     // Moved in: the version, its new files, its source.
-    const home = this.folder(id);
     mkdirSync(join(home, 'assets'), { recursive: true });
     mkdirSync(join(home, 'source'), { recursive: true });
     if (!existsSync(join(home, version))) renameSync(built.dir, join(home, version));
@@ -371,6 +419,7 @@ export class GameLibrary {
       rmSync(join(home, 'source', `${old.version}.zip`), { force: true });
     }
     this.games.set(id, r);
+    this.sizes.delete(id);
     this.save(r);
     this.o.log?.(`[library] ${id}: version ${version} by ${by} (${smoke.summary})`);
     this.note(by, `uploaded version ${version} (${smoke.meta.title})`, id);
@@ -413,4 +462,11 @@ export function smokeInThread(start: (data: SmokeWorkerData) => Worker, wasm: Ui
       });
     });
   };
+}
+
+/** A folder's bytes, all the way down. */
+function dirBytes(dir: string): number {
+  let n = 0;
+  for (const e of readdirSync(dir, { withFileTypes: true })) n += e.isDirectory() ? dirBytes(join(dir, e.name)) : statSync(join(dir, e.name)).size;
+  return n;
 }

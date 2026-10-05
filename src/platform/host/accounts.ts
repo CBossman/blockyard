@@ -90,6 +90,11 @@ const SETUP = `
     resolved TEXT,
     resolved_by TEXT
   );
+  CREATE TABLE IF NOT EXISTS terms (
+    account TEXT PRIMARY KEY REFERENCES accounts (id) ON DELETE CASCADE,
+    version INTEGER NOT NULL,
+    at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
   CREATE TABLE IF NOT EXISTS upload_tokens (
     hash TEXT PRIMARY KEY,
     account TEXT NOT NULL REFERENCES accounts (id) ON DELETE CASCADE,
@@ -102,6 +107,15 @@ const SETUP = `
 export const SESSION_SECONDS = 90 * 24 * 3600;
 /** How often a name can be changed (seconds). */
 const RENAME_EVERY = 24 * 3600;
+
+/**
+ * When a Discord account was made, from its id (a snowflake: milliseconds since 2015 in its top
+ * bits); null for an id that isn't one (a development server's `dev:` accounts).
+ */
+export function discordCreated(discord: string): Date | null {
+  if (!/^\d{15,20}$/.test(discord)) return null;
+  return new Date(Number(BigInt(discord) >> 22n) + 1420070400000);
+}
 
 /** A name as players may have one: letters, digits, spaces, `_ . -`; 20 at most (what `start` allows). */
 export function cleanName(raw: string): string {
@@ -231,6 +245,15 @@ export class Accounts {
   /** Revoke all of an account's upload tokens: how many there were. */
   revokeUploadTokens(account: string): number {
     return Number(this.db.prepare('DELETE FROM upload_tokens WHERE account = ?').run(account).changes);
+  }
+
+  /** The version of the upload terms an account accepted (0: none). */
+  termsAccepted(account: string): number {
+    return (this.db.prepare('SELECT version FROM terms WHERE account = ?').get(account) as { version: number } | undefined)?.version ?? 0;
+  }
+
+  acceptTerms(account: string, version: number) {
+    this.db.prepare(`INSERT INTO terms (account, version) VALUES (?, ?) ON CONFLICT (account) DO UPDATE SET version = excluded.version, at = datetime('now')`).run(account, version);
   }
 
   /** Ban an account from uploading and managing games (or lift it: `banned` false). */

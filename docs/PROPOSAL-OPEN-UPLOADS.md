@@ -1,7 +1,7 @@
 # Proposal: open uploads (anyone may upload a game)
 
-Status: **stages 1 to 3 built** (2026-10-04; see "Stage 1: what was built", "Stage 2: the sandbox
-machine" and "Stage 3: what was built"); stage 4 to come. Follows `PROPOSAL-UPLOADS.md`, which built
+Status: **all four stages built** (2026-10-04; see each stage's "what was built"). Opening uploads to
+everyone is one setting (`UPLOADERS=*`), left for the owner to turn on after reviewing the terms. Follows `PROPOSAL-UPLOADS.md`, which built
 uploads for trusted people only.
 
 ## Why it's not open yet
@@ -244,4 +244,30 @@ workers and games' workers alike.
   `fetch`, WebSocket and image beacon to another site are all blocked (`connect-src`, `img-src`).
   Pointer lock itself couldn't be exercised from CDP (synthetic clicks don't get it, in a frame or
   not): to check by hand. `tests/headless/tickets.ts` covers tickets.
+
+## Stage 4: what was built
+
+- **Anyone may upload with `UPLOADERS=*`**: any signed-in account whose Discord account is a week old
+  (a Discord id is a snowflake: its creation time is in it; `minAgeDays`). Accounts named in
+  `UPLOADERS` skip the age check. "Your games" is in the account menu for everyone signed in then,
+  and says why if they can't upload yet.
+- **Terms**: `public/upload-terms.html` (a plain-language draft for the owner to review), version 1;
+  an uploader accepts once in Your games before uploading (`POST /uploads/terms`, kept in
+  `accounts.sqlite`); a new version (`UPLOAD_TERMS_VERSION`) asks again. Admins and development
+  servers aren't asked.
+- **Limits** (`host/uploads.ts`, `UPLOAD_LIMITS`; admins exempt): 10 games created per account,
+  200 MB on disk for them (what a new version adds, counted once built), 20 uploads an hour, and
+  10 builds waiting at once (then "try again in a minute"). Your games shows what's used.
+  **Delete for good** (`DELETE /g/<id>?forever=1`, asked again in place) frees room.
+- **A room pool for uploaded games** (`Limits.uploadedRooms`, `UPLOADED_ROOMS`, 8 by default): past
+  it, "Uploaded games are full right now" (a refusal screens retry); with a sandbox, uploaded rooms
+  don't count toward the game server's own `ROOMS`, so built-in games always have theirs.
+- `tests/headless/open-uploads.ts` covers it: the age gate, terms, each limit, deleting, admins,
+  the pool beside a built-in game.
+
+### To open uploads
+
+1. Read `public/upload-terms.html` (live at blockyard.gg/upload-terms.html) and change what you'd
+   word differently; a contact for takedowns could go in it (the Report button is the route now).
+2. Set `UPLOADERS = "*"` in fly.toml (the names there now can stay: they skip the age check).
 

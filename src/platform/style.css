@@ -939,6 +939,30 @@ body.framed #ui .home .home-play {
 .mygames-result .mygames-actions {
   margin-top: 8px;
 }
+.mygames-gate:empty {
+  display: none;
+}
+.mygames-terms {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 16px 18px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+}
+.mygames-terms a {
+  color: var(--accent);
+}
+.mygames-drop.hidden,
+.mygames-cli.hidden {
+  display: none;
+}
+.mygames-quiet {
+  background: none;
+  border-color: transparent;
+  color: var(--muted);
+}
 .mygames-state.directory {
   background: rgba(90, 180, 255, 0.14);
   color: var(--text);

@@ -31,6 +31,8 @@ export class MyGamesPanel {
   private drop = h('div.mygames-drop');
   private asId = h('input.mygames-id', { type: 'text', placeholder: 'its id (optional)', maxlength: '32', spellcheck: false, autocomplete: 'off' }) as HTMLInputElement;
   private token = h('div.mygames-token');
+  /** Before the upload area: why they can't upload, the terms to accept, what they use. */
+  private gate = h('div.mygames-gate');
   /** Your games, and (an admin's) every game. */
   private tabs = h('div.mygames-tabs.hidden');
   private mine = h('div.mygames-tab');
@@ -71,7 +73,7 @@ export class MyGamesPanel {
       this.drop.classList.remove('over');
       void this.fromDrop((e as DragEvent).dataTransfer);
     });
-    this.mine.append(this.drop, this.result, this.list, h('section.mygames-cli', {}, h('div.mygames-section', {}, 'From the command line'), this.token));
+    this.mine.append(this.gate, this.drop, this.result, this.list, h('section.mygames-cli', {}, h('div.mygames-section', {}, 'From the command line'), this.token));
     this.panel.append(
       h('header.profile-head', {}, h('div.profile-who', {}, h('div.profile-name', {}, 'Your games'), h('div.profile-sub', {}, 'Games you host on Blockyard, built from their folders: no deploy needed')), close),
       this.tabs,
@@ -109,8 +111,46 @@ export class MyGamesPanel {
     }
     this.data = (await r.json()) as MyGames;
     this.renderTabs();
+    this.renderGate();
     this.renderList();
     if (this.data.admin && this.tab === 'admin') await this.refreshAdmin();
+  }
+
+  /** Why they can't upload, the terms to accept first, and how much of their limits they use. */
+  private renderGate() {
+    const d = this.data;
+    this.gate.replaceChildren();
+    const blocked = !!d?.why || (!!d?.terms && !d.terms.accepted);
+    this.drop.classList.toggle('hidden', blocked);
+    this.token.parentElement?.classList.toggle('hidden', blocked);
+    if (!d) return;
+    if (d.why) {
+      this.gate.append(h('div.mygames-result.error', {}, d.why));
+      return;
+    }
+    if (d.terms && !d.terms.accepted) {
+      const accept = h('button.mygames-button.primary', {}, 'I accept the upload terms') as HTMLButtonElement;
+      accept.onclick = async () => {
+        accept.disabled = true;
+        const r = await this.post('/uploads/terms', { version: d.terms!.version });
+        if (!r.ok) this.say('error', r.error ?? "Couldn't accept them");
+        await this.refresh();
+      };
+      this.gate.append(
+        h(
+          'div.mygames-terms',
+          {},
+          h('div.mygames-drop-title', {}, 'Before your first upload'),
+          h('div.mygames-drop-note', {}, 'Your game must be yours to share (no real brands or characters), nothing hateful, sexual or illegal, and no trying to break out of where games run. ', h('a', { href: d.terms.url, target: '_blank', rel: 'noopener' }, 'Read the upload terms')),
+          h('div.mygames-drop-actions', {}, accept),
+        ),
+      );
+      return;
+    }
+    if (d.limits) {
+      const l = d.limits;
+      this.gate.append(h('div.mygames-dim', {}, `${l.usedGames} of ${l.games} games · ${Math.round(l.usedBytes / 1024 / 1024)} MB of ${Math.round(l.bytes / 1024 / 1024)} MB`));
+    }
   }
 
   private renderList() {
@@ -196,7 +236,29 @@ export class MyGamesPanel {
       h('div.mygames-actions', {}, hosted && !g.broken ? open : null, hosted ? copy : null, hosted ? list : null, hosted && !g.broken ? home : null, host),
       versions,
       owners,
+      this.deleteForGood(g),
     );
+  }
+
+  /** "Delete for good": asked again in place (it can't be undone). */
+  private deleteForGood(g: MyGame): HTMLElement {
+    const box = h('div.mygames-actions');
+    const ask = () => {
+      box.replaceChildren(
+        h('span.mygames-dim', {}, `Delete ${g.title} for good? Its versions and files go; it can't be undone.`),
+        h('button.mygames-button.small.danger', {
+          onclick: async () => {
+            const r = await fetch(`${this.http}/g/${g.id}?forever=1`, { method: 'DELETE', credentials: 'include' }).catch(() => null);
+            if (!r?.ok) this.say('error', "Couldn't delete it");
+            await this.refresh();
+          },
+        }, 'Delete for good'),
+        h('button.mygames-button.small', { onclick: () => reset() }, 'Keep it'),
+      );
+    };
+    const reset = () => box.replaceChildren(h('button.mygames-button.small.mygames-quiet', { onclick: ask }, 'Delete for good…'));
+    reset();
+    return box;
   }
 
   /** A game an update to the platform broke: what went wrong, and checking it again. */

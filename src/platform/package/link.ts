@@ -152,6 +152,14 @@ export interface MyGames {
   uploader: boolean;
   /** May manage every game (the server's `ADMINS`): `GET /admin`. */
   admin: boolean;
+  /** Why they may not upload (null: they may). */
+  why: string | null;
+  /** Anyone signed in may upload here (`UPLOADERS=*`), within the limits. */
+  open: boolean;
+  /** Their limits and what they use (null: none, an admin or a development server). */
+  limits: { games: number; bytes: number; usedGames: number; usedBytes: number } | null;
+  /** The upload terms to accept before uploading (null: none asked). */
+  terms: { version: number; url: string; accepted: boolean } | null;
   account: { id: string; name: string } | null;
   games: MyGame[];
 }

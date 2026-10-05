@@ -80,8 +80,9 @@ export class AccountCorner {
   /** Whether they may upload games here: then "Your games" is in the menu. */
   private async askUploader(http: string) {
     const r = await fetch(`${http}/g/mine`, { credentials: 'include' }).catch(() => null);
-    const mine = r?.ok ? ((await r.json()) as { uploader?: boolean }) : null;
-    if (this.http !== http || !mine?.uploader) return;
+    const mine = r?.ok ? ((await r.json()) as { uploader?: boolean; open?: boolean }) : null;
+    // (Where anyone may upload, it's there for everyone signed in: it says why if they can't yet.)
+    if (this.http !== http || !(mine?.uploader || mine?.open)) return;
     this.uploader = true;
     this.render();
   }

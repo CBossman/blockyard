@@ -7,7 +7,8 @@
 //   GET    /g/mine                         the games one may manage, and whether one may upload
 //   GET    /g/<id>/manage                  its record (owners only)
 //   POST   /g/<id>/manage                  `{ current?, listed?, addOwner?, removeOwner?, recheck? }` (owners only)
-//   DELETE /g/<id>                         stop hosting it (its files and record stay)
+//   DELETE /g/<id>[?forever=1]             stop hosting it (its files and record stay); for good: gone
+//   POST   /uploads/terms                  `{ version }`: accept the upload terms
 //   GET    /g/directory                    the community directory: hosted games in it, not on the home page
 //   POST   /g/<id>/report                  `{ reason }`: a player reports a game
 //   GET    /uploads                        a page for making an upload token (for `npm run game -- push`)
@@ -26,16 +27,41 @@ import { readFile } from 'node:fs/promises';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { extname, join } from 'node:path';
 import { packagePath, type AdminView, type DirectoryGame, type MyGame, type MyGames, type PackageEntry } from '../package/link';
-import type { Account, Accounts } from './accounts';
+import { discordCreated, type Account, type Accounts } from './accounts';
 import type { Auth } from './auth';
 import type { GameLibrary, GameRecord } from './library';
+
+/** What an uploader may do (admins: anything). */
+export interface UploadLimits {
+  /** Games an account may create (be the first owner of). */
+  games: number;
+  /** Bytes the games it created may take on disk (their versions, sources, files). */
+  bytes: number;
+  /** Uploads an hour. */
+  perHour: number;
+  /** Builds waiting at once (anyone's): past it, an upload is asked to wait. */
+  queue: number;
+  /** With `UPLOADERS=*` (anyone signed in): how old a Discord account must be (days). */
+  minAgeDays: number;
+}
+
+export const UPLOAD_LIMITS: UploadLimits = { games: 10, bytes: 200 * 1024 * 1024, perHour: 20, queue: 10, minAgeDays: 7 };
+
+/** The upload terms uploaders accept before their first upload: which version, and where to read them. */
+export interface UploadTerms {
+  version: number;
+  url: string;
+}
 
 export interface UploadsOptions {
   library: GameLibrary;
   accounts?: Accounts;
   auth?: Auth | null;
-  /** Accounts that may upload: their ids or Discord ids. */
+  /** Accounts that may upload: their ids or Discord ids; `*`: anyone signed in (old enough: `limits.minAgeDays`). */
   uploaders: string[];
+  limits?: Partial<UploadLimits>;
+  /** Terms to accept before uploading (none: not asked). */
+  terms?: UploadTerms | null;
   /** Accounts that may manage every game (and upload): their ids or Discord ids. */
   admins?: string[];
   /** The site's addresses: where a game's link points (the first), and the pages that may manage games. */
@@ -71,13 +97,18 @@ const VERSION = /^[0-9a-f]{12}$/;
 export class Uploads {
   private readonly own: string;
 
+  private readonly limits: UploadLimits;
+  /** Each uploader's uploads in the last hour (when). */
+  private recent = new Map<string, number[]>();
+
   constructor(private o: UploadsOptions) {
     this.own = new URL(o.library.publicUrl).origin;
+    this.limits = { ...UPLOAD_LIMITS, ...o.limits };
   }
 
   /** Answer a `/g…` or `/uploads…` request: true if it was one. */
   handle(req: IncomingMessage, res: ServerResponse, path: string): boolean {
-    if (path !== '/g' && !path.startsWith('/g/') && path !== '/uploads' && path !== '/uploads/token' && path !== '/admin' && !path.startsWith('/admin/')) return false;
+    if (path !== '/g' && !path.startsWith('/g/') && path !== '/uploads' && !path.startsWith('/uploads/') && path !== '/admin' && !path.startsWith('/admin/')) return false;
     const method = req.method ?? 'GET';
     // The site's pages ask with the player's sign-in (their games, uploads, changes).
     this.cors(req, res);
@@ -97,6 +128,7 @@ export class Uploads {
   private async route(req: IncomingMessage, res: ServerResponse, path: string, method: string) {
     if (path === '/uploads') return method === 'GET' ? this.tokenPage(res) : this.json(res, 405, { error: 'GET it' });
     if (path === '/uploads/token') return method === 'POST' ? this.newToken(req, res) : this.json(res, 405, { error: 'POST it' });
+    if (path === '/uploads/terms') return method === 'POST' ? this.acceptTerms(req, res) : this.json(res, 405, { error: 'POST it' });
     if (path === '/g') return method === 'POST' ? this.upload(req, res, new URL(req.url ?? '/', 'http://server').searchParams.get('id') ?? undefined) : this.json(res, 405, { error: 'POST a zip' });
     if (path === '/g/mine') return method === 'GET' ? this.mine(req, res) : this.json(res, 405, { error: 'GET it' });
     if (path === '/g/directory') return method === 'GET' ? this.directory(res) : this.json(res, 405, { error: 'GET it' });
@@ -104,7 +136,7 @@ export class Uploads {
     const parts = path.split('/').slice(2);
     const id = parts[0];
     if (parts.length === 2 && parts[1] === 'report' && method === 'POST') return this.report(req, res, id);
-    if (parts.length === 1 && method === 'DELETE') return this.manage(req, res, id, { current: null });
+    if (parts.length === 1 && method === 'DELETE') return this.manage(req, res, id, new URL(req.url ?? '/', 'http://server').searchParams.get('forever') ? { forever: true } : { current: null });
     if (parts.length === 2 && parts[1] === 'manage') {
       if (method === 'GET') return this.manage(req, res, id, null);
       if (method === 'POST') {
@@ -157,12 +189,31 @@ export class Uploads {
   private async upload(req: IncomingMessage, res: ServerResponse, asId: string | undefined) {
     const who = this.who(req);
     if (!who) return this.json(res, 401, { error: req.headers.authorization ? 'That upload token is unknown or revoked' : 'Sign in, or send an upload token (Authorization: Bearer …)' });
-    if (!this.mayUpload(who)) return this.json(res, 403, { error: this.banned(who) ? "You're banned from uploading games here" : `${who.account?.name ?? who.by} isn't one of this server's uploaders` });
+    const why = this.whyNot(who);
+    if (why) return this.json(res, 403, { error: why });
+    const exempt = this.isAdmin(who) || this.o.dev;
+    if (!exempt && this.o.terms && who.account && (this.o.accounts?.termsAccepted(who.account.id) ?? 0) < this.o.terms.version) {
+      return this.json(res, 403, { error: `Accept the upload terms first: Your games, on the site (${this.o.terms.url})`, terms: this.o.terms });
+    }
+    const now = Date.now();
+    const recent = (this.recent.get(who.by) ?? []).filter((t) => now - t < 3600_000);
+    if (!exempt && recent.length >= this.limits.perHour) return this.json(res, 429, { error: `That's ${this.limits.perHour} uploads this hour: the most. Try again later` });
+    if (this.o.library.waiting >= this.limits.queue) return this.json(res, 503, { error: 'Busy building other games: try again in a minute' });
+    this.recent.set(who.by, [...recent, now]);
     const zip = await readBody(req, MAX_UPLOAD);
     if (!zip) return this.json(res, 413, { error: `Too big: ${MAX_UPLOAD / 1024 / 1024} MB at most` });
     if (!zip.length) return this.json(res, 400, { error: "Send the zip of a game's folder as the body" });
     const t0 = performance.now();
-    const result = await this.o.library.upload(new Uint8Array(zip.buffer, zip.byteOffset, zip.length), who.by, asId);
+    // Its creator's limits, once its id is known: games and room on disk.
+    const admit = exempt
+      ? undefined
+      : (_id: string, isNew: boolean, bytes: number) => {
+          const used = this.o.library.usage(who.by);
+          if (isNew && used.games >= this.limits.games) return `You have ${used.games} games here: the most is ${this.limits.games}. Delete one for good (Your games) to make room`;
+          if (used.bytes + bytes > this.limits.bytes) return `Your games take ${mb(used.bytes)} of ${mb(this.limits.bytes)}: delete old ones (Your games) to make room`;
+          return null;
+        };
+    const result = await this.o.library.upload(new Uint8Array(zip.buffer, zip.byteOffset, zip.length), who.by, asId, admit);
     if (!result.ok) {
       this.o.log?.(`[uploads] ${who.account?.name ?? who.by}'s upload refused (${result.status}): ${result.problems[0]}`);
       return this.json(res, result.status, { error: "Your game can't be hosted", problems: result.problems });
@@ -181,6 +232,12 @@ export class Uploads {
     const admin = this.isAdmin(who);
     if (!admin && this.banned(who)) return this.json(res, 403, { error: "You're banned from managing games here" });
     if (!this.o.dev && !admin && !record.owners.includes(who.by)) return this.json(res, 403, { error: `"${id}" isn't yours` });
+    if (change?.forever) {
+      lib.remove(id);
+      lib.note(who.by, 'deleted it for good', id);
+      this.o.log?.(`[uploads] ${id} deleted for good by ${who.account?.name ?? who.by}`);
+      return this.json(res, 200, { deleted: id });
+    }
     if (change?.recheck) {
       // Smoke-test its current version again now (after a fix to the platform, say).
       void lib.recheck({ force: true, only: id }).then(() => this.json(res, 200, { record: lib.record(id), broken: lib.broken(id) }));
@@ -220,7 +277,18 @@ export class Uploads {
       .filter((r) => this.o.dev || r.owners.includes(who.by))
       .map((r) => this.myGame(r))
       .sort((a, b) => (b.versions[0]?.built ?? '').localeCompare(a.versions[0]?.built ?? ''));
-    this.json(res, 200, { uploader: this.mayUpload(who), admin: this.isAdmin(who), account: who.account ? { id: who.account.id, name: who.account.name } : null, games } satisfies MyGames);
+    const exempt = this.isAdmin(who) || this.o.dev;
+    const used = this.o.library.usage(who.by);
+    this.json(res, 200, {
+      uploader: this.mayUpload(who),
+      admin: this.isAdmin(who),
+      account: who.account ? { id: who.account.id, name: who.account.name } : null,
+      games,
+      why: this.whyNot(who),
+      open: this.o.uploaders.includes('*'),
+      limits: exempt ? null : { games: this.limits.games, bytes: this.limits.bytes, usedGames: used.games, usedBytes: used.bytes },
+      terms: this.o.terms && !exempt ? { ...this.o.terms, accepted: !!who.account && (this.o.accounts?.termsAccepted(who.account.id) ?? 0) >= this.o.terms.version } : null,
+    } satisfies MyGames);
   }
 
   /** A game as its owners' page shows it. */
@@ -364,10 +432,39 @@ export class Uploads {
   }
 
   private mayUpload(who: { by: string; account: Account | null }): boolean {
-    if (this.isAdmin(who)) return true;
-    if (this.banned(who)) return false;
-    if (this.o.dev) return true;
-    return !!who.account && (this.o.uploaders.includes(who.account.id) || this.o.uploaders.includes(who.account.discord));
+    return this.whyNot(who) === null;
+  }
+
+  /** Why `who` may not upload (null: they may). */
+  private whyNot(who: { by: string; account: Account | null }): string | null {
+    if (this.isAdmin(who)) return null;
+    if (this.banned(who)) return "You're banned from uploading games here";
+    if (this.o.dev) return null;
+    const a = who.account;
+    if (!a) return 'Sign in to upload games';
+    if (this.o.uploaders.includes(a.id) || this.o.uploaders.includes(a.discord)) return null;
+    if (!this.o.uploaders.includes('*')) return `${a.name} isn't one of this server's uploaders`;
+    // Anyone signed in, with a Discord account old enough (a new one is cheap to make).
+    const made = discordCreated(a.discord);
+    if (made && Date.now() - made.getTime() < this.limits.minAgeDays * 86400_000) return `Your Discord account is newer than ${this.limits.minAgeDays} days: try again when it's older`;
+    return null;
+  }
+
+  /** `POST /uploads/terms {version}`: the signed-in account (or a token's) accepts the upload terms. */
+  private async acceptTerms(req: IncomingMessage, res: ServerResponse) {
+    const who = this.who(req);
+    if (!who?.account || !this.o.accounts) return this.json(res, 401, { error: 'Sign in first' });
+    const body = await readBody(req, 4096);
+    let version = 0;
+    try {
+      version = Number((JSON.parse(body?.toString() ?? '{}') as { version?: unknown }).version);
+    } catch {
+      // (no version)
+    }
+    if (!this.o.terms || version !== this.o.terms.version) return this.json(res, 400, { error: 'Those terms are out of date: read them again', terms: this.o.terms });
+    this.o.accounts.acceptTerms(who.account.id, version);
+    this.o.library.note(who.by, `accepted the upload terms (version ${version})`);
+    this.json(res, 200, { ok: true });
   }
 
   /** On the server's list of admins (by account id or Discord id). */
@@ -404,6 +501,8 @@ interface Change {
   removeOwner?: string;
   /** Smoke-test its current version again now. */
   recheck?: boolean;
+  /** Delete it for good (`DELETE /g/<id>?forever=1`). */
+  forever?: boolean;
   /** The home page: its owners ask (or withdraw); an admin approves, declines or takes it off (remove). */
   home?: 'ask' | 'withdraw' | 'approve' | 'decline' | 'remove';
 }
@@ -479,3 +578,5 @@ const TOKEN_PAGE = `<!doctype html>
   };
 </script>
 </body></html>`;
+
+const mb = (bytes: number) => (bytes < 1024 * 1024 ? `${Math.round(bytes / 1024)} KB` : `${Math.round(bytes / 1024 / 1024)} MB`);

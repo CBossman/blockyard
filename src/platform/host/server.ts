@@ -18,7 +18,7 @@ import type { PackageEntry } from '../package/link';
 import type { GameLibrary } from './library';
 import { gameFiles, type SandboxLink } from './sandbox-link';
 import type { StoreSnapshot } from '../sandbox/protocol';
-import { Uploads } from './uploads';
+import { Uploads, type UploadLimits, type UploadTerms } from './uploads';
 
 /** Seconds a room's thread may go without a word (it says it's alive every 2) before it's stopped as stuck. */
 const STUCK = 30;
@@ -49,6 +49,10 @@ export interface ServeOptions {
   uploaders?: string[];
   /** Accounts that may manage every game (approve for the home page, ban…): their ids or Discord ids. */
   admins?: string[];
+  /** What uploaders may do (games, room on disk, uploads an hour…; see `UPLOAD_LIMITS`). */
+  uploadLimits?: Partial<UploadLimits>;
+  /** The terms uploaders accept before their first upload (none: not asked). */
+  uploadTerms?: UploadTerms | null;
   /**
    * The sandbox (see sandbox/protocol.ts): uploaded games' rooms run there, not in this machine's
    * threads. Without it they run in worker threads like the others (trusted uploaders only).
@@ -125,12 +129,20 @@ export interface Limits {
   rooms: number;
   /** Rooms of their own that people at one address may have running at once. */
   roomsPerAddress: number;
+  /**
+   * Rooms of uploaded games (from the library) running at once: a pool of their own, so they never
+   * crowd out the games built in. With a sandbox they run there and don't count toward `rooms`.
+   */
+  uploadedRooms: number;
 }
 
 /** Turned away when the server runs as many rooms as it may. */
 const BUSY = { code: CLOSE_FULL, reason: 'The server is busy right now' };
 
-const LIMITS: Limits = { playersPerGame: 16, perAddress: 6, messagesPerSecond: 300, maxMessage: 16 * 1024, rooms: 12, roomsPerAddress: 2 };
+const LIMITS: Limits = { playersPerGame: 16, perAddress: 6, messagesPerSecond: 300, maxMessage: 16 * 1024, rooms: 12, roomsPerAddress: 2, uploadedRooms: 8 };
+
+/** Turned away when uploaded games' rooms are as many as may run. */
+const UPLOADED_BUSY = { code: CLOSE_FULL, reason: 'Uploaded games are full right now' };
 
 export { CLOSE_FULL, CLOSE_LIMIT, CLOSE_UNKNOWN };
 
@@ -244,13 +256,27 @@ export function serve(o: ServeOptions): Promise<GameServer> {
   const auth = o.accounts
     ? new Auth({ accounts: o.accounts, discord: o.discord, sites: o.sites ?? [], dev: o.dev ?? false, onDelete: (a) => forget(a), catalog, log })
     : null;
-  const uploads = o.library ? new Uploads({ library: o.library, accounts: o.accounts, auth, uploaders: o.uploaders ?? [], admins: o.admins ?? [], sites: o.sites ?? [], dev: o.dev ?? false, log }) : null;
+  const uploads = o.library ? new Uploads({ library: o.library, accounts: o.accounts, auth, uploaders: o.uploaders ?? [], admins: o.admins ?? [], limits: o.uploadLimits, terms: o.uploadTerms, sites: o.sites ?? [], dev: o.dev ?? false, log }) : null;
   // A game from the library changed (a new version, say): its cosmetics are what may be worn.
   if (o.library) o.library.onChange = () => refreshCatalog();
   // Compiled once: each room's worker gets the module (no compiling per room).
   let engine: WebAssembly.Module | null = null;
 
   const running = () => [...rooms.values()].filter((r) => r.link).length;
+  /** A room of an uploaded game's (from the library, not built in). */
+  const uploaded = (r: Room) => !defs.has(r.def.id);
+  /**
+   * Whether another room of `def` may start: the uploaded games' pool, and this machine's rooms (an
+   * uploaded game's in the sandbox doesn't take one of those). Why not, or null.
+   */
+  const full = (def: GameDefinition) => {
+    const live = [...rooms.values()].filter((r) => r.link);
+    const isUploaded = !defs.has(def.id);
+    if (isUploaded && live.filter(uploaded).length >= limits.uploadedRooms) return UPLOADED_BUSY;
+    const here = live.filter((r) => !(o.sandbox && uploaded(r))).length;
+    if (!(isUploaded && o.sandbox) && here >= limits.rooms) return BUSY;
+    return null;
+  };
 
   /** Start a room's game: in a worker of its own, or here. */
   function start(room: Room): RoomLink {
@@ -511,7 +537,8 @@ export function serve(o: ServeOptions): Promise<GameServer> {
     if ([...rooms.values()].filter((r) => r.creator === address && r.link).length >= limits.roomsPerAddress) {
       return { code: CLOSE_LIMIT, reason: 'You have too many games of your own going: leave one first' };
     }
-    if (running() >= limits.rooms) return BUSY;
+    const busy = full(def);
+    if (busy) return busy;
     if (room) return room;
     const made = new Room(def, code, address, (line) => log(`[${key}] ${line}`));
     rooms.set(key, made);
@@ -531,7 +558,8 @@ export function serve(o: ServeOptions): Promise<GameServer> {
     if (pick) return pick;
     const first = copies.find((r) => r.shard === 1);
     if (first?.link && (!def.instances || !o.worker)) return { code: CLOSE_FULL, reason: 'This game is full' };
-    if (running() >= limits.rooms) return BUSY;
+    const busy = full(def);
+    if (busy) return busy;
     if (first && !first.link) return first;
     let shard = first ? 2 : 1;
     while (copies.some((r) => r.shard === shard)) shard++;

@@ -10,6 +10,8 @@
 // files by the server's public address (PUBLIC_URL, default http://localhost:<port>). ADMINS (account
 // or Discord ids) may manage every game: approve one for the home page, ban an uploader, see reports.
 // SANDBOX_URL and SANDBOX_TOKEN: the sandbox machine uploaded games' rooms run on (src/sandbox.ts).
+// UPLOADERS=* lets anyone signed in upload (a Discord account a week old), within the limits
+// (host/uploads.ts) and once they've accepted the upload terms; UPLOADED_ROOMS sizes their pool.
 //
 // It reaches the games only through their server registry (src/games/server.ts): their shared
 // definitions and rules. No game's client code, and nothing of the browser's, comes in here.
@@ -95,6 +97,7 @@ export async function main(args: string[], worker?: ServeOptions['worker'], mode
     if (!built.ok) fail(`--package ${folder}: can't host it:\n${built.problems.map((p) => `  ${p}`).join('\n')}`);
     console.log(`[${built.id}] built ${folder} as version ${built.version}: ?game=${built.id}`);
   }
+  const sites = (process.env.SITE_ORIGINS ?? '').split(',').map((s) => s.trim()).filter(Boolean);
   const server = await serve({
     games: defs,
     hidden,
@@ -102,6 +105,9 @@ export async function main(args: string[], worker?: ServeOptions['worker'], mode
     sandbox,
     uploaders: (process.env.UPLOADERS ?? '').split(',').map((u) => u.trim()).filter(Boolean),
     admins: (process.env.ADMINS ?? '').split(',').map((u) => u.trim()).filter(Boolean),
+    // The upload terms (the site's /upload-terms.html), accepted once before a first upload; a new
+    // version (UPLOAD_TERMS_VERSION) asks again.
+    uploadTerms: sites[0] ? { version: Number(process.env.UPLOAD_TERMS_VERSION ?? 1), url: `${sites[0]}/upload-terms.html` } : null,
     port,
     seed,
     wasm,
@@ -112,10 +118,15 @@ export async function main(args: string[], worker?: ServeOptions['worker'], mode
     storeFile: dbOf,
     // A room (a world, in a thread of its own) takes 30 to 50 MB: 8 fit a 512 MB machine. Its size
     // (players and those watching; a full public game overflows into another copy) defaults to 16.
-    limits: { rooms: Number(flag('rooms') ?? process.env.ROOMS ?? 8), ...(flag('room-size') ?? process.env.ROOM_SIZE ? { playersPerGame: Number(flag('room-size') ?? process.env.ROOM_SIZE) } : {}) },
+    limits: {
+      rooms: Number(flag('rooms') ?? process.env.ROOMS ?? 8),
+      ...(flag('room-size') ?? process.env.ROOM_SIZE ? { playersPerGame: Number(flag('room-size') ?? process.env.ROOM_SIZE) } : {}),
+      // Uploaded games' rooms: a pool of their own (on the sandbox machine, with one).
+      ...(process.env.UPLOADED_ROOMS ? { uploadedRooms: Number(process.env.UPLOADED_ROOMS) } : {}),
+    },
     accounts: Accounts.open(join(data, 'accounts.sqlite')),
     discord: process.env.DISCORD_CLIENT_ID && process.env.DISCORD_CLIENT_SECRET ? { id: process.env.DISCORD_CLIENT_ID, secret: process.env.DISCORD_CLIENT_SECRET } : null,
-    sites: (process.env.SITE_ORIGINS ?? '').split(',').map((s) => s.trim()).filter(Boolean),
+    sites,
     log: (line) => console.log(line),
   });
   const how = dev ? ' (development mode: cheats, development games, __game.dev)' : cheats ? ' (cheats on)' : '';
