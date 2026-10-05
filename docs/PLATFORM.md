@@ -1681,7 +1681,7 @@ The folder is the game exactly as it sits in `src/games/<id>/`. Building it:
 
 A refused upload says why (each boundary broken, with the file; the smoke test's errors).
 
-The server serves screens `/g/<id>` (what to load), the client code by version (`/g/<id>/<version>/client.js`) and the files (`/g/<id>/assets/…`), never the server code. The files the server code names by URL (models it sends players) are addressed by the server's public address (`PUBLIC_URL`, default `http://localhost:<port>`). An uploaded game's code runs with the same access as a built-in game's, which is why only trusted people may upload.
+The server serves screens `/g/<id>` (what to load), the client code by version (`/g/<id>/<version>/client.js`) and the files (`/g/<id>/assets/…`), never the server code. The files the server code names by URL (models it sends players) are addressed by the server's public address (`PUBLIC_URL`, default `http://localhost:<port>`). On a server with a sandbox (`SANDBOX_URL`, as blockyard.gg has), uploaded games' rooms and smoke tests run there, each in a process with no network, a user of its own and Node's permission model; the game server keeps the sockets and the data (`docs/PROPOSAL-OPEN-UPLOADS.md`). Their client code still runs on the site's page, so uploaders stay trusted until the browser side is sandboxed too.
 
 ## Architecture and the road to multiplayer
 

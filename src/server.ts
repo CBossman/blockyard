@@ -9,6 +9,7 @@
 // src/games/<id>, or outside the repo; `--package <folder>=<id>` under another id). They name their
 // files by the server's public address (PUBLIC_URL, default http://localhost:<port>). ADMINS (account
 // or Discord ids) may manage every game: approve one for the home page, ban an uploader, see reports.
+// SANDBOX_URL and SANDBOX_TOKEN: the sandbox machine uploaded games' rooms run on (src/sandbox.ts).
 //
 // It reaches the games only through their server registry (src/games/server.ts): their shared
 // definitions and rules. No game's client code, and nothing of the browser's, comes in here.
@@ -20,6 +21,7 @@ import { devGames, games } from './games/server';
 import type { GameDefinition } from './platform/api/types';
 import { Accounts } from './platform/host/accounts';
 import { GameLibrary, smokeInThread } from './platform/host/library';
+import { gameFiles, SandboxLink } from './platform/host/sandbox-link';
 import { serve, type ServeOptions } from './platform/host/server';
 import { SqliteStore } from './platform/host/sqlite';
 
@@ -73,6 +75,10 @@ export async function main(args: string[], worker?: ServeOptions['worker'], mode
   }
   const wasm = readFileSync(flag('wasm') ?? 'engine/pkg/voxel_engine_bg.wasm');
   const publicUrl = (process.env.PUBLIC_URL ?? `http://localhost:${port}`).replace(/\/+$/, '');
+  // The sandbox (SANDBOX_URL, SANDBOX_TOKEN): uploaded games' rooms and smoke tests run there, on a
+  // machine of its own; without one, in this machine's threads (only for trusted uploaders).
+  const sandbox =
+    process.env.SANDBOX_URL && process.env.SANDBOX_TOKEN ? new SandboxLink({ url: process.env.SANDBOX_URL, token: process.env.SANDBOX_TOKEN, requireFull: !dev, log: (line) => console.log(line) }) : undefined;
   const library = GameLibrary.open({
     root: join(data, 'games'),
     publicUrl,
@@ -80,7 +86,7 @@ export async function main(args: string[], worker?: ServeOptions['worker'], mode
     taken: (id) => known.some((g) => g.id === id),
     // The packager (and esbuild) load only when something's built.
     build: async (folder, out, id) => (await import('./platform/package/build')).buildGame(folder, { out, id, dev }),
-    smoke: worker ? smokeInThread(worker, wasm, publicUrl) : async (dir) => (await import('./platform/host/packaged')).smokeTest(dir, wasm, { publicUrl }),
+    smoke: sandbox ? (dir) => sandbox.smoke(gameFiles(dir), publicUrl) : worker ? smokeInThread(worker, wasm, publicUrl) : async (dir) => (await import('./platform/host/packaged')).smokeTest(dir, wasm, { publicUrl }),
     log: (line) => console.log(line),
   });
   for (const spec of args.flatMap((a, i) => (args[i - 1] === '--package' ? [a] : []))) {
@@ -93,6 +99,7 @@ export async function main(args: string[], worker?: ServeOptions['worker'], mode
     games: defs,
     hidden,
     library,
+    sandbox,
     uploaders: (process.env.UPLOADERS ?? '').split(',').map((u) => u.trim()).filter(Boolean),
     admins: (process.env.ADMINS ?? '').split(',').map((u) => u.trim()).filter(Boolean),
     port,

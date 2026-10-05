@@ -37,6 +37,8 @@ export interface Store {
   savePlayer(name: string, p: SavedPlayer): void;
   /** Forget where a player left off (their account is gone). */
   forgetPlayer(name: string): void;
+  /** Where every player left off, by name (what a sandboxed room starts from). */
+  players?(): Record<string, SavedPlayer>;
   /** Everything the game has put in `game.store`. */
   data(): Map<string, unknown>;
   /** A change to `game.store` (`undefined`: deleted). */
@@ -52,7 +54,7 @@ export interface Store {
  */
 export class MemoryStore implements Store {
   private kept: SavedWorld | null = null;
-  private players = new Map<string, SavedPlayer>();
+  private places = new Map<string, SavedPlayer>();
   private values: Map<string, unknown>;
 
   constructor(
@@ -71,15 +73,19 @@ export class MemoryStore implements Store {
   }
 
   player(name: string) {
-    return this.players.get(name) ?? null;
+    return this.places.get(name) ?? null;
   }
 
   savePlayer(name: string, p: SavedPlayer) {
-    this.players.set(name, { ...p });
+    this.places.set(name, { ...p });
   }
 
   forgetPlayer(name: string) {
-    this.players.delete(name);
+    this.places.delete(name);
+  }
+
+  players(): Record<string, SavedPlayer> {
+    return Object.fromEntries(this.places);
   }
 
   data() {

@@ -11,3 +11,4 @@ engine/Cargo.*
 *.local
 .claude
 .vercel
+dist-sandbox

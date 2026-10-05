@@ -1,6 +1,7 @@
 # Proposal: open uploads (anyone may upload a game)
 
-Status: **stage 1 built** (2026-10-04; see "Stage 1: what was built"); stages 2 to 4 to come. Follows `PROPOSAL-UPLOADS.md`, which built
+Status: **stages 1 and 2 built** (2026-10-04; see "Stage 1: what was built" and "Stage 2: the
+sandbox machine"); stages 3 and 4 to come. Follows `PROPOSAL-UPLOADS.md`, which built
 uploads for trusted people only.
 
 ## Why it's not open yet
@@ -109,4 +110,31 @@ takedown route.
   runner, compiled by the starting thread's Vite over a message channel (`scripts/dev-worker.mjs`).
   Terminating a thread holding Vite's native bundler aborted the whole process (found testing the
   watchdog); a bare `room-worker-dev.mjs` still starts its own.
+
+## Stage 2: the sandbox machine
+
+- **`voxel-sandbox`** (fly.sandbox.toml): the game server's image running `dist-sandbox/sandbox.js`
+  (src/sandbox.ts, bundled by esbuild in scripts/build-sandbox.mjs: the platform's server code, no
+  games), performance-1x 2 GB, one machine, Flycast only (`ws://voxel-sandbox.flycast`, no public
+  address), stopped when idle. Its one secret, `SANDBOX_TOKEN`, is the game server's too. CI deploys
+  it before the game server (`deploy-server.mjs --sandbox`, secret `FLY_SANDBOX_TOKEN`: a deploy
+  token for that app only).
+- **The supervisor** takes one authenticated WebSocket from the game server (a new one replaces it
+  and its rooms go) and starts a process per room and per smoke test: `unshare --net` (a network
+  namespace with nothing in it), `setpriv` (a uid of its own per room, 20000 up, no new
+  privileges, no groups), Node's permission model (reads the app and its room's folder, 0700 and its
+  own; writes nothing; no processes, threads or addons), a 256 MB heap and a clean environment. It
+  runs a probe before starting (no network, its own uid, can't read the supervisor's) and refuses to
+  start at `full` isolation if any fails. Checked on Fly: it passes.
+- **The game server's link** (`host/sandbox-link.ts`) opens when an uploaded room or smoke test
+  needs it, speaks a version (both ends must match), refuses less than full isolation outside
+  development, and closes after 5 idle minutes (so the sandbox machine stops). A room's run sends
+  the game's built code and a snapshot of its store; the room's store (`RelayStore`) reads that and
+  sends every change back, which the game server keeps in the game's SQLite. The watchdog and
+  everything else are as for a worker.
+- **Checked** in a Linux container at full isolation: a probe game saw a clean environment
+  (`PATH`, `NODE_ENV`), uid 20000, `ENETUNREACH`, and access denied reading the supervisor's
+  environment; Call of Blocky played through it (bots, the killcam). `tests/headless/
+  sandboxed-rooms.ts` runs the real bundle at `permission` isolation (any machine).
+- Without `SANDBOX_URL` (development), uploaded rooms run in worker threads as before.
 

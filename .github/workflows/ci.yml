@@ -1,9 +1,11 @@
-# Checks every pull request and push; a push to main then deploys what changed: the game server
-# to Fly first, then the site to Vercel (a build for a new wire protocol must not reach players
-# before the server that speaks it). Each deploy is skipped when the live one is the same build,
-# so a docs-only or client-only change doesn't restart the server and end its matches.
+# Checks every pull request and push; a push to main then deploys what changed: the sandbox
+# machine (uploaded games' rooms) and the game server to Fly first, then the site to Vercel (a build
+# for a new wire protocol must not reach players before the server that speaks it). Each deploy is
+# skipped when the live one is the same build, so a docs-only or client-only change doesn't restart
+# the server and end its matches.
 #
-# Secrets: FLY_API_TOKEN (`fly tokens create deploy -a voxel-games`) and VERCEL_TOKEN.
+# Secrets: FLY_API_TOKEN (`fly tokens create deploy -a voxel-games`), FLY_SANDBOX_TOKEN (`fly tokens
+# create deploy -a voxel-sandbox`) and VERCEL_TOKEN.
 name: CI
 
 on:
@@ -97,6 +99,11 @@ jobs:
           name: site
           path: .vercel/output
       - uses: superfly/flyctl-actions/setup-flyctl@1.5
+      # The sandbox first: the game server it relays to then finds it current.
+      - name: Deploy the sandbox (Fly)
+        run: node scripts/deploy-server.mjs --sandbox --no-wasm --if-changed
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_SANDBOX_TOKEN }}
       - name: Deploy the game server (Fly)
         run: node scripts/deploy-server.mjs --no-wasm --if-changed
         env:

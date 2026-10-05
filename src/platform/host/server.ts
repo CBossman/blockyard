@@ -15,6 +15,8 @@ import type { FromRoom, RoomWorkerData, SmokeWorkerData, ToRoom } from './room-w
 import type { Store } from './store';
 import type { PackageEntry } from '../package/link';
 import type { GameLibrary } from './library';
+import { gameFiles, type SandboxLink } from './sandbox-link';
+import type { StoreSnapshot } from '../sandbox/protocol';
 import { Uploads } from './uploads';
 
 /** Seconds a room's thread may go without a word (it says it's alive every 2) before it's stopped as stuck. */
@@ -46,6 +48,11 @@ export interface ServeOptions {
   uploaders?: string[];
   /** Accounts that may manage every game (approve for the home page, ban…): their ids or Discord ids. */
   admins?: string[];
+  /**
+   * The sandbox (see sandbox/protocol.ts): uploaded games' rooms run there, not in this machine's
+   * threads. Without it they run in worker threads like the others (trusted uploaders only).
+   */
+  sandbox?: SandboxLink;
   port: number;
   /** The engine's compiled `.wasm`. */
   wasm: BufferSource;
@@ -253,6 +260,8 @@ export function serve(o: ServeOptions): Promise<GameServer> {
       room.def = defOf(room.def.id) ?? room.def;
       spec.package = o.library!.spec(version);
     }
+    // An uploaded game, on a server with a sandbox: its room runs there.
+    if (version && o.sandbox) return inSandbox(room, spec, version.dir, room.stopping ?? Promise.resolve());
     if (o.worker) return inWorker(room, spec, room.stopping ?? Promise.resolve());
     let shared = stores.get(room.def.id);
     if (!shared && o.store) stores.set(room.def.id, (shared = o.store(room.def.id)));
@@ -330,6 +339,108 @@ export function serve(o: ServeOptions): Promise<GameServer> {
         if (!exited) post({ t: 'stop' });
         // It exits once saved; one that doesn't answer is stopped anyway.
         const late = setTimeout(() => void worker?.terminate(), 10_000);
+        return exit.finally(() => clearTimeout(late));
+      },
+    };
+    return link;
+  }
+
+  /** This thread's store for a game (opened the first time): what sandboxed rooms read from and write to. */
+  function storeOf(game: string): Store | undefined {
+    let shared = stores.get(game);
+    if (!shared && o.store) stores.set(game, (shared = o.store(game)));
+    return shared;
+  }
+
+  let runs = 0;
+
+  /**
+   * A room in the sandbox (an uploaded game's, see sandbox/protocol.ts), started once its last run
+   * has finished saving (`after`): its game's code and the data it starts from go there; its
+   * messages and the changes it makes to its store come back; the same watchdog as a worker's.
+   */
+  function inSandbox(room: Room, spec: RoomSpec, dir: string, after: Promise<void>): RoomLink {
+    const sandbox = o.sandbox!;
+    // A run of its own (the same room started again is another run).
+    const run = `${room.key}#${++runs}`;
+    const keeps = room.keeps;
+    let exited = false;
+    let watchdog: ReturnType<typeof setInterval> | undefined;
+    const queue: ToRoom[] = [];
+    let started = false;
+    const post = (m: ToRoom) => (started ? sandbox.send(run, m) : queue.push(m));
+    const exit = new Promise<void>((done) => {
+      void after.then(async () => {
+        const shared = storeOf(room.def.id);
+        const snapshot: StoreSnapshot = { world: keeps ? (shared?.world() ?? null) : null, players: keeps ? (shared?.players?.() ?? {}) : {}, data: [...(shared?.data() ?? new Map())], keeps };
+        const born = performance.now();
+        let heard = 0;
+        watchdog = setInterval(() => {
+          const now = performance.now();
+          const quiet = heard ? (now - heard) / 1000 > (o.stuckAfter ?? STUCK) : (now - born) / 1000 > STARTING;
+          if (!quiet || exited) return;
+          clearInterval(watchdog);
+          failed(room, link, heard ? 'it stopped responding (stuck in a loop?)' : "it didn't start in time", 'The game stopped responding');
+          sandbox.kill(run);
+        }, 1000);
+        try {
+          await sandbox.start(run, spec, gameFiles(dir), snapshot, {
+            message: (m) => {
+              heard = performance.now();
+              if (m.t === 'alive') return;
+              if (m.t === 'send') room.send(m.client, m.text);
+              else if (m.t === 'counts') {
+                room.playing = m.playing;
+                room.watching = m.watching;
+              } else if (m.t === 'log') room.log(m.line);
+              else if (m.t === 'achieve') o.accounts?.achieve(m.account, room.def.id, m.id);
+              else if (m.t === 'grant' && m.id.startsWith(`${room.def.id}:`)) o.accounts?.own(m.account, m.id);
+              else if (m.t === 'failed') failed(room, link, m.text);
+            },
+            store: (c) => {
+              // What the room changed, kept here (a room that doesn't keep its world saves only the game's data).
+              if (!shared) return;
+              if (c.op === 'put') {
+                // (A store's `put` marks a change the game made to its data map: here, it's made too.)
+                const data = shared.data();
+                if (c.value === undefined) data.delete(c.key);
+                else data.set(c.key, c.value);
+                shared.put(c.key, c.value);
+              }
+              else if (c.op === 'flush') shared.flush();
+              else if (!keeps) return;
+              else if (c.op === 'saveWorld') shared.saveWorld(c.world);
+              else if (c.op === 'savePlayer') shared.savePlayer(c.name, c.player);
+              else if (c.op === 'forgetPlayer') shared.forgetPlayer(c.name);
+            },
+            exit: (code) => {
+              exited = true;
+              clearInterval(watchdog);
+              if (room.link === link) failed(room, link, code === null ? 'the sandbox went away' : `its process ended (${code})`);
+              done();
+            },
+          });
+          started = true;
+          for (const m of queue) sandbox.send(run, m);
+          queue.length = 0;
+        } catch (err) {
+          exited = true;
+          clearInterval(watchdog);
+          failed(room, link, `the sandbox couldn't start it: ${err instanceof Error ? err.message : String(err)}`, "The game couldn't start: try again in a moment");
+          done();
+        }
+      });
+    });
+    const link: RoomLink = {
+      host: null,
+      connect: (c, who) => post({ t: 'connect', client: c, who }),
+      command: (c, cmd) => post({ t: 'command', client: c, cmd }),
+      identify: (c, who) => post({ t: 'identify', client: c, who }),
+      disconnect: (c) => post({ t: 'disconnect', client: c }),
+      stop: () => {
+        if (!exited) post({ t: 'stop' });
+        // It ends once saved; one that doesn't is stopped anyway.
+        const late = setTimeout(() => sandbox.kill(run), 10_000);
         return exit.finally(() => clearTimeout(late));
       },
     };

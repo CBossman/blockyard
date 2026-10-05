@@ -144,6 +144,12 @@ export class SqliteStore implements Store {
     this.db.prepare('DELETE FROM players WHERE name = ?').run(name);
   }
 
+  players(): Record<string, SavedPlayer> {
+    const out: Record<string, SavedPlayer> = {};
+    for (const row of this.db.prepare('SELECT name, state FROM players').all() as { name: string; state: string }[]) out[row.name] = JSON.parse(row.state) as SavedPlayer;
+    return out;
+  }
+
   data() {
     return this.values;
   }

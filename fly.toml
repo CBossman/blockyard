@@ -30,6 +30,9 @@ kill_timeout = "10s"
   # Admins: may manage every uploaded game (approve one for the home page, take one off, ban an
   # uploader, resolve reports), in Your games' Admin tab. The owner only.
   ADMINS = "87198861512146944"
+  # The sandbox machine uploaded games' rooms run on (fly.sandbox.toml), on Fly's private network;
+  # the token both share is a secret (SANDBOX_TOKEN).
+  SANDBOX_URL = "ws://voxel-sandbox.flycast"
 
 [[mounts]]
   source = "data"
