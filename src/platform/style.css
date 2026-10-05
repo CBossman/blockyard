@@ -4236,3 +4236,11 @@ body.touch-mode canvas {
   position: absolute;
   inset: 0;
 }
+/* Played upright (waved past the prompt): the hotbar along the top, clear of the thumbs. */
+@media (orientation: portrait) {
+  body.touch-playing .hotbar {
+    left: 50%;
+    bottom: auto;
+    top: calc((env(safe-area-inset-top, 0px) + 64px) / (var(--hud-zoom, 1) * 0.85));
+  }
+}

@@ -1683,6 +1683,8 @@ export class Runtime {
     this.entityView.sync(shown.players.length > 1 || (!rp && this.view.thirdPerson) || (rp && this.taken.active) ? [...shown.entities, ...avatars()] : shown.entities, shown.projectiles, dt, started, shown.t, !!rp?.holding);
     // A controller rumbles when we're hurt.
     if (me.health < this.lastHealth && this.lastHealth > 0 && this.input.device === 'pad' && this.settings.vibration) rumble(0.55, 0.3, 170);
+    // (A phone buzzes, where it can: Android.)
+    if (me.health < this.lastHealth && this.lastHealth > 0 && this.input.device === 'touch' && this.settings.vibration) navigator.vibrate?.(45);
     this.lastHealth = me.health;
     this.pickupView.sync(shown.pickups, dt);
     // Our own vehicle's model where prediction has it, not where the (older) frame does.

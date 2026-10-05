@@ -228,7 +228,7 @@ export class PauseMenu {
           'Touch',
           slider('Look sensitivity', 'touchSensitivity', 0.3, 3, 0.05, (v) => v.toFixed(2)),
           slider('Field of view', 'fov', 55, 110, 1, (v) => `${v}°`),
-          h('div.toggles', {}, toggle('Invert look', 'invertY'), toggle('Aim assist', 'aimAssist', 'With guns'), toggle('View bobbing', 'viewBobbing')),
+          h('div.toggles', {}, toggle('Invert look', 'invertY'), toggle('Aim assist', 'aimAssist', 'With guns'), toggle('View bobbing', 'viewBobbing'), toggle('Vibration', 'vibration', 'When hurt')),
         ),
       ),
       sound: h(
