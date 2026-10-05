@@ -6,6 +6,8 @@
 // the frame asks this page for room tickets (to connect as the signed-in player), for its settings
 // to be kept and for invite links. A fresh frame for each uploaded game; picking another game
 // closes it (a built-in one runs in this page again, with the renderer it left).
+import { isHandheld } from '../settings';
+import { TouchControls } from './touch';
 import { FRAME_KEPT, type FrameToShell, type ShellToFrame } from '../client/frame-protocol';
 import { webOrigin } from '../client/packaged';
 import { Runtime, type FrameOpen } from '../runtime';
@@ -115,7 +117,10 @@ export class FrameHost {
         return;
       case 'press':
         // (Only while the button may be pressed: a frame can't press it at will.)
-        if (this.armed) title.press();
+        if (!this.armed) return;
+        // A phone: the whole screen, sideways (the tap in the frame lets this page ask too).
+        if (isHandheld()) void TouchControls.fill();
+        title.press();
         return;
       case 'address': {
         const at = new URL(location.href);

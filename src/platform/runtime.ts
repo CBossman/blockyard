@@ -32,7 +32,7 @@ import { blockIdOf, destructibleIds, loadRegistry, variant, type Registry } from
 import { Input } from './player/input';
 import { gameKeys } from './player/keys';
 import { padBindings, padHints, rumble } from './player/gamepad';
-import { touchButtons } from './player/touch';
+import { touchButtons, touchHints } from './player/touch';
 import { TouchControls } from './ui/touch';
 import { PadNav } from './ui/padnav';
 import { Effects } from './fx/effects';
@@ -60,7 +60,7 @@ import { errorContext } from './client/errors';
 import { TitleScreen, type HomeScreen } from './ui/home';
 import { PauseMenu } from './ui/pause';
 import { blockIcon } from './ui/icons';
-import { GRAPHICS, loadSettings, saveSettings, toRenderSettings, type Settings } from './settings';
+import { GRAPHICS, isHandheld, loadSettings, saveSettings, toRenderSettings, type Settings } from './settings';
 import { AutoQuality, savedQuality, saveQuality, type Look } from './quality';
 import type { BlockRef, IconRef, ItemDefinition, ItemStack, PadAction, PadButton, SharedDefinition, Vec3 } from './api/types';
 import type { Client, ClientDefinition, ClientEvent, ClientGame, ClientTrace, GameEntry, Me } from './api/client';
@@ -293,7 +293,7 @@ export class Runtime {
     const online = { server: new URL(link.url).origin, game: def.id, room, onRoom: def.instances ? (own: boolean) => this.switchGame(def.id, own ? newRoomCode() : null) : undefined };
     this.title = title;
     const uploaded = !!packagedVersion([...this.games, ...this.hidden].find((g) => g.meta.id === def.id));
-    this.title.show({ current: def.id, title: def.title, onPlay: () => this.play(), onPick: (id) => this.switchGame(id), controls: def.controls, pad: padHints(def, this.walker, keys), walks: this.walker, keys: { bound: this.settings.keys, game: keys }, online, uploaded });
+    this.title.show({ current: def.id, title: def.title, onPlay: () => this.play(), onPick: (id) => this.switchGame(id), controls: def.controls, pad: padHints(def, this.walker, keys), touch: touchHints(touchButtons(def, this.walker, keys, this.walker), this.walker, this.walker), walks: this.walker, keys: { bound: this.settings.keys, game: keys }, online, uploaded });
   }
 
   /**
@@ -771,6 +771,7 @@ export class Runtime {
     this.input.onPadButton = (b, a) => this.onPadButton(b, a);
     document.body.classList.toggle('pad-mode', this.input.device === 'pad');
     this.pause.setPadHints(padHints(def, this.walker, this.input.keysFor));
+    this.pause.setTouchHints(touchHints(touchButtons(def, this.walker, this.input.keysFor, this.walker), this.walker, this.walker));
     const life = { signal: this.life.signal };
     this.canvas.addEventListener('click', () => {
       this.sfx.unlock();
@@ -1212,6 +1213,7 @@ export class Runtime {
 
   private play() {
     this.sfx.unlock();
+    if (this.input.device === 'touch') void TouchControls.fill();
     if (this.worldReady) this.input.lock();
   }
 
@@ -1463,11 +1465,16 @@ export class Runtime {
     return Math.min(12, this.viewDistance(s));
   }
 
-  /** The player's render distance, raised to the game's minimum (`world.viewDistance`) and held to its maximum (`world.maxViewDistance`). */
+  /**
+   * The player's render distance, raised to the game's minimum (`world.viewDistance`) and held to
+   * its maximum (`world.maxViewDistance`). A phone or tablet is raised to 12 at most: its memory
+   * and graphics chip won't hold a desktop's view.
+   */
   private viewDistance(s: Settings): number {
     const w = this.def.world;
-    return Math.min(w?.maxViewDistance ?? 24, Math.max(s.renderDistance, Math.min(24, w?.viewDistance ?? 0)));
+    return Math.min(w?.maxViewDistance ?? 24, Math.max(s.renderDistance, Math.min(this.handheld ? 12 : 24, w?.viewDistance ?? 0)));
   }
+  private handheld = isHandheld();
 
   private applySettings(s: Settings, persist = true) {
     const was = this.look ? this.settings : null;

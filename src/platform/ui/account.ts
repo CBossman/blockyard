@@ -144,7 +144,7 @@ export class AccountCorner {
     if (!this.me) {
       const button = h('button.home-signin', { onclick: () => this.signIn() });
       button.innerHTML = DISCORD;
-      button.append(h('span', {}, 'Sign in with Discord'));
+      button.append(h('span', {}, 'Sign in', h('span.home-signin-more', {}, ' with Discord')));
       return this.root.replaceChildren(button);
     }
     const me = this.me;

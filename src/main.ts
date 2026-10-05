@@ -1,3 +1,4 @@
+import { isHandheld } from './platform/settings';
 import { Refused } from './platform/client/link';
 import { Runtime } from './platform/runtime';
 import { FrameHost } from './platform/ui/frame-host';
@@ -12,6 +13,9 @@ if (import.meta.env.DEV) Runtime.onStart = (rt) => ((window as unknown as { __ga
 
 // What goes wrong here is reported to the game server (client/errors.ts).
 reportErrors('page');
+
+// A phone or tablet: the touch controls' hints and settings from the start (the runtime keeps it up to date).
+document.body.classList.toggle('touch-mode', isHandheld());
 
 // Uploaded games run in a sandboxed frame (their code never runs in this page: ui/frame-host.ts).
 const frames = new FrameHost();

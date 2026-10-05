@@ -73,7 +73,15 @@ export class TouchControls {
     }, { signal });
     this.base.append(this.knob, this.sprintEl);
     this.root.append(this.base, this.buttonsEl, this.drawer, this.moreBtn, pause);
-    parent.append(this.root);
+    // Upright, the game's cramped: turn the phone sideways (or play on like that, if they'd rather).
+    const rotate = h(
+      'div.touch-rotate',
+      {},
+      h('div.touch-rotate-phone'),
+      h('div.touch-rotate-text', {}, 'Turn your phone sideways'),
+      h('button.touch-rotate-anyway', { type: 'button', onclick: () => document.body.classList.add('upright-ok') }, 'Play upright anyway'),
+    );
+    parent.append(this.root, rotate);
     const opts = { signal };
     this.root.addEventListener('pointerdown', (e) => this.down(e as PointerEvent), opts);
     this.root.addEventListener('pointermove', (e) => this.move(e as PointerEvent), opts);
@@ -114,6 +122,25 @@ export class TouchControls {
   /** Shown (the touch controls have the game) or not: hidden, every finger lets go. */
   setActive(on: boolean) {
     if (!on) this.release();
+  }
+
+  /**
+   * The game's starting on a touch screen (Play was tapped: the browser lets a tap do this): the
+   * whole screen, held sideways, where the browser allows it (Android; an iPhone keeps its bars).
+   */
+  static async fill() {
+    const el = document.documentElement as HTMLElement & { webkitRequestFullscreen?: () => void };
+    try {
+      if (!document.fullscreenElement && el.requestFullscreen) await el.requestFullscreen({ navigationUI: 'hide' });
+      else if (!document.fullscreenElement) el.webkitRequestFullscreen?.();
+    } catch {
+      // (not allowed here: an iPhone, or an embedded page)
+    }
+    try {
+      await (screen.orientation as ScreenOrientation & { lock?: (o: string) => Promise<void> }).lock?.('landscape');
+    } catch {
+      // (not allowed: not full screen, or a desktop)
+    }
   }
 
   /** What the fingers hold this frame (look movement and taps start over). */

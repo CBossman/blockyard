@@ -45,9 +45,9 @@ const SLOTS: [PadButton, TouchSlot][] = [
 /** The most buttons in a slot (a phone has room for so many). */
 const MOST: Partial<Record<TouchSlot, number>> = { action: 3, more: 8 };
 
-/** A button's name, short: "attack · hold to mine" says "attack", "lethal (hold to cook)" "lethal". */
+/** A button's name, short: "attack · hold to mine" says "attack", "lethal (hold to cook)" "lethal", "sneak: slower, no falling" "sneak". */
 export function shortLabel(label: string): string {
-  return label.split(/\s+·\s+|\s*\(/)[0].trim() || label;
+  return label.split(/\s+·\s+|\s*\(|:\s|\s+[—–-]\s+|,\s/)[0].trim() || label;
 }
 
 /**
@@ -80,6 +80,20 @@ export function touchButtons(def: Pick<GameDefinition, 'controls' | 'gamepad' | 
     counts.set(slot, n + 1);
     out.push({ pad, action: action === 'prev' ? 'next' : action, label: shortLabel(name), title: name, slot, index: n, looks: slot === 'fire' || slot === 'aim' });
   }
+  return out;
+}
+
+/**
+ * The touch controls' hints for the home page and the pause menu: the stick and look, then the
+ * buttons (those whose name says it all in one line, the rest each with the game's whole name).
+ */
+export function touchHints(buttons: TouchButton[], walks: boolean, hotbar: boolean): [string, string][] {
+  const out: [string, string][] = walks ? [['Left thumb', 'move · push on past the ring to sprint'], ['Drag', 'look']] : [['Left thumb', 'move'], ['Drag', 'steer']];
+  if (hotbar) out.push(['Tap a slot', 'pick it']);
+  const plain = buttons.filter((b) => b.title === b.label && b.slot !== 'more');
+  if (plain.length) out.push(['Buttons', plain.map((b) => b.label).join(' · ')]);
+  for (const b of buttons) if (b.title !== b.label || b.slot === 'more') out.push([b.slot === 'more' ? `⋯ ${b.label}` : b.label, b.title]);
+  out.push(['❚❚', 'pause']);
   return out;
 }
 

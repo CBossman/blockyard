@@ -3,6 +3,7 @@
 // game's runtime as a page of the site's would, but its home page is the page's (it sends each call
 // there: client/remote-title.ts), its settings are kept by the page, it connects with room tickets
 // the page asks for, and it tells the page its address. See ui/frame-host.ts for the page's side.
+import { isHandheld } from './platform/settings';
 import type { FrameToShell, ShellToFrame } from './platform/client/frame-protocol';
 import { RemoteTitle } from './platform/client/remote-title';
 import { reportErrors } from './platform/client/errors';
@@ -16,6 +17,9 @@ if (import.meta.env.DEV) Runtime.onStart = (rt) => ((window as unknown as { __ga
 
 // What goes wrong in the game here is reported to the game server, as its own (client/errors.ts).
 reportErrors('frame');
+
+// A phone or tablet: the touch controls' hints and settings from the start (the runtime keeps it up to date).
+document.body.classList.toggle('touch-mode', isHandheld());
 
 const canvas = document.getElementById('view') as HTMLCanvasElement;
 const ui = document.getElementById('ui') as HTMLElement;

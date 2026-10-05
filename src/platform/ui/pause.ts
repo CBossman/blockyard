@@ -32,7 +32,7 @@ export interface PausePlayer {
 }
 
 type Pane = 'help' | 'settings';
-type Tab = 'graphics' | 'controls' | 'controller' | 'sound' | 'world';
+type Tab = 'graphics' | 'controls' | 'controller' | 'touch' | 'sound' | 'world';
 
 /**
  * The pause menu (Escape, or a controller's Menu button): the game's name and room down the left
@@ -44,6 +44,7 @@ export class PauseMenu {
   private settings: Settings;
   private timeSlider!: HTMLInputElement;
   private padKeys = h('div.pad-only');
+  private touchKeys = h('div.touch-only');
   private roomLine = h('div.pause-room');
   private players = h('div.pause-players');
   private feats = h('div.feats');
@@ -220,6 +221,16 @@ export class PauseMenu {
           h('div.toggles', {}, toggle('Invert look', 'invertY'), toggle('Vibration', 'vibration'), toggle('Aim assist', 'aimAssist', 'With guns')),
         ),
       ),
+      touch: h(
+        'div.tab-body',
+        {},
+        group(
+          'Touch',
+          slider('Look sensitivity', 'touchSensitivity', 0.3, 3, 0.05, (v) => v.toFixed(2)),
+          slider('Field of view', 'fov', 55, 110, 1, (v) => `${v}°`),
+          h('div.toggles', {}, toggle('Invert look', 'invertY'), toggle('Aim assist', 'aimAssist', 'With guns'), toggle('View bobbing', 'viewBobbing')),
+        ),
+      ),
       sound: h(
         'div.tab-body',
         {},
@@ -237,13 +248,15 @@ export class PauseMenu {
           )
         : null,
     };
-    const labels: Record<Tab, string> = { graphics: 'Graphics', controls: 'Mouse & keys', controller: 'Controller', sound: 'Sound', world: 'World' };
+    const labels: Record<Tab, string> = { graphics: 'Graphics', controls: 'Mouse & keys', controller: 'Controller', touch: 'Touch', sound: 'Sound', world: 'World' };
+    // On a touch screen, its own tab in place of the mouse's and the controller's (and off one, none).
+    const only: Partial<Record<Tab, string>> = { controls: '.no-touch', controller: '.no-touch', touch: '.touch-only' };
     const tabBar = h('div.pause-tabs', { role: 'tablist' });
-    this.tabs = { graphics: null, controls: null, controller: null, sound: null, world: null };
+    this.tabs = { graphics: null, controls: null, controller: null, touch: null, sound: null, world: null };
     for (const t of Object.keys(labels) as Tab[]) {
       const body = tabBodies[t];
       if (!body) continue;
-      const button = h('button.pause-tab', { role: 'tab', onclick: () => this.showTab(t) }, labels[t]);
+      const button = h(`button.pause-tab${only[t] ?? ''}`, { role: 'tab', onclick: () => this.showTab(t) }, labels[t]);
       tabBar.append(button);
       this.tabs[t] = { button, body };
     }
@@ -252,7 +265,7 @@ export class PauseMenu {
       help: h(
         'div.pause-pane',
         {},
-        h('section.pause-card', {}, h('h3', {}, 'How to play'), h('div.keys-only.help-keys'), this.padKeys),
+        h('section.pause-card', {}, h('h3', {}, 'How to play'), h('div.keys-only.help-keys'), this.padKeys, this.touchKeys),
         h('section.pause-card', {}, h('h3', {}, 'In this game'), this.players),
         game.achievements && Object.keys(game.achievements).length ? h('section.pause-card', {}, this.featsHead, this.feats) : null,
       ),
@@ -304,6 +317,11 @@ export class PauseMenu {
   setPadHints(hints: [string, string][]) {
     this.game.pad = hints;
     this.padKeys.replaceChildren(hintTable(hints));
+  }
+
+  /** What the touch controls do in this game (shown on a touch screen). */
+  setTouchHints(hints: [string, string][]) {
+    this.touchKeys.replaceChildren(hintTable(hints));
   }
 
   /** Who's in the game (kept fresh while the menu is up): people by name, bots counted. */

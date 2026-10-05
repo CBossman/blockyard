@@ -369,7 +369,8 @@ export class Renderer {
       generateMipmaps: false,
     });
     this.copyRT = new THREE.WebGLRenderTarget(sw, sh, {
-      type: THREE.FloatType,
+      // Full floats where they can be drawn to (most screens); half floats where not (some phones).
+      type: this.gl.extensions.has('EXT_color_buffer_float') ? THREE.FloatType : THREE.HalfFloatType,
       format: THREE.RGBAFormat,
       depthBuffer: false,
       minFilter: THREE.NearestFilter,

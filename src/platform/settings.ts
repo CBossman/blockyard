@@ -36,17 +36,27 @@ export interface Settings {
 
 const KEY = 'voxel.settings.v1';
 
+/**
+ * A phone or tablet: no mouse to hover with, a finger to point. Its graphics chip is a laptop's at
+ * best and its battery runs down, so its graphics start lower (auto quality goes down from there,
+ * and back up while there's room).
+ */
+export function isHandheld(): boolean {
+  return typeof matchMedia === 'function' && matchMedia('(hover: none) and (pointer: coarse)').matches;
+}
+
 export function defaultSettings(): Settings {
   const dpr = window.devicePixelRatio || 1;
+  const handheld = isHandheld();
   return {
-    renderDistance: 12,
-    shadows: 'high',
-    msaa: true,
+    renderDistance: handheld ? 8 : 12,
+    shadows: handheld ? 'off' : 'high',
+    msaa: !handheld,
     bloom: true,
-    godrays: true,
-    ssr: true,
+    godrays: !handheld,
+    ssr: !handheld,
     clouds: true,
-    renderScale: dpr > 1.5 ? 0.75 : 1,
+    renderScale: handheld ? 0.7 : dpr > 1.5 ? 0.75 : 1,
     fov: 75,
     sensitivity: 1,
     stickSensitivity: 1,

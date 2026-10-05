@@ -447,6 +447,7 @@ export class TitleScreen implements HomeScreen {
     this.hints.replaceChildren(
       h('div.hint-line.keys-only', {}, ...shown, ...rest, more),
       h('div.hint-line.pad-only', {}, ...hintChips(g.pad ?? [])),
+      h('div.hint-line.touch-only', {}, ...hintChips((g.touch ?? []).slice(0, 3))),
     );
   }
 

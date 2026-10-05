@@ -7,6 +7,8 @@ export interface GameControls {
   controls?: [string, string][];
   /** The same on a controller (shown instead while one is in use). */
   pad?: [string, string][];
+  /** The touch controls' hints (player/touch.ts), shown on a touch screen. */
+  touch?: [string, string][];
   /** Players walk (the movement keys and jump come first). */
   walks?: boolean;
   /** The player's key bindings and the game's own keys, so the hints name the keys they actually press. */
