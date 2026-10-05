@@ -26,9 +26,10 @@ export interface SavedPlayer {
 }
 
 /**
- * What a host keeps across restarts: the world, its players by name, and the game's own
- * key-value data (`game.store`). A server keeps it in SQLite (`SqliteStore`); tests and the
- * browser use `MemoryStore`.
+ * What a host keeps across restarts: the world, where its players left off (by account, `#<id>`;
+ * by name, from before accounts), and the game's own key-value data (`game.store`). A server
+ * keeps it in SQLite (`SqliteStore`); tests use `MemoryStore`, and sandboxed rooms a relay of the
+ * server's (`RelayStore`).
  */
 export interface Store {
   world(): SavedWorld | null;
@@ -50,7 +51,7 @@ export interface Store {
 
 /**
  * A store in memory, starting from `initial` and telling `onPut` about each change to the
- * game's data (a worker passes them to its page, which keeps them in localStorage).
+ * game's data (a sandboxed room's: the relay passes them back to the server, which keeps them).
  */
 export class MemoryStore implements Store {
   private kept: SavedWorld | null = null;

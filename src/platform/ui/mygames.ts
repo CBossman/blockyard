@@ -1,5 +1,5 @@
 import { h } from './dom';
-import type { AdminView, ErrorIssueView, MyGame, MyGames } from '../package/link';
+import type { AdminView, ErrorIssueView, GameStats, MyGame, MyGames, StatsSpan } from '../package/link';
 
 /** What's never part of a game's folder (as the server's unpacking has it): hidden files, packages, macOS's leftovers. */
 const SKIPPED = (path: string) => path.split('/').some((part) => part.startsWith('.') || part === 'node_modules' || part === '__MACOSX');
@@ -14,6 +14,53 @@ function ago(iso: string): string {
   if (s < 86400) return `${Math.floor(s / 3600)} h ago`;
   if (s < 172800) return 'yesterday';
   return new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+}
+
+/** "45 min", "3 h 20 min", "1,204 h". */
+function playTime(minutes: number): string {
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  return hours >= 100 ? `${hours.toLocaleString()} h` : `${hours} h${minutes % 60 ? ` ${minutes % 60} min` : ''}`;
+}
+
+/**
+ * A game's stats: plays, players, play time and who came back, over the last day, week or month
+ * (or ever), and a bar for each of the last 30 days.
+ */
+function statsView(st: GameStats): HTMLElement {
+  if (!st.all.plays) return h('div.mygames-dim', {}, 'Not played yet: share its link.');
+  const spans = { day: '24 hours', week: '7 days', month: '30 days', all: 'Ever' } as const;
+  let shown: keyof typeof spans = st.week.plays ? 'week' : st.month.plays ? 'month' : 'all';
+  const numbers = h('div.mygames-stats-numbers');
+  const figure = (value: string, label: string, note?: string) => h('div.mygames-stat', {}, h('strong', {}, value), h('span', {}, label), note ? h('span.mygames-dim', {}, note) : null);
+  const buttons = Object.entries(spans).map(([id, label]) => h('button.mygames-tabbutton', { type: 'button', onclick: () => ((shown = id as keyof typeof spans), render()) }, label));
+  const render = () => {
+    Object.keys(spans).forEach((id, i) => buttons[i].classList.toggle('on', id === shown));
+    if (shown === 'all') {
+      numbers.replaceChildren(figure(st.all.plays.toLocaleString(), st.all.plays === 1 ? 'play' : 'plays', st.all.since ? `since ${new Date(`${st.all.since}T00:00:00Z`).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}` : undefined), figure(playTime(st.all.minutes), 'played'));
+      return;
+    }
+    const sp: StatsSpan = st[shown];
+    const each = sp.plays ? Math.round(sp.minutes / sp.plays) : 0;
+    numbers.replaceChildren(
+      figure(sp.plays.toLocaleString(), sp.plays === 1 ? 'play' : 'plays'),
+      figure(sp.players.toLocaleString(), sp.players === 1 ? 'player' : 'players', sp.guests ? `+ ${sp.guests} as guests` : 'signed in'),
+      figure(playTime(sp.minutes), 'played', sp.plays ? `about ${each} min a play` : undefined),
+      ...(st.returning !== null ? [figure(`${Math.round(st.returning * 100)}%`, 'came back', 'on another day (30 days)')] : []),
+    );
+  };
+  render();
+  const most = Math.max(1, ...st.days.map((d) => d.plays));
+  const bars = h(
+    'div.mygames-stats-days',
+    { 'aria-label': 'Plays each of the last 30 days' },
+    ...st.days.map((d) => {
+      const bar = h('span', { title: `${new Date(`${d.day}T00:00:00Z`).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })}: ${d.plays} ${d.plays === 1 ? 'play' : 'plays'}, ${d.players} ${d.players === 1 ? 'player' : 'players'}` });
+      bar.style.height = `${d.plays ? Math.max(8, (d.plays / most) * 100) : 0}%`;
+      return bar;
+    }),
+  );
+  return h('div.mygames-stats', {}, h('div.mygames-stats-spans', {}, ...buttons), numbers, bars, h('div.mygames-stats-axis.mygames-dim', {}, h('span', {}, '30 days ago'), h('span', {}, 'today')));
 }
 
 /**
@@ -234,6 +281,7 @@ export class MyGamesPanel {
       g.broken && hosted ? this.brokenNote(g) : null,
       g.home === 'declined' ? h('div.mygames-dim', {}, 'Not taken for the home page this time: it stays in the directory if you put it there.') : g.home === 'asked' ? h('div.mygames-dim', {}, 'Asked for the home page: an admin will have a look.') : null,
       h('div.mygames-actions', {}, hosted && !g.broken ? open : null, hosted ? copy : null, hosted ? list : null, hosted && !g.broken ? home : null, host),
+      g.stats ? statsView(g.stats) : null,
       versions,
       owners,
       g.errors ? this.errorList(g) : null,
@@ -398,6 +446,18 @@ export class MyGamesPanel {
         'No reports waiting.',
       ),
       section(`Errors (${issues.length})`, issues.slice(0, 60).map((i) => this.issue(i, () => this.post(`/admin/errors/${i.id}`, {}).then(() => this.refreshAdmin()))), 'No errors. Nice.'),
+      section(
+        'Plays, the last 7 days',
+        v.stats.map((st) =>
+          row([
+            h('strong', {}, st.title ?? st.game),
+            ' ',
+            h('code', {}, st.game),
+            h('span.mygames-dim', {}, ` · ${st.week.plays} ${st.week.plays === 1 ? 'play' : 'plays'}, ${st.week.players} signed in${st.week.guests ? ` + ${st.week.guests} as guests` : ''}, ${playTime(st.week.minutes)} · ${st.plays.toLocaleString()} ever`),
+          ]),
+        ),
+        'Nothing played yet.',
+      ),
       section(
         `Every game (${v.games.length})`,
         v.games.map((g) =>

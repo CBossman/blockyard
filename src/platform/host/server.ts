@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { Worker } from 'node:worker_threads';
 import { WebSocketServer, type WebSocket } from 'ws';
-import type { GameDefinition } from '../api/types';
+import type { GameDefinition, PlayerAccount } from '../api/types';
 import { decode, encode } from '../net/codec';
 import { CLOSE_FULL, CLOSE_LIMIT, CLOSE_UNKNOWN, ROOM_CODE, type ClientCommand, type WireBatch } from '../net/protocol';
 import { sanitizeCommand } from '../net/validate';
@@ -17,6 +17,7 @@ import type { Store } from './store';
 import type { PackageEntry } from '../package/link';
 import type { GameLibrary } from './library';
 import type { ErrorLog, ErrorSource } from './errors';
+import type { Stats } from './stats';
 import { gameFiles, type SandboxLink } from './sandbox-link';
 import type { StoreSnapshot } from '../sandbox/protocol';
 import { Uploads, type UploadLimits, type UploadTerms } from './uploads';
@@ -56,6 +57,10 @@ export interface ServeOptions {
   uploadTerms?: UploadTerms | null;
   /** Error tracking (host/errors.ts): rooms' errors are kept there, and screens report theirs (`POST /errors`). */
   errors?: ErrorLog;
+  /** Stats (host/stats.ts): each play of each game, for its makers and the admin. */
+  stats?: Stats;
+  /** The server's address as players reach it (players' avatars are given by it); default the library's, or localhost. */
+  publicUrl?: string;
   /**
    * The sandbox (see sandbox/protocol.ts): uploaded games' rooms run there, not in this machine's
    * threads. Without it they run in worker threads like the others (trusted uploaders only).
@@ -259,7 +264,7 @@ export function serve(o: ServeOptions): Promise<GameServer> {
   const auth = o.accounts
     ? new Auth({ accounts: o.accounts, discord: o.discord, sites: o.sites ?? [], dev: o.dev ?? false, onDelete: (a) => forget(a), catalog, log })
     : null;
-  const uploads = o.library ? new Uploads({ library: o.library, errors: o.errors, accounts: o.accounts, auth, uploaders: o.uploaders ?? [], admins: o.admins ?? [], limits: o.uploadLimits, terms: o.uploadTerms, sites: o.sites ?? [], dev: o.dev ?? false, log }) : null;
+  const uploads = o.library ? new Uploads({ library: o.library, errors: o.errors, stats: o.stats, titleOf: (id) => (defs.has(id) ? defs.get(id)!.title : undefined), accounts: o.accounts, auth, uploaders: o.uploaders ?? [], admins: o.admins ?? [], limits: o.uploadLimits, terms: o.uploadTerms, sites: o.sites ?? [], dev: o.dev ?? false, log }) : null;
   // A game from the library changed (a new version, say): its cosmetics are what may be worn.
   if (o.library) o.library.onChange = () => refreshCatalog();
   // Compiled once: each room's worker gets the module (no compiling per room).
@@ -632,6 +637,7 @@ export function serve(o: ServeOptions): Promise<GameServer> {
       accountOf.delete(client);
       a.ws.close(4003, 'Your account was deleted');
     }
+    o.stats?.forgetAccount(account.id);
     if (!o.store) return;
     // Every game's data: the built-in ones' and the uploaded ones' (kept here too).
     for (const id of new Set([...defs.keys(), ...(o.library?.records().map((r) => r.id) ?? [])])) {
@@ -656,6 +662,7 @@ export function serve(o: ServeOptions): Promise<GameServer> {
     res.setHeader('Access-Control-Allow-Origin', '*');
     if (path === '/tickets' && auth) return void ticketRoute(req, res);
     if (path === '/errors') return void errorRoute(req, res);
+    if (path.startsWith('/avatars/')) return void avatarRoute(res, path.slice('/avatars/'.length));
     if (auth?.handle(req, res, path)) return;
     if (path === '/health') {
       res.writeHead(200, { 'Content-Type': 'text/plain' }).end('ok');
@@ -689,6 +696,38 @@ export function serve(o: ServeOptions): Promise<GameServer> {
     }
   });
 
+
+  /**
+   * A player's account as games see it: their avatar by way of this server (`/avatars/<id>`), so
+   * no game learns their Discord id from its address.
+   */
+  function playerAccount(a: Account): PlayerAccount {
+    const base = o.publicUrl ?? o.library?.publicUrl ?? `http://localhost:${listening}`;
+    return { id: a.id, name: a.name, avatar: a.avatar ? `${base}/avatars/${a.id}` : null };
+  }
+
+  /** `GET /avatars/<account>`: an account's Discord avatar, fetched (and kept a while) by the server. */
+  const avatars = new Map<string, { at: number; type: string; body: Buffer }>();
+  async function avatarRoute(res: ServerResponse, id: string) {
+    const from = /^[\w-]{1,32}$/.test(id) ? o.accounts?.get(id)?.avatar : null;
+    if (!from) return res.writeHead(404, { 'Content-Type': 'text/plain' }).end('no such avatar');
+    let kept = avatars.get(id);
+    if (!kept || Date.now() - kept.at > 3600_000) {
+      try {
+        const r = await fetch(from, { signal: AbortSignal.timeout(5000) });
+        const type = r.headers.get('content-type') ?? '';
+        if (!r.ok || !type.startsWith('image/')) throw new Error(`${r.status} ${type}`);
+        const body = Buffer.from(await r.arrayBuffer());
+        if (body.length > 1024 * 1024) throw new Error('too big');
+        kept = { at: Date.now(), type, body };
+        if (avatars.size >= 1000) avatars.delete(avatars.keys().next().value!);
+        avatars.set(id, kept);
+      } catch {
+        if (!kept) return res.writeHead(502, { 'Content-Type': 'text/plain' }).end('avatar unavailable');
+      }
+    }
+    res.writeHead(200, { 'Content-Type': kept.type, 'Cache-Control': 'public, max-age=3600', 'Cross-Origin-Resource-Policy': 'cross-origin' }).end(kept.body);
+  }
 
   /** `POST /tickets {game}`: a room ticket for the signed-in player (the site's pages only). */
   async function ticketRoute(req: IncomingMessage, res: ServerResponse) {
@@ -731,7 +770,7 @@ export function serve(o: ServeOptions): Promise<GameServer> {
   function join(ws: WebSocket, req: IncomingMessage) {
     // A bad frame (too big, malformed) is an error on that socket alone: it closes, the server
     // carries on. (Unhandled, it would take the whole process down.)
-    ws.on('error', (err) => log(`socket error from ${addressOf(req)}: ${err.message}`));
+    ws.on('error', (err) => log(`socket error: ${err.message}`));
     const address = addressOf(req);
     if ((perAddress.get(address) ?? 0) >= limits.perAddress) return ws.close(CLOSE_LIMIT, 'Too many connections from your address');
     const found = roomFor(req, address);
@@ -746,12 +785,14 @@ export function serve(o: ServeOptions): Promise<GameServer> {
     // Signed in: by the session cookie (a page of the site's), or by a room ticket (an uploaded
     // game's screen, in a sandboxed frame that has no cookie: see `tickets`).
     let account = ticketed(req, room.def.id) ?? auth?.who(req) ?? null;
-    const who: Who = account ? { account: { id: account.id, name: account.name, avatar: account.avatar }, achieved: o.accounts!.achievedIn(account.id, room.def.id), look: o.accounts!.look(account.id), owned: ownedIn(account.id, room.def.id) } : { account: null };
+    const who: Who = account ? { account: playerAccount(account), achieved: o.accounts!.achievedIn(account.id, room.def.id), look: o.accounts!.look(account.id), owned: ownedIn(account.id, room.def.id) } : { account: null };
     if (account) accountOf.set(id, { id: account.id, ws });
     room.sockets.set(id, ws);
     room.link ??= start(room);
     room.link.connect(id, who);
-    room.log(`${id} connected from ${address} (${room.sockets.size} here)`);
+    room.log(`${id} connected (${room.sockets.size} here)`);
+
+    let play: number | null = null;
 
     // A bucket of messages, refilled each second; a client far over it is disconnected.
     let allowance = limits.messagesPerSecond;
@@ -788,13 +829,16 @@ export function serve(o: ServeOptions): Promise<GameServer> {
       if (cmd.t === 'start' && account && o.accounts) {
         // (Their name and look, too, as they are now: either may have changed on the home page.)
         account = o.accounts.get(account.id) ?? account;
-        room.link?.identify(id, { account: { id: account.id, name: account.name, avatar: account.avatar }, look: o.accounts.look(account.id) });
+        room.link?.identify(id, { account: playerAccount(account), look: o.accounts.look(account.id) });
       }
       room.link?.command(id, cmd);
+      // A play (for the stats): from their first start until they leave.
+      if (cmd.t === 'start' && play === null) play = o.stats?.start(room.def.id, account?.id ?? null) ?? null;
       if (cmd.t === 'start') room.log(`${id} plays as ${account ? `${account.name} (${account.id})` : `${cmd.name ?? 'Player'} (a guest)`}`);
     });
     ws.on('close', () => {
       clearInterval(refill);
+      if (play !== null) o.stats?.end(play);
       accountOf.delete(id);
       perAddress.set(address, (perAddress.get(address) ?? 1) - 1);
       if (!perAddress.get(address)) perAddress.delete(address);
@@ -813,12 +857,20 @@ export function serve(o: ServeOptions): Promise<GameServer> {
     }
   }, 250);
 
+  // Hourly, what's no longer needed goes: expired sign-ins, old resolved reports. Each minute, plays
+  // going on are counted so far (should the server stop without their ends).
+  o.accounts?.tidy();
+  const tidying = setInterval(() => o.accounts?.tidy(), 3600_000);
+  const counting = setInterval(() => o.stats?.flush(), 60_000);
+
+  let listening = o.port;
   return new Promise((resolve, reject) => {
     http.once('error', reject);
     http.listen(o.port, () => {
       const addr = http.address();
+      listening = typeof addr === 'object' && addr ? addr.port : o.port;
       resolve({
-        port: typeof addr === 'object' && addr ? addr.port : o.port,
+        port: listening,
         host: (game) => rooms.get(`${game}/public`)?.link?.host ?? null,
         get rooms() {
           return running();
@@ -826,12 +878,15 @@ export function serve(o: ServeOptions): Promise<GameServer> {
         close: () =>
           new Promise<void>((done) => {
             clearInterval(idle);
+            clearInterval(tidying);
+            clearInterval(counting);
             for (const ws of wss.clients) ws.terminate();
             wss.close();
             http.close(async () => {
               await Promise.all([...rooms.values()].map((r) => stop(r)));
               for (const s of stores.values()) s.close();
               stores.clear();
+              o.stats?.flush();
               o.accounts?.close();
               done();
             });

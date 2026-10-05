@@ -461,6 +461,8 @@ export class GameHost {
     const hotbar = p.creative?.hotbar.map((id) => (id >= first ? (this.registry.blocks[id]?.key ?? id) : id));
     const saved: SavedPlayer = { x: s.x, y: s.y, z: s.z, yaw: p.yaw, pitch: p.pitch, flying: s.flying, hotbar };
     this.store.savePlayer(placeKey(p.account.id), saved);
+    // Where their name left off (from before accounts) is theirs now: kept by their name no longer.
+    if (p.adopted) this.store.forgetPlayer(p.adopted);
   }
 
   /** A kept hotbar slot's block: an id, or a game block's key (stone if it's no longer defined). */

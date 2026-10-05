@@ -1145,7 +1145,7 @@ export interface PlayerAccount {
   id: string;
   /** Their name on the platform (unique); it can change. */
   name: string;
-  /** Their Discord avatar's URL. */
+  /** Their avatar picture's address (their Discord one, by way of the game server: `/avatars/<id>`). */
   avatar: string | null;
 }
 

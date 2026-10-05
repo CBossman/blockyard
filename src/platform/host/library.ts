@@ -97,6 +97,8 @@ export interface LibraryOptions {
 
 /** Ids no game may have: the server's own routes (`/g/mine`, `/g/directory`). */
 const RESERVED = new Set(['mine', 'directory', 'admin']);
+/** How long the library's activity log keeps what happened (days). */
+const ACTIVITY_DAYS = 90;
 
 /** Something that happened in the library (the admin's recent activity). */
 export interface Activity {
@@ -281,15 +283,24 @@ export class GameLibrary {
     return true;
   }
 
-  /** Note something that happened (kept in `<root>/activity.jsonl`). */
+  /** Note something that happened (kept in `<root>/activity.jsonl` for 90 days). */
   note(by: string, text: string, game?: string) {
     const entry: Activity = { at: new Date().toISOString(), by, ...(game ? { game } : {}), text };
+    const file = join(this.o.root, 'activity.jsonl');
     try {
-      appendFileSync(join(this.o.root, 'activity.jsonl'), `${JSON.stringify(entry)}\n`);
+      appendFileSync(file, `${JSON.stringify(entry)}\n`);
+      // Once a day, what's older than 90 days goes.
+      if (Date.now() - this.trimmed < 24 * 3600_000) return;
+      this.trimmed = Date.now();
+      const since = new Date(Date.now() - ACTIVITY_DAYS * 24 * 3600_000).toISOString();
+      const lines = readFileSync(file, 'utf8').trim().split('\n');
+      const kept = lines.filter((l) => (/"at":"([^"]+)"/.exec(l)?.[1] ?? '') >= since);
+      if (kept.length < lines.length) writeFileSync(file, kept.length ? `${kept.join('\n')}\n` : '');
     } catch {
       // (the activity log is a convenience)
     }
   }
+  private trimmed = 0;
 
   /** What happened lately, newest first. */
   activity(limit = 200): Activity[] {

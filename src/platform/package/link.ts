@@ -112,6 +112,42 @@ export interface MyGame {
   home: 'asked' | 'approved' | 'declined' | null;
   /** Error issues of its not resolved (`GET /g/<id>/errors`). */
   errors: number;
+  /** How it's played (null: the server keeps no stats). */
+  stats: GameStats | null;
+}
+
+/** Plays over a span of time: how many, by how many signed-in players and guests, and for how long. */
+export interface StatsSpan {
+  plays: number;
+  /** Signed-in players (each counted once). */
+  players: number;
+  /** Guests' plays (a guest can't be told from another, so each play counts). */
+  guests: number;
+  minutes: number;
+}
+
+/** A game's stats (host/stats.ts). */
+export interface GameStats {
+  /** The last 24 hours, 7 days and 30 days. */
+  day: StatsSpan;
+  week: StatsSpan;
+  month: StatsSpan;
+  /** Since its first play (`since`, a UTC day: null if never played). */
+  all: { plays: number; minutes: number; since: string | null };
+  /** Of the last 30 days' signed-in players, the share who played on more than one day (null: none). */
+  returning: number | null;
+  /** Plays and players each of the last 30 days (UTC), oldest first. */
+  days: { day: string; plays: number; players: number }[];
+}
+
+/** A game in the admin's overview of every game's stats. */
+export interface StatsRow {
+  game: string;
+  title?: string;
+  /** The last 7 days. */
+  week: StatsSpan;
+  /** Every play. */
+  plays: number;
 }
 
 /** An error issue (reports alike, grouped), as an owner or the admin sees it. */
@@ -161,6 +197,8 @@ export interface AdminView {
   reports: AdminReport[];
   bans: { account: string; name: string; reason: string; at: string }[];
   activity: { at: string; by: string; game?: string; text: string }[];
+  /** Every game's plays (built in and uploaded). */
+  stats: StatsRow[];
 }
 
 /** What `GET /g/mine` answers. */

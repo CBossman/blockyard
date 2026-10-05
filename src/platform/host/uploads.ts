@@ -32,6 +32,7 @@ import { packagePath, type AdminView, type DirectoryGame, type MyGame, type MyGa
 import { discordCreated, type Account, type Accounts } from './accounts';
 import type { Auth } from './auth';
 import type { ErrorLog } from './errors';
+import type { Stats } from './stats';
 import type { GameLibrary, GameRecord } from './library';
 
 /** What an uploader may do (admins: anything). */
@@ -60,6 +61,10 @@ export interface UploadsOptions {
   library: GameLibrary;
   /** Error tracking: the admin sees every issue, an uploaded game's owners its own. */
   errors?: ErrorLog;
+  /** Stats: an uploaded game's owners see its own, the admin every game's. */
+  stats?: Stats;
+  /** A built-in game's title (the admin's overview of stats names them). */
+  titleOf?(id: string): string | undefined;
   accounts?: Accounts;
   auth?: Auth | null;
   /** Accounts that may upload: their ids or Discord ids; `*`: anyone signed in (old enough: `limits.minAgeDays`). */
@@ -240,6 +245,7 @@ export class Uploads {
     if (!this.o.dev && !admin && !record.owners.includes(who.by)) return this.json(res, 403, { error: `"${id}" isn't yours` });
     if (change?.forever) {
       lib.remove(id);
+      this.o.stats?.forget(id);
       lib.note(who.by, 'deleted it for good', id);
       this.o.log?.(`[uploads] ${id} deleted for good by ${who.account?.name ?? who.by}`);
       return this.json(res, 200, { deleted: id });
@@ -316,6 +322,7 @@ export class Uploads {
       broken: ((b) => (b ? { at: b.at, errors: b.errors ?? [] } : null))(lib.broken(r.id)),
       home: r.home ?? null,
       errors: this.o.errors?.counts().get(r.id) ?? 0,
+      stats: this.o.stats?.game(r.id) ?? null,
     };
   }
 
@@ -398,6 +405,7 @@ export class Uploads {
         reports: reports.map((r) => ({ id: r.id, game: r.game, version: r.version, name: r.name, reason: r.reason, at: r.at })),
         bans: (accounts?.bans() ?? []).map((b) => ({ account: b.account, name: b.name, reason: b.reason, at: b.at })),
         activity: lib.activity(100).map((a) => ({ ...a, by: this.name(a.by) })),
+        stats: (this.o.stats?.overview() ?? []).map((row) => ({ ...row, title: this.o.titleOf?.(row.game) ?? lib.current(row.game)?.meta.title })),
       };
       return this.json(res, 200, view);
     }

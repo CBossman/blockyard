@@ -23,10 +23,12 @@ kill_timeout = "10s"
   ROOMS = "14"
   # Uploaded games (docs/PROPOSAL-UPLOADS.md): the address players reach this server at, which
   # their files (models, pictures) are named by; and who may upload (account ids or Discord ids,
-  # comma-separated; https://play.blockyard.gg/uploads tells a signed-in account its id). Uploaded
+  # comma-separated; https://play.blockyard.gg/uploads tells a signed-in account its id). `*`:
+  # anyone signed in (open since 2026-10-04), once their Discord account is a week old, after
+  # accepting the upload terms and within the limits; those named as well skip the week. Uploaded
   # games are kept on the volume, in /data/games.
   PUBLIC_URL = "https://play.blockyard.gg"
-  UPLOADERS = "87198861512146944,112164261760876544"
+  UPLOADERS = "*,87198861512146944,112164261760876544"
   # Admins: may manage every uploaded game (approve one for the home page, take one off, ban an
   # uploader, resolve reports), in Your games' Admin tab. The owner only.
   ADMINS = "87198861512146944"

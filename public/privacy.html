@@ -69,7 +69,7 @@
   <body>
     <main>
       <h1>Privacy</h1>
-      <p class="muted">Version 1 · what Blockyard knows about you, where it's kept, and how to remove it</p>
+      <p class="muted">Version 2 · what Blockyard knows about you, where it's kept, and how to remove it</p>
 
       <div class="box">
         <p>Blockyard is a website of multiplayer block games you play in the browser. It keeps as little about you as it can to run the games: you can play without an account, and signing in with Discord only tells Blockyard who you are on Discord, not your email, servers, friends or messages. There are no ads, no analytics or tracking scripts, and your information is never sold.</p>
@@ -84,7 +84,7 @@
         <li>While you play, the game server gets the name you typed and your look, so other players can see you. If an account already has that name, yours is shown with "(guest)" after it.</li>
         <li>What you earn as a guest (achievements, a game's progress) lasts only this visit: it isn't kept on the server once you leave.</li>
         <li>In games that keep their world, what you build stays part of that world for everyone, but it isn't tied to you.</li>
-        <li>Like every visitor, your connection's IP address shows up in the server's logs (see <a href="#logs">Logs</a>).</li>
+        <li>Like every visitor's, your connection's IP address is used to limit abuse while you're connected, in the server's memory only; it isn't written to its logs (see <a href="#logs">Logs</a>).</li>
       </ul>
 
       <h2>Signing in with Discord</h2>
@@ -120,7 +120,14 @@
         <li>If your account is banned from uploading, the ban, who made it and why are kept.</li>
       </ul>
       <p>Anyone can report a game. A report keeps what you wrote, the game and its version, when, and your account id if you're signed in (nothing about you if you're a guest). Blockyard's admin sees reports with the reporter's name. To stop floods, the server counts recent reports from each IP address in its memory only; addresses aren't saved.</p>
-      <p><b>What uploaded games get of yours.</b> An uploaded game runs apart from the rest of Blockyard. Its screen runs in a locked-down frame in your browser that can't read your sign-in cookie or the site's storage, and can only talk to Blockyard's own servers. Its server code runs on a separate machine with no access to Blockyard's accounts. A game, uploaded or not, gets your Blockyard account id, your name, your look, the address of your Discord avatar picture (which, like every Discord avatar address, includes your Discord user id), the achievements and cosmetics you have in it, and the data it kept for you itself.</p>
+      <p><b>What uploaded games get of yours.</b> An uploaded game runs apart from the rest of Blockyard. Its screen runs in a locked-down frame in your browser that can't read your sign-in cookie or the site's storage, and can only talk to Blockyard's own servers. Its server code runs on a separate machine with no access to Blockyard's accounts. A game, uploaded or not, gets your Blockyard account id, your name, your look, your avatar picture (by way of Blockyard's game server, so the game never learns your Discord id), the achievements and cosmetics you have in it, and the data it kept for you itself.</p>
+
+      <h2>Play stats</h2>
+      <ul>
+        <li>Each time you play a game, the game server records which game, when, for how long, and your account id if you're signed in (nothing about you if you're a guest).</li>
+        <li>A game's creators, and Blockyard's admin, see only counts from these: how many plays and players, how long they played, and how many came back on another day. Never who.</li>
+        <li>Each play is kept for 90 days; after that, only each day's totals for the game are. Deleting your account removes your account id from them.</li>
+      </ul>
 
       <h2>Error reports</h2>
       <ul>
@@ -140,7 +147,7 @@
 
       <h2 id="logs">Logs</h2>
       <ul>
-        <li>The game server writes a running log, which goes to its hosting provider's log service (Fly.io). It records connections, with their IP address and the room joined; the name each player plays as (and the account id, if signed in); sign-ins (name and account id); account deletions (account id); uploads and changes to uploaded games; and errors.</li>
+        <li>The game server writes a running log, which goes to its hosting provider's log service (Fly.io). It records connections and the room joined (not IP addresses); the name each player plays as (and the account id, if signed in); sign-ins (name and account id); account deletions (account id); uploads and changes to uploaded games; and errors.</li>
         <li>To limit abuse, the server also counts open connections and private rooms from each IP address. Those counts are held in its memory only, while you're connected.</li>
         <li>Blockyard doesn't set its own time limit on these logs: they last as long as the hosting provider keeps them.</li>
       </ul>
@@ -149,7 +156,7 @@
       <ul>
         <li><b>Vercel</b> hosts the website (blockyard.gg). Like any web host, it sees your IP address and the pages you load.</li>
         <li><b>Fly.io</b> hosts the game server and the machine uploaded games run on, in its <code>iad</code> region in the United States. Everything Blockyard keeps (accounts, game data, uploaded games, error reports) is stored there, so it's kept in the United States.</li>
-        <li><b>Discord</b> handles signing in, under its own privacy policy. Your avatar picture is loaded from Discord's servers, which see your IP address when it loads.</li>
+        <li><b>Discord</b> handles signing in, under its own privacy policy. On the site's pages, your avatar picture is loaded from Discord's servers, which see your IP address when it loads; in games, it comes by way of Blockyard's game server.</li>
         <li><b>Google Fonts</b> supplies the site's fonts. Your browser loads them from Google's servers, which see your IP address.</li>
       </ul>
       <p>Blockyard doesn't sell your information, share it with advertisers, or use it for anything but running Blockyard.</p>
@@ -157,11 +164,13 @@
       <h2>How long things are kept</h2>
       <ul>
         <li><b>Your account</b> and everything tied to it (look, cosmetics, achievements, game data): until you delete it.</li>
-        <li><b>A sign-in</b>: 90 days, or until you sign out.</li>
+        <li><b>A sign-in</b>: 90 days, or until you sign out. Expired ones are cleared out every hour.</li>
         <li><b>A guest's progress</b>: until you leave the game.</li>
         <li><b>Uploaded games</b>: until their owners or Blockyard delete them; the last 10 versions of each.</li>
         <li><b>Error reports</b>: until 30 days after the error last happened.</li>
-        <li><b>Reports of games and the uploads activity record</b>: no set time limit yet.</li>
+        <li><b>Play stats</b>: each play 90 days, then only each day's totals for the game.</li>
+        <li><b>Reports of games</b>: until 180 days after they're dealt with.</li>
+        <li><b>The uploads activity record</b>: 90 days.</li>
         <li><b>Server logs</b>: as long as the hosting provider keeps them.</li>
       </ul>
 
@@ -171,7 +180,7 @@
         <li><b>Sign out</b> from the account menu on the home page. Your sign-in is ended on the server too.</li>
         <li><b>Change your name</b> in the name box on the home page, once a day.</li>
         <li><b>Delete your account</b> with <b>Delete my account</b> in the account menu. This removes your account and Discord id, your sign-ins, look, cosmetics, achievements, upload tokens and your acceptance of the upload terms, plus what every game, uploaded ones included, kept for you. It can't be undone: signing in again makes a fresh account.</li>
-        <li>Some things stay after you delete your account: games you uploaded (they stay up, and you stay listed as an owner by account id only); reports you made (without your name); the uploads activity record; error reports; and server logs. To have any of that removed, write to [contact email].</li>
+        <li>Some things stay after you delete your account: games you uploaded (they stay up, and you stay listed as an owner by account id only); reports you made (without your name or account id); play stats (counted, no longer tied to you); the uploads activity record; error reports; and server logs. To have any of that removed, write to [contact email].</li>
         <li>Blockyard keeps no Discord access, but you can also remove it from <b>Authorized Apps</b> in Discord's settings.</li>
         <li>To ask what Blockyard holds about you, or to have it corrected or removed, write to [contact email]. Depending on where you live, you may have further rights over your information.</li>
       </ul>

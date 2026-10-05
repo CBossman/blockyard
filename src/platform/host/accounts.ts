@@ -335,9 +335,19 @@ export class Accounts {
     return out;
   }
 
-  /** Gone: the account, its sessions and achievements (the games' data for it is the server's to clear). */
+  /**
+   * Gone: the account, its sessions and achievements (the games' data for it is the server's to
+   * clear). Its reports of games stay, as a guest's.
+   */
   delete(id: string) {
+    this.db.prepare('UPDATE reports SET account = NULL WHERE account = ?').run(id);
     this.db.prepare('DELETE FROM accounts WHERE id = ?').run(id);
+  }
+
+  /** Clear out what's no longer needed: expired sessions, and reports resolved more than 180 days ago. */
+  tidy() {
+    this.db.prepare('DELETE FROM sessions WHERE expires < ?').run(Math.floor(Date.now() / 1000));
+    this.db.prepare(`DELETE FROM reports WHERE resolved IS NOT NULL AND resolved < datetime('now', '-180 days')`).run();
   }
 
   close() {

@@ -24,6 +24,7 @@ import { devGames, games } from './games/server';
 import type { GameDefinition } from './platform/api/types';
 import { Accounts } from './platform/host/accounts';
 import { ErrorLog } from './platform/host/errors';
+import { Stats } from './platform/host/stats';
 import { GameLibrary, smokeInThread } from './platform/host/library';
 import { gameFiles, SandboxLink } from './platform/host/sandbox-link';
 import { serve, type ServeOptions } from './platform/host/server';
@@ -104,9 +105,14 @@ export async function main(args: string[], worker?: ServeOptions['worker'], mode
   // webhook (ERRORS_WEBHOOK) hears of each new one. The server's own crash is kept on its way down.
   const errors = ErrorLog.open(join(data, 'errors.sqlite'), { library, sites, webhook: process.env.ERRORS_WEBHOOK || null, log: (line) => console.log(line) });
   setInterval(() => errors.prune(), 24 * 3600_000).unref();
+  // Stats (host/stats.ts): each play kept 90 days, then only each day's totals.
+  const stats = Stats.open(join(data, 'stats.sqlite'));
+  setInterval(() => stats.prune(), 24 * 3600_000).unref();
   process.on('uncaughtExceptionMonitor', (err) => void errors.record({ source: 'server', message: err.message, stack: err.stack }));
   const server = await serve({
     errors,
+    stats,
+    publicUrl,
     games: defs,
     hidden,
     library,

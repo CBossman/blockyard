@@ -111,6 +111,8 @@ export class SqliteStore implements Store {
       s.close();
       throw new Error(`${path} holds a ${w.game} world, not ${game}: use another --db`);
     }
+    // Where players left off by name (from before accounts) goes once nobody's claimed it for 90 days.
+    s.db.prepare(`DELETE FROM players WHERE name NOT LIKE '#%' AND seen < datetime('now', '-90 days')`).run();
     return s;
   }
 

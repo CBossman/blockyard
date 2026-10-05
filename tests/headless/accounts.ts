@@ -71,6 +71,7 @@ export default async function accounts() {
   const asked: string[] = [];
   globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input);
+    if (url.startsWith('https://cdn.discordapp.com/avatars/80351110224678912/')) return new Response(new Uint8Array([137, 80, 78, 71]), { headers: { 'Content-Type': 'image/png' } });
     if (!url.startsWith('https://discord.com/')) return realFetch(input, init);
     asked.push(url);
     if (url.endsWith('/api/oauth2/token')) {
@@ -133,6 +134,13 @@ export default async function accounts() {
     await until('Nelly in the game', () => n.names().includes('Nelly'));
     const host = srv.host('heart-hunt')!;
     check(host.sim.players.find((p) => p.name === 'Nelly')?.account?.name === 'Nelly', 'she plays as her account');
+    // Her avatar, as games see it: by way of this server, so no game learns her Discord id.
+    const avatar = host.sim.players.find((p) => p.name === 'Nelly')!.account!.avatar!;
+    check(avatar.startsWith(`${base}/avatars/`) && !avatar.includes('80351110224678912'), `her avatar by way of the server: ${avatar}`);
+    const pic = await realFetch(avatar);
+    check(pic.ok && pic.headers.get('content-type') === 'image/png' && (await pic.arrayBuffer()).byteLength === 4, 'which gives the picture');
+    check((await realFetch(`${base}/avatars/nobody`)).status === 404, 'and nobody else’s');
+    check(!logs.some((l) => /connected from|\d+\.\d+\.\d+\.\d+|::1|::ffff/.test(l)), `no addresses in the log: ${logs.find((l) => /connected/.test(l))}`);
     const g = player(srv.port, 'nelly', SITE);
     await until('the guest in', () => n.names().includes('nelly (guest)'));
     const e = player(srv.port, 'Eve', 'https://evil.example', nelly);

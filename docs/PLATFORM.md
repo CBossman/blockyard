@@ -1651,6 +1651,13 @@ For online play there are probes rather than tests: `tests/headless/_netprobe.ts
 
 The platform tracks what goes wrong (`src/platform/host/errors.ts`). Games' errors in rooms (what a game throws and carries on from, and rooms that fail), the server's own crashes, and what goes wrong on players' screens (the site's page and an uploaded game's frame report their uncaught errors: `src/platform/client/errors.ts`) are kept on the game server in `<data>/errors.sqlite`. Reports alike are grouped as one issue, counted and kept for 30 days after they last happened. Stack traces are put back into the source's own files and lines (an uploaded game's from its source maps, the site's from its), without the server's paths. The admin sees every issue in the Admin tab of Your games, and an uploaded game's owners see their game's own (its rooms and its frame) on its card, and can resolve them (one comes back if it happens again). `ERRORS_WEBHOOK`, a Discord webhook, hears of each new issue.
 
+
+## Stats
+
+The game server counts each game's plays (`src/platform/host/stats.ts`, `<data>/stats.sqlite`): a play is a player's first `start` on a connection until it closes, kept with their account (a guest's with none) for 90 days, then only as that day's totals for the game. An uploaded game's owners see its plays, players (signed in, and guests' plays), play time and the share of last month's players who came back on another day, over the last 24 hours, 7 days, 30 days and ever, with a bar for each of the last 30 days, on its card in Your games; the admin also sees every game's last 7 days (built-in ones too) in the Admin tab. Only counts are shown, never who. A deleted account's plays are still counted, no longer under its id.
+
+Games see a signed-in player's avatar (`player.account.avatar`) by way of the game server (`/avatars/<account id>`, fetched from Discord and kept an hour), so no game learns a player's Discord id.
+
 ## Games outside the platform's build
 
 A game doesn't have to be compiled into the platform. You can upload it to a game server, which builds it, checks it and hosts it at once, with no deploy; players' screens load its client code from that server (the design: `docs/PROPOSAL-UPLOADS.md`).
