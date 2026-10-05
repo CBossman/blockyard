@@ -2,6 +2,10 @@ import type { PadAction, PadButton } from '../api/types';
 import type { PlayerInput } from '../net/protocol';
 import { DEFAULT_PAD, PAD_BUTTONS, readPad } from './gamepad';
 import { DEFAULT_KEYS, translation, type KeyBindings, type KeyDefaults } from './keys';
+import type { TouchState } from './touch';
+
+/** What the player plays with: a keyboard and mouse, a controller, or the touch controls (a phone or tablet). */
+export type InputDevice = 'mouse' | 'pad' | 'touch';
 
 /** Directions a controller moves through menus with (the D-pad or the left stick). */
 const NAV: PadButton[] = ['Up', 'Down', 'Left', 'Right'];
@@ -9,7 +13,8 @@ const NAV: PadButton[] = ['Up', 'Down', 'Left', 'Right'];
 /**
  * Keyboard / mouse state with pointer lock and per-frame edge detection, and a controller's
  * buttons and sticks alongside: while it drives the game its buttons press the keys and mouse
- * buttons they're bound to (and its sticks walk and look); otherwise they work the menus. Keys
+ * buttons they're bound to (and its sticks walk and look); otherwise they work the menus. The
+ * touch controls (ui/touch.ts) drive the game the same way (`applyTouch`). Keys
  * are read through the player's key bindings (`setBindings`): a rebound key reads as its action's
  * default code, which is also what a controller presses.
  */
@@ -43,6 +48,10 @@ export class Input {
   private pointer = false;
   /** A controller has the game (no pointer lock needed: it doesn't use the mouse). */
   private padHeld = false;
+  /** The touch controls have the game (a phone or tablet: no pointer lock either). */
+  private touchHeld = false;
+  /** When a finger last touched the screen: the mouse events a browser makes up after a tap aren't the mouse. */
+  private lastTouch = -1e9;
   onLockChange: ((locked: boolean) => void) | null = null;
   /**
    * A key went down: the code it reads as, and the event itself unless a controller's button
@@ -50,8 +59,8 @@ export class Input {
    */
   onKey: ((code: string, e?: KeyboardEvent) => void) | null = null;
   /** What was used last: `lock` captures with it, and the page shows hints for it. */
-  device: 'mouse' | 'pad' = 'mouse';
-  onDevice: ((device: 'mouse' | 'pad') => void) | null = null;
+  device: InputDevice = 'mouse';
+  onDevice: ((device: InputDevice) => void) | null = null;
   /**
    * A controller button went down while it isn't driving the game (menus; `Up`/`Down`/`Left`/
    * `Right` also come from the left stick, repeating while held), or its pause button at any time.
@@ -81,13 +90,30 @@ export class Input {
   private padDrove = false;
   private padIgnore = new Set<PadButton>();
   private stickIgnore = false;
+  /** The touch controls (ui/touch.ts), while they drive the game: keys and mouse buttons held, the stick, its sprint. */
+  private touchKeys = new Set<string>();
+  private touchMouse = 0;
+  private touchMove: [number, number] | null = null;
+  private touchPrev = new Set<string>();
+  private touchWheel = 0;
+  /** A finger is turning the view (aim assist follows a target then, as with a moving stick). */
+  touchLooking = false;
 
   constructor(
     private target: HTMLElement,
     /** Aborting it removes every listener (the game is over). */
     signal?: AbortSignal,
   ) {
+    // A phone or tablet (no mouse to hover with, a finger to point): the touch controls from the start.
+    if (typeof matchMedia === 'function' && matchMedia('(hover: none) and (pointer: coarse)').matches) this.device = 'touch';
     const opts = { signal };
+    // A finger: the touch controls (and the mouse events a browser makes up from a tap aren't the mouse).
+    window.addEventListener('pointerdown', (e) => {
+      if (e.pointerType !== 'touch') return;
+      this.lastTouch = performance.now();
+      this.use('touch');
+    }, { capture: true, signal });
+    window.addEventListener('touchstart', () => (this.lastTouch = performance.now()), { capture: true, passive: true, signal });
     window.addEventListener('keydown', (e) => {
       const code = this.read(e.code);
       if (this.locked && (isGameKey(e.code) || (code !== null && isGameKey(code)))) e.preventDefault();
@@ -113,6 +139,7 @@ export class Input {
       this.buttonsDown = 0;
     }, opts);
     target.addEventListener('mousedown', (e) => {
+      if (this.touchy) return;
       this.use('mouse');
       if (!this.pointer) return;
       this.buttonsDown |= 1 << e.button;
@@ -130,7 +157,7 @@ export class Input {
       if (!wantsMenu(e.target)) e.preventDefault();
     }, opts);
     window.addEventListener('mousemove', (e) => {
-      if (Math.abs(e.movementX) + Math.abs(e.movementY) > 6) this.use('mouse');
+      if (Math.abs(e.movementX) + Math.abs(e.movementY) > 6 && !this.touchy) this.use('mouse');
       if (!this.pointer) return;
       this.mouseDX += e.movementX;
       this.mouseDY += e.movementY;
@@ -146,8 +173,11 @@ export class Input {
     document.addEventListener('pointerlockchange', () => {
       const was = this.locked;
       this.pointer = document.pointerLockElement === this.target;
-      // The mouse took over from a controller (it lets go of the game when the pointer does).
-      if (this.pointer) this.padHeld = false;
+      // The mouse took over from a controller or the touch controls (it lets go of the game when the pointer does).
+      if (this.pointer) {
+        this.padHeld = false;
+        this.touchHeld = false;
+      }
       if (!this.pointer) {
         this.releaseKeys();
         this.buttonsDown = 0;
@@ -172,9 +202,19 @@ export class Input {
     this.held.clear();
   }
 
-  /** The game has the controls: the mouse is captured, or a controller has them. */
+  /** The game has the controls: the mouse is captured, or a controller or the touch controls have them. */
   get locked(): boolean {
-    return this.pointer || this.padHeld;
+    return this.pointer || this.padHeld || this.touchHeld;
+  }
+
+  /** The touch controls have the game. */
+  get touchCaptured(): boolean {
+    return this.touchHeld && !this.pointer;
+  }
+
+  /** A finger touched the screen a moment ago (what looks like the mouse is a tap's made-up events). */
+  private get touchy(): boolean {
+    return performance.now() - this.lastTouch < 1000;
   }
 
   /** The mouse is captured (pointer lock). */
@@ -187,14 +227,21 @@ export class Input {
     return this.padHeld && !this.pointer;
   }
 
-  private use(device: 'mouse' | 'pad') {
+  private use(device: InputDevice) {
     if (this.device === device) return;
     this.device = device;
     this.onDevice?.(device);
   }
 
-  /** Give the game the controls: with the controller if that's what was used last, else the mouse. */
+  /** Give the game the controls: with the controller or the touch controls if that's what was used last, else the mouse. */
   lock() {
+    if (this.device === 'touch') {
+      if (this.touchHeld) return;
+      const was = this.locked;
+      this.touchHeld = true;
+      if (!was) this.onLockChange?.(true);
+      return;
+    }
     if (this.device === 'pad') {
       if (this.padHeld) return;
       const was = this.locked;
@@ -213,8 +260,10 @@ export class Input {
   }
 
   unlock() {
-    if (this.padHeld) {
+    if (this.padHeld || this.touchHeld) {
       this.padHeld = false;
+      this.touchHeld = false;
+      this.releaseTouch();
       if (!this.pointer) this.onLockChange?.(false);
     }
     if (document.pointerLockElement) document.exitPointerLock();
@@ -322,6 +371,76 @@ export class Input {
     for (const code of pressedKeys) this.onKey?.(code);
   }
 
+  /**
+   * The touch controls this frame (ui/touch.ts). While they drive the game their buttons press what
+   * they stand for (as a controller's do), the stick walks (and holds WASD for games that read the
+   * keys) and, pushed all the way ahead, sprints; tapped keys (a hotbar slot) press once. Their look
+   * movement is the caller's to turn (it's in pixels: see the runtime's `touchAim`).
+   */
+  applyTouch(t: TouchState, drives: boolean) {
+    if (!drives) {
+      this.releaseTouch();
+      return;
+    }
+    const keys = new Set<string>();
+    const pressedKeys: string[] = [];
+    let mouse = 0;
+    const held = new Set<string>();
+    for (const a of t.held) {
+      if (!a || a === 'pause') continue;
+      held.add(a);
+      const edge = !this.touchPrev.has(a);
+      if (a === 'next' || a === 'prev') {
+        if (edge) this.touchWheel += a === 'next' ? 1 : -1;
+        continue;
+      }
+      const m = a === 'LMB' ? 0 : a === 'MMB' ? 1 : a === 'RMB' ? 2 : -1;
+      if (m >= 0) {
+        mouse |= 1 << m;
+        if (edge) {
+          this.buttonsPressed |= 1 << m;
+          this.frameButtons |= 1 << m;
+        }
+        continue;
+      }
+      const code = a === 'jump' ? this.keysFor.jump : a === 'crouch' ? this.keysFor.crouch : a === 'sprint' ? this.keysFor.sprint : a;
+      keys.add(code);
+      if (edge && !this.touchKeys.has(code)) pressedKeys.push(code);
+    }
+    this.touchPrev = held;
+    this.touchMove = t.move && (t.move[0] !== 0 || t.move[1] !== 0) ? [t.move[0], t.move[1]] : null;
+    const [mx, my] = t.move ?? [0, 0];
+    const stickKeys: [boolean, string][] = [[my > 0.5, 'KeyW'], [my < -0.5, 'KeyS'], [mx > 0.5, 'KeyD'], [mx < -0.5, 'KeyA']];
+    for (const [on, code] of stickKeys) if (on) keys.add(code);
+    if (t.sprint) keys.add(this.keysFor.sprint);
+    for (const code of keys) if (!this.touchKeys.has(code)) this.pressedThisFrame.add(code);
+    for (const code of pressedKeys) this.frameKeys.add(code);
+    this.touchKeys = keys;
+    this.touchMouse = mouse;
+    this.touchLooking = t.looking;
+    for (const code of t.taps) {
+      this.pressedThisFrame.add(code);
+      this.frameKeys.add(code);
+      pressedKeys.push(code);
+    }
+    // The page's own keys too (E opens the block picker).
+    for (const code of pressedKeys) this.onKey?.(code);
+  }
+
+  /** The stick's pushed (walking), with the touch controls driving the game. */
+  get touchMoving(): boolean {
+    return this.touchMove !== null;
+  }
+
+  /** The touch controls let go of everything they held in the game. */
+  private releaseTouch() {
+    this.touchKeys.clear();
+    this.touchMouse = 0;
+    this.touchMove = null;
+    this.touchPrev.clear();
+    this.touchLooking = false;
+  }
+
   /** The left stick is pushed (walking), with a controller driving the game. */
   get padMoving(): boolean {
     return this.padMove !== null;
@@ -338,7 +457,7 @@ export class Input {
   }
 
   isDown(code: string): boolean {
-    return (this.down.has(code) || this.padKeys.has(code)) && !this.consumedKeys.has(code);
+    return (this.down.has(code) || this.padKeys.has(code) || this.touchKeys.has(code)) && !this.consumedKeys.has(code);
   }
 
   pressed(code: string): boolean {
@@ -346,7 +465,7 @@ export class Input {
   }
 
   button(b: number): boolean {
-    return ((this.buttonsDown | this.padMouse) & ~this.consumedButtons & (1 << b)) !== 0;
+    return ((this.buttonsDown | this.padMouse | this.touchMouse) & ~this.consumedButtons & (1 << b)) !== 0;
   }
 
   buttonPressed(b: number): boolean {
@@ -360,24 +479,26 @@ export class Input {
   snapshot(active: boolean, yaw: number, pitch: number, viewSeq: number): PlayerInput {
     const s: PlayerInput = {
       active,
-      down: this.padKeys.size ? [...new Set([...this.down, ...this.padKeys])] : [...this.down],
+      down: this.padKeys.size || this.touchKeys.size ? [...new Set([...this.down, ...this.padKeys, ...this.touchKeys])] : [...this.down],
       pressed: [...this.pressedThisFrame],
-      buttons: this.buttonsDown | this.padMouse,
+      buttons: this.buttonsDown | this.padMouse | this.touchMouse,
       clicked: this.buttonsPressed,
       mouseX: this.carryDX + this.mouseDX,
       mouseY: this.carryDY + this.mouseDY,
-      wheel: this.wheel + this.padWheel,
+      wheel: this.wheel + this.padWheel + this.touchWheel,
       yaw,
       pitch,
       viewSeq,
     };
     if (this.padMove) s.move = [...this.padMove];
+    else if (this.touchMove) s.move = [...this.touchMove];
     this.pressedThisFrame.clear();
     this.buttonsPressed = 0;
     this.carryDX = 0;
     this.carryDY = 0;
     this.wheel = 0;
     this.padWheel = 0;
+    this.touchWheel = 0;
     this.sent = true;
     return s;
   }

@@ -32,6 +32,8 @@ import { blockIdOf, destructibleIds, loadRegistry, variant, type Registry } from
 import { Input } from './player/input';
 import { gameKeys } from './player/keys';
 import { padBindings, padHints, rumble } from './player/gamepad';
+import { touchButtons } from './player/touch';
+import { TouchControls } from './ui/touch';
 import { PadNav } from './ui/padnav';
 import { Effects } from './fx/effects';
 import { Sfx } from './audio/sfx';
@@ -244,6 +246,9 @@ export class Runtime {
   private unTheme: () => void = () => {};
   /** A controller in the menus: the highlighted control. */
   private padNav = new PadNav(document.body);
+  /** The touch controls (phones and tablets), and whether they're over the game now. */
+  private touch!: TouchControls;
+  private touchShown = false;
   /** How long the right stick has been pushed all the way sideways (turning round speeds up). */
   private fullTilt = 0;
   /** Our health last frame (the controller rumbles when it drops). */
@@ -579,7 +584,7 @@ export class Runtime {
     this.gameHud.onScreen = (open) => {
       if (open) this.input.unlock();
       // Closed by a button click: grab the mouse again (needs a user gesture), or give the controller the game back.
-      else if (this.mode === 'playing' && (this.input.device === 'pad' || navigator.userActivation?.isActive)) this.input.lock();
+      else if (this.mode === 'playing' && (this.input.device !== 'mouse' || navigator.userActivation?.isActive)) this.input.lock();
     };
     this.gameHud.onCrosshair = (v) => this.hud.setCrosshair(v);
     this.gameHud.player = this.playerId;
@@ -753,8 +758,16 @@ export class Runtime {
     this.input.onKey = (code, e) => this.onKey(code, e);
     this.input.onDevice = (d) => {
       document.body.classList.toggle('pad-mode', d === 'pad');
+      document.body.classList.toggle('touch-mode', d === 'touch');
       if (d === 'mouse') this.padNav.clear();
     };
+    // The touch controls (phones and tablets): the game's buttons from its controller layout.
+    this.touch = new TouchControls(this.ui, this.life.signal);
+    this.touch.setButtons(touchButtons(def, this.walker, this.input.keysFor, this.walker));
+    this.touch.onPause = () => {
+      if (this.mode === 'playing' && !this.gameHud.screenOpen) this.input.unlock();
+    };
+    document.body.classList.toggle('touch-mode', this.input.device === 'touch');
     this.input.onPadButton = (b, a) => this.onPadButton(b, a);
     document.body.classList.toggle('pad-mode', this.input.device === 'pad');
     this.pause.setPadHints(padHints(def, this.walker, this.input.keysFor));
@@ -857,7 +870,7 @@ export class Runtime {
             return settings().aimAssist && walker;
           },
           get sticksMoving() {
-            return input.padTilt > 0.05 || input.padMoving;
+            return input.padTilt > 0.05 || input.padMoving || input.touchLooking || input.touchMoving;
           },
           rumble: (strong, weak, ms) => {
             if (settings().vibration) rumble(strong, weak, ms);
@@ -1314,6 +1327,22 @@ export class Runtime {
     this.input.mouseDY += pitch / k;
   }
 
+  /**
+   * A finger turning the view on the touch controls (pixels moved this frame), as mouse movement
+   * would: a swipe across the screen turns about half way round, at the player's touch
+   * sensitivity, slower down the sights; with a gun, aim assist on the player in the crosshair
+   * (slower over them, turning with them) while a finger's on the screen.
+   */
+  private touchAim([dx, dy]: [number, number]) {
+    const help = this.input.touchLooking || this.input.touchMoving ? this.client.kindStick() : { slow: 1, yaw: 0, pitch: 0 };
+    const perPixel = (2.8 / Math.max(320, window.innerWidth)) * this.settings.touchSensitivity / Math.pow(this.view.aimZoom, 0.85);
+    const yaw = dx * perPixel * help.slow - help.yaw;
+    const pitch = dy * perPixel * help.slow * (this.settings.invertY ? -1 : 1) - help.pitch;
+    const k = 0.0022 * this.view.sensitivity * this.view.lookScale;
+    this.input.mouseDX += yaw / k;
+    this.input.mouseDY += pitch / k;
+  }
+
   private closePicker() {
     this.picker?.hide();
     this.mode = 'playing';
@@ -1478,6 +1507,8 @@ export class Runtime {
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
     this.particles?.setViewport(h * dpr * (this.look?.settings ?? this.settings).renderScale, this.camera.fov);
+    // On a touch screen the HUD's drawn to fit it (style.css: body.touch-mode), a phone's at about half size.
+    document.documentElement.style.setProperty('--hud-zoom', String(Math.round(Math.min(1, Math.max(0.5, Math.min(w / 1180, h / 760))) * 100) / 100));
   }
 
   /** Auto quality moved a notch: draw the settings as it has them now. */
@@ -1504,12 +1535,22 @@ export class Runtime {
     // A controller: in the game (its buttons press keys, its sticks walk and look), else the menus.
     const drives = this.mode === 'playing' && this.input.locked && !this.gameHud.screenOpen;
     this.input.pollPad(drives);
+    // The touch controls: their buttons and stick, as a controller's; their look, turned here.
+    const fingers = this.touch.read();
+    this.input.applyTouch(fingers, drives);
     if (drives) {
       // (A menu opens with its highlight where it starts.)
       this.padNav.clear();
       if (this.input.device === 'pad') this.padAim(dt);
+      if (this.input.touchCaptured) this.touchAim(fingers.look);
     } else if (this.input.device === 'pad' && this.mode !== 'console') this.padNav.sync();
     document.body.classList.toggle('pad-playing', this.input.padCaptured);
+    const touchPlaying = drives && this.input.touchCaptured;
+    if (touchPlaying !== this.touchShown) {
+      this.touchShown = touchPlaying;
+      this.touch.setActive(touchPlaying);
+      document.body.classList.toggle('touch-playing', touchPlaying);
+    }
     const playing = this.mode === 'playing';
     const started = this.frameData?.started ?? false;
     const dead = this.mine(this.frameData)?.dead ?? false;

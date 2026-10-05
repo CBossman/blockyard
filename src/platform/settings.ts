@@ -18,6 +18,8 @@ export interface Settings {
   /** Controllers: how fast the right stick turns (1 = the platform's), pulling it down looks down (false) or up, rumble, aim assist with guns. */
   stickSensitivity: number;
   invertY: boolean;
+  /** The touch controls: how fast a finger turns the view (1 = the platform's). */
+  touchSensitivity: number;
   vibration: boolean;
   aimAssist: boolean;
   viewBobbing: boolean;
@@ -49,6 +51,7 @@ export function defaultSettings(): Settings {
     sensitivity: 1,
     stickSensitivity: 1,
     invertY: false,
+    touchSensitivity: 1,
     vibration: true,
     aimAssist: true,
     viewBobbing: true,

@@ -52,7 +52,7 @@ export async function loadPackaged(dir: string, publicUrl: string, { fresh = fal
 }
 
 /** The keys of a game's meta (`GameMeta`): what a screen gets of a built game before its code. */
-const META_KEYS = ['id', 'title', 'tagline', 'accent', 'cover', 'controls', 'gamepad', 'instances', 'achievements', 'cosmetics', 'cosmeticSlots'] as const satisfies readonly (keyof GameMeta)[];
+const META_KEYS = ['id', 'title', 'tagline', 'accent', 'cover', 'controls', 'gamepad', 'touch', 'instances', 'achievements', 'cosmetics', 'cosmeticSlots'] as const satisfies readonly (keyof GameMeta)[];
 
 /** A game's meta alone, as data (`GET /g/<id>`). */
 export function metaOf(def: GameMeta): GameMeta {

@@ -53,6 +53,15 @@ export interface GameMeta {
    */
   gamepad?: Partial<Record<PadButton, PadAction | [PadAction, string]>>;
   /**
+   * Touch controls (phones and tablets): a stick to move (pushed all the way ahead, it sprints),
+   * the rest of the screen to look, and buttons for the controller layout's jobs (`gamepad`), named
+   * as it names them: the triggers' as big buttons in the right thumb's reach (a finger on fire or
+   * aim turns the view too), the face buttons' round them, the D-pad's up the right edge. The
+   * hotbar's slots are tapped. Change a button here, over `gamepad` (as `gamepad` does, with a
+   * key or `[key, label]`), or leave one off a touch screen with null: `touch: { Up: null }`.
+   */
+  touch?: Partial<Record<PadButton, PadAction | [PadAction, string]>>;
+  /**
    * Players can start a game of their own on a server (just them, or friends they send the link
    * to) instead of joining the public one: each such game is a separate copy with its own world,
    * and the home page offers both. For match games (Bed Wars, the Arena); leave it off for one

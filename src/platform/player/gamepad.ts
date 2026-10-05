@@ -125,11 +125,11 @@ function keyName(code: string): string {
 }
 
 /**
- * The controller's hints for the home page and the pause menu: what each button does, named as
- * the game names its keys in `controls` (or as it says for the button), buttons that do nothing
- * the game mentions left out.
+ * What each controller button does in a game, named as the game names its keys in `controls` (or
+ * as it says for the button): null for a button that does nothing the game mentions. The
+ * controller's hints and the touch controls' buttons (player/touch.ts) are both named by it.
  */
-export function padHints(def: Pick<GameDefinition, 'controls' | 'gamepad'>, walks: boolean, keys: { jump: string; crouch: string; sprint: string }): [string, string][] {
+export function padLabel(def: Pick<GameDefinition, 'controls' | 'gamepad'>, walks: boolean, keys: { jump: string; crouch: string; sprint: string }): (b: PadButton) => string | null {
   const bind = padBindings(def.gamepad);
   const said = (b: PadButton) => {
     const v = def.gamepad?.[b];
@@ -140,7 +140,7 @@ export function padHints(def: Pick<GameDefinition, 'controls' | 'gamepad'>, walk
     for (const [k, v] of def.controls ?? []) if (k.split(/[\s/,·]+/).includes(name)) return v;
     return null;
   };
-  const label = (b: PadButton): string | null => {
+  return (b) => {
     const own = said(b);
     if (own) return own;
     const a = bind[b];
@@ -151,6 +151,16 @@ export function padHints(def: Pick<GameDefinition, 'controls' | 'gamepad'>, walk
     if (a === 'sprint') return walks ? (named(keys.sprint) ?? 'sprint') : null;
     return named(a);
   };
+}
+
+/**
+ * The controller's hints for the home page and the pause menu: what each button does, named as
+ * the game names its keys in `controls` (or as it says for the button), buttons that do nothing
+ * the game mentions left out.
+ */
+export function padHints(def: Pick<GameDefinition, 'controls' | 'gamepad'>, walks: boolean, keys: { jump: string; crouch: string; sprint: string }): [string, string][] {
+  const bind = padBindings(def.gamepad);
+  const label = padLabel(def, walks, keys);
   const groups = new Map<string, PadButton[]>();
   for (const b of HINT_ORDER) {
     const l = label(b);

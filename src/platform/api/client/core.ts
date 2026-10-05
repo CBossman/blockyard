@@ -50,8 +50,9 @@ export interface ClientKit {
    */
   controls?(client: Client, c: KitControls, dt: number): void;
   /**
-   * A controller's stick, turning the view this frame (the player's aim assist setting on): slow
-   * it (over a target), and turn the view with what it follows (radians). Null: nothing.
+   * A controller's stick (or a finger on the touch controls), turning the view this frame (the
+   * player's aim assist setting on): slow it (over a target), and turn the view with what it
+   * follows (radians). Null: nothing.
    */
   stick?(client: Client): { slow?: number; yaw?: number; pitch?: number } | null;
   /** What holding one of its kind does to movement: its host half's `move`, the same function (movement is predicted). */
@@ -347,11 +348,11 @@ export interface ClientInput {
   isDown(code: string): boolean;
   /** A mouse button held (0 left, 1 middle, 2 right; a controller's triggers too). */
   button(b: number): boolean;
-  /** What was used last. */
-  readonly device: 'mouse' | 'pad';
-  /** The player's aim assist setting is on (it helps a controller's stick only: `ClientKit.stick`). */
+  /** What was used last: a keyboard and mouse, a controller, or the touch controls (a phone or tablet). */
+  readonly device: 'mouse' | 'pad' | 'touch';
+  /** The player's aim assist setting is on (it helps a controller's stick and the touch controls only: `ClientKit.stick`). */
   readonly assist: boolean;
-  /** A controller's sticks are moving (tilted, or walking): aim assist follows a target only then. */
+  /** A controller's sticks are moving (tilted, or walking), or a finger's moving or looking: aim assist follows a target only then. */
   readonly sticksMoving: boolean;
   /** Rumble a controller in use: its strong and weak motors (0..1 each), for `ms`; if the player's vibration setting is on. */
   rumble(strong: number, weak: number, ms: number): void;
