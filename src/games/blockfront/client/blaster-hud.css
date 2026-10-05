@@ -350,3 +350,12 @@
 .bf-reticle.holo .bf-reticle-ring {
   display: block;
 }
+
+/* ---------- On a touch screen: the heat drawn to fit, by the buttons rather than under them ---------- */
+body.touch-mode .bf-heat {
+  zoom: var(--hud-zoom, 1);
+}
+body.touch-playing .bf-heat {
+  right: calc((env(safe-area-inset-right, 0px) + 172px) / var(--hud-zoom, 1));
+  bottom: calc((env(safe-area-inset-bottom, 0px) + 10px) / var(--hud-zoom, 1));
+}

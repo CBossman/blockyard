@@ -684,6 +684,29 @@ defineMeta({
 
 While a controller is in use, the home page and the pause menu show its hints instead of the keys. Each button is named from the game's `controls`: the entry for the key it presses, so `Up: 'KeyL'` shows "D-pad ↑ loadout". Buttons the game doesn't mention are left out, and `[job, 'label']` names one outright. Over the network a stick goes with the controls as `PlayerInput.move` ([right, forward]), and the host moves the player by it the same way the client predicts.
 
+## Phones and tablets
+
+Every game plays on a touch screen too, with nothing to write: the touch controls press the same keys and mouse buttons a controller does, from the same layout. On a phone or tablet (no mouse to hover with, a finger to point: `matchMedia('(hover: none) and (pointer: coarse)')`), Play gives the game to the touch controls (going full screen and sideways where the browser allows it, Android; an iPhone keeps its bars), and over the game there are:
+
+- a stick wherever the left thumb comes down (in the lower left of the screen): it walks the way it points, as fast as it's pushed (and holds WASD, for games that read those), and dragged on past its ring, or held all the way ahead a moment, it sprints until it's eased back;
+- the rest of the screen to look, as the mouse would (a swipe across turns about half way round, at the player's touch sensitivity, slower down the sights), with a gun's aim assist while a finger's on the screen, as a controller's;
+- buttons for the controller layout's jobs, named as its hints name them (the first part of the name: "lethal (hold to cook)" says "lethal"): the triggers' as big buttons in the right thumb's reach (fire, aim: a finger on either turns the view too as it moves, so a player fires while looking about), A's and B's beside them (jump, crouch), X's and the bumpers' round them, and the rest (Y, R3, the D-pad's, View's) in a drawer the ⋯ button opens; a pause button top left;
+- the hotbar's slots, tapped to pick one (so there's no button to switch), and anything else of the HUD's that's for tapping: a button, a link, or an element with `data-touch-key="KeyF"` (tapped, it presses that key).
+
+A game changes its touch buttons with `touch`, over its `gamepad` and the same way (a job, `[job, 'label']`, or `null` to leave a button off a touch screen):
+
+```ts
+defineMeta({
+  gamepad: { /* … */ },
+  // Golf: hold swing and drag (pull back, swing up), as the mouse does; the cart at hand; no crouch.
+  touch: { RT: ['LMB', 'swing'], X: ['KeyE', 'cart · ball'], B: null },
+});
+```
+
+On a touch screen the home page and the pause menu show the touch controls' hints, the settings have a Touch tab (look sensitivity, field of view, invert look, aim assist), and the HUD is drawn to fit the screen: its panels at `--hud-zoom` (about half on a phone, from the screen's size), the feed and the top corners' widgets clear of the pause and ⋯ buttons, the hotbar between the stick and the buttons, a radar of the HUD's own under the ⋯ button, and the rounds and throwables by the buttons. Upright on a phone, a game asks to be turned sideways (it can be waved off). A game's own HUD panels (a client kit's layers, a widget's CSS) can do the same with the page's classes: `body.touch-mode` on a touch screen, `body.touch-playing` while the touch controls have the game, and `var(--hud-zoom)`; a zoomed element's own lengths are drawn zoomed, so place it with `calc(62px / var(--hud-zoom))`. Client code reads `client.input.device` (`'mouse' | 'pad' | 'touch'`): golf, for one, takes a thumb's flick as a full swing.
+
+A phone or tablet starts on lighter graphics (8 chunks, no shadows, MSAA, god rays or reflections, 0.7 of the screen's pixels), auto quality going down from there and back up while there's room, and a game's `world.viewDistance` raises it to 12 at most.
+
 ## Bots
 
 `game.bots.add(name)` adds a player driven by your code: they're in `game.players` like anyone, everyone sees them (a figure, a name, what they hold), and they move, jump, slide, swing and shoot by exactly the same rules, because they do it through the same controls a person has:

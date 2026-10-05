@@ -16,7 +16,7 @@ export class Inventory {
     this.root = h(
       'div.screen.inventory-screen.hidden',
       { onclick: (e: Event) => e.target === this.root && onClose() },
-      h('div.panel.inv-panel', {}, h('div.panel-head', {}, h('h2', {}, 'Blocks'), h('span.hint', {}, 'Click a block to put it in the selected hotbar slot')), grid),
+      h('div.panel.inv-panel', {}, h('div.panel-head', {}, h('h2', {}, 'Blocks'), h('span.hint', {}, 'Click a block to put it in the selected hotbar slot'), h('button.btn', { onclick: () => onClose() }, 'Done')), grid),
     );
     parent.append(this.root);
   }
