@@ -139,8 +139,8 @@ export class Input {
       this.buttonsDown = 0;
     }, opts);
     target.addEventListener('mousedown', (e) => {
-      if (this.touchy) return;
-      this.use('mouse');
+      // (A tap's made-up mousedown doesn't make the mouse the device; a real click with the pointer captured still counts.)
+      if (!this.touchy) this.use('mouse');
       if (!this.pointer) return;
       this.buttonsDown |= 1 << e.button;
       this.buttonsPressed |= 1 << e.button;
