@@ -65,10 +65,13 @@ export const ROTATION: MatchPlan[] = [
   { mode: 'ffa', map: 'jackrabbit' },
   { mode: 'tdm', map: 'kahuna' },
   { mode: 'case', map: 'hijacked' },
+  { mode: 'ffa', map: 'nukeblock' },
   { mode: 'tdm', map: 'jackrabbit' },
   { mode: 'case', map: 'kahuna' },
   { mode: 'ffa', map: 'hijacked' },
+  { mode: 'tdm', map: 'nukeblock' },
   { mode: 'case', map: 'jackrabbit' },
   { mode: 'ffa', map: 'kahuna' },
   { mode: 'tdm', map: 'hijacked' },
+  { mode: 'case', map: 'nukeblock' },
 ];

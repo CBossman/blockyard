@@ -2,8 +2,9 @@ import { defineMeta } from '@platform';
 import cover from './cover.webp?url';
 
 /**
- * Call of Blocky: fast pulp shootouts on Jackrabbit Lane, a Nuketown-style cul-de-sac, and at Big
- * Kahuna Burger: free-for-all, Team Deathmatch, and The Briefcase (plant it or stop it).
+ * Call of Blocky: fast pulp shootouts on Jackrabbit Lane, a Nuketown-style cul-de-sac, at Big
+ * Kahuna Burger, aboard Hijacked's yacht and in the Nukeblock test town: free-for-all, Team
+ * Deathmatch, and The Briefcase (plant it or stop it).
  */
 export default defineMeta({
   id: 'callofblocky',

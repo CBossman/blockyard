@@ -24,7 +24,7 @@
  * - Sizes (overall length along z, px, within 5% of the hard-surface models): pistol 12, SMG 17,
  *   rifle 28, shotgun 29.5, sniper 33, katana 30; and the ones added since: the Tommy gun 27, the
  *   machine gun 33, the marksman rifle 32, the sawn-off 16, the revolver 15.5 (held as a pistol:
- *   `stance` in its look). Receivers 1.9-2.5 px wide, pistol grips 1.9-2.5
+ *   `stance` in its look), the FAMAS 25. Receivers 1.9-2.5 px wide, pistol grips 1.9-2.5
  *   px wide and 5 tall, raked 15 degrees (the shotgun's wrist 25, the sniper's 18). A gun whose
  *   muzzle is less than 11 px ahead of the grip is held as a compact gun (the pistol and the SMG).
  * - Marker nodes: empty nodes (no mesh), children of the root, their translation in blocks:
@@ -463,6 +463,49 @@ function rifle() {
   const sight = optic(g, { w: 5, h: 3, sill: 8.75, z: 0, frame: 'yellow', body: 2, bodyW: 7, back: 1, len: 6, drop: 1, aheadW: 5 });
   const at = alongPath(magPath, 0.45);
   return g.mark('grip', [0, 0, 0]).mark('grip2', [0, 1.875, 10]).mark('muzzle', [0, 3.4375, 18.125]).mark('sight', sight).mark('mag', [0, at[1], at[0]]);
+}
+
+/**
+ * FAMAS: the French bullpup, black polymer, the long carry handle over it all, the magazine behind
+ * the grip, the bipod folded along the handguard, a tricolore band round the butt and a blue holo
+ * on the handle.
+ */
+function famas() {
+  const g = new Gun('famas', 'FAMAS', { offset: [-0.5, 0, 0] }).colours({
+    polymer: [0x2e3035, 0.65], polymerDark: [0x1f2024, 0.7], polymerLight: [0x3d4046, 0.6], steel: [0xa4a8ae, 0.3, 1], darksteel: [0x575c64, 0.35, 0.8],
+    bleu: [0x2456d8, 0.3], blanc: [0xf2f2ee, 0.35], rouge: [0xe0283a, 0.3], anod: [0x2a2c31, 0.45, 0.4],
+  });
+  // The pistol grip, raked, under the middle of the gun (a bullpup's action is behind the hand).
+  g.grip(3, [-3.125, 1.875], 1.29, 4, 15, 'polymer');
+  // The body: the butt and the receiver in one, flat on top, its underside sloping up to the grip,
+  // the handguard running on ahead, slotted along its sides; a dark butt plate, the tricolore.
+  const band = { bleu: [-9.4, -8.75], blanc: [-8.75, -8.1], rouge: [-8.1, -7.45] };
+  g.prof([[-10.6, 4.4, 0.4], [6.5, 4.4], [8.75, 3.75], [8.75, 1.9], [2.5, 1.9], [-3.1, 1.9], [-10.6, -0.65, 0.4]], 3, (i, j, k) => {
+    const z = g.c(2, k);
+    if (z < -10) return 'polymerDark';
+    if (i !== 0) for (const [c, [a, b]] of Object.entries(band)) if (z >= a && z < b && j >= 0) return c;
+    if (i !== 0 && z > 3.5 && z < 8 && j === 4 && k % 2 === 0) return 'polymerDark';
+    return j === 6 ? 'polymerLight' : 'polymer';
+  });
+  // The magazine, straight, behind the grip: steel, a polymer floor plate.
+  g.pbox(3, [-4.4, 1.9], [-6.25, -3.75], (i, j) => (j === -8 ? 'polymerDark' : 'darksteel'));
+  // The big trigger guard round the whole hand, and the trigger.
+  g.pbox(1, [-3.75, -3.125], [-1.875, 5.0], 'polymer');
+  g.pbox(1, [-3.75, 1.9], [4.375, 5.0], 'polymer');
+  g.box([0, 2, 3], [1, 3, 4], 'steel');
+  // The barrel, the slotted flash hider.
+  g.pbox(1, [3.125, 3.75], [8.75, 12.5], 'darksteel');
+  g.pbox(3, [2.5, 4.375], [12.5, 14.375], (i, j, k) => (i !== 0 && j === 5 && k % 2 === 0 ? false : 'polymerDark'));
+  // The bipod, folded: a steel leg down each side of the handguard.
+  for (const x of [-2, 2]) g.box([x, 5, g.cell(2, 3.75)], [x + 1, 6, g.cell(2, 8.1)], 'steel');
+  // The carry handle: posts at each end, the long bar over the top, the cocking lever under it.
+  g.pbox(3, [4.375, 7.5], [-6.875, -5.625], 'polymer');
+  g.pbox(3, [4.375, 7.5], [5.625, 6.875], 'polymer');
+  g.pbox(3, [6.875, 7.5], [-6.875, 6.875], (i, j, k) => (k % 4 === 0 && i === 0 ? 'polymerLight' : 'polymer'));
+  g.pbox(1, [4.375, 5.0], [0, 1.875], 'steel');
+  // The holo, blue, on the handle.
+  const sight = optic(g, { w: 5, h: 3, sill: 8.75, z: -1.25, frame: 'bleu', body: 2, bodyW: 7, back: 1, len: 6, drop: 1, aheadW: 5 });
+  return g.mark('grip', [0, 0, 0]).mark('grip2', [0, 1.875, 6.5]).mark('muzzle', [0, 3.4375, 14.375]).mark('sight', sight).mark('mag', [0, -1.25, -5.0]);
 }
 
 /** Zed's Pump: an 870 in blued steel, a walnut pistol-grip stock, a cherry pump and holo, red shells on the side. */
@@ -931,7 +974,7 @@ function glb(g) {
 }
 
 /** Each model's size (px, x y z) as the hard-surface models these replaced drew it, to keep the holds tuned. */
-const SIZES = { pistol: [3.68, 12.38, 12.25], smg: [4.86, 20.33, 16.92], rifle: [5.96, 19.71, 28.06], shotgun: [5.96, 15.15, 30.05], sniper: [5.06, 13.22, 32.95], tommy: [4.4, 12.8, 27], lmg: [5.6, 13, 33], marksman: [3.75, 12.3, 32], sawnoff: [3.75, 11.25, 16.25], revolver: [3.13, 11.25, 15.63], katana: [3.9, 4.6, 29.8], briefcase: [10.3, 9.15, 4.63], ammo: [6.88, 4.38, 5.63], frag: [4.06, 6.1, 3.93], molotov: [3.84, 12.16, 3.84] };
+const SIZES = { pistol: [3.68, 12.38, 12.25], smg: [4.86, 20.33, 16.92], rifle: [5.96, 19.71, 28.06], famas: [4.4, 13.75, 25], shotgun: [5.96, 15.15, 30.05], sniper: [5.06, 13.22, 32.95], tommy: [4.4, 12.8, 27], lmg: [5.6, 13, 33], marksman: [3.75, 12.3, 32], sawnoff: [3.75, 11.25, 16.25], revolver: [3.13, 11.25, 15.63], katana: [3.9, 4.6, 29.8], briefcase: [10.3, 9.15, 4.63], ammo: [6.88, 4.38, 5.63], frag: [4.06, 6.1, 3.93], molotov: [3.84, 12.16, 3.84] };
 
 /** Clip a 2D polygon by a convex counter-clockwise one. */
 function clipConvex(poly, clip) {
@@ -1081,7 +1124,7 @@ function show(g) {
   view(2, 0, 1, true, `above (z across, x up), from +y`);
 }
 
-const MODELS = { pistol, smg, rifle, shotgun, sniper, tommy, lmg, marksman, sawnoff, revolver, katana, briefcase, ammo, frag, molotov };
+const MODELS = { pistol, smg, rifle, famas, shotgun, sniper, tommy, lmg, marksman, sawnoff, revolver, katana, briefcase, ammo, frag, molotov };
 const args = process.argv.slice(2);
 const only = args.filter((a) => !a.startsWith('--'));
 mkdirSync(OUT, { recursive: true });

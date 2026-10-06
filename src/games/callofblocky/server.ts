@@ -118,8 +118,9 @@ const planName = (m: MatchPlan) => `${MODES[m.mode].name} on ${mapById(m.map)?.n
 
 /** What a bot carries: mostly rifles and SMGs, now and then a shotgun or the machine gun, rarely a scope. */
 const BOT_PRIMARIES: [Primary, number][] = [
-  ['rifle', 0.3],
-  ['smg', 0.18],
+  ['rifle', 0.24],
+  ['famas', 0.1],
+  ['smg', 0.14],
   ['tommy', 0.13],
   ['shotgun', 0.11],
   ['sawnoff', 0.06],

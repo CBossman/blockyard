@@ -18,6 +18,7 @@ const GUNS: Record<string, string[]> = {
   pistol: ['grip', 'grip2', 'muzzle', 'sight', 'mag'],
   smg: ['grip', 'grip2', 'muzzle', 'sight', 'mag'],
   rifle: ['grip', 'grip2', 'muzzle', 'sight', 'mag'],
+  famas: ['grip', 'grip2', 'muzzle', 'sight', 'mag'],
   shotgun: ['grip', 'grip2', 'muzzle', 'sight', 'mag'],
   sniper: ['grip', 'grip2', 'muzzle', 'sight', 'mag'],
   tommy: ['grip', 'grip2', 'muzzle', 'sight', 'mag'],

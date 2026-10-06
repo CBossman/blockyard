@@ -7,7 +7,8 @@ import { isStreak, STREAKS } from './streaks/kinds';
  * Numbers are tuned for 100 health: most guns kill in three to five body shots, heads take fewer,
  * the katana, the Honey Bunny and Rock Salt (up close) in one, Bad Mother in two.
  *
- * The primaries: the Big Kahuna (an all-rounder), two SMGs (the Mac-10, quick and light; the
+ * The primaries: the Big Kahuna (an all-rounder), the FAMAS (a bullpup that fires faster and hits
+ * a little lighter: four to the body up close, five further off), two SMGs (the Mac-10, quick and light; the
  * Wolf, a Tommy gun with a fifty-round drum, heavier to swing), two shotguns (Zed's Pump; Rock
  * Salt, a sawn-off with both barrels one after the other and then a reload), Marsellus (a
  * machine gun: a hundred-round belt, slow to aim and to reload), and two scoped rifles (Ezekiel,
@@ -18,7 +19,7 @@ import { isStreak, STREAKS } from './streaks/kinds';
  * goes about `radius + depth` further in. Through a block-thick wall that's about eight rifle or
  * pistol shots, ten from the SMG, two from the Honey Bunny; the shotgun's pellets pepper it.
  *
- * The rifles, Marsellus, the pistols and the Honey Bunny wall-bang (`penetration`): the rifle
+ * The rifles (the FAMAS a little less), Marsellus, the pistols and the Honey Bunny wall-bang (`penetration`): the rifle
  * through a block-thick wall head on (at about two thirds of its damage), Marsellus and Ezekiel a
  * little more, the pistols only through thinner stuff (a wall already shot into, a slab, a door),
  * the Honey Bunny through two blocks and still a kill up close.
@@ -48,6 +49,24 @@ export const WEAPONS: Record<string, GunItem | MeleeItem> = {
     mobility: 0.95,
     carve: { radius: 0.09, depth: 0.04 },
     penetration: { depth: 1.15, damageLoss: 0.32 },
+  } satisfies GunItem,
+  famas: {
+    kind: 'gun',
+    name: 'FAMAS',
+    auto: true,
+    rpm: 900,
+    damage: [28, 20],
+    falloff: [18, 42],
+    headshot: 1.5,
+    magazine: 30,
+    reserve: 120,
+    reload: 2.4,
+    spread: { hip: 2.3, aim: 0.15, move: 1.2, air: 3, bloom: 0.2 },
+    recoil: { up: 0.55, side: 0.3, recover: 0.75 },
+    aim: { zoom: 1.35, time: 0.2, move: 0.65, sight: 'holo', color: '#6fa8ff' },
+    mobility: 0.97,
+    carve: { radius: 0.09, depth: 0.035 },
+    penetration: { depth: 1.05, damageLoss: 0.36 },
   } satisfies GunItem,
   smg: {
     kind: 'gun',
@@ -264,7 +283,7 @@ export const LETHAL_BLURBS: Record<string, string> = {
 };
 
 /** The primaries on offer, in the order the loadout menu lists them. */
-export const PRIMARIES = ['rifle', 'smg', 'tommy', 'shotgun', 'sawnoff', 'lmg', 'marksman', 'sniper'] as const;
+export const PRIMARIES = ['rifle', 'famas', 'smg', 'tommy', 'shotgun', 'sawnoff', 'lmg', 'marksman', 'sniper'] as const;
 export type Primary = (typeof PRIMARIES)[number];
 
 /** The sidearms on offer. */
@@ -274,6 +293,7 @@ export type Sidearm = (typeof SIDEARMS)[number];
 /** One line about each, for the loadout menu. */
 export const BLURBS: Record<Primary | Sidearm, string> = {
   rifle: 'Assault rifle · all-rounder',
+  famas: 'Bullpup rifle · fast fire, light recoil',
   smg: 'SMG · fast and close',
   tommy: 'Drum SMG · fifty rounds, a heavy hand',
   shotgun: 'Pump shotgun · one pump, one body',
