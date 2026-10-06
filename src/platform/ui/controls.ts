@@ -15,11 +15,16 @@ export interface GameControls {
   keys?: { bound: KeyBindings; game: KeyDefaults };
 }
 
-/** The keyboard's hints: moving and jumping (a walking game), then the game's own, each with its keys as bound. */
+/**
+ * The keyboard's hints: moving and jumping (a walking game: unless the game's own hints name those
+ * keys), then the game's own, each with its keys as bound.
+ */
 export function keyHints(c: GameControls): [string, string][] {
   const { bound, game } = c.keys ?? { bound: {}, game: DEFAULT_KEYS };
-  const moves: [string, string][] = (c.walks ?? true) ? [[moveLabel(bound, game), 'move'], [actionLabel(bound, game, 'jump'), 'jump']] : [];
   const own = c.controls ?? [['LMB', 'break'], ['RMB', 'place'], ['E', 'blocks']];
+  // The game's own hints for the movement keys or jump's key (Space shoots, say) go in their place.
+  const named = new Set(own.flatMap(([k]) => k.split(/[\s/,·+]+/)));
+  const moves: [string, string][] = (c.walks ?? true) ? ([[moveLabel({}, game), moveLabel(bound, game), 'move'], [actionLabel({}, game, 'jump'), actionLabel(bound, game, 'jump'), 'jump']] as const).filter(([plain]) => !named.has(plain)).map(([, k, v]): [string, string] => [k, v]) : [];
   return [...moves, ...own.map(([k, v]): [string, string] => [relabel(bound, game, k), v])];
 }
 

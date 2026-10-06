@@ -81,7 +81,7 @@ export function showHud(game: Game, m: Match) {
   game.hud.widget('jam-board', {
     a: { abbr: a.def.abbr, color: a.def.color, score: a.score },
     b: { abbr: b.def.abbr, color: b.def.color, score: b.score },
-    quarter: m.quarter <= 4 ? `Q${m.quarter}` : 'OT',
+    quarter: m.quarter <= 4 ? ['', '1ST', '2ND', '3RD', '4TH'][m.quarter] : 'OT',
     clock: fmt(m.clock),
     shot: Math.ceil(m.shotClock),
     shotWarn: m.shotClock <= 5 && m.phase === 'live' ? 'warn' : '',

@@ -173,6 +173,13 @@ export interface ServerDefinition {
   setup?(game: GameContext): void;
   /** Runs when play begins, and again after `game.restart()`. */
   start?(game: GameContext): void;
+  /**
+   * Play begins as soon as the ground at the spawn has loaded, without waiting for someone to
+   * press Play: a match the bots play while people watch from the home page (an arcade's attract
+   * mode), which a player pressing Play then joins. Off by default (`start` waits for the first
+   * player). Block Jam has it.
+   */
+  autoStart?: boolean;
   /** Runs every frame while the game is running (not while paused). `dt` is in seconds. */
   update?(game: GameContext, dt: number): void;
   /**

@@ -27,13 +27,18 @@ interface Mind {
   spotUntil: number;
   /** When they last leapt. */
   leaptAt: number;
+  /** This possession's idea (worked out as they get the ball): drive at the rim, pull up, or a three. */
+  plan: 'drive' | 'jumper' | 'three';
+  planSpot: { x: number; z: number } | null;
+  /** They had the ball last tick (a new possession starts a new plan). */
+  had: boolean;
 }
 
 const minds = new Map<Baller, Mind>();
 
 export const bots = {
   add(b: Baller) {
-    minds.set(b, { skill: 0.5 + Math.random() * 0.3, shooting: false, releaseAt: 0, tap: 0, thinkAt: 0, spot: null, spotUntil: 0, leaptAt: -9 });
+    minds.set(b, { skill: 0.5 + Math.random() * 0.3, shooting: false, releaseAt: 0, tap: 0, thinkAt: 0, spot: null, spotUntil: 0, leaptAt: -9, plan: 'drive', planSpot: null, had: false });
   },
   forget(b: Baller) {
     minds.delete(b);
@@ -108,6 +113,8 @@ function think(game: Game, m: Match, b: Baller, bot: Bot, mind: Mind, now: numbe
   }
   const ball = m.ball;
   const holder = ball.mode === 'held' ? ball.holder : null;
+  if (holder === b && !mind.had) newPlan(b, mind);
+  mind.had = holder === b;
   if (holder === b) return offenseWithBall(game, m, b, bot, mind, now);
   if (ball.mode === 'flight' || (ball.mode === 'dead' && !ball.inbound && m.phase === 'tip')) return chase(game, m, b, bot, mind, now);
   if (ball.mode === 'dead') {
@@ -132,6 +139,20 @@ function holderSide(m: Match, b: Baller): Side | null {
 function tap(bot: Bot, mind: Mind) {
   bot.controls.hold('Space', true);
   mind.tap = 2;
+}
+
+/** A possession's idea: mostly at the rim, often a pull-up, now and then from downtown. */
+function newPlan(b: Baller, mind: Mind) {
+  const r = Math.random();
+  const side = b.team.side;
+  const c = rim(side);
+  mind.plan = r < 0.45 ? 'drive' : r < 0.78 ? 'jumper' : 'three';
+  if (mind.plan === 'drive') mind.planSpot = null;
+  else {
+    const ang = (Math.random() - 0.5) * Math.PI * 0.85;
+    const dist = mind.plan === 'three' ? 7.2 : 4.2 + Math.random() * 1.8;
+    mind.planSpot = { x: c.x - side * Math.cos(ang) * dist, z: Math.max(-HALF_WIDTH + 0.8, Math.min(HALF_WIDTH - 0.8, Math.sin(ang) * dist)) };
+  }
 }
 
 function offenseWithBall(_game: Game, m: Match, b: Baller, bot: Bot, mind: Mind, now: number) {
@@ -169,14 +190,16 @@ function offenseWithBall(_game: Game, m: Match, b: Baller, bot: Bot, mind: Mind,
     // The lane's open (or they're on fire): to the rim for a dunk.
     const fire = s.fire === 1;
     const laneOpen = guard > 1.6 || fire || Math.random() < 0.08;
-    if (d < DUNK_RANGE * 0.92 && laneOpen && (s.turbo > 0.15 || fire)) {
+    if (mind.plan === 'drive' && d < DUNK_RANGE * 0.92 && laneOpen && (s.turbo > 0.15 || fire)) {
       bot.controls.hold('ShiftLeft', true);
       tap(bot, mind);
       return;
     }
-    // Room for a jumper.
+    // Room for a jumper: at their spot (a pull-up, a three), or anywhere in range when it's open.
     const range = fire ? 9 : guard > 2.4 && Math.random() < 0.45 ? 8.6 : 7.2;
-    if ((d < range && guard > 1.7 && Math.random() < 0.3 + mind.skill * 0.3) || hurry) {
+    const atSpot = mind.planSpot ? Math.hypot(p.x - mind.planSpot.x, p.z - mind.planSpot.z) < 0.9 : false;
+    const wide = mind.plan !== 'drive' && (atSpot ? guard > 1.1 || Math.random() < 0.3 : false);
+    if (wide || (mind.plan === 'drive' && d < range && guard > 2.2 && Math.random() < 0.18 + mind.skill * 0.2) || hurry) {
       mind.shooting = true;
       // Let go near the top, as well as their skill allows.
       const miss = (Math.random() - 0.5) * 0.3 * (1.2 - mind.skill);
@@ -198,7 +221,13 @@ function offenseWithBall(_game: Game, m: Match, b: Baller, bot: Bot, mind: Mind,
       }
     }
   }
-  // Drive: at the rim, swerving round the man in the way.
+  // To their spot for a jumper or a three; else drive at the rim, swerving round the man in the way.
+  if (mind.planSpot) {
+    runTo(bot, mind.planSpot, s.turbo > 0.4 && guard < 2, 0.4);
+    // Taking too long: drive instead.
+    if (m.shotClock < 9) mind.planSpot = null;
+    return;
+  }
   let tx = r.x - side * 0.8;
   let tz = r.z;
   if (guard < 2.5) {

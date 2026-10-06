@@ -35,6 +35,8 @@ let visitors = 1;
 let tick = 0;
 
 export default defineServer(shared, {
+  // The bots play while people watch from the home page; Play puts them on the floor.
+  autoStart: true,
   setup(game) {
     defineHud(game);
     // The arena's pieces, as items each screen draws (their looks are its: `client/looks.ts`).

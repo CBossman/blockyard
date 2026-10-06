@@ -78,6 +78,13 @@ src/games/
                         the powers' effects, the hero HUD
     client/             bolts you can watch fly, the third-person crosshair and heat, voices, ambience; skies.ts: fighters overhead
     maps/ tools/        Mos Blockley Spaceport as Blueprints; the voxel troopers, heroes and weapons built in code
+  blockjam/             Block Jam: two-on-two arcade basketball (NBA Jam-style): big heads, turbo, dunks, catching fire
+    court.ts ball.ts    the court's numbers; the ball's flight (rims, the board, the net), played the same on every screen
+    moves.ts            the ballers' movement ability: steering by the screen, turbo, jump shots, seven dunks, knockdowns
+    server.ts match.ts  rules: the roster (bots in empty places), possession, shots, blocks, steals, shoves, fire, the clocks
+    bots.ts             bot ballers: drives, pull-ups and threes, passes and lobs, defence, rebounds
+    client/             the broadcast camera, the ball and the baskets drawn, the poses (big heads, dunks), the announcer, the crowd
+    tools/models.mjs    the ball, the baskets, the nets and the court's markings, built in code
   golf/                 Blockyard Links: eighteen holes, a cart, a mouse swing, sloping greens
     course/             the holes as a yardage book (holes.ts), the land worked out from them (course.ts), its invisible footing in blocks (build.ts)
     physics.ts          the ball: flight (drag, Magnus lift, wind), bounces that dig into the turf, skid and roll, the cup
@@ -186,6 +193,8 @@ The hooks are the rules in `server.ts` (`defineServer(shared, { setup, start, up
 | `setup(game)` | once, after the engine loads, before the world streams | define items and entity types, subscribe to events |
 | `start(game)` | when the player first clicks play, and after `game.restart()` | reset state, give the starting kit, schedule the first beat |
 | `update(game, dt)` | every frame while running (not paused) | rules, spawning, HUD |
+
+A match the bots can play by themselves (an arcade's attract mode, shown to everyone watching from the home page) sets `autoStart: true` on its rules: `start` runs as soon as the ground at the spawn has loaded, and a player pressing Play joins it (`playerJoin`) rather than starting it. Block Jam does.
 
 `game.restart()` clears entities, props, pickups, timers, the inventory and HUD, puts back any blocks broken, placed or shot into this session (unless the game sets `world.persist`), revives the player at the spawn point, lets go of any `freeze`, and calls `start` again. Keep your game state in plain module variables and reset it in `start`.
 
