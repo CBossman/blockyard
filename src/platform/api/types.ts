@@ -173,6 +173,13 @@ export interface ServerDefinition {
   setup?(game: GameContext): void;
   /** Runs when play begins, and again after `game.restart()`. */
   start?(game: GameContext): void;
+  /**
+   * Play begins as soon as the ground at the spawn has loaded, without waiting for someone to
+   * press Play: a match the bots play while people watch from the home page (an arcade's attract
+   * mode), which a player pressing Play then joins. Off by default (`start` waits for the first
+   * player). Block Jam has it.
+   */
+  autoStart?: boolean;
   /** Runs every frame while the game is running (not while paused). `dt` is in seconds. */
   update?(game: GameContext, dt: number): void;
   /**
@@ -1310,8 +1317,9 @@ export interface PlayerApi {
   /**
    * Dress their avatar in the game's colours (a team's kit): the top, bottoms and shoes, styles and
    * colours (`{ topColor: '#d33', accent: '#fff' }`), over what they chose; who they are (their
-   * build, face, hair) stays theirs. Null: their own clothes again. For players in their avatars
-   * (a game without `player.model` or `player.skin`, and none given them with `setModel`).
+   * build, face, hair) stays theirs (`hatHair` cuts the hair close, under a helmet the game hangs
+   * on them). Null: their own clothes again. For players in their avatars (a game without
+   * `player.model` or `player.skin`, and none given them with `setModel`).
    */
   setUniform(uniform: Uniform | null): void;
   /**

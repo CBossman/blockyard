@@ -78,6 +78,26 @@ src/games/
                         the powers' effects, the hero HUD
     client/             bolts you can watch fly, the third-person crosshair and heat, voices, ambience; skies.ts: fighters overhead
     maps/ tools/        Mos Blockley Spaceport as Blueprints; the voxel troopers, heroes and weapons built in code
+  blockjam/             Block Jam: two-on-two arcade basketball (NBA Jam-style): big heads, turbo, dunks, catching fire
+    court.ts ball.ts    the court's numbers; the ball's flight (rims, the board, the net), played the same on every screen
+    moves.ts            the ballers' movement ability: steering by the screen, turbo, jump shots, seven dunks, knockdowns
+    server.ts match.ts  rules: the roster (bots in empty places), possession, shots, blocks, steals, shoves, fire, the clocks
+    pick.ts levels.ts   the team screen (M: pick a team, the first person in starts a new game; the bots' level), and the
+                        levels (Rookie, Pro, All-Star): how the bots facing people guard, reach, shoot and run
+    bots.ts             bot ballers: drives, pull-ups and threes, passes and lobs, defence, rebounds
+    client/             the broadcast camera, the ball and the baskets drawn, the poses (big heads, dunks), the announcer, the crowd
+    tools/models.mjs    the ball, the baskets, the nets and the court's markings, built in code
+  blockice/             Block Ice: two-on-two arcade hockey (NHL Open Ice-style), a goalie each: big heads, turbo, slap shots,
+                        one-timers, checks into the glass, catching fire
+    rink.ts puck.ts     the rink's numbers (the boards, the goals); the puck's slide and flight (posts, the bar, the twine)
+    moves.ts            the skaters' movement ability: steering by the screen, gliding on ice, hockey stops, turbo,
+                        wind-ups, check lunges, knockdowns; a goalie's glide to its spot
+    server.ts match.ts  rules: the roster, faceoffs, possession, shots, saves, blocks, pokes, checks, fire, the periods
+    pick.ts levels.ts   the team screen (M) and the bots' levels (Rookie, Pro, All-Star)
+    bots.ts goalies.ts  bot skaters (rushes, wristers and slappers, passes for one-timers, defence) and the goalies
+    client/             the broadcast camera, the rink and goals drawn, everyone's gear (sticks, helmets, skates, goalie
+                        pads), the poses (skating, shots, saves), the announcer, the organ, the goal horn
+    tools/models.mjs    the puck, the boards, the goals and nets, the rink's markings, sticks, helmets and goalie gear
   golf/                 Blockyard Links: eighteen holes, a cart, a mouse swing, sloping greens
     course/             the holes as a yardage book (holes.ts), the land worked out from them (course.ts), its invisible footing in blocks (build.ts)
     physics.ts          the ball: flight (drag, Magnus lift, wind), bounces that dig into the turf, skid and roll, the cup
@@ -186,6 +206,8 @@ The hooks are the rules in `server.ts` (`defineServer(shared, { setup, start, up
 | `setup(game)` | once, after the engine loads, before the world streams | define items and entity types, subscribe to events |
 | `start(game)` | when the player first clicks play, and after `game.restart()` | reset state, give the starting kit, schedule the first beat |
 | `update(game, dt)` | every frame while running (not paused) | rules, spawning, HUD |
+
+A match the bots can play by themselves (an arcade's attract mode, shown to everyone watching from the home page) sets `autoStart: true` on its rules: `start` runs as soon as the ground at the spawn has loaded, and a player pressing Play joins it (`playerJoin`) rather than starting it. Block Jam does.
 
 `game.restart()` clears entities, props, pickups, timers, the inventory and HUD, puts back any blocks broken, placed or shot into this session (unless the game sets `world.persist`), revives the player at the spawn point, lets go of any `freeze`, and calls `start` again. Keep your game state in plain module variables and reset it in `start`.
 
@@ -562,6 +584,7 @@ The platform does the rest:
 - **Walls.** In a world with destructible blocks (`world.destructible`), each bullet (each pellet) carves a pit where it lands: `carve: { radius, depth }` in blocks, default `{ radius: 0.1, depth: 0.05 }`; `carve: false` for a gun that doesn't. The next shot on the same spot lands at the bottom of the last one's pit, so each goes about `radius + depth` further in: seven or eight on one spot hole a block. Call of Blocky's: rifle and pistol `{ 0.09, 0.04 }` (eight shots down the sights through a block-thick wall), SMG `{ 0.1, 0.025 }` (ten), sniper `{ 0.12, 0.42 }` (two), shotgun pellets `{ 0.07, 0.01 }` (a spray of small pits). The pit is the bullet's mark: no bullet-hole decal on a block that carves.
 - **The HUD.** An ammo counter replaces the hotbar's job, and the crosshair opens with the spread (and goes when aiming).
 - **Ammo.** `guns.of(game).ammo(player, 'rifle')` is `{ magazine, reserve }`, and `setAmmo(player, 'rifle', { … })` refills it. A gun given again comes full. `guns.of(game).reloading(player)` and `aiming(player)` say what the gun in their hand is doing.
+- **Reload speed.** `guns.of(game).setReloadSpeed(player, 2)` has them reload every gun in half the time (a perk, a power-up), until it's set back to 1; their screen reloads at the same pace.
 - **In the hand.** The `gun` hold style puts two hands on the gun: at the hip, swung across the chest to sprint, leaning into a slide, up to the eye to aim, tipped to show the magazine as the support hand fetches a new one, and working its action. `hold.scale` multiplies its size (0.42 of the model's own), and `hold.gun` moves its poses (next). A held glTF model marks its points with empty nodes named `grip` (the firing hand, at the model's origin), `grip2` (the support hand), `muzzle`, `sight` (on the eye line when aiming) and `mag`; `HeldModels.gltf(url, { grip, grip2 })` gives them in pixels instead, over the file's, in first person and on figures alike. A gun without a `grip2` anywhere is held halfway along. Others see the gun raised to their figure's shoulder, a flash at its muzzle, and its tracers. Call of Blocky builds its guns in code (`src/games/callofblocky/tools/guns/build.mjs`) and writes them as GLB files that way.
 - **Actions.** `action` is worked a beat (0.08 s) after each shot: a `pump` (the support hand back and forth along the gun), a `bolt` (the gun rolled over to work it), a `lever` (the gun rocked muzzle-up on the support hand as the firing hand swings the lever), a `hammer` thumbed back (a single-action revolver: the gun canted in and tipped up), or a `ViewAnimation` of the game's own, the hand's motion (as `viewModel.define` takes; keep it shorter than the time between shots). A humanoid figure works a `lever` and a `hammer` too (`HumanoidPoses.lever`, `.hammer`, see docs/HUMANOID.md).
 
@@ -1293,7 +1316,7 @@ game.entities.define('guard', { name: 'Guard', model: Models.character({ build: 
 ```
 
 - A look (`CharacterLook`) is styles by name and colours as CSS hex, all optional: `build` (`slim`, `broad`, `heavy`, and `curvy`), `skin`, `eyes`, `hair` (`short`, `crew`, `buzz`, `slick`, `swept`, `long`, `pomp`, `bob`, `pony`, `bun`, `afro`, `mohawk`, `bald`) and `hairColor`, `facialHair`, `face` (`lashes`, `lipstick`, `freckles`, `shades`, `specs`; for monsters `glow`, eyes glowing their colour, and `skull`), `top` (`tee`, `shirt`, `hoodie`, `sweater`, `suit`, `jacket`, `track`, `camp`, `aloha`, `tank`, `tunic`, `apron`; `ribs`, a skeleton's) with `topColor` and `accent` (a tie, stripes, panels, a print, the trim), `bottom` (`trousers`, `jeans`, `shorts`, `skirt`, `joggers`) and `bottomColor`, `shoes` (`sneakers`, `shoes`, `boots`, `flats`) and `shoeColor`, `hat` (`crown`, `fedora`, `cap`) and `ragged` (holes and frayed hems). `Models.character(look, { scale })` makes one bigger (the Arena's Warden is 1.95).
-- `player.setUniform({ top: 'tunic', topColor: '#c23a30' })` dresses a player's avatar in the game's colours (a team's kit: their top, bottoms and shoes, styles and colours) over what they chose; who they are stays theirs. Null gives them their own clothes back. Bed Wars' teams are dressed that way.
+- `player.setUniform({ top: 'tunic', topColor: '#c23a30' })` dresses a player's avatar in the game's colours (a team's kit: their top, bottoms and shoes, styles and colours) over what they chose; who they are stays theirs. Null gives them their own clothes back. Bed Wars' teams are dressed that way. `hatHair: true` cuts their hair close, for a helmet or a hat the game hangs on their head itself (Block Ice's helmets, on the rig's head joint).
 - An entity holds an item in its right hand with `held` (in its definition, or `entity.held = 'stone_sword'` as it gears up), as a player's figure does.
 - Each is one mesh and one draw call (a few thousand triangles), built in a few milliseconds the first time its look is seen; they fight, hold guns and swords, and wear what's worn as the fighters do.
 

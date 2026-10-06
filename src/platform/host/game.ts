@@ -520,11 +520,12 @@ export class GameHost {
     useGameBlocks(this.blocks);
     const sim = this.sim;
     this.guard(() => {
-      this.world.update(
-        sim.players.filter((p) => !p.vacant).map((p) => p.state),
-        this.radius,
-        this.budget,
-      );
+      // A game that starts by itself (`autoStart`) loads the ground at the spawn first, then starts.
+      const waiting = !!this.def.autoStart && !sim.started;
+      const points: { x: number; z: number }[] = sim.players.filter((p) => !p.vacant).map((p) => p.state);
+      if (waiting) points.push(sim.spawn);
+      this.world.update(points, this.radius, this.budget);
+      if (waiting && this.world.world.has_column(Math.floor(sim.spawn.x / 16), Math.floor(sim.spawn.z / 16))) sim.start();
       const inputs: Record<string, PlayerInput> = {};
       const premoved = new Set<string>();
       for (const c of this.clients.values()) {

@@ -1,5 +1,5 @@
 import { defineServer, type Bot, type GameContext, type IconRef, type MenuHandle, type MenuOptions, type Pickup, type Player, type Vec3 } from '@platform';
-import { guns, melee, navGrid, skipVote, throwables, type NavGrid, type SkipVote } from '@platform/kits';
+import { guns, melee, navGrid, skipVote, throwables, type Guns, type NavGrid, type SkipVote } from '@platform/kits';
 import { AmmoBags } from './ammo';
 import { ATLAS, defineArt, OUTFITS, skinOrigin } from './art';
 import { CaseRounds } from './briefcase';
@@ -14,8 +14,10 @@ import { PlayOfTheGame, POTG_DELAY, POTG_KEEP } from './potg';
 import { BLURBS, defineWeapons, feedIcon, LETHAL_BLURBS, LETHAL_COUNT, LETHALS, PRIMARIES, SIDEARMS, WEAPONS, weaponName, type Lethal, type Primary } from './weapons';
 import { outfitId, setupProgression, type Progression } from './progression'; // [progression]
 import { killcam, killcamHolds, killcamsOff } from './killcam';
+import { DEFAULT_PERKS, hasPerk, PERK_TIERS, PERKS, perkDamage, SECOND_WIND, SLEIGHT, speedOf, streakCost, type PerkId } from './perks';
 import { selfHarm, Streaks } from './streaks';
-import { isStreak, STREAK_IDS, STREAKS } from './streaks/kinds';
+import { DEFAULT_KILLSTREAKS, isKillstreak, isStreak, isStreakWeapon, KILLSTREAK_IDS, KILLSTREAKS, PICKS, STREAKS, type KillstreakId } from './streaks/kinds';
+import { Mortars } from './streaks/mortar';
 
 /**
  * Call of Blocky: fast pulp shootouts against bots and people, on Jackrabbit Lane (a
@@ -35,11 +37,14 @@ import { isStreak, STREAK_IDS, STREAKS } from './streaks/kinds';
  * (the platform's `skipVote` kit).
  *
  * Everyone carries a primary and a sidearm of their choosing (L), a katana and a lethal (G: two
- * Pineapple frags or a Mia firebomb). Whoever goes down drops a bag of ammo: walk over it to top
- * up your spare rounds (ammo.ts). Three kills in a row light up the radar for you (UAV); five get
- * an Adrenaline Shot: faster, and patched up. In a free-for-all or Team Deathmatch, seven earn a
- * Hellstorm missile to steer down onto them, and ten an Attack Chopper to fly and shoot from, each
- * called in with 5 when you like (`streaks/`).
+ * Pineapple frags or a Mia firebomb), with a perk from each of three tiers (`perks.ts`) and three
+ * killstreaks of six (`streaks/kinds.ts`), all picked in the same loadout. Whoever goes down drops
+ * a bag of ammo: walk over it to top up your spare rounds (ammo.ts). The killstreaks, earned at
+ * their count of kills in a row: the UAV (everyone on your radar), the Counter-UAV (their radar
+ * jammed), the Adrenaline Shot (faster, and patched up) and the Mortar Team (shells on them) come
+ * at once; the Hellstorm missile to steer down onto them and the Attack Chopper to fly and shoot
+ * from are called in with 5 when you like (`streaks/`). The ones that hurt people are for the
+ * free-for-all and Team Deathmatch.
  */
 
 const TIME_LIMIT: Record<ModeId, number> = { ffa: 8 * 60, tdm: 10 * 60, case: Infinity };
@@ -48,6 +53,9 @@ const MAX_FIGHTERS = 8;
 const RESPAWN = 3;
 /** How long the Adrenaline Shot lasts. */
 const RUSH = 15;
+/** How long a UAV's sweep lasts, and a Counter-UAV's jamming. */
+const UAV = 25;
+const JAM = 25;
 /**
  * Seconds between the end of a match and the next: with people in it, its final scores, then the
  * vote on what's next (nextvote.ts); with nobody but bots, the scores alone. Between a match
@@ -81,6 +89,10 @@ let rounds: CaseRounds;
 let streaks: Streaks;
 /** Ammo bags the fallen drop (ammo.ts). */
 let ammo: AmmoBags;
+/** The Mortar Team's shells (`streaks/mortar.ts`). */
+let mortars: Mortars;
+/** The gun kit (Sleight of Hand's reloads). */
+let gunKit: Guns | null = null;
 /** Each map's walking grid (built once its blocks have loaded, the first time a match is on it). */
 let navs = new Map<string, NavGrid>();
 /** The map's hotspots, where bots drift (the array the bots read: refilled for each map). */
@@ -133,6 +145,16 @@ function botPrimary(r: number): Primary {
   return 'rifle';
 }
 
+/** A bot's perks and killstreaks: any one from each tier, any three. */
+function botChoice(game: GameContext): Fighter['choice'] {
+  const pool = [...KILLSTREAK_IDS];
+  const killstreaks: KillstreakId[] = [];
+  while (killstreaks.length < PICKS) killstreaks.push(pool.splice(game.rng.int(0, pool.length - 1), 1)[0]);
+  return { perks: PERK_TIERS.map((tier) => tier[game.rng.int(0, tier.length - 1)]), killstreaks: byCost(killstreaks) };
+}
+
+const byCost = (ids: KillstreakId[]) => [...ids].sort((a, b) => KILLSTREAKS[a].kills - KILLSTREAKS[b].kills);
+
 function standings(): Fighter[] {
   return [...fighters.values()].sort((a, b) => b.score - a.score || b.kills - a.kills || a.deaths - b.deaths);
 }
@@ -175,6 +197,12 @@ function addFighter(game: GameContext, p: Player): Fighter {
     uavFor: 0,
     rushUntil: 0,
     streaks: [],
+    choice: p.bot ? botChoice(game) : { perks: [...DEFAULT_PERKS], killstreaks: [...DEFAULT_KILLSTREAKS] },
+    perks: [],
+    killstreaks: [],
+    jamUntil: 0,
+    jamFor: 0,
+    hurtAt: -99,
     firedAt: -99,
     menu: null,
     radar: '',
@@ -264,16 +292,24 @@ function pickSpawn(game: GameContext, me: Player): SpawnPoint {
   return best;
 }
 
+/** Armed with their loadout, and their perks and killstreaks picked for it taken up. */
 function arm(p: Player, f: Fighter) {
+  f.perks = [...f.choice.perks];
+  f.killstreaks = byCost(f.choice.killstreaks);
   const inv = p.inventory;
   inv.clear();
   inv.give(f.primary);
   inv.give(f.sidearm);
   inv.give('katana');
   // The lethal rides in the fourth slot: thrown with G, never switched to.
-  inv.give(f.lethal, LETHAL_COUNT[f.lethal] ?? 1);
+  inv.give(f.lethal, lethalCount(f));
   inv.select(0);
+  p.speed = speedOf(f) * (f.rushUntil ? 1.2 : 1);
+  gunKit?.setReloadSpeed(p, hasPerk(f, 'sleight') ? SLEIGHT : 1);
 }
+
+/** How many lethals a life (Warlord: one more). */
+const lethalCount = (f: Fighter) => (LETHAL_COUNT[f.lethal] ?? 1) + (hasPerk(f, 'warlord') ? 1 : 0);
 
 /** Revive a fighter at a spawn point, armed, protected for a moment. */
 function spawnAt(game: GameContext, f: Fighter, sp: SpawnPoint) {
@@ -284,12 +320,11 @@ function spawnAt(game: GameContext, f: Fighter, sp: SpawnPoint) {
   p.revive();
   p.health = p.maxHealth;
   p.teleport({ x: sp.x, y: sp.y + 0.05, z: sp.z }, sp.yaw, 0);
+  f.rushUntil = 0;
   arm(p, f);
   p.protect(1.5);
-  p.speed = 1;
   f.diedAt = -1;
   f.spawnedAt = game.clock.now;
-  f.rushUntil = 0;
   if (p.bot) bots.reset(p);
   else p.audio.play('respawn');
 }
@@ -312,6 +347,16 @@ function spawn(game: GameContext, f: Fighter) {
  */
 function canPick(_f: Fighter, _item: string): boolean {
   return true;
+}
+
+/** Scavenger: an ammo bag gives back the lethals they've thrown. */
+function scavenge(p: Player) {
+  const f = fighters.get(p.id);
+  if (!f || !hasPerk(f, 'scavenger')) return;
+  const short = lethalCount(f) - p.inventory.count(f.lethal);
+  if (short <= 0) return;
+  p.inventory.give(f.lethal, short);
+  if (!p.bot) p.hud.pop('+LETHAL', { color: COLORS.gold });
 }
 
 function loadoutMenu(game: GameContext, f: Fighter) {
@@ -369,12 +414,52 @@ function loadoutMenu(game: GameContext, f: Fighter) {
           },
         }),
       ); // [progression]
+  // A perk from each tier.
+  const perks = (tier: number) =>
+    PERK_TIERS[tier].map((id: PerkId) => ({
+      label: PERKS[id].name,
+      note: PERKS[id].blurb,
+      active: f.choice.perks[tier] === id,
+      onSelect: () => {
+        f.choice.perks[tier] = id;
+        f.menu?.update({ sections: sections() });
+        pick(PERKS[id].name);
+      },
+    }));
+  // Three killstreaks: a tap takes one, or puts one back.
+  const killstreaks = () =>
+    KILLSTREAK_IDS.map((id) => {
+      const k = KILLSTREAKS[id];
+      const mine = f.choice.killstreaks.includes(id);
+      return {
+        label: k.name,
+        note: k.blurb,
+        detail: `${k.kills} kills`,
+        active: mine,
+        onSelect: () => {
+          if (!mine && f.choice.killstreaks.length >= PICKS) {
+            p.hud.toast(`${PICKS} killstreaks at most: tap one of yours to put it back`);
+            return;
+          }
+          f.choice.killstreaks = mine ? f.choice.killstreaks.filter((x) => x !== id) : byCost([...f.choice.killstreaks, id]);
+          f.menu?.update({ sections: sections() });
+          pick(`Killstreaks (${f.choice.killstreaks.map((x) => KILLSTREAKS[x].name).join(', ') || 'none'})`);
+        },
+      };
+    });
   // [progression] Outfits (the locked greyed out), and the sections all together.
   const outfits = () => xp.outfits(p, f.outfit, (i) => ((f.outfit = i), f.menu?.update({ sections: sections() })));
-  const sections = () => [{ title: 'Primary', entries: entries() }, { title: 'Sidearm', entries: sidearms() }, { title: 'Lethal (G)', entries: lethals() }, outfits()];
+  const sections = () => [
+    { title: 'Primary', entries: entries() },
+    { title: 'Sidearm', entries: sidearms() },
+    { title: 'Lethal (G)', entries: lethals() },
+    ...PERK_TIERS.map((_, t) => ({ title: `Perk ${t + 1}`, entries: perks(t) })),
+    { title: `Killstreaks (pick ${PICKS})`, entries: killstreaks() },
+    outfits(),
+  ];
   f.menu = p.hud.menu({
     title: 'Pick your piece',
-    subtitle: `Level ${xp.level(p)}, more unlocking as you go. Your primary, your sidearm, your lethal and your look; the katana comes along regardless.`, // [progression]
+    subtitle: `Level ${xp.level(p)}, more unlocking as you go. Your primary, your sidearm, your lethal, a perk from each tier, ${PICKS} killstreaks and your look; the katana comes along regardless.`, // [progression]
     sections: sections(), // [progression]
     onClose: () => {
       f.menu = null;
@@ -474,22 +559,8 @@ function onDeath(game: GameContext, victim: Player, source: unknown, weapon: str
       killer.hud.pop(big, { big: true, color: COLORS.gold });
       killer.audio.play('streak');
     }
-    // Streak rewards.
-    if (k.streak === 3) {
-      k.uavUntil = now + 25;
-      k.uavFor = 25;
-      killer.hud.banner('UAV ONLINE', 'Everyone shows on your radar', { color: COLORS.gold, duration: 2 });
-      killer.audio.play('lock');
-    }
-    if (k.streak === 5) {
-      k.rushUntil = now + RUSH;
-      killer.speed = 1.2;
-      killer.heal(killer.maxHealth);
-      killer.hud.banner('ADRENALINE SHOT', 'Faster and patched up, for fifteen seconds', { color: COLORS.pink, duration: 2 });
-      killer.audio.play('heal');
-    }
-    // The ones you call in (a free-for-all or Team Deathmatch): the Hellstorm at seven, the chopper at ten.
-    if (streaks.on) for (const id of STREAK_IDS) if (k.streak === STREAKS[id].kills) streaks.earn(k, id);
+    // Their killstreaks, each at its count (Hardline: a kill sooner).
+    for (const id of k.killstreaks) if (k.streak === streakCost(k, KILLSTREAKS[id].kills) && streakOn(id)) reward(game, k, id);
     game.hud.feed([
       { text: killer.name, color: nameColor(killer, killer.bot ? '#ffe7a3' : COLORS.gold) },
       ...(icon ? [{ icon }] : weapon ? [` ${killName(weapon)} `] : [' ✕ ']),
@@ -501,7 +572,7 @@ function onDeath(game: GameContext, victim: Player, source: unknown, weapon: str
     // KILLCAM hook (killcam.ts): the victim sees it again through the killer's eyes, then respawns.
     killcam(game, victim, killer, weapon, headshot, through, streaks.killcamView(victim, killer, weapon));
     // The Play of the Game (potg.ts): a kill counts toward a play, unless a killstreak made it.
-    if (!isStreak(weapon)) potg.kill(killer, victim, { weapon, headshot, through: through > 0, stopped, color: nameColor(killer, killer.bot ? '#ffe7a3' : COLORS.gold), spawned: k.spawnedAt });
+    if (!isStreakWeapon(weapon)) potg.kill(killer, victim, { weapon, headshot, through: through > 0, stopped, color: nameColor(killer, killer.bot ? '#ffe7a3' : COLORS.gold), spawned: k.spawnedAt });
     // (Hook: whatever else counts a kill, progression say, hears of it here: `k` got `points`.)
     // Achievements (meta.ts), a person's.
     if (!killer.bot) {
@@ -523,6 +594,43 @@ function onDeath(game: GameContext, victim: Player, source: unknown, weapon: str
   if (isCase()) rounds.died(v);
 }
 
+/** Whether a killstreak works in this mode (the ones that hurt people: not in The Briefcase). */
+const streakOn = (id: KillstreakId) => !KILLSTREAKS[id].lethal || streaks.on;
+
+/** A killstreak earned: the ones that come at once go off now; the ones you call in wait for 5. */
+function reward(game: GameContext, f: Fighter, id: KillstreakId) {
+  const p = f.player;
+  const now = game.clock.now;
+  switch (id) {
+    case 'uav':
+      f.uavUntil = now + UAV;
+      f.uavFor = UAV;
+      p.hud.banner('UAV ONLINE', 'Everyone shows on your radar', { color: COLORS.gold, duration: 2 });
+      p.audio.play('lock');
+      return;
+    case 'counter':
+      f.jamUntil = now + JAM;
+      f.jamFor = JAM;
+      p.hud.banner('COUNTER-UAV', "Their radar's jammed", { color: COLORS.teal, duration: 2 });
+      p.audio.play('lock');
+      return;
+    case 'rush':
+      f.rushUntil = now + RUSH;
+      p.speed = speedOf(f) * 1.2;
+      p.heal(p.maxHealth);
+      p.hud.banner('ADRENALINE SHOT', 'Faster and patched up, for fifteen seconds', { color: COLORS.pink, duration: 2 });
+      p.audio.play('heal');
+      return;
+    case 'mortar':
+      mortars.call(f);
+      p.hud.banner('MORTAR TEAM', 'Shells inbound on them', { color: COLORS.red, duration: 2 });
+      p.audio.play('lock');
+      return;
+    default:
+      streaks.earn(f, id);
+  }
+}
+
 /** Points for something done (a plant, a crack), with a pop-up. */
 function award(f: Fighter, points: number, title: string) {
   f.score += points;
@@ -541,6 +649,7 @@ function endMatch(game: GameContext, winner: Player | null, team?: Team, cheat =
   match.phase = 'over';
   overAt = game.clock.now;
   streaks.reset();
+  mortars.reset();
   const table = standings();
   const teams = match.mode.teams;
   // A team match with no winner named (the clock ran out): the side ahead, if any.
@@ -759,21 +868,25 @@ function personalHud(game: GameContext, f: Fighter, dt: number) {
     teamColor: teams ? TEAMS[f.team!].color : '',
     role: isCase() && teams ? (f.team === rounds.attackers ? 'Attacking' : 'Defending') : 'Team',
     carrier: isCase() && rounds.carrier === f ? 'Hold F at A or B' : '',
-    pips: streakPips(f.streak, streaks.on),
-    pipsClass: streaks.on ? 'long' : '',
-    extra: Math.max(0, f.streak - (streaks.on ? STREAKS.chopper.kills : 5)),
+    ...streakCards(f),
     ready: streaks.ready(f),
     uav: Math.max(0, Math.ceil(f.uavUntil - now)),
     uavFor: f.uavFor,
+    counter: Math.max(0, Math.ceil(f.jamUntil - now)),
+    counterFor: f.jamFor,
+    jammed: jammed(f, now),
     rush: Math.max(0, Math.ceil(f.rushUntil - now)),
     rushFor: RUSH,
   });
-  // The radar: their side always (a team mode); enemies who just fired (unsuppressed), or all of them under a UAV.
+  // The radar: their side always (a team mode); enemies who just fired (unless they've Low
+  // Profile), or all of them under a UAV (but those with Ghost). Jammed by the other side's
+  // Counter-UAV, it shows nobody.
   const uav = f.uavUntil > now;
-  const others = [...fighters.values()].filter((e) => e !== f && e.player.alive);
+  const jam = jammed(f, now);
+  const others = jam ? [] : [...fighters.values()].filter((e) => e !== f && e.player.alive);
   const friends = teams ? others.filter((e) => !hostile(p, e.player)) : [];
-  const foes = others.filter((e) => hostile(p, e.player) && (uav || now - e.firedAt < 1.6));
-  const key = `${uav}|${friends.map((b) => b.player.id).join(',')}|${foes.map((b) => b.player.id).join(',')}`;
+  const foes = others.filter((e) => hostile(p, e.player) && ((uav && !hasPerk(e, 'ghost')) || (now - e.firedAt < 1.6 && !hasPerk(e, 'lowprofile'))));
+  const key = `${uav}|${jam}|${friends.map((b) => b.player.id).join(',')}|${foes.map((b) => b.player.id).join(',')}`;
   if (key !== f.radar) {
     f.radar = key;
     // Top right, under their dossier (its streak and what the streak's earned).
@@ -793,6 +906,20 @@ function personalHud(game: GameContext, f: Fighter, dt: number) {
       p.fx.flash('rgba(190, 0, 0, 1)', 0.3, 0.85);
     }
   }
+}
+
+/** Whether an enemy's Counter-UAV has their radar jammed. */
+const jammed = (f: Fighter, now: number) => [...fighters.values()].some((e) => e.jamUntil > now && hostile(e.player, f.player));
+
+/**
+ * The streak's cards on their dossier: one a kill up to their dearest killstreak (that works in
+ * this mode), each killstreak's card marked; past it, the count over.
+ */
+function streakCards(f: Fighter) {
+  const marks: Record<number, string> = {};
+  for (const id of f.killstreaks) if (streakOn(id)) marks[streakCost(f, KILLSTREAKS[id].kills) - 1] = id;
+  const length = Math.max(3, ...Object.keys(marks).map((i) => Number(i) + 1));
+  return { pips: streakPips(f.streak, marks, length), pipsClass: length > 5 ? 'long' : '', extra: Math.max(0, f.streak - length) };
 }
 
 /** Down in The Briefcase: watch a teammate who's still up until the round's out. */
@@ -925,7 +1052,8 @@ export default defineServer(shared, {
     defineArt(game);
     defineWeapons(game);
     defineBriefcase(game);
-    ammo = new AmmoBags(game);
+    ammo = new AmmoBags(game, scavenge);
+    gunKit = guns.of(game);
     // [progression] XP, levels and unlocks: before the game's own listeners (the kill that ends a match still counts).
     xp = setupProgression(game);
     // (Its voices are each screen's, `client/sounds.ts`: played here by name.)
@@ -939,10 +1067,16 @@ export default defineServer(shared, {
     bots.supplies = ammo;
     rounds = new CaseRounds(game, { spawnAt: (f, at) => spawnAt(game, f, at), award, endMatch: (t) => endMatch(game, null, t) });
     streaks = new Streaks(game, { bots, award });
+    mortars = new Mortars(game, (p) => streaks.aloft(p));
+    // An enemy's Counter-UAV scrambles bots too: they stop going after shots they hear.
+    bots.scrambled = (b) => {
+      const f = fighters.get(b.id);
+      return !!f && jammed(f, game.clock.now);
+    };
     bots.aloft = (p) => streaks.aloft(p);
     streaks.setup();
     // (Development: tests reach the match and the streaks.)
-    if (import.meta.env.DEV) (globalThis as unknown as { __cob: unknown }).__cob = { match, streaks };
+    if (import.meta.env.DEV) (globalThis as unknown as { __cob: unknown }).__cob = { match, streaks, bots, reward: (f: Fighter, id: KillstreakId) => reward(game, f, id) };
     vote = skipVote(game, {
       people: () => [...match.fighters.values()].map((f) => f.player),
       // Between The Briefcase's rounds it stays open: that's when people have a moment to vote.
@@ -1000,13 +1134,20 @@ export default defineServer(shared, {
       // Up at a chopper: its hits count against it.
       streaks.shot(player, weapon, from, dir);
     });
-    // No friendly fire in a team mode (your own frag still hurts you).
+    // No friendly fire in a team mode (your own frag still hurts you); then the perks' say (perks.ts).
     game.events.on('damage', (hit) => {
       const by = hit.source;
       // A streak's blast spares its pilot.
       if (selfHarm(hit.weapon, hit.target, by)) return hit.cancel();
-      if (!match.mode.teams || !by || by === 'world' || by.kind !== 'player' || hit.target.kind !== 'player' || by === hit.target) return;
-      if (!hostile(by, hit.target)) hit.cancel();
+      const shooter = by && by !== 'world' && by.kind === 'player' ? by : null;
+      if (hit.target.kind !== 'player') return;
+      if (match.mode.teams && shooter && shooter !== hit.target && !hostile(shooter, hit.target)) return hit.cancel();
+      hit.amount *= perkDamage(hit, fighterOf(hit.target), shooter ? fighterOf(shooter) : undefined);
+    });
+    // Second Wind counts from the last hit.
+    game.events.on('playerDamage', ({ player }) => {
+      const f = fighters.get(player.id);
+      if (f) f.hurtAt = game.clock.now;
     });
     game.commands.register('bots', {
       usage: '<n>',
@@ -1025,17 +1166,17 @@ export default defineServer(shared, {
       },
     });
     game.commands.register('streak', {
-      usage: '<hellstorm|chopper>',
-      help: 'Earn a killstreak now (call it in with 5)',
+      usage: `<${KILLSTREAK_IDS.join('|')}>`,
+      help: 'Earn a killstreak now (the Hellstorm and the chopper: call it in with 5)',
       cheat: true,
-      run: ([id], _g, p) => {
+      run: ([id], g, p) => {
         const f = fighterOf(p);
-        if (!f || !id || !(STREAK_IDS as string[]).includes(id)) return `streaks: ${STREAK_IDS.join(', ')}`;
-        if (!streaks.on) return 'streaks are for the free-for-all and Team Deathmatch';
-        streaks.earn(f, id as (typeof STREAK_IDS)[number]);
-        return `${STREAKS[id as (typeof STREAK_IDS)[number]].name} ready: press 5`;
+        if (!f || !isKillstreak(id)) return `killstreaks: ${KILLSTREAK_IDS.join(', ')}`;
+        if (!streakOn(id)) return `the ${KILLSTREAKS[id].name} is for the free-for-all and Team Deathmatch`;
+        reward(g, f, id);
+        return isStreak(id) ? `${STREAKS[id].name} ready: press 5` : `${KILLSTREAKS[id].name}`;
       },
-      complete: () => [...STREAK_IDS],
+      complete: () => [...KILLSTREAK_IDS],
     });
     // The vote to skip, typed (V does the same): everyone's, not a cheat.
     game.commands.register('skip', {
@@ -1108,7 +1249,7 @@ export default defineServer(shared, {
     ammo.clear();
     nextBriefcase = game.clock.now + 35;
     for (const f of fighters.values()) {
-      Object.assign(f, { kills: 0, deaths: 0, score: 0, streak: 0, best: 0, headshots: 0, plants: 0, defuses: 0, diedAt: -1, uavUntil: 0, uavFor: 0, rushUntil: 0, streaks: [], firedAt: -99, radar: '', multi: 0 });
+      Object.assign(f, { kills: 0, deaths: 0, score: 0, streak: 0, best: 0, headshots: 0, plants: 0, defuses: 0, diedAt: -1, uavUntil: 0, uavFor: 0, rushUntil: 0, jamUntil: 0, jamFor: 0, streaks: [], firedAt: -99, radar: '', multi: 0 });
     }
     for (const p of game.players) if (!fighters.has(p.id)) addFighter(game, p);
     if (match.mode.teams) formTeams(game);
@@ -1146,6 +1287,7 @@ export default defineServer(shared, {
     if (isCase() && match.phase === 'playing') rounds.driveBots(bots);
     // Killstreaks: calling them in (5), flying them, bots firing up at choppers.
     streaks.update(dt);
+    mortars.update();
     // The vote to skip (V), people's only: a vote that carries it ends the match here.
     for (const p of game.players) {
       if (p.bot || !p.input.pressed('KeyV', { dead: true })) continue;
@@ -1205,8 +1347,11 @@ export default defineServer(shared, {
       }
       if (f.rushUntil && now > f.rushUntil) {
         f.rushUntil = 0;
-        p.speed = 1;
+        p.speed = speedOf(f);
       }
+      // Second Wind: health starts coming back sooner (the platform's own regeneration takes over at its delay).
+      const since = now - f.hurtAt;
+      if (hasPerk(f, 'secondwind') && since >= SECOND_WIND.delay && since < 4.5 && p.health < p.maxHealth) p.heal(SECOND_WIND.perSecond * dt);
       const q = p.position;
       // Fallen out of the map, or overboard (an achievement, a hidden one).
       if (q.y < (match.map.sea ?? match.map.bounds.min.y - 4)) {

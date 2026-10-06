@@ -12,7 +12,7 @@ import { STREAK_IDS, STREAKS, type StreakId } from './kinds';
 
 /**
  * The killstreaks you steer, on the server: seven in a row earns a Hellstorm, ten an Attack Chopper
- * (free-for-all and Team Deathmatch). Earned ones wait until called in with 5 (a controller's
+ * (free-for-all and Team Deathmatch), for whoever's picked them (`kinds.ts`). Earned ones wait until called in with 5 (a controller's
  * D-pad left), the latest first, and last until the match is over.
  *
  * Calling one in puts the fighter's controls and camera in it (`flight.ts` flies it, predicted on
@@ -767,5 +767,5 @@ export class Streaks {
   }
 }
 
-/** A streak's blast never hurts its own pilot (`damage` listener). */
-export const selfHarm = (weapon: string | undefined, target: unknown, source: unknown) => (weapon === 'hellstorm' || weapon === 'chopper') && target === source;
+/** A streak's blast never hurts its own pilot, nor the Mortar Team's its caller (`damage` listener). */
+export const selfHarm = (weapon: string | undefined, target: unknown, source: unknown) => (weapon === 'hellstorm' || weapon === 'chopper' || weapon === 'mortar') && target === source;
