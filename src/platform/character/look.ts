@@ -34,8 +34,11 @@ export interface CharacterLook {
   hatHair?: boolean;
 }
 
-/** What a game dresses players' avatars in (`player.setUniform`): a team's colours, its kit, over what they chose. */
-export type Uniform = Pick<CharacterLook, 'top' | 'topColor' | 'accent' | 'bottom' | 'bottomColor' | 'shoes' | 'shoeColor'>;
+/**
+ * What a game dresses players' avatars in (`player.setUniform`): a team's colours, its kit, over what
+ * they chose; `hatHair` cuts their hair close, under a helmet or hat the game puts on them itself.
+ */
+export type Uniform = Pick<CharacterLook, 'top' | 'topColor' | 'accent' | 'bottom' | 'bottomColor' | 'shoes' | 'shoeColor' | 'hatHair'>;
 
 export type CharacterBuild = 'slim' | 'broad' | 'heavy';
 export type HairStyle = 'short' | 'crew' | 'buzz' | 'slick' | 'swept' | 'long' | 'pomp' | 'bob' | 'pony' | 'bun' | 'afro' | 'mohawk' | 'bald';

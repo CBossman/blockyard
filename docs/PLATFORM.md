@@ -87,6 +87,17 @@ src/games/
     bots.ts             bot ballers: drives, pull-ups and threes, passes and lobs, defence, rebounds
     client/             the broadcast camera, the ball and the baskets drawn, the poses (big heads, dunks), the announcer, the crowd
     tools/models.mjs    the ball, the baskets, the nets and the court's markings, built in code
+  blockice/             Block Ice: two-on-two arcade hockey (NHL Open Ice-style), a goalie each: big heads, turbo, slap shots,
+                        one-timers, checks into the glass, catching fire
+    rink.ts puck.ts     the rink's numbers (the boards, the goals); the puck's slide and flight (posts, the bar, the twine)
+    moves.ts            the skaters' movement ability: steering by the screen, gliding on ice, hockey stops, turbo,
+                        wind-ups, check lunges, knockdowns; a goalie's glide to its spot
+    server.ts match.ts  rules: the roster, faceoffs, possession, shots, saves, blocks, pokes, checks, fire, the periods
+    pick.ts levels.ts   the team screen (M) and the bots' levels (Rookie, Pro, All-Star)
+    bots.ts goalies.ts  bot skaters (rushes, wristers and slappers, passes for one-timers, defence) and the goalies
+    client/             the broadcast camera, the rink and goals drawn, everyone's gear (sticks, helmets, skates, goalie
+                        pads), the poses (skating, shots, saves), the announcer, the organ, the goal horn
+    tools/models.mjs    the puck, the boards, the goals and nets, the rink's markings, sticks, helmets and goalie gear
   golf/                 Blockyard Links: eighteen holes, a cart, a mouse swing, sloping greens
     course/             the holes as a yardage book (holes.ts), the land worked out from them (course.ts), its invisible footing in blocks (build.ts)
     physics.ts          the ball: flight (drag, Magnus lift, wind), bounces that dig into the turf, skid and roll, the cup
@@ -1304,7 +1315,7 @@ game.entities.define('guard', { name: 'Guard', model: Models.character({ build: 
 ```
 
 - A look (`CharacterLook`) is styles by name and colours as CSS hex, all optional: `build` (`slim`, `broad`, `heavy`, and `curvy`), `skin`, `eyes`, `hair` (`short`, `crew`, `buzz`, `slick`, `swept`, `long`, `pomp`, `bob`, `pony`, `bun`, `afro`, `mohawk`, `bald`) and `hairColor`, `facialHair`, `face` (`lashes`, `lipstick`, `freckles`, `shades`, `specs`; for monsters `glow`, eyes glowing their colour, and `skull`), `top` (`tee`, `shirt`, `hoodie`, `sweater`, `suit`, `jacket`, `track`, `camp`, `aloha`, `tank`, `tunic`, `apron`; `ribs`, a skeleton's) with `topColor` and `accent` (a tie, stripes, panels, a print, the trim), `bottom` (`trousers`, `jeans`, `shorts`, `skirt`, `joggers`) and `bottomColor`, `shoes` (`sneakers`, `shoes`, `boots`, `flats`) and `shoeColor`, `hat` (`crown`, `fedora`, `cap`) and `ragged` (holes and frayed hems). `Models.character(look, { scale })` makes one bigger (the Arena's Warden is 1.95).
-- `player.setUniform({ top: 'tunic', topColor: '#c23a30' })` dresses a player's avatar in the game's colours (a team's kit: their top, bottoms and shoes, styles and colours) over what they chose; who they are stays theirs. Null gives them their own clothes back. Bed Wars' teams are dressed that way.
+- `player.setUniform({ top: 'tunic', topColor: '#c23a30' })` dresses a player's avatar in the game's colours (a team's kit: their top, bottoms and shoes, styles and colours) over what they chose; who they are stays theirs. Null gives them their own clothes back. Bed Wars' teams are dressed that way. `hatHair: true` cuts their hair close, for a helmet or a hat the game hangs on their head itself (Block Ice's helmets, on the rig's head joint).
 - An entity holds an item in its right hand with `held` (in its definition, or `entity.held = 'stone_sword'` as it gears up), as a player's figure does.
 - Each is one mesh and one draw call (a few thousand triangles), built in a few milliseconds the first time its look is seen; they fight, hold guns and swords, and wear what's worn as the fighters do.
 

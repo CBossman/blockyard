@@ -1317,8 +1317,9 @@ export interface PlayerApi {
   /**
    * Dress their avatar in the game's colours (a team's kit): the top, bottoms and shoes, styles and
    * colours (`{ topColor: '#d33', accent: '#fff' }`), over what they chose; who they are (their
-   * build, face, hair) stays theirs. Null: their own clothes again. For players in their avatars
-   * (a game without `player.model` or `player.skin`, and none given them with `setModel`).
+   * build, face, hair) stays theirs (`hatHair` cuts the hair close, under a helmet the game hangs
+   * on them). Null: their own clothes again. For players in their avatars (a game without
+   * `player.model` or `player.skin`, and none given them with `setModel`).
    */
   setUniform(uniform: Uniform | null): void;
   /**

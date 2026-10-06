@@ -2,6 +2,7 @@ import type { GameDefinition } from '@platform';
 import callofblocky from './callofblocky/server';
 import blockfront from './blockfront/server';
 import blockjam from './blockjam/server';
+import blockice from './blockice/server';
 import arena from './arena/server';
 import starfighter from './starfighter/server';
 import skyship from './skyship/server';
@@ -12,7 +13,7 @@ import heartHunt from './heart-hunt/server';
 import golf from './golf/server';
 
 /** The games a server hosts, as it runs them (shared definition and rules), in the launcher's order. */
-export const games: GameDefinition[] = [callofblocky, blockfront, blockjam, arena, starfighter, skyship, bedwars, golf, obby, sandbox, heartHunt];
+export const games: GameDefinition[] = [callofblocky, blockfront, blockjam, blockice, arena, starfighter, skyship, bedwars, golf, obby, sandbox, heartHunt];
 
 /**
  * Development-only games (a development server hosts them when named; the headless tests use
