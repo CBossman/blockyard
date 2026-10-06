@@ -3,8 +3,8 @@ import cover from './cover.webp?url';
 
 /**
  * Call of Blocky: fast pulp shootouts on Jackrabbit Lane, a Nuketown-style cul-de-sac, at Big
- * Kahuna Burger, aboard Hijacked's yacht and in the Nukeblock test town: free-for-all, Team
- * Deathmatch, and The Briefcase (plant it or stop it).
+ * Kahuna Burger, aboard Hijacked's yacht, in the Nukeblock test town and in Rust's oil yard:
+ * free-for-all, Team Deathmatch, and The Briefcase (plant it or stop it).
  */
 export default defineMeta({
   id: 'callofblocky',
