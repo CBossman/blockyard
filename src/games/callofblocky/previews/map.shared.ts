@@ -6,7 +6,7 @@ import meta from './map.meta';
 /**
  * Dev preview: the maps on their own, to fly round (double-tap Space, or F), in their world and
  * at their time of day. It starts on Jackrabbit Lane; `/tp 512 70 30` goes to Big Kahuna Burger,
- * `/tp -470 75 30` to Hijacked's yacht, `/tp 0 75 540` to Nukeblock.
+ * `/tp -470 75 30` to Hijacked's yacht, `/tp 0 75 540` to Nukeblock, `/tp 0 75 -484` to Rust.
  */
 export const shared = defineShared({
   ...meta,
