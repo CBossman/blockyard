@@ -1,6 +1,7 @@
 import type { Bot, GameContext as Game } from '@platform';
 import { fromRim, HALF_WIDTH, rim, type Side } from './court';
-import { allBallers, ballPos, jamOf, otherTeam, type Baller, type Match } from './match';
+import type { Level } from './levels';
+import { allBallers, ballPos, jamOf, levelOf, otherTeam, type Baller, type Match } from './match';
 import { DUNK_RANGE, SHOT_APEX } from './moves';
 
 /**
@@ -10,11 +11,20 @@ import { DUNK_RANGE, SHOT_APEX } from './moves';
  * the lane's open, passes when they're hounded, and lobs to a teammate leaping at the rim; the other
  * finds an open spot or cuts. On defense each guards a man, between him and the basket: a swipe
  * for the ball now and then, a shove, a leap at a shot. Everyone crashes the boards.
+ *
+ * How well they do all that is their level's (`levels.ts`): the room's against people, an
+ * All-Star's against bots.
  */
 
 interface Mind {
-  /** How good they are (0..1): their timing, their reads, how often they try things. */
+  /** Where they stand in their level's range of skill (0..1, theirs for the game). */
+  talent: number;
+  /** How good they are (0..1): their timing, their reads, how often they try things. Their level's. */
   skill: number;
+  level: Level;
+  /** Whether they'll use turbo for now (a level that leans on it less often doesn't), and till when. */
+  boost: boolean;
+  boostAt: number;
   /** Shoot is held (a jump shot), and when to let go (match clock). */
   shooting: boolean;
   releaseAt: number;
@@ -37,8 +47,9 @@ interface Mind {
 const minds = new Map<Baller, Mind>();
 
 export const bots = {
-  add(b: Baller) {
-    minds.set(b, { skill: 0.5 + Math.random() * 0.3, shooting: false, releaseAt: 0, tap: 0, thinkAt: 0, spot: null, spotUntil: 0, leaptAt: -9, plan: 'drive', planSpot: null, had: false });
+  add(m: Match, b: Baller) {
+    const level = levelOf(m, b);
+    minds.set(b, { talent: Math.random(), skill: 0.5, level, boost: true, boostAt: 0, shooting: false, releaseAt: 0, tap: 0, thinkAt: 0, spot: null, spotUntil: 0, leaptAt: -9, plan: 'drive', planSpot: null, had: false });
   },
   forget(b: Baller) {
     minds.delete(b);
@@ -59,8 +70,8 @@ export const bots = {
 
 const KEYS = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ShiftLeft'];
 
-/** Run toward a point on the floor (8 ways, as the keys go), turbo if asked. */
-function runTo(bot: Bot, at: { x: number; z: number }, turbo: boolean, near = 0.35) {
+/** Run toward a point on the floor (8 ways, as the keys go), turbo if asked (and they're using it). */
+function runTo(bot: Bot, mind: Mind, at: { x: number; z: number }, turbo: boolean, near = 0.35) {
   const p = bot.position;
   const dx = at.x - p.x;
   const dz = at.z - p.z;
@@ -72,7 +83,7 @@ function runTo(bot: Bot, at: { x: number; z: number }, turbo: boolean, near = 0.
   bot.controls.hold('KeyA', ux < -0.38);
   bot.controls.hold('KeyS', uz > 0.38);
   bot.controls.hold('KeyW', uz < -0.38);
-  bot.controls.hold('ShiftLeft', go && turbo);
+  bot.controls.hold('ShiftLeft', go && turbo && mind.boost);
   if (go) face(bot, dx, dz);
 }
 
@@ -88,6 +99,14 @@ function face(bot: Bot, dx: number, dz: number) {
 
 function think(game: Game, m: Match, b: Baller, bot: Bot, mind: Mind, now: number) {
   const s = jamOf(bot);
+  // Their level now (people come and go, the score moves, the room changes it).
+  const level = levelOf(m, b);
+  mind.level = level;
+  mind.skill = level.skill[0] + mind.talent * (level.skill[1] - level.skill[0]);
+  if (now >= mind.boostAt) {
+    mind.boostAt = now + 0.8 + Math.random();
+    mind.boost = Math.random() < level.turbo;
+  }
   // A tap of shoot lasts one tick.
   if (mind.tap > 0) {
     mind.tap--;
@@ -120,7 +139,7 @@ function think(game: Game, m: Match, b: Baller, bot: Bot, mind: Mind, now: numbe
   if (ball.mode === 'dead') {
     // Back on defense or up the floor while it's dead.
     const own = holderSide(m, b) ?? -b.team.side;
-    runTo(bot, { x: own * 6, z: b === b.team.ballers[0] ? -2 : 3 }, false, 0.8);
+    runTo(bot, mind, { x: own * 6, z: b === b.team.ballers[0] ? -2 : 3 }, false, 0.8);
     return;
   }
   if (holder && holder.team === b.team) return offenseOffBall(game, m, b, bot, mind, now, holder);
@@ -175,7 +194,7 @@ function offenseWithBall(_game: Game, m: Match, b: Baller, bot: Bot, mind: Mind,
   }
   const mate = b.team.ballers.find((x) => x !== b);
   if (now >= mind.thinkAt) {
-    mind.thinkAt = now + 0.18 + (1 - mind.skill) * 0.25;
+    mind.thinkAt = now + 0.18 + (1 - mind.skill) * 0.25 + mind.level.slow;
     // A teammate leaping at the rim: lob it up.
     if (mate) {
       const ms = jamOf(mate.player);
@@ -190,7 +209,7 @@ function offenseWithBall(_game: Game, m: Match, b: Baller, bot: Bot, mind: Mind,
     // The lane's open (or they're on fire): to the rim for a dunk.
     const fire = s.fire === 1;
     const laneOpen = guard > 1.6 || fire || Math.random() < 0.08;
-    if (mind.plan === 'drive' && d < DUNK_RANGE * 0.92 && laneOpen && (s.turbo > 0.15 || fire)) {
+    if (mind.plan === 'drive' && d < DUNK_RANGE * 0.92 && laneOpen && (s.turbo > 0.15 || fire) && (fire || Math.random() < 0.3 + 0.7 * mind.level.turbo)) {
       bot.controls.hold('ShiftLeft', true);
       tap(bot, mind);
       return;
@@ -223,7 +242,7 @@ function offenseWithBall(_game: Game, m: Match, b: Baller, bot: Bot, mind: Mind,
   }
   // To their spot for a jumper or a three; else drive at the rim, swerving round the man in the way.
   if (mind.planSpot) {
-    runTo(bot, mind.planSpot, s.turbo > 0.4 && guard < 2, 0.4);
+    runTo(bot, mind, mind.planSpot, s.turbo > 0.4 && guard < 2, 0.4);
     // Taking too long: drive instead.
     if (m.shotClock < 9) mind.planSpot = null;
     return;
@@ -235,7 +254,7 @@ function offenseWithBall(_game: Game, m: Match, b: Baller, bot: Bot, mind: Mind,
     tz += away * 2.2;
   }
   tz = Math.max(-HALF_WIDTH + 1, Math.min(HALF_WIDTH - 1, tz));
-  runTo(bot, { x: tx, z: tz }, s.turbo > 0.35 && (guard > 1.5 || d > 9), 0.5);
+  runTo(bot, mind, { x: tx, z: tz }, s.turbo > 0.35 && (guard > 1.5 || d > 9), 0.5);
 }
 
 function offenseOffBall(_game: Game, _m: Match, b: Baller, bot: Bot, mind: Mind, now: number, holder: Baller) {
@@ -266,7 +285,7 @@ function offenseOffBall(_game: Game, _m: Match, b: Baller, bot: Bot, mind: Mind,
     mind.spot = spots[scored.indexOf(Math.max(...scored))];
     mind.spotUntil = now + 2 + Math.random() * 2.5;
   }
-  runTo(bot, mind.spot, false, 0.6);
+  runTo(bot, mind, mind.spot, false, 0.6);
 }
 
 function defend(_game: Game, m: Match, b: Baller, bot: Bot, mind: Mind, now: number, holder: Baller) {
@@ -285,25 +304,26 @@ function defend(_game: Game, m: Match, b: Baller, bot: Bot, mind: Mind, now: num
   const dx = home.x - mp.x;
   const dz = home.z - mp.z;
   const dd = Math.hypot(dx, dz) || 1;
-  const gap = onBall ? 1.1 : 2.2;
+  const L = mind.level;
+  const gap = onBall ? L.gap : 2.2 + (L.gap - 1.1) * 0.5;
   const at = { x: mp.x + (dx / dd) * gap, z: mp.z + (dz / dd) * gap };
   const far = Math.hypot(at.x - p.x, at.z - p.z);
-  runTo(bot, at, far > 3 && s.turbo > 0.3, 0.3);
+  runTo(bot, mind, at, far > 3 && s.turbo > 0.3, 0.3);
   face(bot, mp.x - p.x, mp.z - p.z);
   if (!onBall) return;
   const hs = jamOf(holder.player);
   const close = Math.hypot(hp.x - p.x, hp.z - p.z);
   // A leap at a shot going up, or a dunk coming in.
   if (s.air === 0 && now - mind.leaptAt > 0.8) {
-    if ((hs.air === 1 && hs.t < 0.22 && close < 1.6 && Math.random() < 0.08 + mind.skill * 0.08) || (hs.air === 3 && close < 2.6 && Math.random() < 0.03 + mind.skill * 0.04)) {
+    if ((hs.air === 1 && hs.t < 0.22 && close < 1.6 && Math.random() < (0.08 + mind.skill * 0.08) * L.leap) || (hs.air === 3 && close < 2.6 && Math.random() < (0.03 + mind.skill * 0.04) * L.leap)) {
       mind.leaptAt = now;
       tap(bot, mind);
       return;
     }
   }
   // A swipe, now and then; a shove, more rarely.
-  if (close < 1.5 && hs.air === 0 && Math.random() < 0.006 + mind.skill * 0.01) bot.controls.press('KeyE');
-  else if (close < 1.8 && Math.random() < 0.004 + mind.skill * 0.004 && s.turbo > 0.3) {
+  if (close < 1.5 && hs.air === 0 && Math.random() < (0.006 + mind.skill * 0.01) * L.steal) bot.controls.press('KeyE');
+  else if (close < 1.8 && Math.random() < (0.004 + mind.skill * 0.004) * L.shove && s.turbo > 0.3) {
     bot.controls.hold('ShiftLeft', true);
     bot.controls.press('KeyE');
   }
@@ -324,16 +344,16 @@ function chase(_game: Game, m: Match, b: Baller, bot: Bot, mind: Mind, now: numb
     const r = rim(side);
     const off = ball.by.team === b.team;
     const spot = { x: r.x - side * (off ? 1.6 : 1.1), z: (b === mates[0] ? -1 : 1) * 1.4 };
-    runTo(bot, spot, false, 0.4);
+    runTo(bot, mind, spot, false, 0.4);
     face(bot, r.x - p.x, r.z - p.z);
     return;
   }
   if (!nearest && ball.kind !== 'tip') {
     // The other drops back a little toward the basket we defend.
-    runTo(bot, { x: -b.team.side * 5, z: 0 }, false, 1);
+    runTo(bot, mind, { x: -b.team.side * 5, z: 0 }, false, 1);
     return;
   }
-  runTo(bot, at, Math.hypot(at.x - p.x, at.z - p.z) > 3 && s.turbo > 0.2, 0.2);
+  runTo(bot, mind, at, Math.hypot(at.x - p.x, at.z - p.z) > 3 && s.turbo > 0.2, 0.2);
   // Leap for it if it's above their reach and right there.
   const high = at.y - p.y;
   if (s.air === 0 && high > 2.3 && high < 4.2 && Math.hypot(at.x - p.x, at.z - p.z) < 1.4 && now - mind.leaptAt > 0.7) {

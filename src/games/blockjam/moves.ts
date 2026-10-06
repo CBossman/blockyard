@@ -45,6 +45,8 @@ export interface JamState {
   ball: number;
   /** On fire (unlimited turbo, further dunks). The game's. */
   fire: number;
+  /** Running speed, times the usual (the game's: a bot's level slows it; people always 1). */
+  pace: number;
   /** Turbo left, 0..1. */
   turbo: number;
   /**
@@ -79,6 +81,7 @@ export const JAM_STATE: JamState = {
   side: 1,
   ball: 0,
   fire: 0,
+  pace: 1,
   turbo: 1,
   air: 0,
   t: 0,
@@ -149,7 +152,7 @@ export const jam: MovementAbility<JamState> = {
     const boosting = turbo && s.turbo > 0 && len > 0 && s.stun <= 0;
     if (boosting && !s.fire) s.turbo = Math.max(0, s.turbo - dt / TURBO_DRAIN);
     else if (!turbo) s.turbo = Math.min(1, s.turbo + dt / TURBO_FILL);
-    body.speed = (boosting ? TURBO : RUN) / RUN;
+    body.speed = ((boosting ? TURBO : RUN) / RUN) * (s.pace || 1);
 
     // Knocked down: flat on the floor, pushed along at first, no controls.
     if (s.stun > 0) {

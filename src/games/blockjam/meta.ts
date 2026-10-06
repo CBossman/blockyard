@@ -14,6 +14,7 @@ export default defineMeta({
     ['Shift + Space', 'dunk, near the basket'],
     ['E / RMB', 'pass · steal'],
     ['Shift + E', 'shove'],
+    ['M', 'teams · bots'],
   ],
   // Controllers: A shoots, X passes and steals, the right trigger and bumper are turbo.
   gamepad: {
@@ -23,7 +24,7 @@ export default defineMeta({
     X: ['KeyE', 'pass · steal'],
     LT: ['KeyE', 'pass · steal'],
     B: null,
-    Y: null,
+    Y: ['KeyM', 'teams'],
     LB: null,
     L3: null,
     R3: null,
@@ -34,7 +35,7 @@ export default defineMeta({
     Back: ['Tab', 'box score'],
   },
   // Touch: the big button shoots, the one beside it is turbo, pass and steal by them.
-  touch: { RT: ['Space', 'shoot'], LT: ['ShiftLeft', 'turbo'], A: null, X: ['KeyE', 'pass · steal'], RB: null, LB: null, Back: null },
+  touch: { RT: ['Space', 'shoot'], LT: ['ShiftLeft', 'turbo'], A: null, X: ['KeyE', 'pass · steal'], Y: ['KeyM', 'teams'], RB: null, LB: null, Back: null },
   instances: true,
   achievements: {
     first_bucket: { title: 'Bucket', description: 'Score your first basket' },

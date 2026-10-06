@@ -3,15 +3,18 @@ import { advance, arc, launch, shotTime, type BallEvent } from './ball';
 import { bots } from './bots';
 import { BALL_RADIUS, FLOOR, fromRim, isThree, rim, RIM_HEIGHT, type Side } from './court';
 import { defineHud, resetHud, showHud } from './hud';
-import { allBallers, ballPos, jamOf, otherTeam, type Baller, type Match, type Team } from './match';
+import { LEVELS, type LevelId } from './levels';
+import { allBallers, ballPos, jamOf, levelOf, otherTeam, type Baller, type Match, type Team } from './match';
 import { DUNK_STYLES, releaseError } from './moves';
+import { definePick, PICK, pickData } from './pick';
 import { MSG, type BallMsg, type BallersMsg, type CallMsg, type FlightKind, type MomentMsg } from './protocol';
 import { shared } from './shared';
 import { botLook, TEAMS, uniformOf, type TeamDef } from './teams';
 
 /**
  * Block Jam's rules: two on two, people and bots (bots fill the empty places, and give way when a
- * person joins), four quarters of two minutes, a 24-second shot clock, no fouls. The ball is the
+ * person joins: each picks their team on the team screen, `pick.ts`, and the first person in
+ * starts a new game), four quarters of two minutes, a 24-second shot clock, no fouls. The ball is the
  * server's: who holds it, its flights (shots, passes, swats, loose balls: `ball.ts`, played out the
  * same on every screen), rebounds, steals, shoves, blocks, baskets. Three in a row and a baller
  * catches fire.
@@ -30,6 +33,15 @@ let m: Match;
 /** (Only while a new game's setting up is there no match.) */
 /** People waiting for a place (both teams full of people). */
 const waiting = new Set<Player>();
+/** People who haven't picked a team yet (the team screen's up), and people who'd rather watch. */
+const choosing = new Set<Player>();
+const watching = new Set<Player>();
+/** Who has the team screen up (it's kept current for them). */
+const picking = new Set<Player>();
+/** The team each person last played for (the next game puts them there again). */
+const prefs = new Map<Player, string>();
+/** How hard the bots play against people (the room's: kept from game to game). */
+let level: LevelId = 'pro';
 /** Which visitors come to town next. */
 let visitors = 1;
 let tick = 0;
@@ -47,14 +59,27 @@ export default defineServer(shared, {
       ['jam_court', 'Court'],
       ['jam_shadow', 'Shadow'],
     ]) game.items.define(id, { kind: 'misc', name, icon: { block: 'orange_concrete' } });
+    definePick(game, {
+      team: (p, id) => take(game, p, id),
+      level: (p, id) => setLevel(game, p, id),
+      watch: (p) => watch(game, p),
+      close: (p) => {
+        picking.delete(p);
+        // Closed without picking: wherever there's room.
+        if (choosing.has(p)) take(game, p);
+      },
+    });
     game.events.on('playerJoin', ({ player }) => {
       if (player.bot) return;
-      join(game, player);
+      // Watching till they pick a team.
+      choosing.add(player);
+      player.spectate(true);
     });
     game.events.on('playerLeave', ({ player }) => leave(game, player));
     game.events.on('playerReady', ({ player }) => {
       // Their camera off their eyes (so their own figure's drawn); the screen's broadcast camera takes it from there.
       player.camera.orbit(player, { distance: 4, min: 4, max: 4, wheel: false });
+      if (choosing.has(player)) showPick(game, player);
     });
     game.events.on('ability', ({ player, name }) => {
       if (m) onAbility(game, player, name);
@@ -70,9 +95,9 @@ export default defineServer(shared, {
     for (const b of [...game.bots.all]) game.bots.remove(b);
     bots.clear();
     tick = 0;
-    const home = TEAMS[0];
-    const away = TEAMS[visitors % TEAMS.length === 0 ? 1 : visitors % TEAMS.length];
-    visitors = visitors % (TEAMS.length - 1) + 1;
+    picking.clear();
+    const people = game.players.filter((p) => !p.bot);
+    const [home, away] = matchup(people);
     m = {
       teams: [makeTeam(0, home, 1), makeTeam(1, away, -1)],
       ball: { mode: 'dead', holder: null, flight: null, launchedAt: 0, kind: 'tip', by: null, points: 0, to: null, touched: false, deadUntil: 0, inbound: null, dunker: null, tried: new Set() },
@@ -82,12 +107,18 @@ export default defineServer(shared, {
       shotClock: SHOT_CLOCK,
       phaseUntil: game.clock.now + 2.5,
       nextPossession: 1,
+      level,
     };
     game.hud.crosshair(false);
-    // Whoever's here already takes the floor; bots fill the rest.
-    for (const p of game.players) if (!p.bot) join(game, p);
+    // Whoever's here already takes the floor, for the team they last played for; bots fill the rest.
+    // (Anyone still picking, or watching, watches; a restart took the team screen down.)
+    for (const p of people) {
+      if (choosing.has(p) || watching.has(p)) p.spectate(true);
+      else join(game, p, m.teams.find((t) => t.def.id === prefs.get(p)));
+    }
     fill(game);
     tipOff(game);
+    for (const p of choosing) showPick(game, p);
     // In development, tests reach in (`__game.dev('__jam.give(me)')`).
     if (import.meta.env.DEV) (globalThis as unknown as { __jam: unknown }).__jam = { get match() { return m; }, give: (p: Player) => { const b = ballerOf(p); if (b) { m.phase = 'live'; for (const x of allBallers(m)) x.player.freeze(false); giveBall(game, b); } }, pass: (p: Player) => { const b = ballerOf(p); if (b) pass(game, b); } };
   },
@@ -103,7 +134,11 @@ export default defineServer(shared, {
       s.side = b.team.side;
       s.ball = m.ball.mode === 'held' && m.ball.holder === b ? 1 : 0;
       s.fire = b.fireMakes > 0 || b.streak >= 3 ? 1 : 0;
+      s.pace = b.player.bot ? levelOf(m, b).pace : 1;
     }
+    // The team screen: on M, and kept current while it's up.
+    for (const p of game.players) if (!p.bot && p.input.pressed('KeyM')) showPick(game, p);
+    if (tick % 10 === 0) for (const p of picking) showPick(game, p);
     phaseStep(game, dt, now);
     if (m.phase === 'live' || m.phase === 'tip') {
       ballStep(game, now);
@@ -127,19 +162,86 @@ function newBaller(player: Player, team: Team): Baller {
   return { player, team, pts: 0, reb: 0, ast: 0, stl: 0, blk: 0, dunks: 0, threes: 0, streak: 0, fireMakes: 0, stealAt: 0, shoveAt: 0, passedAt: -9, passedTo: null };
 }
 
-/** A person comes onto the floor: the side with fewer people, a bot giving way; or they watch. */
-function join(game: Game, player: Player) {
-  if (!m || allBallers(m).some((b) => b.player === player)) return;
-  const people = (t: Team) => t.ballers.filter((b) => !b.player.bot).length;
-  const [a, b] = m.teams;
-  const team = people(a) <= people(b) ? a : b;
-  if (people(team) >= PER_TEAM) {
-    waiting.add(player);
-    player.spectate(true);
+/** The two teams for a new game: the ones people last played for, else the home side and the next visitors. */
+function matchup(people: Player[]): [TeamDef, TeamDef] {
+  const wanted: TeamDef[] = [];
+  for (const p of people) {
+    if (choosing.has(p) || watching.has(p)) continue;
+    const d = TEAMS.find((t) => t.id === prefs.get(p));
+    if (d && !wanted.includes(d)) wanted.push(d);
+  }
+  const home = wanted[0] ?? TEAMS[0];
+  let away = wanted[1];
+  while (!away || away === home) away = TEAMS[visitors++ % TEAMS.length];
+  return [home, away];
+}
+
+/** People on the floor (on either team), besides `but`. */
+const playing = (but?: Player) => allBallers(m).filter((b) => !b.player.bot && b.player !== but);
+
+/**
+ * A person takes the floor: for the team they picked (`id`), or wherever there's room. The first
+ * person in starts a new game (the bots' game on show makes way). A team that isn't in this game
+ * takes over a side nobody else plays on (theirs first), in its colours, with its own bench.
+ */
+function take(game: Game, player: Player, id?: string) {
+  if (!m) return;
+  const def = id ? TEAMS.find((t) => t.id === id) : undefined;
+  if (id && !def) return;
+  const mine = ballerOf(player);
+  if (!mine && !playing().length) {
+    choosing.delete(player);
+    watching.delete(player);
+    if (def) prefs.set(player, def.id);
+    else prefs.delete(player);
+    closePick(player);
+    game.restart();
     return;
   }
+  let team = def ? m.teams.find((t) => t.def === def) : undefined;
+  if (def && !team) {
+    const free = (t: Team) => !t.ballers.some((b) => !b.player.bot && b.player !== player);
+    team = mine && free(mine.team) ? mine.team : m.teams.find(free);
+    if (!team) {
+      player.hud.toast('Both teams have people on them: join one');
+      return;
+    }
+    rebrand(game, team, def);
+  }
+  if (join(game, player, team)) closePick(player);
+}
+
+/**
+ * Onto the floor for `want` (or the side with fewer people), a bot giving way; both full of people,
+ * they wait, watching. True if they're on the floor now.
+ */
+function join(game: Game, player: Player, want?: Team): boolean {
+  if (!m) return false;
+  const current = ballerOf(player);
+  const people = (t: Team) => t.ballers.filter((b) => !b.player.bot && b.player !== player).length;
+  const [a, b] = m.teams;
+  let team = want ?? (people(a) <= people(b) ? a : b);
+  if (people(team) >= PER_TEAM) {
+    if (want) {
+      player.hud.toast(`The ${team.def.name} are full`);
+      return !!current;
+    }
+    team = otherTeam(m, team);
+    if (people(team) >= PER_TEAM) {
+      if (current) return true;
+      waiting.add(player);
+      choosing.delete(player);
+      player.spectate(true);
+      return false;
+    }
+  }
+  choosing.delete(player);
+  watching.delete(player);
   waiting.delete(player);
+  prefs.set(player, team.def.id);
+  if (current?.team === team) return true;
   player.spectate(false);
+  if (current) removeBaller(game, current, false);
   // A bot on that side makes room (where it stood is where they come on).
   const bot = team.ballers.find((x) => x.player.bot);
   let at = { x: -team.side * 4, y: FLOOR, z: 3 };
@@ -149,14 +251,70 @@ function join(game: Game, player: Player) {
   }
   const baller = newBaller(player, team);
   team.ballers.push(baller);
+  dress(player, team);
+  player.teleport(at, team.side > 0 ? -Math.PI / 2 : Math.PI / 2);
+  if (m.phase === 'tip' || m.phase === 'over') player.freeze(true);
+  fill(game);
+  return true;
+}
+
+function dress(player: Player, team: Team) {
   player.setUniform(uniformOf(team.def));
   player.color = team.def.color;
-  player.teleport(at, team.side > 0 ? -Math.PI / 2 : Math.PI / 2);
+}
+
+/** A side changes teams (the score stays the side's): its people in the new colours, its bots off for the new bench. */
+function rebrand(game: Game, team: Team, def: TeamDef) {
+  team.def = def;
+  for (const b of [...team.ballers]) {
+    if (b.player.bot) removeBaller(game, b);
+    else dress(b.player, team);
+  }
   fill(game);
+  call(game, { text: `${def.city} ${def.name}`.toUpperCase(), sub: 'Take the floor', color: def.color, roar: 0.4 });
+}
+
+/** Off the floor to watch (a bot takes their place, or someone waiting). */
+function watch(game: Game, player: Player) {
+  const mine = ballerOf(player);
+  choosing.delete(player);
+  waiting.delete(player);
+  watching.add(player);
+  closePick(player);
+  player.spectate(true);
+  if (!mine) return;
+  removeBaller(game, mine, false);
+  const next = [...waiting][0];
+  if (next) join(game, next);
+  fill(game);
+}
+
+function setLevel(game: Game, player: Player, id: string) {
+  if (!(id in LEVELS) || id === level) return;
+  level = id as LevelId;
+  if (m) m.level = level;
+  game.hud.feed(`${player.name} set the bots to ${LEVELS[level].name}`, { color: '#ffd23f' });
+  for (const p of picking) showPick(game, p);
+}
+
+/** The team screen, up (or kept current) on a person's screen. */
+function showPick(game: Game, player: Player) {
+  if (!m || player.bot || !game.players.includes(player)) return;
+  picking.add(player);
+  player.hud.widget(PICK, pickData(m, player, { watching: watching.has(player), perTeam: PER_TEAM }));
+}
+
+function closePick(player: Player) {
+  if (!picking.delete(player)) return;
+  player.hud.widget(PICK).remove();
 }
 
 function leave(game: Game, player: Player) {
   waiting.delete(player);
+  choosing.delete(player);
+  watching.delete(player);
+  picking.delete(player);
+  prefs.delete(player);
   if (!m) return;
   const b = allBallers(m).find((x) => x.player === player);
   if (!b) return;
@@ -193,7 +351,8 @@ function fill(game: Game) {
       const baller = newBaller(bot, t);
       t.ballers.push(baller);
       bot.teleport({ x: -t.side * (3 + t.ballers.length * 2), y: FLOOR, z: t.ballers.length === 1 ? -2 : 3 }, t.side > 0 ? -Math.PI / 2 : Math.PI / 2);
-      bots.add(baller);
+      if (m.phase === 'tip' || m.phase === 'over') bot.freeze(true);
+      bots.add(m, baller);
     }
   }
 }
@@ -388,9 +547,9 @@ function ballStep(game: Game, now: number) {
       const p = x.player.position;
       const hand = { x: p.x, y: p.y + 2.45, z: p.z };
       if (Math.hypot(f.x - hand.x, f.y - hand.y, f.z - hand.z) < 0.72 && !b.tried.has(x)) {
-        // One try each: the hand gets there, or just misses.
+        // One try each: the hand gets there, or just misses (a bot's level says how often, on a person's shot).
         b.tried.add(x);
-        if (game.rng.range(0, 1) < 0.55) {
+        if (game.rng.range(0, 1) < swatChance(x, b.by)) {
           swat(game, x, b.by, { x: f.x, y: f.y, z: f.z });
           return;
         }
@@ -447,6 +606,11 @@ function ballStep(game: Game, now: number) {
     call(game, { text: 'PICKED OFF!', color: best.team.def.color });
   }
   giveBall(game, best);
+}
+
+/** How likely a leap that gets a hand to a shot swats it: a bot's level says, on a person's shot. */
+function swatChance(blocker: Baller, shooter: Baller): number {
+  return blocker.player.bot && !shooter.player.bot ? levelOf(m, blocker).swat : 0.55;
 }
 
 /** A swatted shot: away it goes, and the blocker's on the highlight reel. */
@@ -552,8 +716,17 @@ function shoot(game: Game, b: Baller, timing: number) {
   const t = Math.abs(timing);
   chance += t < 0.05 ? 0.14 : t < 0.12 ? 0.05 : t < 0.22 ? -0.08 : -0.22;
   let guard = Infinity;
-  for (const x of otherTeam(m, b.team).ballers) guard = Math.min(guard, flat(x.player.position, p));
-  chance -= guard < 1.1 ? 0.2 : guard < 2 ? 0.09 : 0;
+  let guardBy: Baller | null = null;
+  for (const x of otherTeam(m, b.team).ballers) {
+    const g = flat(x.player.position, p);
+    if (g < guard) [guard, guardBy] = [g, x];
+  }
+  // A bot shoots as well as its level; a person over bots gets the level's help (a looser contest).
+  const lv = b.player.bot ? levelOf(m, b) : null;
+  const vs = !b.player.bot && otherTeam(m, b.team).ballers.some((x) => x.player.bot) ? LEVELS[m.level] : null;
+  const contest = guardBy?.player.bot && vs ? vs.contest : 1;
+  chance -= (guard < 1.1 ? 0.2 : guard < 2 ? 0.09 : 0) * contest;
+  chance += (lv?.aim ?? 0) + (vs?.help ?? 0);
   if (s.fire) chance = Math.max(chance, 0.6) + 0.3;
   else if (b.streak === 2) chance += 0.06;
   chance = Math.max(0.02, Math.min(0.96, chance));
@@ -607,7 +780,7 @@ function dunkStep(game: Game, d: Baller) {
     const q = x.player.position;
     if (flat(p, q) < 1.25 && Math.abs(p.y - q.y) < 1.4 && q.y > FLOOR + 0.3) {
       m.ball.tried.add(x);
-      if (game.rng.range(0, 1) > 0.4) continue;
+      if (game.rng.range(0, 1) > 0.4 * (swatChance(x, d) / 0.55)) continue;
       // Stuffed: they drop out of the air, the ball flies.
       s.air = 5;
       s.t = 0;
@@ -700,6 +873,8 @@ function steal(game: Game, b: Baller, now: number) {
   if (dot < 0.2) chance += 0.14;
   if (hs.air === 1) chance -= 0.12;
   if (hs.fire) chance -= 0.18;
+  // A bot's hands are as quick as its level, reaching for a person's ball.
+  if (b.player.bot && !h.player.bot) chance *= levelOf(m, b).pick;
   if (game.rng.range(0, 1) >= chance) return;
   b.stl++;
   if (!b.player.bot) b.player.achieve('pickpocket');

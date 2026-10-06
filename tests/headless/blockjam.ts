@@ -2,9 +2,11 @@ import { readFileSync } from 'node:fs';
 import { advance, arc, launch, shotTime, type BallEvent } from '../../src/games/blockjam/ball';
 import { FLOOR, isThree, rim } from '../../src/games/blockjam/court';
 import { dunkPath, dunkTarget, JAM_STATE, SHOT_APEX } from '../../src/games/blockjam/moves';
+import { levelOf } from '../../src/games/blockjam/match';
 import blockjam, { matchNow } from '../../src/games/blockjam/server';
 import { GameHost } from '../../src/platform/host/game';
 import { check } from './_harness';
+import { personGame } from './_jam-levels';
 
 const wasm = readFileSync('engine/pkg/voxel_engine_bg.wasm');
 
@@ -12,7 +14,8 @@ const wasm = readFileSync('engine/pkg/voxel_engine_bg.wasm');
  * Block Jam: the ball (a shot through the middle drops from anywhere, one at the back of the rim
  * clanks out, the flight is the same played in one go or in pieces), the court (threes), a dunk's
  * path (it ends at the rim), and a whole game of bots played out headless: tip-off, four quarters,
- * the final buzzer, a winner, and box scores that add up to the score.
+ * the final buzzer, a winner, and box scores that add up to the score; the team screen (the first
+ * pick starts a new game, joining, taking a side over, watching) and the bots' levels.
  */
 export default function blockjamTest() {
   // Shots through the middle, from close in, the elbow, the arc and deep.
@@ -85,26 +88,118 @@ export default function blockjamTest() {
   }
   const all = [...a.ballers, ...b.ballers];
   check(all.reduce((n, x) => n + x.dunks, 0) > 0 && all.reduce((n, x) => n + x.reb, 0) > 0 && all.reduce((n, x) => n + x.stl, 0) > 0, 'dunks, rebounds and steals');
-  // People coming and going: each who takes the floor gets the turbo meter, even in a place
-  // someone left (the first player's place is the same player for whoever takes it next).
+  // People coming and going: each picks a team on the team screen; the first in starts a new game
+  // for theirs; each who takes the floor gets the turbo meter, even in a place someone left (the
+  // first player's place is the same player for whoever takes it next).
+  let picks = '';
   {
     const host2 = new GameHost(blockjam, { engine: wasm, seed: 3, remote: true, radius: 3, budget: Infinity });
-    const meter = (batches: Map<string, { events: { t: string; call?: { method: string; args: unknown[] } }[] }>, id: string) =>
-      (batches.get(id)?.events ?? []).some((e) => e.t === 'call' && e.call?.method === 'widget' && (e.call.args[0] as string) === 'jam-turbo');
-    const join = () => {
-      const c = host2.connect();
-      host2.command(c.id, { t: 'start', name: 'Pat' });
-      let got = false;
-      for (let i = 0; i < 20 && !got; i++) got = meter(host2.step(1 / 30) as never, c.id);
-      return { c, got };
+    type Batches = Map<string, { events: { t: string; call?: { method: string; args: unknown[] } }[] }>;
+    const widget = (batches: Batches, id: string, name: string) =>
+      (batches.get(id)?.events ?? []).some((e) => e.t === 'call' && e.call?.method === 'widget' && (e.call.args[0] as string) === name);
+    const press = (id: string, action: string, value = '') => host2.command(id, { t: 'message', msg: { t: 'widgetAction', player: '', widget: 'jam-pick', action, value } });
+    // M brings the team screen back (its buttons count only while it's up).
+    const key = (id: string, code: string) => {
+      host2.command(id, { t: 'input', input: { active: true, down: [code], pressed: [code], buttons: 0, clicked: 0, mouseX: 0, mouseY: 0, wheel: 0, yaw: 0, pitch: 0, viewSeq: -1 } });
+      host2.step(1 / 30);
+      host2.command(id, { t: 'input', input: { active: true, down: [], pressed: [], buttons: 0, clicked: 0, mouseX: 0, mouseY: 0, wheel: 0, yaw: 0, pitch: 0, viewSeq: -1 } });
     };
-    for (let i = 0; i < 60; i++) host2.step(1 / 30);
-    const first = join();
+    const steps = (n: number, id?: string, name?: string) => {
+      let got = false;
+      for (let i = 0; i < n; i++) {
+        const b = host2.step(1 / 30) as never;
+        if (id && name && widget(b, id, name)) got = true;
+      }
+      return got;
+    };
+    const arrive = (name: string) => {
+      const c = host2.connect();
+      host2.command(c.id, { t: 'start', name });
+      const screen = steps(5, c.id, 'jam-pick');
+      return { c, screen };
+    };
+    const team = (name: string) => matchNow().teams.find((t) => t.ballers.some((b) => b.player.name === name));
+    steps(60);
+    // The first person: the team screen, then a new game for the Gators.
+    const first = arrive('Pat');
+    check(first.screen, 'a person coming in gets the team screen');
+    check(!team('Pat'), 'and watches till they pick');
+    const before = matchNow();
+    // (The level first: buttons count only while the screen's up, and a pick closes it.)
+    press(first.c.id, 'level', 'rookie');
+    steps(2);
+    check(before.level === 'rookie', 'the level is set');
+    press(first.c.id, 'team', 'gators');
+    const meter1 = steps(20, first.c.id, 'jam-turbo');
+    const m1 = matchNow();
+    check(m1 !== before && m1.phase === 'tip' && m1.quarter === 1, 'the first pick starts a new game');
+    check(team('Pat')?.def.id === 'gators' && m1.teams[0].def.id === 'gators', `Pat plays for the Gators (${team('Pat')?.def.id})`);
+    check(m1.teams[0].ballers.length === 2 && m1.teams[1].ballers.length === 2, 'bots fill the rest');
+    // The level: the room's (kept for the new game), for the bots facing people; All-Stars against bots.
+    const foeBot = m1.teams[1].ballers[0];
+    const mateBot = m1.teams[0].ballers.find((b) => b.player.bot)!;
+    check(m1.level === 'rookie' && levelOf(m1, foeBot).id === 'rookie' && levelOf(m1, mateBot).id === 'allstar', `rookies face Pat (${levelOf(m1, foeBot).id}), Pat's teammate plays the bots as an All-Star (${levelOf(m1, mateBot).id})`);
+    // A second person joins the other team in this game (no new game), a bot giving way.
+    const second = arrive('Sam');
+    press(second.c.id, 'team', m1.teams[1].def.id);
+    steps(5);
+    check(matchNow() === m1 && team('Sam') === m1.teams[1] && m1.teams[1].ballers.length === 2, 'a second person joins the game on, for the other side');
+    // Sam picks a team not in the game: their side takes it over (the score stays), with its bench.
+    const bench = ['blaze', 'cubes', 'rockets'].find((x) => !m1.teams.some((t) => t.def.id === x))!;
+    m1.teams[1].score = 7;
+    press(second.c.id, 'team', bench);
+    steps(2);
+    check(m1.teams[1].def.id !== bench, 'a button pressed with the screen down does nothing');
+    key(second.c.id, 'KeyM');
+    press(second.c.id, 'team', bench);
+    steps(5);
+    check(m1.teams[1].def.id === bench && team('Sam') === m1.teams[1] && m1.teams[1].score === 7, `Sam's side becomes the ${bench}, keeping its 7`);
+    check(m1.teams[1].ballers.every((b) => !b.player.bot || m1.teams[1].def.bench.some((x) => x.name === b.player.name)), 'its bench comes on');
+    // Pat (alone on their side) picks a team that isn't playing: their own side takes it.
+    const third = ['blaze', 'cubes', 'rockets', 'gators'].find((x) => !m1.teams.some((t) => t.def.id === x))!;
+    key(first.c.id, 'KeyM');
+    press(first.c.id, 'team', third);
+    steps(3);
+    check(team('Pat') === m1.teams[0] && m1.teams[0].def.id === third && team('Sam') === m1.teams[1], `Pat's side becomes the ${third}`);
+    // Pat leaves; someone else comes and takes the place they left.
     host2.disconnect(first.c.id);
-    for (let i = 0; i < 10; i++) host2.step(1 / 30);
-    const second = join();
-    check(first.got && second.got, `each person gets the turbo meter (first ${first.got}, second in the same place ${second.got})`);
+    steps(10);
+    const fourth = arrive('Lee');
+    press(fourth.c.id, 'team', third);
+    const meter2 = steps(20, fourth.c.id, 'jam-turbo');
+    check(meter1 && meter2, `each person gets the turbo meter (first ${meter1}, second in the same place ${meter2})`);
+    check(team('Lee') === m1.teams[0] && matchNow() === m1, `Lee joins the ${third} in the game on`);
+    // A third person, with people on both sides: a team that isn't playing can't take a side over.
+    const fifth = arrive('Kim');
+    const out = ['blaze', 'cubes', 'rockets', 'gators'].find((x) => !m1.teams.some((t) => t.def.id === x))!;
+    press(fifth.c.id, 'team', out);
+    steps(3);
+    check(!team('Kim') && m1.teams.every((t) => t.def.id !== out), 'both sides have people: no taking one over');
+    press(fifth.c.id, 'team', m1.teams[0].def.id);
+    steps(3);
+    check(team('Kim') === m1.teams[0] && m1.teams[0].ballers.every((b) => !b.player.bot), 'Kim joins Lee: two people, no bots');
+    // A fourth onto that full side: refused, they stay on the screen.
+    const sixth = arrive('Ash');
+    press(sixth.c.id, 'team', m1.teams[0].def.id);
+    steps(3);
+    check(!team('Ash'), 'a full side turns them away');
+    // Watching: off the floor, a bot in their place.
+    key(second.c.id, 'KeyM');
+    press(second.c.id, 'watch');
+    steps(3);
+    check(!team('Sam') && m1.teams[1].ballers.length === 2, 'watching: a bot takes their place');
+    picks = `${m1.teams[0].def.abbr} v ${m1.teams[1].def.abbr}`;
   }
 
-  console.log(`  blockjam: shots drop and clank, threes, dunk paths; a bots' game ${a.def.abbr} ${a.score}-${b.score} ${b.def.abbr} (${all.reduce((n, x) => n + x.dunks, 0)} dunks, ${all.reduce((n, x) => n + x.threes, 0)} threes)`);
+  // The levels: a (scripted) person and their bot do better against Rookies than All-Stars.
+  const against: Record<string, string> = {};
+  const margin: Record<string, number> = {};
+  for (const lv of ['rookie', 'allstar'] as const) {
+    const mm = personGame(11, lv, 180);
+    margin[lv] = mm.teams[0].score - mm.teams[1].score;
+    against[lv] = `${mm.teams[0].score}-${mm.teams[1].score}`;
+  }
+  check(margin.rookie > margin.allstar + 10, `against Rookies a person does better (${against.rookie}) than against All-Stars (${against.allstar})`);
+
+  console.log(`  blockjam: shots drop and clank, threes, dunk paths; a bots' game ${a.def.abbr} ${a.score}-${b.score} ${b.def.abbr} (${all.reduce((n, x) => n + x.dunks, 0)} dunks, ${all.reduce((n, x) => n + x.threes, 0)} threes); picks ${picks}; a person v Rookies ${against.rookie}, v All-Stars ${against.allstar}`);
 }

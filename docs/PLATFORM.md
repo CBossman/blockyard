@@ -82,6 +82,8 @@ src/games/
     court.ts ball.ts    the court's numbers; the ball's flight (rims, the board, the net), played the same on every screen
     moves.ts            the ballers' movement ability: steering by the screen, turbo, jump shots, seven dunks, knockdowns
     server.ts match.ts  rules: the roster (bots in empty places), possession, shots, blocks, steals, shoves, fire, the clocks
+    pick.ts levels.ts   the team screen (M: pick a team, the first person in starts a new game; the bots' level), and the
+                        levels (Rookie, Pro, All-Star): how the bots facing people guard, reach, shoot and run
     bots.ts             bot ballers: drives, pull-ups and threes, passes and lobs, defence, rebounds
     client/             the broadcast camera, the ball and the baskets drawn, the poses (big heads, dunks), the announcer, the crowd
     tools/models.mjs    the ball, the baskets, the nets and the court's markings, built in code

@@ -1,6 +1,7 @@
 import type { Player } from '@platform';
 import type { BallState } from './ball';
 import type { Side } from './court';
+import { easier, LEVELS, type Level, type LevelId } from './levels';
 import type { JamState } from './moves';
 import type { FlightKind } from './protocol';
 import type { TeamDef } from './teams';
@@ -84,6 +85,8 @@ export interface Match {
   phaseUntil: number;
   /** Which team gets the ball to start the next quarter. */
   nextPossession: 0 | 1;
+  /** How hard the bots play against people (the room's choice, `levels.ts`). */
+  level: LevelId;
 }
 
 /** The jam ability's live state for a player. */
@@ -101,6 +104,20 @@ export function offense(m: Match): Team | null {
   if (b.mode === 'held' && b.holder) return b.holder.team;
   if (b.mode === 'flight' && b.by && (b.kind === 'shot' || b.kind === 'pass')) return b.by.team;
   return null;
+}
+
+/** Someone on a team is a person. */
+export const hasPeople = (t: Team): boolean => t.ballers.some((b) => !b.player.bot);
+
+/**
+ * How a bot plays: at the room's level when it faces people (a step easier while they trail by a
+ * lot), as an All-Star when it faces only bots.
+ */
+export function levelOf(m: Match, b: Baller): Level {
+  const foe = otherTeam(m, b.team);
+  if (!hasPeople(foe)) return LEVELS.allstar;
+  const l = LEVELS[m.level];
+  return b.team.score - foe.score >= l.comeback ? easier(l) : l;
 }
 
 /** Where the ball is now (held: about the holder's hands; flying: its flight). */
