@@ -3,10 +3,10 @@ import type { WidgetDefinition } from '@platform';
 /**
  * Each fighter's corner of the screen (top right), a HUD widget of the game's own: in a
  * free-for-all their kills, their place and the leader; in a team mode their side, their kills
- * and score (and the case, while they carry it); always their streak toward the UAV (three) and
- * the Adrenaline Shot (five), and how long those have left; in a free-for-all or Team Deathmatch
- * on toward the Hellstorm (seven) and the Attack Chopper (ten), and which of those is ready to
- * call in (5). The markup and styles are here;
+ * and score (and the case, while they carry it); always their streak toward the killstreaks
+ * they've picked (each one's card marked), how long a UAV, a Counter-UAV or an Adrenaline Shot
+ * has left, whether the other side has their radar jammed, and which streak's ready to call in
+ * (5). The markup and styles are here;
  * `personalHud` fills it in every tick with `player.hud.widget('dossier', data)`, and only what
  * changed goes to their screen. It's inked on paper like the rest of the HUD, from the theme's
  * colours.
@@ -34,9 +34,13 @@ export const DOSSIER: WidgetDefinition = {
     <div class="perk uav" data-if="uav > 0" style="--left: {{uav}}; --of: {{uavFor}}">
       <span class="perk-name">UAV</span><span class="perk-bar"><span></span></span><span class="perk-time">{{uav}}s</span>
     </div>
+    <div class="perk counter" data-if="counter > 0" style="--left: {{counter}}; --of: {{counterFor}}">
+      <span class="perk-name">Counter-UAV</span><span class="perk-bar"><span></span></span><span class="perk-time">{{counter}}s</span>
+    </div>
     <div class="perk rush" data-if="rush > 0" style="--left: {{rush}}; --of: {{rushFor}}">
       <span class="perk-name">Adrenaline</span><span class="perk-bar"><span></span></span><span class="perk-time">{{rush}}s</span>
-    </div>`,
+    </div>
+    <div class="perk jammed" data-if="jammed"><span class="perk-name">Radar jammed</span></div>`,
   css: `
     /* Where the platform's stat chips were: under the frame counter. */
     :scope {
@@ -77,7 +81,7 @@ export const DOSSIER: WidgetDefinition = {
       font: 700 20px var(--pixel);
       font-variant-numeric: tabular-nums;
     }
-    /* The streak: five cards, the third lights the UAV, the fifth the Adrenaline Shot. */
+    /* The streak: a card a kill, each killstreak's card striped in its colour. */
     .streak {
       align-items: center;
     }
@@ -98,13 +102,19 @@ export const DOSSIER: WidgetDefinition = {
     .pip.rush:not(.on) {
       background: repeating-linear-gradient(45deg, var(--hud-danger, #e63946) 0 2px, transparent 2px 5px);
     }
+    .pip.counter:not(.on) {
+      background: repeating-linear-gradient(45deg, #1fa3a0 0 2px, transparent 2px 5px);
+    }
+    .pip.mortar:not(.on) {
+      background: repeating-linear-gradient(-45deg, var(--hud-danger, #e63946) 0 2px, #111 2px 5px);
+    }
     .pip.hellstorm:not(.on) {
       background: repeating-linear-gradient(45deg, #ff8c1a 0 2px, transparent 2px 5px);
     }
     .pip.chopper:not(.on) {
       background: repeating-linear-gradient(-45deg, #111 0 2px, var(--hud-accent, #ffcc00) 2px 5px);
     }
-    /* The streak's cards past five are a little smaller (ten in a row fit). */
+    /* A long streak's cards are a little smaller (ten in a row fit). */
     .pips.long .pip {
       width: 10px;
     }
@@ -130,6 +140,14 @@ export const DOSSIER: WidgetDefinition = {
     }
     .perk.uav {
       --c: #ff5c8a;
+    }
+    .perk.counter {
+      --c: #2ec4b6;
+    }
+    /* The other side's Counter-UAV: red, flickering like static. */
+    .perk.jammed {
+      --c: var(--hud-danger, #e63946);
+      animation: perk-in 320ms cubic-bezier(0.3, 1.8, 0.5, 1), ready-blink 0.5s steps(2, jump-none) infinite;
     }
     /* A streak to call in: its key, its name, blinking READY. */
     .perk.ready {
@@ -201,12 +219,11 @@ export const DOSSIER: WidgetDefinition = {
 };
 
 /**
- * The streak cards, lit up to the streak: five, the third and fifth marked (UAV, Adrenaline Shot);
- * with the streaks you call in (`long`), ten, the seventh and tenth marked too (Hellstorm, chopper).
+ * The streak cards, `length` of them lit up to the streak, each killstreak's marked with its
+ * class (`marks`: by card, from 0).
  */
-export function streakPips(streak: number, long = false): string[] {
-  const marks: Record<number, string> = { 2: ' uav', 4: ' rush', 6: ' hellstorm', 9: ' chopper' };
-  return Array.from({ length: long ? 10 : 5 }, (_, i) => `${i < streak ? 'on' : 'off'}${marks[i] ?? ''}`);
+export function streakPips(streak: number, marks: Record<number, string>, length: number): string[] {
+  return Array.from({ length }, (_, i) => `${i < streak ? 'on' : 'off'}${marks[i] ? ` ${marks[i]}` : ''}`);
 }
 
 /**

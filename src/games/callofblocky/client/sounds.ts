@@ -66,6 +66,11 @@ export function defineSounds(client: Client) {
     shot(s, { punch: 150, body: 0.2, bright: 3600, crack: 0.75, tail: 0.5, loud: 1.1 });
     s.tone({ wave: 'triangle', from: 1900 * s.pitch, to: 1750 * s.pitch, duration: 0.25, volume: 0.04, delay: 0.02 });
   });
+  // A mortar shell coming in: a falling whistle, then (the blast's own sound) the crump.
+  a.define('mortar', (s) => {
+    s.tone({ wave: 'sine', from: 2300 * s.pitch, to: 700 * s.pitch, duration: 1.15, volume: 0.22, attack: 0.05 });
+    s.tone({ wave: 'triangle', from: 2350 * s.pitch, to: 720 * s.pitch, duration: 1.15, volume: 0.06, attack: 0.05 });
+  });
   a.define('reload_mag', (s) => {
     click(s, 0.05, 900, 0.35); // magazine out
     click(s, 0.55, 700, 0.45); // magazine in

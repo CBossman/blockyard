@@ -398,6 +398,15 @@ export function stepReload(g: Gun, s: GunState, dt: number, trigger: boolean): b
   return true;
 }
 
+/**
+ * What a player's own screen gets from the gun kit (`me.items.gun`), when there's anything to say:
+ * how fast they reload, a multiple of each gun's own pace (`Guns.setReloadSpeed`; 1 when unsaid),
+ * so the screen reloads as fast as the host does.
+ */
+export interface GunOwn {
+  reloadSpeed: number;
+}
+
 /** A held gun as everyone's screen has it (`hand.state`): its rounds, a reload, its last shot, how far it's aimed. */
 export interface GunShown {
   mag: number;

@@ -1,5 +1,5 @@
 import type { Entity, GameContext, ItemHost, ItemKind, ItemKit, ItemUse, Player, Vec3 } from '@platform';
-import { addBloom, canReload, isGun, type GunRules, type GunShown, type ShotWire, damageAt, freshGun, gun, gunMove, lookDir, pelletDirs, RAISE, resolveGunRules, settleBloom, spreadDeg, startReload, stepAim, stepReload, type Gun, type GunState, type GunItem, type GunOptions } from '@platform/items';
+import { addBloom, canReload, isGun, type GunOwn, type GunRules, type GunShown, type ShotWire, damageAt, freshGun, gun, gunMove, lookDir, pelletDirs, RAISE, resolveGunRules, settleBloom, spreadDeg, startReload, stepAim, stepReload, type Gun, type GunState, type GunItem, type GunOptions } from '@platform/items';
 
 /** The gun kit on the host, with what a game asks of a player's guns. */
 export interface Guns extends ItemKind<GunItem, GunState> {
@@ -13,6 +13,13 @@ export interface Guns extends ItemKind<GunItem, GunState> {
   ammo(player: Player, item: string): { magazine: number; reserve: number } | null;
   /** Set a carried gun's rounds (a resupply, a start): what's given, the magazine no fuller than it holds. */
   setAmmo(player: Player, item: string, a: { magazine?: number; reserve?: number }): void;
+  /**
+   * How fast they reload every gun, as a multiple of each one's own pace (a perk, a power-up): 2
+   * reloads in half the time. 1 by default, kept until changed (0.25 to 4). Their screen reloads
+   * at the same pace.
+   */
+  setReloadSpeed(player: Player, multiple: number): void;
+  reloadSpeed(player: Player): number;
 }
 
 /**
@@ -35,6 +42,9 @@ guns.of = (game: GameContext): Guns | null => game.items.kind<Guns>('gun');
 /** Guns in one game. */
 function guns1(rules: GunRules, host: ItemHost): Guns {
   const defOf = (item: string) => host.game.items.get(item);
+  /** Players who reload at a pace of their own (`setReloadSpeed`); everyone else at 1. */
+  const pace = new WeakMap<Player, number>();
+  const paceOf = (p: Player) => pace.get(p) ?? 1;
   const heldGun = (p: Player) => {
     const stack = p.inventory.held;
     if (!stack) return null;
@@ -71,7 +81,7 @@ function guns1(rules: GunRules, host: ItemHost): Guns {
       st.cooldown = Math.max(0, st.cooldown - use.dt);
       st.bloom = settleBloom(g, st.bloom, use.dt);
       st.tokens = Math.min(rules.rateSlack, st.tokens + use.dt / g.interval);
-      stepReload(g, st, use.dt, trigger);
+      stepReload(g, st, use.dt * paceOf(use.player), trigger);
       if (active && c.pressed('KeyR') && canReload(g, st)) reload(use, held.item, g, st);
       // Their screen's shots (locked, or not at the controls, it fires none: those it sent anyway are refused).
       const shots = use.acts;
@@ -107,6 +117,7 @@ function guns1(rules: GunRules, host: ItemHost): Guns {
       if (!c.locked && rules.autoReload && st.mag <= 0 && st.cooldown <= 0.05 && canReload(g, st)) reload(use, held.item, g, st);
     },
     move: (def, controls) => gunMove(def, controls.buttons, rules),
+    own: (v) => (pace.has(v.player) ? ({ reloadSpeed: paceOf(v.player) } satisfies GunOwn) : null),
     shown: (_v, _item, st) => (st ? ({ mag: st.mag, reserve: st.reserve, reload: st.reload, serial: st.serial, aim: st.aim } satisfies GunShown) : null),
     held: heldGun,
     reloading: (p) => (heldGun(p)?.state.reload ?? -1) >= 0,
@@ -122,6 +133,12 @@ function guns1(rules: GunRules, host: ItemHost): Guns {
       if (a.magazine !== undefined) st.mag = Math.max(0, Math.min(def.magazine, Math.floor(a.magazine)));
       if (a.reserve !== undefined) st.reserve = Math.max(0, Math.floor(a.reserve));
     },
+    setReloadSpeed(p, multiple) {
+      const k = Number.isFinite(multiple) ? Math.max(0.25, Math.min(4, multiple)) : 1;
+      if (k === 1) pace.delete(p);
+      else pace.set(p, k);
+    },
+    reloadSpeed: paceOf,
   };
 }
 

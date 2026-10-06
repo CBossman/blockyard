@@ -2,7 +2,8 @@ import type { MenuHandle, Player } from '@platform';
 import { MAPS, type MapSpec } from './map';
 import { MODES, type Mode, type Team } from './modes';
 import type { Lethal, Primary, Sidearm } from './weapons';
-import type { StreakId } from './streaks/kinds';
+import type { PerkId } from './perks';
+import type { KillstreakId, StreakId } from './streaks/kinds';
 
 /**
  * The match being played, as the server's parts share it (`server.ts` runs it, `briefcase.ts`
@@ -37,8 +38,19 @@ export interface Fighter {
   /** How long the UAV they have now lasts in all (its bar drains from full). */
   uavFor: number;
   rushUntil: number;
-  /** Killstreaks earned and not yet called in (4 calls in the last one): `streaks/`. */
+  /** Killstreaks earned and not yet called in (5 calls in the last one): `streaks/`. */
   streaks: StreakId[];
+  /** The perks and killstreaks they've picked (the loadout, L): theirs from their next life. */
+  choice: { perks: PerkId[]; killstreaks: KillstreakId[] };
+  /** The perks they have this life, one from each tier (`perks.ts`). */
+  perks: PerkId[];
+  /** The killstreaks they're on toward this life, cheapest first. */
+  killstreaks: KillstreakId[];
+  /** Their Counter-UAV: the other side's radar is jammed until then; how long it lasts in all. */
+  jamUntil: number;
+  jamFor: number;
+  /** When they were last hurt (Second Wind). */
+  hurtAt: number;
   /** Last shot: they show on everyone's radar for a moment. */
   firedAt: number;
   menu: MenuHandle | null;

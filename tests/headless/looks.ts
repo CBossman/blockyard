@@ -261,7 +261,7 @@ function callOfBlocky() {
   }
   const menu = calls().find((c) => c.method === 'menu' && c.to === ann.player)!;
   const sections = (menu?.args[1] as { sections: { title: string; entries: { label: string; icon: IconRef }[] }[] }).sections;
-  const entries = sections.filter((s) => s.title !== 'Outfit').flatMap((s) => s.entries);
+  const entries = sections.filter((s) => ['Primary', 'Sidearm', 'Lethal (G)'].includes(s.title)).flatMap((s) => s.entries);
   check(entries.length === PRIMARIES.length + SIDEARMS.length + Object.keys(LETHALS).length && entries.every((e) => typeof e.icon === 'object' && 'item' in e.icon), `the loadout menu names its weapons: ${JSON.stringify(entries.map((e) => e.icon))}`);
   // Its outfits (progression.ts) by name too, each drawn as its fighter.
   const outfits = sections.find((s) => s.title === 'Outfit')?.entries ?? [];

@@ -206,7 +206,7 @@ function firstRoom(path: string): number {
     return { id: call.args[0] as number, entries: opts.sections.flatMap((x) => x.entries), sections: opts.sections.map((x) => x.title) };
   };
   let m = menu(b.id);
-  check(m.sections.join() === 'Primary,Sidearm,Lethal (G),Outfit', `the loadout's sections: ${m.sections}`);
+  check(m.sections.join() === 'Primary,Sidearm,Lethal (G),Perk 1,Perk 2,Perk 3,Killstreaks (pick 3),Outfit', `the loadout's sections: ${m.sections}`);
   const locked = m.entries.filter((e) => e.disabled).map((e) => `${e.label} ${e.detail}`);
   const later = ['Mac-10 LV 2', "Zed's Pump LV 4", 'The Wolf LV 5', 'Rock Salt LV 7', 'Honey Bunny LV 8', 'Bad Mother LV 9', 'Marsellus LV 11', 'Ezekiel LV 13', 'The Mia LV 6', 'The Bowler LV 3', 'The Boss LV 30'];
   check(later.every((x) => locked.includes(x)), `level 1's locked picks: ${locked}`);

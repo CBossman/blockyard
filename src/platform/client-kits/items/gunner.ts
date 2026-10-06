@@ -55,6 +55,8 @@ export class GunController {
   private kept = new Map<string, GunState>();
   /** Reload length and a shotgun's rounds going in, for the animation. */
   reloadTotal = 1;
+  /** How fast this player reloads, as the host says (`GunOwn`): a multiple of each gun's pace. */
+  reloadSpeed = 1;
   shellsToLoad = 0;
 
   /** The game's gun rules (`guns`), as the host plays them. */
@@ -131,7 +133,7 @@ export class GunController {
     st.bloom = settleBloom(g, st.bloom, dt);
     const trigger = active && c.trigger;
     const was = st.mag;
-    if (stepReload(g, st, dt, trigger) || st.mag !== was) this.quiet = 0;
+    if (stepReload(g, st, dt * this.reloadSpeed, trigger) || st.mag !== was) this.quiet = 0;
     if (active && c.reload && canReload(g, st)) this.reload(g, st, happened);
     const out: FiredShot[] = [];
     const pull = active && (def.auto ? c.trigger : c.triggerPressed);
@@ -173,7 +175,7 @@ export class GunController {
   private reload(g: Gun, st: GunState, happened: (e: GunNews) => void) {
     startReload(g, st);
     this.quiet = 0;
-    this.reloadTotal = g.def.reload;
+    this.reloadTotal = g.def.reload / this.reloadSpeed;
     this.shellsToLoad = g.def.shells ? Math.min(g.def.magazine - st.mag, st.reserve) : 0;
     happened('reload');
   }
