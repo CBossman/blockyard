@@ -135,10 +135,10 @@ export default function blockjamTest() {
     check(m1 !== before && m1.phase === 'tip' && m1.quarter === 1, 'the first pick starts a new game');
     check(team('Pat')?.def.id === 'gators' && m1.teams[0].def.id === 'gators', `Pat plays for the Gators (${team('Pat')?.def.id})`);
     check(m1.teams[0].ballers.length === 2 && m1.teams[1].ballers.length === 2, 'bots fill the rest');
-    // The level: the room's (kept for the new game), for the bots facing people; All-Stars against bots.
+    // The level: the room's (kept for the new game), for every bot in a game with people in it.
     const foeBot = m1.teams[1].ballers[0];
     const mateBot = m1.teams[0].ballers.find((b) => b.player.bot)!;
-    check(m1.level === 'rookie' && levelOf(m1, foeBot).id === 'rookie' && levelOf(m1, mateBot).id === 'allstar', `rookies face Pat (${levelOf(m1, foeBot).id}), Pat's teammate plays the bots as an All-Star (${levelOf(m1, mateBot).id})`);
+    check(m1.level === 'rookie' && levelOf(m1, foeBot).id === 'rookie' && levelOf(m1, mateBot).id === 'rookie', `with a person playing, every bot's a rookie (${levelOf(m1, foeBot).id}, Pat's teammate ${levelOf(m1, mateBot).id})`);
     // A second person joins the other team in this game (no new game), a bot giving way.
     const second = arrive('Sam');
     press(second.c.id, 'team', m1.teams[1].def.id);
@@ -191,15 +191,15 @@ export default function blockjamTest() {
     picks = `${m1.teams[0].def.abbr} v ${m1.teams[1].def.abbr}`;
   }
 
-  // The levels: a (scripted) person and their bot do better against Rookies than All-Stars.
+  // The levels: Rookies score far less against a (scripted) person and their bot than All-Stars do.
   const against: Record<string, string> = {};
-  const margin: Record<string, number> = {};
+  const scored: Record<string, number> = {};
   for (const lv of ['rookie', 'allstar'] as const) {
     const mm = personGame(11, lv, 180);
-    margin[lv] = mm.teams[0].score - mm.teams[1].score;
+    scored[lv] = mm.teams[1].score;
     against[lv] = `${mm.teams[0].score}-${mm.teams[1].score}`;
   }
-  check(margin.rookie > margin.allstar + 10, `against Rookies a person does better (${against.rookie}) than against All-Stars (${against.allstar})`);
+  check(scored.rookie + 5 < scored.allstar, `Rookies score less against a person (${against.rookie}) than All-Stars (${against.allstar})`);
 
   console.log(`  blockjam: shots drop and clank, threes, dunk paths; a bots' game ${a.def.abbr} ${a.score}-${b.score} ${b.def.abbr} (${all.reduce((n, x) => n + x.dunks, 0)} dunks, ${all.reduce((n, x) => n + x.threes, 0)} threes); picks ${picks}; a person v Rookies ${against.rookie}, v All-Stars ${against.allstar}`);
 }

@@ -126,7 +126,7 @@ export function pickData(m: Match, me: Player, opts: { watching: boolean; perTea
   const [a, b] = m.teams;
   const q = m.quarter <= 4 ? `Q${m.quarter}` : 'OT';
   return {
-    live: playing ? `${a.def.abbr} ${a.score} – ${b.score} ${b.def.abbr} · ${q}` : 'Pick a team: a new game tips off',
+    live: playing || mine ? `${a.def.abbr} ${a.score} – ${b.score} ${b.def.abbr} · ${q}` : 'Pick a team: a new game tips off',
     teams: TEAMS.map(card),
     levels: LEVEL_ORDER.map((id: LevelId) => ({ id, name: LEVELS[id].name, blurb: LEVELS[id].blurb, on: id === m.level ? 'on' : '' })),
     hint: mine ? 'M brings this back · Esc to play' : opts.watching ? 'Watching · pick a team to play' : 'Esc: wherever there’s room',

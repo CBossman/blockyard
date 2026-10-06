@@ -31,7 +31,10 @@ const lazy = (make: (v: JamView) => ClientKit, name: string): ClientKit => {
     frame: (c, dt) => get()?.frame?.(c, dt),
     late: (c, dt) => get()?.late?.(c, dt),
     controls: (c, k, dt) => get()?.controls?.(c, k, dt),
-    dispose: () => kit?.dispose?.(),
+    dispose: () => {
+      kit?.dispose?.();
+      kit = null;
+    },
   };
 };
 

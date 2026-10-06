@@ -146,6 +146,8 @@ export default defineServer(shared, {
     }
     bots.update(game, m, dt);
     if (tick % 3 === 0) game.clients.send('all', MSG.ballers, ballers());
+    // Who has the ball, again now and then: for screens that came in since it changed hands.
+    if (tick % 30 === 2 && m.ball.mode === 'held' && m.ball.holder) sendBall(game, { h: m.ball.holder.player.id, ...(m.ball.dunker === m.ball.holder ? { dunk: true } : {}) });
     showHud(game, m);
   },
 });
@@ -261,6 +263,9 @@ function join(game: Game, player: Player, want?: Team): boolean {
 function dress(player: Player, team: Team) {
   player.setUniform(uniformOf(team.def));
   player.color = team.def.color;
+  // Their camera off their eyes (so their own figure's drawn; a restart puts it back on them): the
+  // screen's broadcast camera takes it from there.
+  player.camera.orbit(player, { distance: 4, min: 4, max: 4, wheel: false });
 }
 
 /** A side changes teams (the score stays the side's): its people in the new colours, its bots off for the new bench. */

@@ -1,9 +1,10 @@
 /**
  * How hard the bots play against people: picked on the team screen (M), for the whole room. Each
- * level sets how good the bots who face people are (their reads and timing), how close they guard
- * and how often they reach, shove and leap, how well they shoot, how much turbo they burn and how
- * fast they run, and how much the rules help a person's own shots. Bots who face only bots (the
- * home page's attract mode, a person's teammate against bots) play as All-Stars.
+ * level sets how good the bots are (their reads and timing), how close they guard and how often
+ * they reach, shove and leap, how well they shoot, how much turbo they burn and how fast they run,
+ * and how much the rules help a person's own shots. In a game with people in it every bot plays at
+ * it, teammates too (the people make the difference); with only bots playing (the home page's
+ * attract mode) they play as All-Stars.
  */
 
 export type LevelId = 'rookie' | 'pro' | 'allstar';

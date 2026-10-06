@@ -110,14 +110,15 @@ export function offense(m: Match): Team | null {
 export const hasPeople = (t: Team): boolean => t.ballers.some((b) => !b.player.bot);
 
 /**
- * How a bot plays: at the room's level when it faces people (a step easier while they trail by a
- * lot), as an All-Star when it faces only bots.
+ * How a bot plays: at the room's level in a game with people in it (teammates and opponents alike,
+ * so the people make the difference; the bots facing them a step easier while they trail by a lot),
+ * as an All-Star when only bots are playing (the attract mode on the home page).
  */
 export function levelOf(m: Match, b: Baller): Level {
   const foe = otherTeam(m, b.team);
-  if (!hasPeople(foe)) return LEVELS.allstar;
+  if (!hasPeople(foe) && !hasPeople(b.team)) return LEVELS.allstar;
   const l = LEVELS[m.level];
-  return b.team.score - foe.score >= l.comeback ? easier(l) : l;
+  return hasPeople(foe) && b.team.score - foe.score >= l.comeback ? easier(l) : l;
 }
 
 /** Where the ball is now (held: about the holder's hands; flying: its flight). */

@@ -30,10 +30,12 @@ export function hudKit(view: JamView): ClientKit {
   let crowd: ClientLoop | null = null;
   let roar = 0;
   let unstyle: (() => void) | null = null;
+  let hud: Client['hud'] | null = null;
   return {
     name: 'jam.hud',
     setup(client) {
       unstyle = client.hud.style(CSS);
+      hud = client.hud;
     },
     frame(client, dt) {
       if (!layer) {
@@ -68,6 +70,10 @@ export function hudKit(view: JamView): ClientKit {
     dispose() {
       crowd?.stop();
       unstyle?.();
+      layer?.remove();
+      layer = null;
+      hud?.marker('jam.me', null);
+      hud?.marker('jam.meter', null);
     },
   };
 }
