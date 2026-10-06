@@ -27,6 +27,8 @@ export interface Baller {
   /** When they can try to steal or shove again (match clock). */
   stealAt: number;
   shoveAt: number;
+  /** What their turbo meter was last sent as (undefined: not yet, on this screen of theirs). */
+  turboShown?: string;
   /** When they last passed (for an assist) and to whom. */
   passedAt: number;
   passedTo: Baller | null;

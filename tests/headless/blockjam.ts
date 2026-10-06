@@ -85,5 +85,26 @@ export default function blockjamTest() {
   }
   const all = [...a.ballers, ...b.ballers];
   check(all.reduce((n, x) => n + x.dunks, 0) > 0 && all.reduce((n, x) => n + x.reb, 0) > 0 && all.reduce((n, x) => n + x.stl, 0) > 0, 'dunks, rebounds and steals');
+  // People coming and going: each who takes the floor gets the turbo meter, even in a place
+  // someone left (the first player's place is the same player for whoever takes it next).
+  {
+    const host2 = new GameHost(blockjam, { engine: wasm, seed: 3, remote: true, radius: 3, budget: Infinity });
+    const meter = (batches: Map<string, { events: { t: string; call?: { method: string; args: unknown[] } }[] }>, id: string) =>
+      (batches.get(id)?.events ?? []).some((e) => e.t === 'call' && e.call?.method === 'widget' && (e.call.args[0] as string) === 'jam-turbo');
+    const join = () => {
+      const c = host2.connect();
+      host2.command(c.id, { t: 'start', name: 'Pat' });
+      let got = false;
+      for (let i = 0; i < 20 && !got; i++) got = meter(host2.step(1 / 30) as never, c.id);
+      return { c, got };
+    };
+    for (let i = 0; i < 60; i++) host2.step(1 / 30);
+    const first = join();
+    host2.disconnect(first.c.id);
+    for (let i = 0; i < 10; i++) host2.step(1 / 30);
+    const second = join();
+    check(first.got && second.got, `each person gets the turbo meter (first ${first.got}, second in the same place ${second.got})`);
+  }
+
   console.log(`  blockjam: shots drop and clank, threes, dunk paths; a bots' game ${a.def.abbr} ${a.score}-${b.score} ${b.def.abbr} (${all.reduce((n, x) => n + x.dunks, 0)} dunks, ${all.reduce((n, x) => n + x.threes, 0)} threes)`);
 }

@@ -71,8 +71,6 @@ const fmt = (s: number) => {
   return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
 };
 
-/** What each player's turbo widget shows (sent again only when it changes). */
-let shownTurbo = new WeakMap<object, string>();
 
 export function showHud(game: Game, m: Match) {
   const [a, b] = m.teams;
@@ -89,10 +87,12 @@ export function showHud(game: Game, m: Match) {
   });
   for (const x of allBallers(m)) {
     if (x.player.bot) continue;
+    // (Kept per baller, not per player: the first player's place is the same player for whoever
+    // takes it next, and a new person needs the meter sent.)
     const fire = x.fireMakes > 0 || x.streak >= 3 ? 'on' : '';
-    if (shownTurbo.get(x.player) !== fire) {
+    if (x.turboShown !== fire) {
       x.player.hud.widget('jam-turbo', { fire });
-      shownTurbo.set(x.player, fire);
+      x.turboShown = fire;
     }
   }
   // The box score (Tab; kept up once the game's over).
@@ -112,7 +112,5 @@ export function showHud(game: Game, m: Match) {
   }
 }
 
-/** A new game: the turbo widgets go up afresh. */
-export function resetHud() {
-  shownTurbo = new WeakMap<object, string>();
-}
+/** A new game: (each baller is new, so the turbo meters go up afresh). */
+export function resetHud() {}

@@ -64,18 +64,29 @@ export function sceneKit(view: JamView): ClientKit {
     return out.set(m[12], m[13], m[14]);
   };
 
+  let scene: Client['scene'] | null = null;
   return {
     name: 'jam.scene',
+    dispose() {
+      // What this kit put in the world goes with it (a game switched away from, then back to).
+      for (const n of [court, ball, shadow, ...baskets.flatMap((b) => [b.hoop, b.net])]) if (n) scene?.remove(n);
+    },
     frame(client, dt) {
+      scene = client.scene;
       // The court and the baskets, once their models are here.
       if (!court) court = place(client, 'jam_court', { x: 0, y: FLOOR + 0.012, z: 0 });
-      if (baskets.length < 2) {
+      // (A basket goes up whole, once both its models are here: a hoop placed alone, its net still
+      // coming, would be placed again next frame.)
+      if (baskets.length < 2 && client.scene.item('jam_hoop') && client.scene.item('jam_net')) {
         for (const side of [1, -1] as Side[]) {
           if (baskets.some((b) => b.side === side)) continue;
           const r = rim(side);
           const hoop = place(client, 'jam_hoop', r);
           const net = place(client, 'jam_net', r);
-          if (!hoop || !net) continue;
+          if (!hoop || !net) {
+            for (const n of [hoop, net]) if (n) client.scene.remove(n);
+            continue;
+          }
           if (side < 0) {
             hoop.quaternion.setFromAxisAngle(UP, Math.PI);
             net.quaternion.setFromAxisAngle(UP, Math.PI);
