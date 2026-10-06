@@ -176,7 +176,7 @@ export class HumanoidRig {
    * How each of the model's joints follows the rig's: the nearest of its joints it hangs from
    * (-1: none, the model's root), and how its parent is turned from that one's at rest.
    */
-  private follow: { node: THREE.Object3D; from: number; rel: THREE.Quaternion }[] = [];
+  private follow: { node: THREE.Object3D; from: number; rel: THREE.Quaternion; scale: THREE.Vector3 }[] = [];
   /** From the model's space into its hips' parent's (where the hips are placed). */
   private hipsFrom = new THREE.Matrix4();
   /** Each joint's turn this frame in the model's space: the rig's, and the model's own. */
@@ -236,7 +236,7 @@ export class HumanoidRig {
       while (a && a !== root && !index.has(a)) a = a.parent;
       const from = a && a !== root ? index.get(a)! : -1;
       const ancestor = from < 0 ? new THREE.Quaternion() : f.turn[REQUIRED[from]];
-      this.follow.push({ node, from, rel: ancestor.clone().invert().multiply(node.parent ? restTurn(node.parent) : new THREE.Quaternion()) });
+      this.follow.push({ node, from, rel: ancestor.clone().invert().multiply(node.parent ? restTurn(node.parent) : new THREE.Quaternion()), scale: node.scale.clone() });
     }
     const hipsParent = f.nodes.hips.parent;
     if (hipsParent && hipsParent !== root) this.hipsFrom.multiplyMatrices(toRoot, hipsParent.matrixWorld).invert();
@@ -385,7 +385,8 @@ export class HumanoidRig {
 
   /**
    * The model's joints to where the rig's are: each turned as the rig's is (in the model's
-   * space), times its own turn standing straight; the hips placed where the rig's are.
+   * space), times its own turn standing straight, and scaled as the rig's is; the hips placed
+   * where the rig's are.
    */
   private retarget() {
     const f = this.frames;
@@ -399,6 +400,8 @@ export class HumanoidRig {
       const w = this.follow[i];
       const parent = w.from < 0 ? q1.copy(w.rel) : q1.multiplyQuaternions(this.placed[w.from], w.rel);
       w.node.quaternion.copy(parent.invert().multiply(placed));
+      // A joint scaled on the rig scales the model's (a cartoon's big head), over its own scale.
+      w.node.scale.copy(w.scale).multiply(this.joints[b].scale);
     }
     f.nodes.hips.position.copy(this.joints.hips.position).applyMatrix4(this.hipsFrom);
   }
