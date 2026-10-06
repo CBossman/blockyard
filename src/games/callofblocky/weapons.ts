@@ -1,6 +1,6 @@
 import type { GameContext, IconRef } from '@platform';
 import type { GunItem, MeleeItem, ThrowableItem } from '@platform/items';
-import { isStreak, STREAKS } from './streaks/kinds';
+import { isKillstreak, isStreak, KILLSTREAKS } from './streaks/kinds';
 
 /**
  * The arsenal. Everyone carries a primary and a sidearm of their choosing and the Hattori katana.
@@ -316,5 +316,5 @@ export function defineWeapons(game: GameContext) {
  */
 export const feedIcon = (id: string): IconRef | null => (WEAPONS[id] || isStreak(id) ? { item: id, view: 'side' } : LETHALS[id] ? { item: id } : null);
 
-/** A weapon's name, for the kill feed (a killstreak's too). */
-export const weaponName = (id: string) => WEAPONS[id]?.name ?? LETHALS[id]?.name ?? (isStreak(id) ? STREAKS[id].name : id);
+/** A weapon's name, for the kill feed (a killstreak's too: the Mortar Team's shells are `mortar`). */
+export const weaponName = (id: string) => WEAPONS[id]?.name ?? LETHALS[id]?.name ?? (isKillstreak(id) ? KILLSTREAKS[id].name : id);

@@ -15,6 +15,8 @@ import { LETHALS } from './weapons';
  * sight (the briefcase when it's out on the street, the better ones more often; in The Briefcase,
  * the sites, the case and its carrier; the nearest ammo bag when they're low on rounds).
  * Otherwise they roam the map's walking grid (`nav`, the map being played) toward its hotspots.
+ * Scrambled by the other side's Counter-UAV (`scrambled`), they lose their ears for the battle:
+ * no going after shots they've heard (they still see, and turn to, whoever's near).
  */
 const WEAPONS: Record<string, BotWeapon> = {
   rifle: { range: 16 },
@@ -30,6 +32,9 @@ const WEAPONS: Record<string, BotWeapon> = {
   revolver: { range: 11 },
   katana: { range: 1.5, rush: true },
 };
+
+/** How long the bots' kit goes after a shot it heard (its `chaseHeard`): a scrambled bot's goal stands in meanwhile. */
+const HEARD = 4;
 
 /** A lethal's lob (as `player.throw({ at })` makes it), and how far along it must be clear to throw. */
 const LOB = (40 * Math.PI) / 180;
@@ -52,6 +57,8 @@ export interface Bots extends ShooterBots {
   supplies: AmmoBags | null;
   /** Whether someone's up in a chopper (off the ground: nobody's target). */
   aloft: ((p: Player) => boolean) | null;
+  /** Whether a bot's scrambled (the other side's Counter-UAV is up): it doesn't go after shots it hears. */
+  scrambled: ((bot: Bot) => boolean) | null;
 }
 
 /**
@@ -73,7 +80,15 @@ export function makeBots(game: GameContext, nav: () => NavGrid | null, hotspots:
         }
         const bag = bots.supplies?.low(bot) ? bots.supplies.nearest(bot.position) : null;
         if (bag) return bag;
-        return bots.objective && mind.skill > 0.5 !== Math.random() < 0.3 ? bots.objective : null;
+        if (bots.objective && mind.skill > 0.5 !== Math.random() < 0.3) return bots.objective;
+        // Scrambled: where it was headed already (unless that's the shot it heard), else a hotspot,
+        // never the shot.
+        if (mind.heard && game.clock.now - mind.heard.t < HEARD && !mind.target && bots.scrambled?.(bot)) {
+          const h = mind.heard.at;
+          if (mind.goal && Math.hypot(mind.goal.x - h.x, mind.goal.z - h.z) > 6) return mind.goal;
+          return hotspots.length ? hotspots[Math.floor(Math.random() * hotspots.length)] : null;
+        }
+        return null;
       },
       throw: (bot, at, mind) => {
         const item = Object.keys(LETHALS).find((id) => bot.inventory.count(id) > 0);
@@ -94,7 +109,7 @@ export function makeBots(game: GameContext, nav: () => NavGrid | null, hotspots:
         return throwables.of(game)?.throw(bot, item, { at, cook: item === 'frag' ? mind.skill * 1.4 : 0 }) ?? false;
       },
     }),
-    { objective: null as Vec3 | null, rules: null as BotRules | null, supplies: null as AmmoBags | null, aloft: null as ((p: Player) => boolean) | null },
+    { objective: null as Vec3 | null, rules: null as BotRules | null, supplies: null as AmmoBags | null, aloft: null as ((p: Player) => boolean) | null, scrambled: null as ((bot: Bot) => boolean) | null },
   );
   return bots;
 }

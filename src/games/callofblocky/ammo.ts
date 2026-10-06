@@ -27,7 +27,11 @@ export class AmmoBags {
   private told = new Set<string>();
   private checkAt = 0;
 
-  constructor(private game: GameContext) {
+  /** `extra(p)`: whatever else a bag gives `p` (Scavenger's lethals, `server.ts`). */
+  constructor(
+    private game: GameContext,
+    private extra: (p: Player) => void = () => {},
+  ) {
     game.items.define('ammo', {
       kind: 'misc',
       name: 'Ammo',
@@ -89,6 +93,7 @@ export class AmmoBags {
         topped = true;
       }
     }
+    this.extra(p);
     p.audio.play('ammo');
     if (p.bot) return;
     if (topped) p.hud.pop('+AMMO', { color: COLORS.gold });

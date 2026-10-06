@@ -1,6 +1,6 @@
 import type { Vec3 } from '@platform';
 import type { Client, ClientKit } from '@platform/client';
-import { assistOf, gun as gunOf, gunMove, resolveGunRules, spreadDeg, type Assist, type Gun, type GunShown, type ShotWire, type GunItem, type GunOptions, isGun } from '@platform/items';
+import { assistOf, gun as gunOf, gunMove, resolveGunRules, spreadDeg, type Assist, type Gun, type GunOwn, type GunShown, type ShotWire, type GunItem, type GunOptions, isGun } from '@platform/items';
 import { GunController, type FiredShot } from './gunner';
 
 /**
@@ -154,6 +154,8 @@ export function guns(options: GunOptions = {}): ClientKit {
       const held = heldGun(client);
       // The host's word on the gun in hand (its rounds, a reload), and a death: guns come back full.
       if (me.dead) ctl.reset();
+      // How fast they reload (the host's word: a perk, say), so this screen reloads as fast.
+      ctl.reloadSpeed = (me.items?.gun as GunOwn | undefined)?.reloadSpeed ?? 1;
       ctl.hold(held?.item ?? null, held?.def, held ? (me.hand.state as GunShown | null) : null);
       ctl.reconcile(held ? (me.hand.state as GunShown | null) : null);
       if (!ctl.state) return;
