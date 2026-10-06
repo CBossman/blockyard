@@ -10,7 +10,7 @@ import type { JamView } from './state';
  */
 
 const CSS = `
-.jam-calls { position: absolute; left: 0; right: 0; top: 30%; display: flex; flex-direction: column; align-items: center; pointer-events: none }
+.jam-calls { position: absolute; left: 0; right: 0; top: 24%; display: flex; flex-direction: column; align-items: center; pointer-events: none }
 .jam-call { display: flex; flex-direction: column; align-items: center; animation: jam-slam 1.9s cubic-bezier(.2,.9,.25,1.2) forwards }
 .jam-call-text { font-family: var(--pixel); font-size: clamp(34px, 7vw, 84px); font-style: italic; letter-spacing: 0.02em; color: #fff;
   -webkit-text-stroke: 3px #0b0d14; paint-order: stroke fill; text-shadow: 0 6px 0 #0b0d14, 0 0 30px var(--c); transform: skewX(-10deg) }
@@ -99,9 +99,9 @@ function markers(client: Client) {
     client.hud.marker('jam.meter', null);
     return;
   }
-  client.hud.marker('jam.me', { x: p.x, y: p.y + 3.15, z: p.z }, { shape: 'diamond', color: s.fire ? '#ff6b1a' : '#ffd23f', size: 12, label: 'YOU', edge: true });
+  client.hud.marker('jam.me', { x: p.x, y: p.y + 2.75, z: p.z }, { shape: 'diamond', color: s.fire ? '#ff6b1a' : '#ffd23f', size: 12, label: 'YOU', edge: true });
   if (s.air === 1 && !s.released) {
     const fill = Math.min(1, s.t / SHOT_APEX);
-    client.hud.marker('jam.meter', { x: p.x, y: p.y + 3.7, z: p.z }, { shape: 'dot', color: fill > 0.85 ? '#2bd673' : '#ffd23f', size: 4, label: fill > 0.85 ? 'NOW!' : ' ', bar: fill });
+    client.hud.marker('jam.meter', { x: p.x, y: p.y + 3.25, z: p.z }, { shape: 'dot', color: fill > 0.85 ? '#2bd673' : '#ffd23f', size: 6, label: fill > 0.85 ? 'RELEASE!' : 'SHOOT', bar: fill });
   } else client.hud.marker('jam.meter', null);
 }

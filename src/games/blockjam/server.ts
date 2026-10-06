@@ -27,6 +27,7 @@ const DEAD_AFTER_SCORE = 1.5;
 const PER_TEAM = 2;
 
 let m: Match;
+/** (Only while a new game's setting up is there no match.) */
 /** People waiting for a place (both teams full of people). */
 const waiting = new Set<Player>();
 /** Which visitors come to town next. */
@@ -42,6 +43,7 @@ export default defineServer(shared, {
       ['jam_hoop', 'Basket'],
       ['jam_net', 'Net'],
       ['jam_court', 'Court'],
+      ['jam_shadow', 'Shadow'],
     ]) game.items.define(id, { kind: 'misc', name, icon: { block: 'orange_concrete' } });
     game.events.on('playerJoin', ({ player }) => {
       if (player.bot) return;
@@ -60,6 +62,11 @@ export default defineServer(shared, {
   start(game) {
     waiting.clear();
     resetHud();
+    // The last game's bots go (a restart keeps players, bots and all); the new game makes its own.
+    // (No match meanwhile, so their leaving doesn't refill the old one.)
+    (m as Match | undefined) = undefined;
+    for (const b of [...game.bots.all]) game.bots.remove(b);
+    bots.clear();
     tick = 0;
     const home = TEAMS[0];
     const away = TEAMS[visitors % TEAMS.length === 0 ? 1 : visitors % TEAMS.length];
@@ -79,6 +86,8 @@ export default defineServer(shared, {
     for (const p of game.players) if (!p.bot) join(game, p);
     fill(game);
     tipOff(game);
+    // In development, tests reach in (`__game.dev('__jam.give(me)')`).
+    if (import.meta.env.DEV) (globalThis as unknown as { __jam: unknown }).__jam = { get match() { return m; }, give: (p: Player) => { const b = ballerOf(p); if (b) { m.phase = 'live'; for (const x of allBallers(m)) x.player.freeze(false); giveBall(game, b); } }, pass: (p: Player) => { const b = ballerOf(p); if (b) pass(game, b); } };
   },
 
   update(game, dt) {
@@ -639,9 +648,13 @@ function inputs(game: Game, now: number) {
     if (!s || s.stun > 0) continue;
     if (!(pl.input.pressed('KeyE') || pl.input.buttonPressed(2))) continue;
     const turbo = pl.input.isDown('ShiftLeft') || pl.input.isDown('ShiftRight');
-    if (m.ball.mode === 'held' && m.ball.holder === b) {
+    const h = m.ball.mode === 'held' ? m.ball.holder : null;
+    if (h === b) {
       if (s.air >= 3) continue;
       pass(game, b);
+    } else if (h && h.team === b.team) {
+      // Calling for it: a bot teammate passes it over (a person decides for themselves).
+      if (h.player.bot && jamOf(h.player).air < 3) pass(game, h, b);
     } else if (turbo) shove(game, b, now);
     else steal(game, b, now);
   }

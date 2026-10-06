@@ -14,6 +14,7 @@ import type { JamView } from './state';
  */
 export function cameraKit(view: JamView): ClientKit {
   let tx = 0;
+  let ty = 0;
   let kick = 0;
   let started = false;
   return {
@@ -26,10 +27,16 @@ export function cameraKit(view: JamView): ClientKit {
       const want = Math.max(-lim, Math.min(lim, target));
       tx = started ? tx + (want - tx) * (1 - Math.exp(-dt * 2.6)) : want;
       started = true;
+      // Up with the play (a dunk, a lob), a little.
+      const high = Math.max(0, ballY(client, view) - (FLOOR + 2.4));
+      ty += (Math.min(2.2, high * 0.55) - ty) * (1 - Math.exp(-dt * 4));
       const k = kick * kick;
+      // In development, a camera of one's own for shooting art (`__jamCam = { position, target, fov }`).
+      const art = import.meta.env.DEV ? (globalThis as unknown as { __jamCam?: { position: { x: number; y: number; z: number }; target: { x: number; y: number; z: number }; fov?: number } }).__jamCam : undefined;
+      if (art) return client.camera.take(art);
       client.camera.take({
-        position: { x: tx * 0.86, y: CAMERA.y - k * 0.8, z: CAMERA.z - k * 1.5 },
-        target: { x: tx, y: FLOOR + 0.9, z: -1.3 },
+        position: { x: tx * 0.86, y: CAMERA.y - k * 0.8 + ty * 0.4, z: CAMERA.z - k * 1.5 },
+        target: { x: tx, y: FLOOR + 0.5 + ty, z: -0.6 },
         fov: CAMERA.fov - k * 5,
       });
     },
@@ -54,6 +61,16 @@ export function cameraKit(view: JamView): ClientKit {
       c.turn(-c.pitch, dy);
     },
   };
+}
+
+/** How high the ball is (whoever has it: their feet; or where it's flying). */
+function ballY(client: Client, view: JamView): number {
+  if (view.holder) {
+    for (const f of client.figures.all) if (f.player === view.holder) return f.root.position.y + 1.1;
+    return FLOOR + 1.1;
+  }
+  const f = view.ballInAir();
+  return f ? f.y : FLOOR;
 }
 
 /** Where along the court the ball is (whoever has it, or where it's flying). */

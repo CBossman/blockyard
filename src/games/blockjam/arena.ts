@@ -80,29 +80,5 @@ export function buildArena(): Blueprint {
       }
     }
   }
-  // The camera's side: two low rows (it watches over them).
-  for (let r = 0; r < 2; r++) {
-    const z = wz + 1 + r;
-    const top = FLOOR + r;
-    for (let x = -wx - 1; x <= wx; x++) {
-      if (r > 0) bp.fill({ x, y: F, z }, { x, y: top - 1, z }, 'jam_concrete');
-      bp.set(x, top, z, (x + 200) % 11 === 0 ? 'jam_concrete' : fan(x, r + 40, z));
-    }
-  }
-
-  // The rafters: a frame of steel over the court, lights hung under it.
-  const ry = FLOOR + 19;
-  for (let x = -wx; x <= wx - 1; x++) {
-    for (const z of [-wz + 1, -1, wz - 2]) {
-      bp.set(x, ry, z, 'jam_steel');
-      if ((x + 200) % 4 === 0) bp.set(x, ry - 1, z, 'jam_light');
-    }
-  }
-  for (let z = -wz + 1; z <= wz - 2; z++) {
-    for (const x of [-wx, -6, 5, wx - 1]) {
-      bp.set(x, ry, z, 'jam_steel');
-      if ((z + 200) % 3 === 0) bp.set(x, ry - 1, z, 'jam_light');
-    }
-  }
   return bp;
 }

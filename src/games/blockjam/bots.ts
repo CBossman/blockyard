@@ -38,6 +38,9 @@ export const bots = {
   forget(b: Baller) {
     minds.delete(b);
   },
+  clear() {
+    minds.clear();
+  },
   update(game: Game, m: Match, _dt: number) {
     const now = game.clock.now;
     for (const b of allBallers(m)) {

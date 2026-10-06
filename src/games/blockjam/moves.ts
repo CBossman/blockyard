@@ -178,7 +178,7 @@ export const jam: MovementAbility<JamState> = {
           const to = dunkTarget(side, p.x, p.z);
           Object.assign(s, { air: 3, t: 0, fx: p.x, fy: p.y, fz: p.z, tx: to.x, ty: to.y, tz: to.z });
           s.dur = 0.5 + dist * 0.075;
-          s.lift = 0.9 + dist * 0.2;
+          s.lift = 0.6 + dist * 0.13;
           s.style = Math.floor(Math.abs(body.time) * 997 + dist * 31) % DUNK_STYLES;
           if (!s.fire) s.turbo = Math.max(0, s.turbo - 0.18);
           body.trigger('dunk');

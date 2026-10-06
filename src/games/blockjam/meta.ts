@@ -1,10 +1,12 @@
 import { defineMeta } from '@platform';
+import cover from './cover.webp?url';
 
 export default defineMeta({
   id: 'blockjam',
   title: 'Block Jam',
   tagline: 'Two on two, no fouls, big heads. Turbo to the rim, slam it home, catch fire.',
   accent: '#ff6b1a',
+  cover,
   controls: [
     ['WASD', 'run (up and down the screen)'],
     ['Shift', 'turbo'],

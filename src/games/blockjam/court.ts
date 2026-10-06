@@ -69,4 +69,4 @@ export const WALL_X = HALF_LENGTH + 3;
 export const WALL_Z = HALF_WIDTH + 2.5;
 
 /** Where the camera watches from: the near sideline (+z), up in the stands. */
-export const CAMERA = { z: HALF_WIDTH + 13.5, y: FLOOR + 8.2, fov: 46 };
+export const CAMERA = { z: HALF_WIDTH + 9, y: FLOOR + 5.6, fov: 44 };

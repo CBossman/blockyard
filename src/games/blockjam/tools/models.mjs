@@ -420,7 +420,21 @@ function court() {
   });
 }
 
+/** A soft dark disc for the ball's shadow on the floor (radius 0.5: each screen scales it). */
+function shadow() {
+  const m = new Mesh({ dark: { rgb: '#1a120c', rough: 1 }, mid: { rgb: '#5a3a24', rough: 1 } });
+  const N = 20;
+  for (let k = 0; k < N; k++) {
+    const a0 = (k / N) * Math.PI * 2;
+    const a1 = ((k + 1) / N) * Math.PI * 2;
+    m.tri([0, 0, 0], [Math.cos(a1) * 0.32, 0, Math.sin(a1) * 0.32], [Math.cos(a0) * 0.32, 0, Math.sin(a0) * 0.32], 'dark', [0, 1, 0]);
+    m.quad([Math.cos(a0) * 0.32, 0, Math.sin(a0) * 0.32], [Math.cos(a1) * 0.32, 0, Math.sin(a1) * 0.32], [Math.cos(a1) * 0.5, 0, Math.sin(a1) * 0.5], [Math.cos(a0) * 0.5, 0, Math.sin(a0) * 0.5], [0, 1, 0], 'mid');
+  }
+  return m.glb('jam_shadow');
+}
+
 save('ball.glb', ball());
+save('shadow.glb', shadow());
 save('hoop.glb', hoop());
 save('net.glb', net());
 save('court.glb', court());

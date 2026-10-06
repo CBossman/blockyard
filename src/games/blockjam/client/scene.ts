@@ -29,6 +29,8 @@ export function sceneKit(view: JamView): ClientKit {
   let court: Node | null = null;
   const baskets: Basket[] = [];
   let ball: Node | null = null;
+  /** Its shadow on the floor (bigger and fainter the higher it is). */
+  let shadow: Node | null = null;
   /** The ball as last drawn (for its spin), and the dribble's last bounce (for its sound). */
   const last = new Vec3();
   let lastBounce = 0;
@@ -82,6 +84,7 @@ export function sceneKit(view: JamView): ClientKit {
         }
       }
       if (!ball) ball = place(client, 'jam_ball', { x: 0, y: FLOOR + 1, z: 0 }, BALL_RADIUS * 2);
+      if (!shadow) shadow = place(client, 'jam_shadow', { x: 0, y: FLOOR + 0.02, z: 0 }, BALL_RADIUS * 2);
 
       // What the ball did this frame.
       for (const e of view.events) {
@@ -188,6 +191,12 @@ export function sceneKit(view: JamView): ClientKit {
       if (!held && view.flight && d < 1e-4) ball.quaternion.premultiply(q1.setFromAxisAngle(UP, dt * 2));
       ball.position.copy(now);
       last.copy(now);
+      if (shadow) {
+        const up = Math.max(0, now.y - FLOOR);
+        shadow.visible = ball.visible;
+        shadow.position.set(now.x, FLOOR + 0.025, now.z);
+        shadow.scale.setScalar(BALL_RADIUS * 2 * (1 + up * 0.12));
+      }
 
       // Fire: anyone on it burns at the feet, and the ball they've touched trails flames.
       flameAt += dt;
@@ -198,10 +207,11 @@ export function sceneKit(view: JamView): ClientKit {
           const f = figureOf(client, id);
           if (!f) continue;
           const p = f.root.position;
-          client.fx.particles({ x: p.x, y: p.y + 0.15, z: p.z }, [1, 0.42, 0.08], { count: 2, speed: 0.6, size: 0.16, gravity: -4, glow: 1, life: 0.45, spread: 0.3, up: 1.6 });
+          client.fx.particles({ x: p.x, y: p.y + 0.1, z: p.z }, [1, 0.22, 0.02], { count: 4, speed: 0.7, size: 0.22, gravity: -5, glow: 0.7, life: 0.5, spread: 0.35, up: 2 });
+          client.fx.particles({ x: p.x, y: p.y + 0.3, z: p.z }, [1, 0.6, 0.05], { count: 2, speed: 0.5, size: 0.14, gravity: -6, glow: 0.9, life: 0.35, spread: 0.25, up: 2.4 });
         }
         const hot = view.holder ? view.ballers.get(view.holder)?.fire : view.flight && view.flightFire;
-        if (hot && ball.visible) client.fx.particles({ x: now.x, y: now.y, z: now.z }, [1, 0.5, 0.1], { count: 3, speed: 0.4, size: 0.14, gravity: -2.5, glow: 1, life: 0.4, spread: 0.12, up: 0.8 });
+        if (hot && ball.visible) client.fx.particles({ x: now.x, y: now.y, z: now.z }, [1, 0.3, 0.03], { count: 4, speed: 0.4, size: 0.18, gravity: -3, glow: 0.8, life: 0.45, spread: 0.12, up: 0.8 });
       }
     },
   };

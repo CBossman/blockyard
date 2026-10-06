@@ -12,7 +12,7 @@ import type { JamView } from './state';
  */
 
 /** How big the heads are (arcade). */
-export const HEAD = 1.6;
+export const HEAD = 1.75;
 
 const smooth = (t: number) => {
   const c = Math.min(1, Math.max(0, t));

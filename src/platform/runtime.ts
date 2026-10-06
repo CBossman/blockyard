@@ -1198,7 +1198,7 @@ export class Runtime {
   private updateReadiness() {
     const s = this.mine(this.frameData);
     if (this.worldReady || !s || !this.hostReady) return;
-    const ready = this.chunks.readiness(s.x, s.z, Math.min(this.settings.renderDistance, 6));
+    const ready = this.chunks.readiness(s.x, s.z, Math.min(this.viewDistance(this.settings), 6));
     const models = this.graphics.gltf.pending;
     this.title.progress(0.1 + 0.9 * ready * (models ? 0.97 : 1), ready < 1 ? `Generating terrain… ${Math.round(ready * 100)}%` : models ? `Loading models… ${models} to go` : 'Ready');
     if (ready >= 0.999 && !models) {
