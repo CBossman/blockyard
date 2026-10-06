@@ -1,6 +1,6 @@
 import type { Player } from '@platform';
 import type { BallState } from './ball';
-import type { Side } from './court';
+import { HALF_LENGTH, type Side } from './court';
 import { easier, LEVELS, type Level, type LevelId } from './levels';
 import type { JamState } from './moves';
 import type { FlightKind } from './protocol';
@@ -119,6 +119,11 @@ export function levelOf(m: Match, b: Baller): Level {
   if (!hasPeople(foe) && !hasPeople(b.team)) return LEVELS.allstar;
   const l = LEVELS[m.level];
   return hasPeople(foe) && b.team.score - foe.score >= l.comeback ? easier(l) : l;
+}
+
+/** Where a side takes the ball out after a basket (or a turnover): its own baseline, beside the key. */
+export function inboundSpot(t: Team): { x: number; z: number } {
+  return { x: -t.side * (HALF_LENGTH - 0.9), z: 3.2 };
 }
 
 /** Where the ball is now (held: about the holder's hands; flying: its flight). */

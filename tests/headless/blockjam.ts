@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { advance, arc, launch, shotTime, type BallEvent } from '../../src/games/blockjam/ball';
 import { FLOOR, isThree, rim } from '../../src/games/blockjam/court';
 import { dunkPath, dunkTarget, JAM_STATE, SHOT_APEX } from '../../src/games/blockjam/moves';
-import { levelOf } from '../../src/games/blockjam/match';
+import { inboundSpot, levelOf, type Team } from '../../src/games/blockjam/match';
 import blockjam, { matchNow } from '../../src/games/blockjam/server';
 import { GameHost } from '../../src/platform/host/game';
 import { check } from './_harness';
@@ -68,15 +68,27 @@ export default function blockjamTest() {
   let tipped = false;
   let maxQuarter = 0;
   let over = false;
+  // Every inbound starts at the inbounding side's own baseline (not up the floor at the other end).
+  let inbounds = 0;
+  let farInbound = 0;
+  let wasInbound: Team | null = null;
   for (let i = 0; i < 30 * 60 * 11 && !over; i++) {
     host.step(1 / 30);
     const m = matchNow();
+    if (wasInbound && m.ball.mode === 'held' && m.ball.holder) {
+      inbounds++;
+      const spot = inboundSpot(wasInbound);
+      const p = m.ball.holder.player.position;
+      if (m.ball.holder.team !== wasInbound || Math.hypot(p.x - spot.x, p.z - spot.z) > 2.6) farInbound++;
+    }
+    wasInbound = m.ball.mode === 'dead' ? m.ball.inbound : null;
     if (m.phase === 'live') tipped = true;
     maxQuarter = Math.max(maxQuarter, m.quarter);
     if (m.phase === 'over') over = true;
   }
   const m = matchNow();
   check(tipped, 'tip-off');
+  check(inbounds > 10 && farInbound === 0, `every inbound at the side's own baseline (${inbounds - farInbound} of ${inbounds})`);
   check(over && maxQuarter >= 4, `the final buzzer, after ${maxQuarter} quarters`);
   const [a, b] = m.teams;
   check(a.score !== b.score, `a winner: ${a.def.abbr} ${a.score} ${b.def.abbr} ${b.score}`);

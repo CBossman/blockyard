@@ -4,7 +4,7 @@ import { bots } from './bots';
 import { BALL_RADIUS, FLOOR, fromRim, isThree, rim, RIM_HEIGHT, type Side } from './court';
 import { defineHud, resetHud, showHud } from './hud';
 import { LEVELS, type LevelId } from './levels';
-import { allBallers, ballPos, jamOf, levelOf, otherTeam, type Baller, type Match, type Team } from './match';
+import { allBallers, ballPos, inboundSpot, jamOf, levelOf, otherTeam, type Baller, type Match, type Team } from './match';
 import { DUNK_STYLES, releaseError } from './moves';
 import { definePick, PICK, pickData } from './pick';
 import { MSG, type BallMsg, type BallersMsg, type CallMsg, type FlightKind, type MomentMsg } from './protocol';
@@ -519,10 +519,15 @@ function dead(game: Game, team: Team, after: number) {
   m.ball = { ...m.ball, mode: 'dead', holder: null, dunker: null, inbound: team, deadUntil: game.clock.now + after };
 }
 
-/** The side inbounds: the one of them nearest the basket they defend takes it. */
+/**
+ * The side inbounds from its own baseline: the one of them nearest the spot takes it there (put
+ * back on it if they've wandered off up the floor: the ball starts at their end, not at the other).
+ */
 function inbound(game: Game, team: Team) {
-  const def = rim(-team.side as Side);
-  const b = [...team.ballers].sort((x, y) => dist2(x.player.position, def) - dist2(y.player.position, def))[0];
+  const spot = inboundSpot(team);
+  const b = [...team.ballers].sort((x, y) => dist2(x.player.position, spot) - dist2(y.player.position, spot))[0];
+  if (!b) return;
+  if (flat(b.player.position, spot) > 2.5) b.player.teleport({ x: spot.x, y: FLOOR, z: spot.z }, team.side > 0 ? -Math.PI / 2 : Math.PI / 2);
   giveBall(game, b);
 }
 

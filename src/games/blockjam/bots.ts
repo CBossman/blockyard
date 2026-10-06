@@ -1,7 +1,7 @@
 import type { Bot, GameContext as Game } from '@platform';
-import { fromRim, HALF_WIDTH, rim, type Side } from './court';
+import { fromRim, HALF_LENGTH, HALF_WIDTH, rim, type Side } from './court';
 import type { Level } from './levels';
-import { allBallers, ballPos, jamOf, levelOf, otherTeam, type Baller, type Match } from './match';
+import { allBallers, ballPos, inboundSpot, jamOf, levelOf, otherTeam, type Baller, type Match } from './match';
 import { DUNK_RANGE, SHOT_APEX } from './moves';
 
 /**
@@ -137,21 +137,25 @@ function think(game: Game, m: Match, b: Baller, bot: Bot, mind: Mind, now: numbe
   if (holder === b) return offenseWithBall(game, m, b, bot, mind, now);
   if (ball.mode === 'flight' || (ball.mode === 'dead' && !ball.inbound && m.phase === 'tip')) return chase(game, m, b, bot, mind, now);
   if (ball.mode === 'dead') {
-    // Back on defense or up the floor while it's dead.
-    const own = holderSide(m, b) ?? -b.team.side;
-    runTo(bot, mind, { x: own * 6, z: b === b.team.ballers[0] ? -2 : 3 }, false, 0.8);
+    const side = b.team.side;
+    const t = ball.inbound;
+    if (t === b.team) {
+      // Ours to take out: the nearer to our baseline goes for it, the other comes back to get it.
+      const spot = inboundSpot(t);
+      const d = (x: Baller) => Math.hypot(x.player.position.x - spot.x, x.player.position.z - spot.z);
+      const takes = [...t.ballers].sort((x, y) => d(x) - d(y))[0] === b;
+      const to = takes ? spot : { x: -side * (HALF_LENGTH - 6), z: -2.5 };
+      runTo(bot, mind, to, Math.hypot(to.x - bot.position.x, to.z - bot.position.z) > 4, 0.4);
+    } else {
+      // Theirs: back on defense, in our half.
+      const to = { x: -side * 7.5, z: b === b.team.ballers[0] ? -2 : 2.5 };
+      runTo(bot, mind, to, Math.hypot(to.x - bot.position.x, to.z - bot.position.z) > 4, 0.8);
+    }
     return;
   }
   if (holder && holder.team === b.team) return offenseOffBall(game, m, b, bot, mind, now, holder);
   if (holder) return defend(game, m, b, bot, mind, now, holder);
   stop(bot);
-}
-
-/** Which way their side's going after a dead ball (the inbounding side runs up the floor). */
-function holderSide(m: Match, b: Baller): Side | null {
-  const t = m.ball.inbound;
-  if (!t) return null;
-  return t === b.team ? b.team.side : (-b.team.side as Side);
 }
 
 /** Tap shoot this tick (a leap, a dunk). */
