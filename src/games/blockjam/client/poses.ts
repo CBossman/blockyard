@@ -43,9 +43,16 @@ function legs(j: Joints, rest: Rest, hip: number, knee: number) {
 export function posesKit(view: JamView): ClientKit {
   /** Each figure's dribble, and how long it's been down (for getting up). */
   const phase = new Map<string, number>();
+  /** Who shoved or swiped lately (this screen's clock): a push with both hands, a swipe with one. */
+  const shoved = new Map<string, number>();
+  const swiped = new Map<string, number>();
   return {
     name: 'jam.poses',
     frame(client, dt) {
+      for (const m of view.moments) {
+        if (m.k === 'shove') shoved.set(m.by, client.time);
+        else if (m.k === 'steal') swiped.set(m.by, client.time);
+      }
       for (const fig of client.figures.all) {
         const rig = fig.rig;
         const id = fig.player;
@@ -99,6 +106,21 @@ export function posesKit(view: JamView): ClientKit {
             arm(j, rest, 'R', -1.1, 0.3, 0.6);
             arm(j, rest, 'L', -1.1, 0.3, 0.6);
             continue;
+        }
+        // A shove: both hands thrust out ahead; a swipe: one hand slapping across.
+        const sh = client.time - (shoved.get(id) ?? -9);
+        if (sh < 0.35) {
+          const k = Math.sin((sh / 0.35) * Math.PI);
+          arm(j, rest, 'R', -1.5 * k, 0.15, 0.2);
+          arm(j, rest, 'L', -1.5 * k, 0.15, 0.2);
+          j.chest.quaternion.multiply(rot(0.35 * k));
+          continue;
+        }
+        const sw = client.time - (swiped.get(id) ?? -9);
+        if (sw < 0.3) {
+          const k = sw / 0.3;
+          arm(j, rest, 'R', -1.3, 0.2 - 1.2 * k, 0.2, -0.8 + 1.6 * k);
+          continue;
         }
         if (holding) {
           // The dribble: the ball goes down and comes back up to the hand, faster at a run.
