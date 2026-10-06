@@ -18,6 +18,7 @@ import { LETHALS } from './weapons';
  */
 const WEAPONS: Record<string, BotWeapon> = {
   rifle: { range: 16 },
+  famas: { range: 14 },
   smg: { range: 8, rush: true },
   tommy: { range: 10, rush: true },
   shotgun: { range: 4, ads: false, rush: true },

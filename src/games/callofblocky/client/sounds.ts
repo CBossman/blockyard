@@ -43,6 +43,8 @@ function surf(s: SynthKit, notes: number[], step: number, picks: number) {
 export function defineSounds(client: Client) {
   const a = client.audio;
   a.define('shot_rifle', (s) => shot(s, { punch: 140, body: 0.2, bright: 5200, crack: 0.45, tail: 0.35 }));
+  // The FAMAS: a quick, snappy 5.56, brighter and shorter than the Big Kahuna's.
+  a.define('shot_famas', (s) => shot(s, { punch: 165, body: 0.15, bright: 6200, crack: 0.5, tail: 0.28, loud: 0.92 }));
   a.define('shot_smg', (s) => shot(s, { punch: 190, body: 0.11, bright: 7000, crack: 0.35, tail: 0.18, loud: 0.8 }));
   a.define('shot_shotgun', (s) => shot(s, { punch: 95, body: 0.42, bright: 3000, crack: 0.3, tail: 0.6, loud: 1.2 }));
   a.define('shot_sniper', (s) => {

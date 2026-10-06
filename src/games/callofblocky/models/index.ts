@@ -1,6 +1,7 @@
 import pistol from './pistol.glb?url';
 import smg from './smg.glb?url';
 import rifle from './rifle.glb?url';
+import famas from './famas.glb?url';
 import shotgun from './shotgun.glb?url';
 import sniper from './sniper.glb?url';
 import tommy from './tommy.glb?url';
@@ -30,6 +31,7 @@ export const GUNS: GunModel[] = [
   { id: 'pistol', name: 'Lucky 45', url: pistol },
   { id: 'smg', name: 'Mac-10', url: smg },
   { id: 'rifle', name: 'Big Kahuna', url: rifle },
+  { id: 'famas', name: 'FAMAS', url: famas },
   { id: 'shotgun', name: 'Pump Shotgun', url: shotgun },
   { id: 'sniper', name: 'Sniper', url: sniper },
   { id: 'tommy', name: 'The Wolf', url: tommy },

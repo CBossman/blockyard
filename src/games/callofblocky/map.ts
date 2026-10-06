@@ -1,18 +1,20 @@
 import { HIJACKED } from './maps/hijacked';
 import { JACKRABBIT } from './maps/jackrabbit';
 import { KAHUNA } from './maps/kahuna';
+import { NUKEBLOCK } from './maps/nukeblock';
 import type { MapSpec } from './maps/kit';
 
 export type { MapSpec, Site, SpawnPoint } from './maps/kit';
 
 /**
  * Call of Blocky's maps, all built into the one world, far apart: Jackrabbit Lane at the middle,
- * Big Kahuna Burger 512 blocks east of it, and Hijacked's yacht at sea 512 blocks west. The world's view is held to ten chunks
+ * Big Kahuna Burger 512 blocks east of it, Hijacked's yacht at sea 512 blocks west, and the
+ * Nukeblock test town 512 blocks south. The world's view is held to ten chunks
  * (`maxViewDistance`), so only the map being played is ever loaded and drawn; a match on another
  * map moves everyone there (its spawns, its bounds for the bots' walking grid, its hotspots).
  * The first is the home page's, and the one a new room starts on.
  */
-export const MAPS: readonly MapSpec[] = [JACKRABBIT, KAHUNA, HIJACKED];
+export const MAPS: readonly MapSpec[] = [JACKRABBIT, KAHUNA, HIJACKED, NUKEBLOCK];
 
 export const mapById = (id: string): MapSpec | undefined => MAPS.find((m) => m.id === id);
 

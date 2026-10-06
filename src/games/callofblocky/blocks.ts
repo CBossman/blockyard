@@ -4,8 +4,8 @@ import type { BlockDefinition } from '@platform';
  * Call of Blocky's own blocks: for Big Kahuna Burger's Hawaiian kitsch, thatch (and its slabs and
  * stairs, for roofs), bamboo (walls, and poles lying any way), carved tiki heads, chain-link, and
  * the drive-thru's menu board; for Hijacked's yacht, teak decking (and its slabs and stairs),
- * window glass, stainless rails, portholes, sofas, sun loungers and lifebuoys. Painted in code;
- * every screen and the server know them (shared.ts).
+ * window glass, stainless rails, portholes, sofas, sun loungers and lifebuoys; for Nukeblock,
+ * clapboard siding in mint and butter yellow, white pickets and the test town's mannequins. Painted in code; every screen and the server know them (shared.ts).
  */
 
 const STRAW = ['#caa14c', '#b78c3c', '#d9b560', '#a67c30', '#c09545'];
@@ -144,6 +144,16 @@ const lifebuoy = {
   },
 };
 
+/** Clapboard siding: boards four pixels tall, a shadow under each one's lip, a little grain. */
+const siding = (boards: string[], shadow: string) => ({
+  paint: (x: number, y: number) => ((y & 3) === 3 ? shadow : boards[((y >> 2) * 3 + ((x * 5 + y) % 11 === 0 ? 1 : 0)) % boards.length]),
+});
+const MINT = siding(['#a6d8b8', '#9fd2b1', '#acdcbd'], '#76a98a');
+const BUTTER = siding(['#f2de8c', '#eed886', '#f5e394'], '#c4ac5e');
+
+/** A test-town mannequin's painted plaster. */
+const PLASTER = { color: ['#ead9bd', '#e4d2b4', '#efe0c6'], noise: 0.08 };
+
 export const BLOCKS: Record<string, BlockDefinition> = {
   thatch: { texture: thatch, hardness: 0.6 },
   thatch_slab: { label: 'Thatch Slab', texture: thatch, shape: 'slab', full: 'thatch', hardness: 0.6 },
@@ -169,4 +179,11 @@ export const BLOCKS: Record<string, BlockDefinition> = {
   sofa: { texture: LEATHER, boxes: [[0, 0, 0, 16, 7, 16], [0, 7, 11, 16, 15, 16]], facing: true, hardness: 0.6 },
   lounger: { label: 'Sun Lounger', texture: LEATHER, boxes: [[1, 0, 0, 15, 4, 16], [1, 4, 9, 15, 9, 16]], facing: true, hardness: 0.6 },
   lifebuoy: { texture: { front: lifebuoy, all: lifebuoy }, boxes: [[0, 0, 15, 16, 16, 16]], facing: true, transparency: 'cutout', hardness: 0.3 },
+  siding_green: { label: 'Mint Siding', texture: MINT, hardness: 1 },
+  siding_yellow: { label: 'Butter Siding', texture: BUTTER, hardness: 1 },
+  picket: { label: 'Picket Fence', texture: { color: ['#f4f2ec', '#eeebe3'], noise: 0.05 }, shape: 'fence', hardness: 0.6 },
+  // A mannequin is two blocks: its legs (the same whichever way it looks), then its body, arms
+  // and head, which face a way (written facing north).
+  mannequin_legs: { label: 'Mannequin', texture: PLASTER, boxes: [[5, 0, 6, 7, 14, 10], [9, 0, 6, 11, 14, 10], [5, 14, 5, 11, 16, 11]], hardness: 0.5 },
+  mannequin_torso: { label: 'Mannequin', texture: PLASTER, boxes: [[4, 0, 5, 12, 8, 11], [2, 1, 6, 4, 8, 10], [12, 1, 6, 14, 8, 10], [7, 8, 7, 9, 10, 9], [5, 10, 5, 11, 15, 11]], facing: true, hardness: 0.5 },
 };

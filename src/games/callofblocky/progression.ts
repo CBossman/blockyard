@@ -90,6 +90,7 @@ export const UNLOCKS: Unlock[] = [
   item(9, 'sidearm', 'revolver'),
   outfit(10, 'crooner'),
   item(11, 'primary', 'lmg'),
+  item(12, 'primary', 'famas'),
   item(13, 'primary', 'marksman'),
   outfit(15, 'kahuna'),
   outfit(20, 'waitress'),

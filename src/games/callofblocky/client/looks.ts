@@ -35,6 +35,7 @@ const FP_HOLDS: Record<string, GunHold> = {
   smg: { ...FP_COMPACT, ads: ADS },
   tommy: { ...FP, ads: ADS },
   rifle: { ...FP, ads: ADS },
+  famas: { ...FP, ads: ADS },
   shotgun: { ...FP, ads: ADS },
   lmg: { ...FP, ads: ADS },
   sawnoff: { ...FP, ads: ADS },
@@ -60,6 +61,7 @@ const lethal = (id: string, grip: [number, number, number], look: ItemLook): Ite
 
 export const LOOKS: Record<string, ItemLook> = {
   rifle: gun('rifle', { sounds: { use: 'shot_rifle', reload: 'reload_mag' } }),
+  famas: gun('famas', { tracer: '#bcd4ff', sounds: { use: 'shot_famas', reload: 'reload_mag' } }),
   smg: gun('smg', { tracer: '#ff9ec8', sounds: { use: 'shot_smg', reload: 'reload_mag' } }),
   shotgun: gun('shotgun', { tracer: '#ffb36b', sounds: { use: 'shot_shotgun', reload: 'reload_shell', cycle: 'pump' } }),
   sniper: gun('sniper', { tracer: '#fff1a8', sounds: { use: 'shot_sniper', reload: 'reload_mag', cycle: 'bolt' } }),

@@ -2,7 +2,8 @@ import { readFileSync } from 'node:fs';
 import { GameHost } from '../../src/platform/host/game';
 import { IDLE_INPUT, type HostEvent, type PresentCall } from '../../src/platform/net/protocol';
 import { match } from '../../src/games/callofblocky/match';
-import { ROTATION } from '../../src/games/callofblocky/modes';
+import { MAPS } from '../../src/games/callofblocky/map';
+import { MODES, ROTATION } from '../../src/games/callofblocky/modes';
 import { SCORES, VOTING } from '../../src/games/callofblocky/nextvote';
 import { check, games } from './_harness';
 
@@ -86,7 +87,7 @@ export default function cobnext() {
   step(1);
   let m = menu(ann);
   check(m && menu(bob), 'then each person gets the vote on what next');
-  check(m.sections?.map((s) => s.title).join() === 'Mode,Map' && m.sections.every((s) => s.entries.length === 3), `a mode and a map to vote on, three of each: ${JSON.stringify(m.sections?.map((s) => s.entries.map((e) => e.label)))}`);
+  check(m.sections?.map((s) => s.title).join() === 'Mode,Map' && m.sections[0].entries.length === Object.keys(MODES).length && m.sections[1].entries.length === MAPS.length, `a mode and a map to vote on, every one of each: ${JSON.stringify(m.sections?.map((s) => s.entries.map((e) => e.label)))}`);
   // Nobody's voted: what's coming next anyway is marked.
   const fallback = ROTATION[1];
   check(entry(ann, 'Team Deathmatch')?.detail === 'next' && entry(ann, 'Big Kahuna Burger')?.detail === 'next', `up next if nobody votes: ${planned(1)} (${entry(ann, 'Team Deathmatch')?.detail}, ${entry(ann, 'Big Kahuna Burger')?.detail})`);
