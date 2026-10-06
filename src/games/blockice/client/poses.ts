@@ -32,25 +32,69 @@ function arm(j: Joints, rest: Rest, side: 'L' | 'R', x: number, z: number, bend:
   j[`lowerArm${side}`].quaternion.copy(rest[`lowerArm${side}`].quaternion).multiply(rot(-bend, 0, 0));
 }
 
-/** A leg set from rest: the hip turned forward (`hip`), out to the side (`out`), the knee bent. */
-function leg(j: Joints, rest: Rest, side: 'L' | 'R', hip: number, out: number, knee: number) {
-  j[`upperLeg${side}`].quaternion.copy(rest[`upperLeg${side}`].quaternion).multiply(rot(-hip, 0, side === 'L' ? out : -out));
+/** A leg set from rest: the hip turned forward (`hip`), out to the side (`out`), the knee bent, the toes turned out (`toe`). */
+function leg(j: Joints, rest: Rest, side: 'L' | 'R', hip: number, out: number, knee: number, toe = 0) {
+  j[`upperLeg${side}`].quaternion.copy(rest[`upperLeg${side}`].quaternion).multiply(rot(-hip, side === 'L' ? toe : -toe, side === 'L' ? out : -out));
   j[`lowerLeg${side}`].quaternion.copy(rest[`lowerLeg${side}`].quaternion).multiply(rot(knee, 0, 0));
 }
 
+/** A leg's pose: the hip turned forward (`h`), out to the side (`a`), the knee bent (`k`), the toes turned out (`t`). */
+interface LegPose {
+  h: number;
+  a: number;
+  k: number;
+  t: number;
+}
+const lerpLeg = (x: LegPose, y: LegPose, f: number): LegPose => ({ h: x.h + (y.h - x.h) * f, a: x.a + (y.a - x.a) * f, k: x.k + (y.k - x.k) * f, t: x.t + (y.t - x.t) * f });
+
+/** Gliding on it, under the body, the knee well bent; pushed out and back, nearly straight, toes out; lifted on the way back in. */
+const GLIDE: LegPose = { h: 0.85, a: 0.04, k: 1.45, t: 0.05 };
+const PUSHED: LegPose = { h: -0.28, a: 0.78, k: 0.1, t: 0.7 };
+const LIFTED: LegPose = { h: 1.1, a: 0.2, k: 1.95, t: 0.2 };
+/** Coasting: both feet under them, knees bent. */
+const COAST: LegPose = { h: 0.62, a: 0.1, k: 1.08, t: 0.08 };
+
+/**
+ * A leg through a stride, `u` 0..1 of it: gliding with the weight on it (the first half), then
+ * pushing out and back, then lifted and brought back in under the body.
+ */
+function strideLeg(u: number): LegPose {
+  if (u < 0.5) return lerpLeg({ ...GLIDE, h: GLIDE.h + 0.08 }, { ...GLIDE, h: GLIDE.h - 0.1 }, u / 0.5);
+  if (u < 0.82) return lerpLeg({ ...GLIDE, h: GLIDE.h - 0.1 }, PUSHED, smooth((u - 0.5) / 0.32));
+  const t = (u - 0.82) / 0.18;
+  return t < 0.5 ? lerpLeg(PUSHED, LIFTED, smooth(t / 0.5)) : lerpLeg(LIFTED, { ...GLIDE, h: GLIDE.h + 0.08 }, smooth((t - 0.5) / 0.5));
+}
+
+/** How high a leg holds the hips (from the hip's pivot to the sole), its lengths the rig's. */
+function legHeight(rig: FigureRig, l: LegPose): number {
+  const st = rig.straight;
+  const thigh = st.upperLegL.y - st.lowerLegL.y;
+  const shin = st.lowerLegL.y - st.footL.y;
+  return Math.cos(l.a) * (thigh * Math.cos(l.h) + shin * Math.cos(l.h - l.k)) + st.footL.y;
+}
+
+/** A leg set, its skate kept flat on the ice. */
+function legFlat(j: Joints, rest: Rest, side: 'L' | 'R', l: LegPose) {
+  leg(j, rest, side, l.h, l.a, l.k, l.t);
+  j[`foot${side}`].quaternion.copy(rest[`foot${side}`].quaternion).multiply(rot(l.h - l.k, 0, side === 'L' ? -l.a : l.a));
+}
+
 /** The body: the hips dropped (blocks) and turned, the back leaning forward, the head up to look ahead. */
-function body(j: Joints, rest: Rest, drop: number, lean: number, twist = 0, tilt = 0) {
+function body(j: Joints, rest: Rest, drop: number, lean: number, twist = 0, tilt = 0, shift = 0, turn = 0) {
   const r = rest.hips.position;
-  j.hips.position.set(r.x, r.y - drop, r.z);
-  j.hips.quaternion.copy(rest.hips.quaternion).multiply(rot(0, 0, tilt));
+  j.hips.position.set(r.x + shift, r.y - drop, r.z);
+  j.hips.quaternion.copy(rest.hips.quaternion).multiply(rot(0, turn, tilt));
   j.spine.quaternion.copy(rest.spine.quaternion).multiply(rot(lean * 0.6, twist * 0.5, 0));
   j.chest.quaternion.copy(rest.chest.quaternion).multiply(rot(lean * 0.4, twist * 0.5, 0));
   j.neck.quaternion.copy(rest.neck.quaternion).multiply(rot(-lean * 0.7, 0, 0));
 }
 
 export function posesKit(view: IceView): ClientKit {
-  /** Each figure's stride. */
+  /** Each figure's stride (0..1 a cycle of both legs), its speed last frame and how it's changing, how far into a hockey stop. */
   const phase = new Map<string, number>();
+  const lastSpeed = new Map<string, number>();
+  const accel = new Map<string, number>();
+  const stopping = new Map<string, number>();
   /** Who checked, poked or scored lately (this screen's clock). */
   const checked = new Map<string, number>();
   const poked = new Map<string, number>();
@@ -91,17 +135,37 @@ export function posesKit(view: IceView): ClientKit {
           continue;
         }
 
-        // Skating: a crouch, leaning in; the legs push out in turn, faster and further the quicker they go.
+        // Skating: a deep crouch, leaning into it. One leg glides with the weight on it while the
+        // other pushes out and back, then comes back in lifted, and they swap: quicker and longer
+        // strides the faster they go; both feet under them coasting (slowing with no push).
         const speed = fig.state.speed ?? 0;
-        const amount = Math.min(1, Math.max(0, (speed - 1.5) / 6));
-        const p = (phase.get(id) ?? Math.random() * 6) + dt * (3 + speed * 0.5) * (amount > 0.05 ? 1 : 0);
+        const was = lastSpeed.get(id) ?? speed;
+        lastSpeed.set(id, speed);
+        const acc = (accel.get(id) ?? 0) + ((speed - was) / Math.max(dt, 1e-3) - (accel.get(id) ?? 0)) * Math.min(1, dt * 6);
+        accel.set(id, acc);
+        const coasting = acc < -2.2 && speed > 2 ? 0.25 : 1;
+        const amount = Math.min(1, Math.max(0, (speed - 0.8) / 4.5)) * coasting;
+        const p = ((phase.get(id) ?? Math.random()) + dt * (0.6 + speed * 0.07) * (amount > 0.02 ? 1 : 0)) % 1;
         phase.set(id, p);
-        body(j, rest, 0.08 + 0.04 * amount, 0.35 + 0.25 * amount);
-        for (const side of ['L', 'R'] as const) {
-          const ph = side === 'L' ? p : p + Math.PI;
-          const push = Math.max(0, Math.sin(ph)) * amount;
-          leg(j, rest, side, 0.55 + 0.18 * Math.cos(ph) * amount, 0.07 + 0.42 * push, 1.0 - 0.55 * push);
-        }
+        const stop = (stopping.get(id) ?? 0) + ((s.stop ? 1 : 0) - (stopping.get(id) ?? 0)) * Math.min(1, dt * 14);
+        stopping.set(id, stop);
+        const legL = lerpLeg(COAST, strideLeg(p), amount);
+        const legR = lerpLeg(COAST, strideLeg((p + 0.5) % 1), amount);
+        // The weight over the gliding leg (the left glides the first half), the hips turning with the push.
+        const over = Math.sin(p * Math.PI * 2) * amount;
+        const shift = over * 0.09;
+        legL.a -= shift / 0.6;
+        legR.a += shift / 0.6;
+        // A hockey stop: turned side on, both knees deep, sitting back into it.
+        const stopL = { h: 0.7, a: 0.38, k: 1.45, t: 0.1 };
+        const stopR = { h: 0.55, a: 0.3, k: 1.2, t: 0.1 };
+        const L = lerpLeg(legL, stopL, stop);
+        const R = lerpLeg(legR, stopR, stop);
+        const legRoom = rig.straight.upperLegL.y;
+        const drop = legRoom - Math.max(legHeight(rig, L), legHeight(rig, R));
+        body(j, rest, drop, (0.5 + 0.35 * amount) * (1 - stop) - 0.05 * stop, -over * 0.35, -over * 0.06, shift * (1 - stop), over * 0.16 + 1.1 * stop);
+        legFlat(j, rest, 'L', L);
+        legFlat(j, rest, 'R', R);
 
         // The arms: both hands on the stick, low and ahead (the top hand, the left, across the body).
         const sinceGoal = client.time - (scored.get(id) ?? -9);
@@ -141,10 +205,16 @@ export function posesKit(view: IceView): ClientKit {
           const k = Math.sin((po / 0.3) * Math.PI);
           arm(j, rest, 'L', -0.9 - 0.5 * k, -0.25, 0.6 - 0.5 * k);
           arm(j, rest, 'R', -1.0 - 0.5 * k, 0.1, 0.3 - 0.2 * k);
+        } else if (view.holder === id) {
+          // Stickhandling: both hands on it, the puck worked side to side (as the puck's drawn).
+          const sway = Math.sin(client.time * 7.5);
+          arm(j, rest, 'L', -0.8, -0.3 + 0.14 * sway, 0.7);
+          arm(j, rest, 'R', -0.95, 0.1 + 0.2 * sway, 0.4 - 0.1 * sway);
         } else {
-          const sway = Math.sin(p) * 0.12 * amount;
-          arm(j, rest, 'L', -0.78 + sway, -0.28, 0.65);
-          arm(j, rest, 'R', -0.95 - sway, 0.12, 0.35);
+          // The stick in the top hand, low and ahead; the other arm pumping with the stride.
+          const pump = Math.sin(p * Math.PI * 2) * amount;
+          arm(j, rest, 'L', -0.72, -0.2, 0.55);
+          arm(j, rest, 'R', -0.7 + 0.8 * pump - 0.25 * amount, 0.2 + 0.45 * Math.max(0, -pump), 0.45 + 0.35 * amount);
         }
       }
     },
