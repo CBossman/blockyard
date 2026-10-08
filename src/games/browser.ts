@@ -4,6 +4,7 @@ import callofblocky from './callofblocky/meta';
 import blockfront from './blockfront/meta';
 import blockjam from './blockjam/meta';
 import blockice from './blockice/meta';
+import blockroyale from './blockroyale/meta';
 import arena from './arena/meta';
 import starfighter from './starfighter/meta';
 import skyship from './skyship/meta';
@@ -22,6 +23,7 @@ export const games: GameEntry[] = [
   entry(blockfront, () => import('./blockfront/client')),
   entry(blockjam, () => import('./blockjam/client')),
   entry(blockice, () => import('./blockice/client')),
+  entry(blockroyale, () => import('./blockroyale/client')),
   entry(arena, () => import('./arena/client')),
   entry(starfighter, () => import('./starfighter/client')),
   entry(skyship, () => import('./skyship/client')),

@@ -28,7 +28,7 @@
 
 ## What it is
 
-- **Nine games, free in the browser, no download.** A Call of Duty-style shooter, a Battlefront II-style third-person war, Bed Wars, a co-op arena, a space dogfighter and more. Play alone with bots or with friends, in public matches or a room of your own.
+- **Thirteen games, free in the browser, no download.** A Call of Duty-style shooter, a Battlefront II-style third-person war, a battle royale, Bed Wars, a co-op arena, a space dogfighter and more. Play alone with bots or with friends, in public matches or a room of your own.
 - **A platform, not just a game.** The engine already has the world: endless procedural terrain, lighting, physics, entities, items, guns, vehicles, combat, audio, HUD and menus. A game only describes its rules and content, and imports nothing but `@platform`.
 - **Multiplayer built in.** Every game runs on an authoritative game server. Each screen predicts its own movement, and shots are lag-compensated, so what you aim at is what you hit.
 - **Shared across games.** Sign in with Discord and your progress, 73 achievements and cosmetics follow you from game to game. It also has gamepad support and rebindable keys.
@@ -54,6 +54,7 @@
   </tr>
   <tr>
     <td align="center"><a href="https://blockyard.gg/?game=heart-hunt"><img src="src/games/heart-hunt/cover.webp" alt="Heart Hunt"></a><br><b>Heart Hunt</b></td>
+    <td align="center"><a href="https://blockyard.gg/?game=blockroyale"><img src="src/games/blockroyale/cover.webp" alt="Block Royale"></a><br><b>Block Royale</b></td>
   </tr>
 </table>
 
@@ -68,6 +69,7 @@
 | **[Blockyard Links](https://blockyard.gg/?game=golf)** | Eighteen holes of parkland golf, par 72, with a cart to drive round them. Swing with the mouse: pull back for power, then swing up through the ball, and the stroke's line pushes, pulls, hooks or slices it. The ball flies with real drag, lift and wind, digs into soft turf and rolls down sloping greens into a real cup (lip-outs included). Everyone plays their own round on the same course. |
 | **[Sky Obby](https://blockyard.gg/?game=obby)** | Ten stages of parkour in the sky, with lava, crumbling sand, launch pads, blinking platforms and cannons. Each player runs on their own clock, and best times go on a leaderboard. |
 | **[Sandbox](https://blockyard.gg/?game=sandbox)** | Creative building in an endless world, which the server keeps. |
+| **[Block Royale](https://blockyard.gg/?game=blockroyale)** | A battle royale: a dozen fighters drop from a balloon bus onto an island of nine landmarks: a village, a moated fort, a windmill farm, a harbour, a quarry, ruins with a crypt under them, a lighthouse, a radio mast and a cabin hollow. Dive, open your parachute, open the glowing chests for guns in five rarities (the Plinker, Zipper, Trailblazer, Boomstick and Longshot), heal and shield up, and fight while a storm closes in circle by circle, a supply drop landing in each. The last one standing wins. Bots fill the places nobody takes, so it plays with one person too. |
 | **[Heart Hunt](https://blockyard.gg/?game=heart-hunt)** | A gentle hunt for ten hidden hearts. At about 70 lines, it's the [tutorial game](docs/PLATFORM.md#hello-game). |
 
 Each game's controls are on the home page and in its pause menu (Escape), along with the settings and an invite link.

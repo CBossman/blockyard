@@ -98,6 +98,16 @@ src/games/
     client/             the broadcast camera, the rink and goals drawn, everyone's gear (sticks, helmets, skates, goalie
                         pads), the poses (skating, shots, saves), the announcer, the organ, the goal horn
     tools/models.mjs    the puck, the boards, the goals and nets, the rink's markings, sticks, helmets and goalie gear
+  blockroyale/          Block Royale: a battle royale on an island: a balloon bus, a dive and a parachute, five rarities of gun, a storm closing in
+    server.ts match.ts  rules: the match (lobby on the bus, the drop, the storm, the results), eliminations and places; bots fill the places
+    island/             the island: a stretch of the natural world (a chosen seed) with nine landmarks drawn in code (kit.ts, pois/): ground
+                        flattened for each and a blueprint over it, and its chests
+    weapons.ts loot.ts  the guns (five families, five rarities each), healing, shields and frags; chests (E) and floor loot rolled by a place's tier
+    dive.ts bus.ts      the dive and the parachute (a movement ability, predicted on each screen) and the drop bus (a solid prop)
+    storm.ts zone.ts    the safe circle (plain arithmetic: the screens ease it too) and the storm in play: damage, the next circle, a supply drop
+    bots.ts             bot fighters on the shooterBots and navGrid kits: dropping, looting, healing, keeping ahead of the storm
+    client/             the storm's wall and tint, the map (in the corner, and M), freefall wind, the guns' looks and voices
+    tools/build.mjs     the guns and loot, built in code as voxel models (models/)
   golf/                 Blockyard Links: eighteen holes, a cart, a mouse swing, sloping greens
     course/             the holes as a yardage book (holes.ts), the land worked out from them (course.ts), its invisible footing in blocks (build.ts)
     physics.ts          the ball: flight (drag, Magnus lift, wind), bounces that dig into the turf, skid and roll, the cup

@@ -1,0 +1,286 @@
+import type { GameContext, Pickup, Player, Vec3 } from '@platform';
+import type { ConsumableItem, ThrowableItem } from '@platform/items';
+import { guns, type Guns } from '@platform/kits';
+import { fighterOf } from './match';
+import { RARITIES } from './rarity';
+import { FAMILIES, FAMILY_IDS, GUNS, gunId, parseGun, type FamilyId } from './weapons';
+import type { LootSpot } from './island/kit';
+
+/**
+ * Everything you can pick up. Guns come in five rarities (`weapons.ts`), and the rest is what keeps
+ * you alive: bandages and med kits for health, a shield potion for the shield on top of it, frag
+ * cubes to throw, and ammo for what you carry.
+ *
+ * A chest holds a gun and something useful, better the better the place it stands in (its `tier`,
+ * 0..4). Floor loot is one item, rolled the same way.
+ */
+
+export const MAX_GUNS = 5;
+export const MAX_HEALTH = 100;
+export const MAX_SHIELD = 100;
+/** A bandage heals this much, but not past this health: a med kit is for the rest. */
+export const BANDAGE = { heal: 15, to: 75 };
+export const SHIELD_POTION = 50;
+
+export interface Drop {
+  item: string;
+  count: number;
+  /** The colour of its beam. */
+  beam: string;
+}
+
+export const BEAMS = { frag: '#ff7a3a', bandage: '#f2f2f2', medkit: '#ff4a5a', shield: '#4aa8ff', ammo: '#ffd23a' };
+
+/** What each tier of place puts in its chests: the weight of each rarity. */
+const RARITY_BY_TIER: number[][] = [
+  [60, 30, 10, 0, 0],
+  [35, 35, 22, 8, 0],
+  [15, 30, 33, 18, 4],
+  [5, 15, 32, 33, 15],
+  [0, 5, 20, 40, 35],
+];
+
+/** How often each family turns up (the Longshot only in the better places). */
+const FAMILY_WEIGHT = (f: FamilyId, tier: number): number => ({ plinker: 16, zipper: 22, trailblazer: 28, boomstick: 20, longshot: tier >= 2 ? 14 : 5 })[f];
+
+/** What else a chest has, as weights: [item, share, fewest, most]. */
+const EXTRAS: [string, number, number, number][] = [
+  ['bandage', 30, 2, 5],
+  ['shield', 24, 1, 2],
+  ['frag', 18, 1, 3],
+  ['medkit', 10, 1, 1],
+  ['ammo', 18, 1, 1],
+];
+
+function weighted<T>(game: GameContext, list: readonly T[], weight: (t: T, i: number) => number): T {
+  const total = list.reduce((s, t, i) => s + weight(t, i), 0);
+  let r = game.rng.next() * total;
+  for (let i = 0; i < list.length; i++) if ((r -= weight(list[i], i)) < 0) return list[i];
+  return list[list.length - 1];
+}
+
+/** A gun for a place of this tier. */
+export function rollGun(game: GameContext, tier: number): Drop {
+  const t = Math.max(0, Math.min(RARITY_BY_TIER.length - 1, Math.round(tier)));
+  const rarity = weighted(game, RARITIES, (_, i) => RARITY_BY_TIER[t][i]);
+  const family = weighted(game, FAMILY_IDS, (f) => FAMILY_WEIGHT(f, t));
+  return { item: gunId(family, RARITIES.indexOf(rarity)), count: 1, beam: rarity.color };
+}
+
+/** Something to keep you going. */
+export function rollExtra(game: GameContext): Drop {
+  const [item, , lo, hi] = weighted(game, EXTRAS, (e) => e[1]);
+  return { item, count: game.rng.int(lo, hi), beam: BEAMS[item as keyof typeof BEAMS] };
+}
+
+/** What's in a chest of this tier. */
+export function rollChest(game: GameContext, tier: number): Drop[] {
+  const drops = [rollGun(game, tier), rollExtra(game)];
+  if (tier >= 2 || game.rng.chance(0.35)) drops.push(rollExtra(game));
+  return drops;
+}
+
+/** One thing lying on the floor. */
+export function rollFloor(game: GameContext, tier: number): Drop {
+  return game.rng.chance(0.55) ? rollGun(game, tier) : rollExtra(game);
+}
+
+/** Every pickup lying about, so bots can look for them (dead ones are dropped from the list as they're found). */
+export const lying: Pickup[] = [];
+
+/** Put drops on the ground at `at`, popping out of a chest (or falling from a body). */
+export function spawn(game: GameContext, drops: Drop[], at: Vec3, opts: { burst?: number; from?: Player; despawn?: number } = {}) {
+  drops.forEach((d, i) => {
+    const a = (i / Math.max(1, drops.length)) * Math.PI * 2 + game.rng.range(-0.4, 0.4);
+    const speed = opts.burst ?? 2.2;
+    const p = game.items.spawnPickup(d.item, at, {
+      count: d.count,
+      beam: d.beam,
+      velocity: { x: Math.cos(a) * speed, y: 4 + game.rng.range(0, 1.5), z: Math.sin(a) * speed },
+      delay: 0.6,
+      from: opts.from,
+      despawn: opts.despawn ?? 1e9,
+    });
+    lying.push(p);
+  });
+  // (Keep the list from growing: the ones that have gone are dropped now and then.)
+  if (lying.length > 160) lying.splice(0, lying.length, ...lying.filter((p) => p.alive));
+}
+
+/** Everything a fighter carries, dropped where they fell (their guns with their beams, the rest too). */
+export function dropLoadout(game: GameContext, p: Player) {
+  const drops: Drop[] = [];
+  for (const s of p.inventory.slots) {
+    if (!s) continue;
+    const g = parseGun(s.item);
+    drops.push({ item: s.item, count: s.count, beam: g ? RARITIES[g.tier].color : (BEAMS[s.item as keyof typeof BEAMS] ?? '#ffffff') });
+  }
+  p.inventory.clear();
+  spawn(game, drops, { x: p.position.x, y: p.position.y + 0.8, z: p.position.z }, { burst: 3 });
+}
+
+let gunKit: Guns | null = null;
+const gunsOf = (game: GameContext): Guns | null => (gunKit ??= guns.of(game));
+
+/** The guns someone carries (slot and id). */
+export function carried(p: Player): { slot: number; item: string; family: FamilyId; tier: number }[] {
+  const out: { slot: number; item: string; family: FamilyId; tier: number }[] = [];
+  p.inventory.slots.forEach((s, slot) => {
+    const g = s && parseGun(s.item);
+    if (s && g) out.push({ slot, item: s.item, ...g });
+  });
+  return out;
+}
+
+/** A gun's worth, to decide what to keep: its tier first, then its family's. */
+const worth = (g: { family: FamilyId; tier: number }) => g.tier * 10 + FAMILIES[g.family].worth;
+
+/**
+ * Someone walks over a gun: they take it if there's room, or if it's better than the worst thing
+ * they carry (which drops where they stand). The same family at the same tier tops up their
+ * ammo; a worse one of a family they have stays where it is. Returns whether it was taken.
+ */
+function takeGun(game: GameContext, p: Player, item: string): boolean {
+  const incoming = parseGun(item)!;
+  const have = carried(p);
+  const same = have.find((g) => g.family === incoming.family);
+  const drop = (g: { item: string; tier: number }, at: Vec3) => {
+    p.inventory.take(g.item, 1);
+    spawn(game, [{ item: g.item, count: 1, beam: RARITIES[g.tier].color }], at, { burst: 1, from: p });
+  };
+  const where = { x: p.position.x, y: p.position.y + 0.8, z: p.position.z };
+  if (same) {
+    if (incoming.tier > same.tier) {
+      drop(same, where);
+      p.inventory.give(item, 1);
+      return true;
+    }
+    if (incoming.tier === same.tier) {
+      const k = gunsOf(game);
+      const a = k?.ammo(p, item);
+      if (k && a) {
+        k.setAmmo(p, item, { magazine: a.magazine, reserve: GUNS[item].reserve ?? a.reserve });
+        return true;
+      }
+    }
+    return false;
+  }
+  if (have.length < MAX_GUNS) {
+    p.inventory.give(item, 1);
+    return true;
+  }
+  const weakest = have.reduce((a, b) => (worth(a) <= worth(b) ? a : b));
+  if (worth(incoming) > worth(weakest)) {
+    drop(weakest, where);
+    p.inventory.give(item, 1);
+    return true;
+  }
+  return false;
+}
+
+/** Define every item the game has. */
+export function defineItems(game: GameContext) {
+  for (const [id, gun] of Object.entries(GUNS)) {
+    game.items.define(id, {
+      ...gun,
+      onPickup(g, _n, p) {
+        if (takeGun(g, p, id)) {
+          g.audio.play('pickup', { at: p.position, volume: 0.6 });
+          p.hud.toast(`+${gun.name}`);
+        } else {
+          // Left where it lies: it's not pulled back to them until they've stepped away from it.
+          lying.push(
+            g.items.spawnPickup(
+              id,
+              { x: p.position.x, y: p.position.y + 0.8, z: p.position.z },
+              { from: p, beam: RARITIES[parseGun(id)!.tier].color, velocity: { x: 0, y: 3, z: 0 }, despawn: 1e9 },
+            ),
+          );
+        }
+        return true;
+      },
+    });
+  }
+
+  game.items.define('bandage', {
+    kind: 'consumable',
+    name: 'Bandage',
+    icon: 'heart',
+    stack: 10,
+    useTime: 3.2,
+    canUse: (_g, p) => p.health < BANDAGE.to,
+    use: (_g, p) => ((p.health = Math.min(BANDAGE.to, p.health + BANDAGE.heal)), true),
+  } satisfies ConsumableItem);
+
+  game.items.define('medkit', {
+    kind: 'consumable',
+    name: 'Med Kit',
+    icon: 'health_potion',
+    stack: 3,
+    useTime: 6.5,
+    canUse: (_g, p) => p.health < MAX_HEALTH,
+    use: (_g, p) => ((p.health = MAX_HEALTH), true),
+  } satisfies ConsumableItem);
+
+  game.items.define('shield', {
+    kind: 'consumable',
+    name: 'Shield Potion',
+    icon: 'health_potion',
+    stack: 4,
+    useTime: 4,
+    canUse: (_g, p) => (fighterOf(p)?.shield ?? 0) < MAX_SHIELD,
+    use: (_g, p) => {
+      const f = fighterOf(p);
+      if (!f) return false;
+      f.shield = Math.min(MAX_SHIELD, f.shield + SHIELD_POTION);
+      return true;
+    },
+  } satisfies ConsumableItem);
+
+  game.items.define('frag', {
+    kind: 'throwable',
+    name: 'Frag Cube',
+    icon: 'heart',
+    stack: 6,
+    key: 'KeyG',
+    fuse: 3,
+    cook: true,
+    speed: 20,
+    lift: 8,
+    physics: { gravity: 24, bounce: 0.25, friction: 0.5, radius: 0.12 },
+    blast: { radius: 4.6, damage: [95, 10], knockback: 1.1, size: 1.5 },
+    cooldown: 0.9,
+  } satisfies ThrowableItem);
+
+  // Ammo: a box that tops up the spare rounds of every gun they carry.
+  game.items.define('ammo', {
+    kind: 'misc',
+    name: 'Ammo Box',
+    icon: 'arrow',
+    onPickup(g, _n, p) {
+      const k = gunsOf(g);
+      let topped = false;
+      for (const c of carried(p)) {
+        const a = k?.ammo(p, c.item);
+        const full = GUNS[c.item].reserve ?? 0;
+        if (k && a && a.reserve < full) {
+          k.setAmmo(p, c.item, { magazine: a.magazine, reserve: full });
+          topped = true;
+        }
+      }
+      if (!topped) {
+        // Nothing to top up: it stays.
+        lying.push(
+          g.items.spawnPickup('ammo', { x: p.position.x, y: p.position.y + 0.8, z: p.position.z }, { from: p, beam: BEAMS.ammo, velocity: { x: 0, y: 3, z: 0 }, despawn: 1e9 }),
+        );
+        return true;
+      }
+      g.audio.play('pickup', { at: p.position, volume: 0.6 });
+      p.hud.toast('Ammo');
+      return true;
+    },
+  });
+}
+
+/** Where a chest's loot comes out: above it. */
+export const above = (s: LootSpot): Vec3 => ({ x: s.x + 0.5, y: s.y + 1.1, z: s.z + 0.5 });
