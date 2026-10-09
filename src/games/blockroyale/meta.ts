@@ -2,7 +2,7 @@ import { defineMeta } from '@platform';
 import cover from './cover.webp?url';
 
 /**
- * Block Royale: sixteen drop onto an island from a flying bus, find guns, and fight while a storm
+ * Block Royale: a dozen drop onto an island from a flying bus, find guns, and fight while a storm
  * closes in. The last one standing wins. Bots fill the places nobody has taken, so it's a match
  * with one player too.
  */
@@ -18,15 +18,16 @@ export default defineMeta({
     ['Shift', 'sprint'],
     ['C', 'crouch'],
     ['E', 'open a chest'],
-    ['1 - 5', 'weapons'],
-    ['6 - 9', 'bandage, med kit, shield (hold RMB to use)'],
+    ['1 - 5', 'rifle, shotgun, SMG, sniper, pistol'],
+    ['6 - 9', 'bandage, med kit, shield, frag (hold RMB to use)'],
     ['G', 'throw a frag cube (hold to cook)'],
     ['Space', 'jump · open or close the parachute'],
     ['M', 'the map'],
     ['Tab', 'scores'],
+    ['F', 'out of it: watch the next fighter'],
   ],
-  // Controllers: the platform's shooter layout, with the map on the D-pad's down.
-  gamepad: { Down: ['KeyM', 'map'] },
+  // Controllers: the platform's shooter layout, with the map on the D-pad's down and watching the next fighter on its right.
+  gamepad: { Down: ['KeyM', 'map'], Right: ['KeyF', 'watch next'] },
   instances: true,
   achievements: {
     played: { title: 'Dropped In', description: 'Play a match through to the end' },

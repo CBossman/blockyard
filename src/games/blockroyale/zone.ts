@@ -12,6 +12,8 @@ export class Zone {
   private tick = 0;
   /** Seconds since the last state went out to the screens. */
   private sent = 99;
+  /** The circle whose warning has gone out (it's said once, a little before the storm moves). */
+  private warned = -1;
 
   constructor(game: GameContext) {
     this.storm = new Storm({
@@ -37,6 +39,17 @@ export class Zone {
         game.audio.play('storm', { volume: 0.7 });
       } else if (e === 'closed') game.hud.banner('FINAL CIRCLE', '', { color: '#ff4a5a', duration: 3 });
       this.sent = 99;
+    }
+    // Fifteen seconds before it moves: a word to each person outside where it's going, and how far that is.
+    const next = storm.next;
+    if (storm.step === 'wait' && next && storm.left <= 15 && this.warned !== storm.phase) {
+      this.warned = storm.phase;
+      for (const f of alive()) {
+        const p = f.player;
+        if (p.bot || f.drop !== 'down') continue;
+        const far = Math.hypot(p.position.x - next.x, p.position.z - next.z) - next.r;
+        if (far > 0) p.hud.toast(`The storm moves in ${Math.ceil(storm.left)} s: the safe zone is ${Math.ceil(far)} blocks away`);
+      }
     }
     // Once a second: the storm's damage to anyone outside the circle, and the state for the screens.
     this.tick += dt;

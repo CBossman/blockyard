@@ -4,8 +4,9 @@ import type { Circle, StormStep, StormWire } from '../storm';
 
 /**
  * The storm on this screen. The server sends the circle's state a second at a time (`storm`); the
- * kit eases the radius between messages, draws the wall as a haze of purple light along the circle
- * near the camera, and tints the whole screen when this player is outside it. The map reads
+ * kit eases the radius between messages, draws the wall along the circle near the camera (streaks of
+ * purple light rising through a haze of motes), and tints the whole screen when this player is
+ * outside it, with how far they have to go. The map reads
  * `stormView` to draw the circle and the next one.
  */
 
@@ -30,14 +31,18 @@ const STYLE = `
   background: radial-gradient(ellipse at center, #7a2cff00 38%, #7a2cff55 72%, #5a12d6aa 100%); mix-blend-mode: normal; }
 .br-storm.on { opacity: 1; animation: br-storm-pulse 1.4s ease-in-out infinite; }
 @keyframes br-storm-pulse { 50% { filter: brightness(1.35); } }
-.br-storm .warn { position: absolute; left: 50%; top: 22%; transform: translateX(-50%); font: 700 18px/1 var(--pixel, sans-serif); letter-spacing: 0.1em; color: #fff;
-  text-shadow: 0 2px 0 #3a0a88, 0 0 12px #a45bff; text-transform: uppercase; }
+.br-storm .warn { position: absolute; left: 50%; top: max(24%, 132px); transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 6px; font: 700 18px/1 var(--pixel, sans-serif); letter-spacing: 0.1em; color: #fff;
+  text-shadow: 0 2px 0 #3a0a88, 0 0 12px #a45bff; text-transform: uppercase; white-space: nowrap; }
+.br-storm .warn small { font: 600 13px/1 var(--sans, sans-serif); letter-spacing: 0.08em; color: #e6d6ff; }
 `;
 
 export function stormKit(): ClientKit {
   let wire: StormWire | null = null;
   let gotAt = 0;
   let acc = 0;
+  let streaks = 0;
+  let away: HTMLElement | null = null;
+  let awayShown = -1;
   let overlay: HTMLElement | null = null;
   let off: (() => void) | null = null;
 
@@ -47,7 +52,8 @@ export function stormKit(): ClientKit {
       off = client.hud.style(STYLE);
       overlay = client.hud.layer('br-storm', 'panels');
       overlay.classList.add('br-storm');
-      overlay.innerHTML = '<div class="warn">You are in the storm</div>';
+      overlay.innerHTML = '<div class="warn"><span>You are in the storm</span><small></small></div>';
+      away = overlay.querySelector('small');
       client.on('storm', (data) => {
         wire = data as StormWire;
         gotAt = client.time;
@@ -78,13 +84,36 @@ export function stormKit(): ClientKit {
       const dist = Math.hypot(me.x - cur.x, me.z - cur.z);
       stormView.outside = dist > cur.r && !client.me.dead;
       overlay?.classList.toggle('on', stormView.outside);
+      // How far to the circle's edge (and the hurt it does a second).
+      const go = stormView.outside ? Math.ceil(dist - cur.r) : -1;
+      if (go !== awayShown && away) {
+        awayShown = go;
+        away.textContent = go > 0 ? `${go} blocks to safety · -${wire.damage} a second` : '';
+      }
 
       // The wall: puffs of light along the circle nearest the camera, drifting up.
       const cam = client.camera.position;
       const camDist = Math.hypot(cam.x - cur.x, cam.z - cur.z);
       if (cur.r < 1 || Math.abs(camDist - cur.r) > 240) return;
-      acc += Math.min(dt, 0.05) * 520;
+      acc += Math.min(dt, 0.05) * 300;
+      // Streaks of light climbing the wall: it reads as a wall from far off, where the motes are too small to see.
+      streaks += Math.min(dt, 0.05) * 70;
+      const reach = Math.min(Math.PI, 160 / Math.max(30, cur.r));
       const around = Math.atan2(cam.z - cur.z, cam.x - cur.x);
+      while (streaks >= 1) {
+        streaks -= 1;
+        const u = Math.random() * 2 - 1;
+        const a = around + Math.sign(u) * u * u * reach;
+        const x = cur.x + Math.cos(a) * cur.r;
+        const z = cur.z + Math.sin(a) * cur.r;
+        const y = cam.y - 30 + Math.random() * 30;
+        client.fx.tracer({ x, y, z }, { x, y: y + 34 + Math.random() * 24, z }, Math.random() < 0.3 ? '#c9a2ff' : '#8a3cff', {
+          speed: 16 + Math.random() * 14,
+          length: 6 + Math.random() * 6,
+          width: 0.35,
+          glow: 0.5,
+        });
+      }
       // Cover about 200 blocks of the arc, more of it when the camera's near the wall.
       const spread = Math.min(Math.PI, (camDist > cur.r ? 120 : 200) / Math.max(30, cur.r));
       while (acc >= 1) {
@@ -97,7 +126,7 @@ export function stormKit(): ClientKit {
         client.fx.particles(at, [c.r, c.g, c.b], {
           count: 1,
           // (Sizes are in blocks: a few small bright motes each, thousands of them, make a wall.)
-          size: 0.35 + Math.random() * 0.8,
+          size: 0.2 + Math.random() * 0.45,
           glow: 0.2,
           life: 2.2 + Math.random(),
           speed: 0.25,

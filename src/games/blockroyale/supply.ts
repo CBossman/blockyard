@@ -1,5 +1,6 @@
 import { Blueprint, math, type BlockRef, type GameContext, type Prop, type PropModel, type Vec3 } from '@platform';
 import type { Chests } from './chests';
+import type { SupplyWire } from './wire';
 
 /**
  * Supply drops: whenever the storm shows its next circle, a crate on a striped balloon comes down
@@ -49,7 +50,11 @@ interface Falling {
 
 export class Supply {
   private falling: Falling[] = [];
+  /** Landed and not yet opened: the chest it became, and where. */
+  private waiting: { spot: number; x: number; z: number }[] = [];
   private n = 0;
+  private shown = '';
+  private sentAt = -9;
 
   /** A drop inside the circle `c`: on land, not in the sea. Returns where, or null if no good spot was found. */
   call(game: GameContext, c: { x: number; z: number; r: number }): Vec3 | null {
@@ -87,13 +92,25 @@ export class Supply {
       const spot = chests.add(game, { kind: 'chest', x: f.at.x, y: f.at.y, z: f.at.z, tier: 4, site: 'supply', facing: 'south', marker: f.marker });
       game.fx.burst({ x: f.at.x + 0.5, y: f.at.y + 0.5, z: f.at.z + 0.5 }, { color: '#e8d9a0', count: 30, speed: 4, size: 0.2, gravity: 4, life: 1 });
       game.audio.play('chest_open', { at: f.at, volume: 0.6, pitch: 0.7 });
+      this.waiting.push({ spot, x: f.at.x + 0.5, z: f.at.z + 0.5 });
       landed(spot);
+    }
+    // To the maps: when it changes, and now and then for anyone who's just arrived.
+    this.waiting = this.waiting.filter((w) => !chests.opened.has(w.spot));
+    const list: SupplyWire = [...this.falling.map((f): [number, number] => [f.at.x + 0.5, f.at.z + 0.5]), ...this.waiting.map((w): [number, number] => [w.x, w.z])];
+    const key = list.join(';');
+    if (key !== this.shown || (list.length && game.clock.now - this.sentAt > 3)) {
+      this.shown = key;
+      this.sentAt = game.clock.now;
+      game.clients.send('all', 'supply', list);
     }
   }
 
   clear() {
     for (const f of this.falling) f.prop.remove();
     this.falling = [];
+    this.waiting = [];
     this.n = 0;
+    this.shown = '';
   }
 }

@@ -1,6 +1,6 @@
 import type { Client, ClientKit, KitControls } from '@platform/client';
 import { CENTER, SITES } from '../island';
-import type { BusWire } from '../wire';
+import type { BusWire, SupplyWire } from '../wire';
 import mapUrl from './minimap.png?url';
 import { stormView } from './storm';
 
@@ -30,6 +30,7 @@ export function mapKit(): ClientKit {
   let image: HTMLImageElement | null = null;
   let off: (() => void) | null = null;
   let markedAt = '';
+  let drops: SupplyWire = [];
 
   const toPx = (x: number, z: number, size: number) => [((x - (CENTER.x - EXTENT)) / (EXTENT * 2)) * size, ((z - (CENTER.z - EXTENT)) / (EXTENT * 2)) * size] as const;
 
@@ -83,6 +84,21 @@ export function mapKit(): ClientKit {
         g.strokeText(s.label, x, z - 10);
         g.fillText(s.label, x, z - 10);
       }
+    }
+    // Supply drops: a gold crate where each one is (or is coming down).
+    const pulse = 0.75 + Math.sin(client.time * 5) * 0.25;
+    for (const [dx, dz] of drops) {
+      const [x, z] = toPx(dx, dz, size);
+      const r = (labels ? 8 : 5) * (0.9 + pulse * 0.2);
+      g.fillStyle = '#ffd23a';
+      g.strokeStyle = '#000';
+      g.lineWidth = 2;
+      g.fillRect(x - r, z - r, r * 2, r * 2);
+      g.strokeRect(x - r, z - r, r * 2, r * 2);
+      g.beginPath();
+      g.moveTo(x - r, z);
+      g.lineTo(x + r, z);
+      g.stroke();
     }
     // The bus: its route, and where it is on it.
     if (bus && !bus.wire.over) {
@@ -162,12 +178,18 @@ export function mapKit(): ClientKit {
       client.on('bus', (data) => {
         bus = { wire: data as BusWire, at: client.time };
       });
+      client.on('supply', (data) => {
+        drops = data as SupplyWire;
+      });
     },
     controls(_client: Client, c: KitControls) {
       if (c.pressed('KeyM')) bigBox?.classList.toggle('on');
     },
     frame(client: Client) {
-      if (client.events.some((e) => e.t === 'reset')) bus = null;
+      if (client.events.some((e) => e.t === 'reset')) {
+        bus = null;
+        drops = [];
+      }
       if (small) draw(client, small, false);
       if (big && bigBox?.classList.contains('on')) draw(client, big, true);
       // A diamond over where the next circle is, at the screen's edge when it's off to the side.

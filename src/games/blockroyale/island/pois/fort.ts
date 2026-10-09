@@ -10,14 +10,13 @@ export function fort(): Site {
   s.label = 'Fort Brickhaven';
   const W = 17;
 
-  // The moat: a ring of water two deep, round the walls.
+  // The moat: a ring of water one deep round the walls (deep enough to slow you, shallow enough to climb out of).
   for (let z = -W - 6; z <= W + 6; z++)
     for (let x = -W - 6; x <= W + 6; x++) {
       const d = Math.max(Math.abs(x), Math.abs(z));
       if (d >= W + 3 && d <= W + 5) {
         s.set(x, 0, z, 'water');
-        s.set(x, -1, z, 'water');
-        s.set(x, -2, z, 'stone_bricks');
+        s.set(x, -1, z, 'stone_bricks');
       }
     }
   // The courtyard's floor.

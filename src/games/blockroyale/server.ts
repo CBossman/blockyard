@@ -1,4 +1,4 @@
-import { defineServer, type Bot, type GameContext, type Player, type Vec3 } from '@platform';
+import { defineServer, type Bot, type GameContext, type Player, type Vec3, type WidgetHandle } from '@platform';
 import { consumables, guns, melee, throwables } from '@platform/kits';
 import { Bots } from './bots';
 import { Bus, pickRoute, prepareBus } from './bus';
@@ -7,7 +7,7 @@ import { Chutes, prepareChutes } from './chutes';
 import { prepareSupply, Supply } from './supply';
 import { clock, defineHud } from './hud';
 import { CENTER, SITES } from './island';
-import { defineItems, dropLoadout, lying, MAX_HEALTH } from './loot';
+import { defineItems, dropLoadout, equip, lying, MAX_HEALTH, SLOT } from './loot';
 import { alive, fighterOf, match, people, type Fighter } from './match';
 import { shared } from './shared';
 import type { BusWire } from './wire';
@@ -54,6 +54,12 @@ let busSentAt = -9;
 let hold = false;
 /** The altitude each person's HUD shows (only changes go out). */
 const altShown = new Map<string, string>();
+/** The how-to-drop card, for each person who has it up. */
+const tipsUp = new Map<string, WidgetHandle>();
+/** Out of it and watching: the fighter each one last jumped to with F (their place in the list). */
+const watched = new Map<string, number>();
+/** How many are left when everyone still in it hears so. */
+const MILESTONES = [10, 5, 3, 2];
 
 const SCOUT_WAYPOINTS: Vec3[] = [
   { x: CENTER.x - 85, y: 90, z: CENTER.z - 85 },
@@ -128,8 +134,8 @@ function landed(game: GameContext, f: Fighter): boolean {
 /** Armed for the start: a basic Plinker, so nobody's fighting with fists. */
 function arm(p: Player) {
   p.inventory.clear();
-  p.inventory.give('plinker_common');
-  p.inventory.select(0);
+  equip(p, 'plinker_common');
+  p.inventory.select(SLOT.plinker);
 }
 
 /** On the bus, fit and armed. */
@@ -145,6 +151,23 @@ function board(game: GameContext, p: Player, seat: number) {
   bus?.seat(p, seat);
   if (p.bot) bots.add(p as Bot);
   if (!p.bot) game.hud.feed(`${p.name} boards the bus`);
+}
+
+/**
+ * F, for someone watching: to just behind the next fighter still in it (in name order, round and
+ * round), looking the way they look. They fly free from there.
+ */
+function watchNext(p: Player) {
+  const list = alive()
+    .filter((f) => f.drop !== 'bus')
+    .sort((a, b) => a.player.name.localeCompare(b.player.name));
+  if (!list.length) return;
+  const i = ((watched.get(p.id) ?? -1) + 1) % list.length;
+  watched.set(p.id, i);
+  const f = list[i];
+  const t = f.player;
+  p.teleport({ x: t.position.x + Math.sin(t.yaw) * 6, y: t.position.y + 3.5, z: t.position.z + Math.cos(t.yaw) * 6 }, t.yaw, -0.3);
+  p.hud.toast(`Watching ${t.name} · ${f.kills} elim${f.kills === 1 ? '' : 's'} · F for the next`);
 }
 
 /** Watch, flying free: from where someone fell (or from above the island, for someone who came in late). */
@@ -169,6 +192,7 @@ function begin(game: GameContext) {
   humansBegan = 0;
   humansOutAt = 0;
   lying.length = 0;
+  watched.clear();
   chests.reset();
   chutes.clear();
   supply.clear();
@@ -294,7 +318,7 @@ function eliminate(game: GameContext, f: Fighter, by: Player | null, weapon: str
             ['Survived', clock(f.diedAt - startedAt)],
           ],
           buttons: [
-            { label: 'Keep watching', primary: true, onClick: () => {} },
+            { label: 'Keep watching', primary: true, onClick: () => p.hud.toast('F: watch the next fighter') },
             { label: 'Exit', onClick: () => game.exit() },
           ],
         });
@@ -302,6 +326,13 @@ function eliminate(game: GameContext, f: Fighter, by: Player | null, weapon: str
   }
   const left = alive();
   if (left.length <= 1 && match.phase !== 'lobby') finish(game, left[0] ?? null);
+  // The field thinning: everyone still in it hears it (a moment later, so it doesn't cover an elimination's own pop).
+  const n = left.length;
+  if (MILESTONES.includes(n) && match.phase !== 'lobby' && match.phase !== 'over')
+    game.clock.after(1.2, () => {
+      if (alive().length !== n || match.phase === 'over') return;
+      for (const f of alive()) if (!f.player.bot) f.player.hud.pop(n === 2 ? 'FINAL TWO' : `TOP ${n}`, { color: '#ffd23a', big: n <= 3, sub: `${n} fighters left` });
+    });
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -328,7 +359,6 @@ function scoutStep(game: GameContext) {
   const t = performance.now();
   bots.nav.build();
   if (import.meta.env.DEV) console.log(`[blockroyale] walking grid: ${bots.nav.size} cells in ${Math.round(performance.now() - t)} ms`);
-  bots.prepare();
   game.bots.remove(scout);
   scout = null;
 }
@@ -362,6 +392,18 @@ function refreshHud(game: GameContext) {
     f.hudKey = key;
     p.hud.widget('status', { alive: left, kills: f.kills, storm, time, tone });
     p.hud.widget('vitals', { shield: Math.round(f.shield) });
+  }
+  // How to drop, while they're on the bus.
+  for (const f of fighters()) {
+    const p = f.player;
+    if (p.bot) continue;
+    const want = f.alive && f.drop === 'bus' && (match.phase === 'lobby' || match.phase === 'bus');
+    const up = tipsUp.get(p.id);
+    if (want && !up) tipsUp.set(p.id, p.hud.widget('tips', {}));
+    else if (!want && up) {
+      up.remove();
+      tipsUp.delete(p.id);
+    }
   }
   // While you're falling: how high you are.
   for (const f of fighters()) {
@@ -426,6 +468,8 @@ export default defineServer(shared, {
       if (!f) return;
       if (match.phase === 'lobby' || match.phase === 'over' || !f.alive || f.drop !== 'down') return hit.cancel();
       if (hit.cause === 'storm') return;
+      // Your own frag hurts you, but only a quarter as much: a throw that bounces back isn't the end.
+      if (hit.cause === 'explosion' && hit.source === hit.target) hit.amount *= 0.25;
       if (f.shield > 0) {
         const taken = Math.min(f.shield, hit.amount);
         f.shield -= taken;
@@ -456,10 +500,13 @@ export default defineServer(shared, {
         board(game, player, match.fighters.size);
       } else {
         spectate(player);
-        player.hud.banner('MATCH IN PROGRESS', 'You play the next one', { duration: 3 });
+        player.hud.banner('MATCH IN PROGRESS', 'You play the next one · F to watch a fighter', { duration: 3 });
       }
     });
     game.events.on('playerLeave', ({ player }) => {
+      tipsUp.delete(player.id);
+      watched.delete(player.id);
+      altShown.delete(player.id);
       const f = fighterOf(player);
       if (!f) return;
       if (match.phase === 'lobby') {
@@ -500,11 +547,12 @@ export default defineServer(shared, {
           return `At ${site.label}`;
         }
         if (cmd === 'kit') {
-          for (const id of ['trailblazer_epic', 'boomstick_rare', 'longshot_epic', 'zipper_legendary']) player.inventory.give(id);
-          player.inventory.give('bandage', 8);
-          player.inventory.give('medkit', 2);
-          player.inventory.give('shield', 3);
-          player.inventory.give('frag', 4);
+          for (const id of ['trailblazer_epic', 'boomstick_rare', 'longshot_epic', 'zipper_legendary']) equip(player, id);
+          equip(player, 'bandage', 8);
+          equip(player, 'medkit', 2);
+          equip(player, 'shield', 3);
+          equip(player, 'frag', 4);
+          player.inventory.select(SLOT.trailblazer);
           return 'Kitted out';
         }
         if (cmd === 'storm') {
@@ -534,6 +582,8 @@ export default defineServer(shared, {
   update(game, dt) {
     const now = game.clock.now;
     scoutStep(game);
+    // (Which chests the bots can walk to: a few a tick once the walking grid is built.)
+    bots.prepare();
     if (!bus) return;
     bus.update(dt);
     const here = humans(game);
@@ -595,6 +645,8 @@ export default defineServer(shared, {
     chutes.update(game, alive());
     supply.update(game, dt, chests, (i) => bots.consider(i));
     if (match.phase !== 'over') bots.update(game, dt);
+    // Someone out of it (or who came in late) jumps from fighter to fighter with F.
+    if (match.phase !== 'lobby') for (const p of here) if (p.spectating && !fighterOf(p)?.alive && p.input.pressed('KeyF', { dead: true })) watchNext(p);
     if ((match.phase === 'lobby' || match.phase === 'bus') && now - busSentAt > 1) sendBus(game);
     refreshHud(game);
     if (now - boardAt > 1) {

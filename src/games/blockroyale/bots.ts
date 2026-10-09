@@ -1,9 +1,9 @@
 import type { Bot, GameContext, Player, Vec3 } from '@platform';
-import { navGrid, shooterBots, throwables, type BotMind, type NavGrid, type ShooterBots } from '@platform/kits';
+import { navGrid, shooterBots, throwables, type BotMind, type NavCell, type NavGrid, type ShooterBots } from '@platform/kits';
 import type { Bus } from './bus';
 import type { Chests } from './chests';
-import { CENTER, RADIUS, SITES } from './island';
-import { BANDAGE, carried, lying, MAX_GUNS, MAX_SHIELD } from './loot';
+import { CENTER, LOOT, RADIUS, SITES } from './island';
+import { BANDAGE, carried, lying, MAX_SHIELD } from './loot';
 import { fighterOf, match } from './match';
 import { BOT_WEAPONS, FAMILIES, parseGun } from './weapons';
 import type { Zone } from './zone';
@@ -30,8 +30,18 @@ interface Brain {
   skill: number;
   /** Where it means to land. */
   landing: Vec3;
-  /** How far from `landing` (blocks, along the ground) the bus is when it steps off. */
+  /** How far along the bus's route (0..1) it heads for the gangway: a little before the bus passes closest to its landing. */
   jumpAt: number;
+  /** When it landed (`game.clock.now`): for a while after, it loots before it looks for a fight. */
+  landedAt: number;
+  /** Running for the circle straight, with no way found on the grid (out of a pit, the water). */
+  escaping: boolean;
+  /** Escaping: where it was a moment ago (to tell when it's stuck on something), and a way round it until `veerUntil`. */
+  escapeCheck: { x: number; z: number; t: number };
+  veer: number;
+  veerUntil: number;
+  /** The whole way to a far goal, planned by the bot itself (see `via`), and when to plan it again. */
+  route: { to: Vec3; cells: NavCell[]; until: number } | null;
   side: 1 | -1;
   state: 'deck' | 'air' | 'ground';
   /** The chest it's after (an index into the chests), and when it gave up on it. */
@@ -45,6 +55,9 @@ interface Brain {
   pickup: Vec3 | null;
 }
 
+/** The search budget (cells looked at) for a far goal's whole way: the kit's own is a few thousand. */
+const FAR = 120000;
+
 /** Where the bot's walking grid reaches: the island, from the sea floor to the hilltops. */
 const BOUNDS = { min: { x: CENTER.x - RADIUS - 12, y: 58, z: CENTER.z - RADIUS - 12 }, max: { x: CENTER.x + RADIUS + 12, y: 108, z: CENTER.z + RADIUS + 12 } };
 
@@ -54,6 +67,8 @@ export class Bots {
   private brains = new Map<string, Brain>();
   /** Which chests a bot can walk to (not the ones up a ladder): worked out once the walking grid is built. */
   private reach: boolean[] | null = null;
+  /** How many of the island's chests (`LOOT`) have been checked for a way to them. */
+  private checked = 0;
   /** The hotspots the kit drifts between (filled once the reachable chests are known). */
   private readonly hot: Vec3[] = [];
   /** Pickups no bot could find a way to (up a ladder, behind glass): left alone. */
@@ -73,6 +88,9 @@ export class Bots {
       weapons: BOT_WEAPONS,
       // A bot that's out looting stays with what it carries: it picks the gun for the fight (`weapon`), and heals with the rest.
       moves: { homeSlot: null, hotspot: 1 },
+      // A little slower to react and a little wider with the first shots than a shooter's bots: a person who's
+      // careful should win most fights against them.
+      aim: { reaction: [1.05, 0.5], miss: [3.6, 1.4] },
       hostile: (bot, other) => this.fair(bot, other),
       goal: (bot, mind) => this.goal(bot, mind),
       weapon: (bot, _mind, distance) => this.bestGun(bot, distance),
@@ -82,20 +100,30 @@ export class Bots {
 
   /**
    * Once the walking grid is built: which chests can be walked to from the middle of the village (a
-   * chest up a ladder can't: the grid doesn't climb), and where the bots drift between: the reachable chests.
+   * chest up a ladder can't: the grid doesn't climb), and where the bots drift between: the reachable
+   * chests. A few each tick (a chest with no way to it searches the whole grid), so the server never
+   * stalls on it; called every tick, it's nothing once they're all done.
    */
   prepare() {
-    if (this.reach || !this.nav.ready) return;
+    if (!this.nav.ready) return;
+    const spots = this.w.chests.spots;
+    if (!this.reach) {
+      this.reach = [];
+      this.hot.length = 0;
+      this.hot.push({ x: CENTER.x, y: this.groundY(CENTER.x, CENTER.z) + 1, z: CENTER.z });
+    }
+    if (this.checked >= LOOT.length) return;
     // From a spot on the village's road (the well in the middle isn't somewhere to stand).
     const from = SITES[0].at(8, 1, 0);
-    const spots = this.w.chests.spots;
-    this.reach = spots.map((s) => s.kind === 'chest' && !!this.nav.path(from, { x: s.x + 0.5, y: s.y, z: s.z + 0.5 }, 160000));
-    this.hot.length = 0;
-    spots.forEach((s, i) => {
-      if (this.reach![i]) this.hot.push({ x: s.x + 0.5, y: s.y, z: s.z + 0.5 });
-    });
-    this.hot.push({ x: CENTER.x, y: this.game.world.surfaceY(CENTER.x, CENTER.z) + 1, z: CENTER.z });
-    if (import.meta.env.DEV) console.log(`[blockroyale] chests a bot can reach: ${this.reach.filter(Boolean).length} of ${spots.filter((s) => s.kind === 'chest').length}`);
+    const until = performance.now() + 8;
+    while (this.checked < LOOT.length && performance.now() < until) {
+      const i = this.checked++;
+      const s = spots[i];
+      this.reach[i] = s.kind === 'chest' && !!this.nav.path(from, { x: s.x + 0.5, y: s.y, z: s.z + 0.5 }, 160000);
+      if (this.reach[i]) this.hot.push({ x: s.x + 0.5, y: s.y, z: s.z + 0.5 });
+    }
+    if (import.meta.env.DEV && this.checked >= LOOT.length)
+      console.log(`[blockroyale] chests a bot can reach: ${this.reach.filter(Boolean).length} of ${LOOT.filter((s) => s.kind === 'chest').length}`);
   }
 
   /** A chest that turned up during the match (a supply drop): whether a bot can walk to it. */
@@ -105,17 +133,45 @@ export class Bots {
     this.reach[i] = !!this.nav.path(SITES[0].at(8, 1, 0), { x: s.x + 0.5, y: s.y, z: s.z + 0.5 }, 160000);
   }
 
-  /** Anyone still in the fight, down on the ground or in the air, is fair game: not the scout, not the dead, not someone on the bus. */
+  /**
+   * Who a bot fights: anyone down on the ground and still in it (not the scout, not someone on the
+   * bus or in the air, who can't be hurt). Just landed with nothing but the starting pistol, it loots
+   * first and only fights someone close or shooting at it; caught in the storm, it runs for the
+   * circle rather than turn to fight anyone but the nearest.
+   */
   private fair(bot: Bot, other: Player): boolean {
     if (other === bot || other === this.w.scout() || other.spectating || !other.alive) return false;
     const f = fighterOf(other);
-    return !!f && f.alive && f.drop !== 'bus';
+    if (!f || !f.alive || f.drop !== 'down') return false;
+    const b = this.brains.get(bot.id);
+    const now = this.game.clock.now;
+    const d = Math.hypot(other.position.x - bot.position.x, other.position.z - bot.position.z);
+    const hurt = now - (this.kit.mind(bot)?.hurtAt ?? -99) < 3;
+    if (b && now - b.landedAt < 25 && carried(bot).length <= 1 && d > 12 && !hurt) return false;
+    const zone = this.w.zone();
+    if (zone && zone.storm.outBy(bot.position.x, bot.position.z) > 2 && d > 10 && !hurt) return false;
+    return true;
   }
 
-  /** A new bot: it picks its landmark and when to jump. */
+  /**
+   * A new bot: it picks a landmark it can glide to from the bus's route (by how good its loot is,
+   * and how many have picked it already, so they spread out), a spot in it, and when to make for
+   * the gangway: a little before the bus passes closest, so it steps off as it does.
+   */
   add(bot: Bot) {
-    // Landmarks are chosen by how good their loot is and how many have chosen them already.
-    const weights = SITES.map((s, i) => Math.max(0.2, s.loot.reduce((a, l) => a + 1 + l.tier * 0.8, 0) / 8 - (this.taken.get(i) ?? 0) * 2));
+    const route = this.w.bus()?.route;
+    // Along the route to the point nearest a spot, and how far off the route that point is.
+    const near = (x: number, z: number) => {
+      if (!route) return { along: 0, off: 0 };
+      const along = Math.max(0, Math.min(route.length, (x - route.from.x) * route.dir[0] + (z - route.from.z) * route.dir[1]));
+      return { along, off: Math.hypot(route.from.x + route.dir[0] * along - x, route.from.z + route.dir[1] * along - z) };
+    };
+    const weights = SITES.map((s, i) => {
+      const base = Math.max(0.2, s.loot.reduce((a, l) => a + 1 + l.tier * 0.8, 0) / 8 - (this.taken.get(i) ?? 0) * 2);
+      const { off } = near(s.cx, s.cz);
+      // Out of a glide's reach from the bus: hardly ever.
+      return off > 120 ? 0.02 : off > 80 ? base * 0.5 : base;
+    });
     const pick = (() => {
       let r = this.game.rng.next() * weights.reduce((a, b) => a + b, 0);
       for (let i = 0; i < weights.length; i++) if ((r -= weights[i]) < 0) return i;
@@ -125,11 +181,21 @@ export class Bots {
     const site = SITES[pick];
     const a = this.game.rng.range(0, Math.PI * 2);
     const r = this.game.rng.range(2, Math.min(14, site.radius * 0.5));
+    const landing = { x: site.cx + Math.cos(a) * r, y: site.ground + 1, z: site.cz + Math.sin(a) * r };
+    // Leave the deck this far ahead of the closest point (the walk to the gangway, and the bus's speed carried off it).
+    const lead = this.game.rng.range(28, 48);
+    const jumpAt = route ? Math.max(0.03, Math.min(0.92, (near(landing.x, landing.z).along - lead) / route.length)) : 0.5;
     this.brains.set(bot.id, {
       bot,
       skill: 0.15 + this.game.rng.next() * 0.6,
-      landing: { x: site.cx + Math.cos(a) * r, y: site.ground + 1, z: site.cz + Math.sin(a) * r },
-      jumpAt: this.game.rng.range(28, 62),
+      landing,
+      jumpAt,
+      landedAt: 0,
+      escaping: false,
+      escapeCheck: { x: 0, z: 0, t: 0 },
+      veer: 0,
+      veerUntil: 0,
+      route: null,
       side: 1,
       state: 'deck',
       chest: -1,
@@ -190,12 +256,10 @@ export class Bots {
       b.state = 'air';
       return;
     }
-    const p = bus.position;
-    const far = Math.hypot(p.x - b.landing.x, p.z - b.landing.z);
     // Which side is the landing on? The gangway on that side is the way out.
     const local = bus.prop.toLocal(b.landing);
     b.side = local.x >= 0 ? 1 : -1;
-    const go = far < b.jumpAt || bus.progress > 0.88;
+    const go = bus.progress >= b.jumpAt || bus.progress > 0.9;
     if (!go) {
       // Wander about the deck a little, looking out.
       bot.controls.release();
@@ -212,6 +276,7 @@ export class Bots {
     if (drop === 'down' || bot.onGround) {
       // Landed: from here the kit drives it.
       b.state = 'ground';
+      b.landedAt = this.game.clock.now;
       bot.controls.release();
       this.kit.add(bot, b.skill);
       return;
@@ -244,7 +309,7 @@ export class Bots {
       const target = s.next ?? s.now;
       const out = Math.hypot(p.x - target.x, p.z - target.z) - target.r;
       const hurry = s.step === 'shrink' || s.step === 'wait' ? 14 : 2;
-      if (out > -hurry || s.outBy(p.x, p.z) > 0) return this.safe(bot, target);
+      if (out > -hurry || s.outBy(p.x, p.z) > 0) return this.via(b, this.safe(bot, target));
     }
     // A chest, if there's one worth the walk.
     if (b.chest >= 0 && this.w.chests.opened.has(b.chest)) b.chest = -1;
@@ -258,7 +323,7 @@ export class Bots {
         });
         if (found < 0) break;
         const s = this.w.chests.spots[found];
-        if (this.nav.path(p, { x: s.x + 0.5, y: s.y, z: s.z + 0.5 })) {
+        if (this.nav.path(p, { x: s.x + 0.5, y: s.y, z: s.z + 0.5 }, FAR)) {
           b.chest = found;
           b.chestUntil = now + 40;
         } else b.skip.set(found, now + 30);
@@ -266,23 +331,76 @@ export class Bots {
     }
     if (b.chest >= 0) {
       const s = this.w.chests.spots[b.chest];
-      return { x: s.x + 0.5, y: s.y, z: s.z + 0.5 };
+      return this.via(b, { x: s.x + 0.5, y: s.y, z: s.z + 0.5 });
     }
     // Loot lying about that it wants.
     const pick = this.pickupFor(bot);
     if (pick) return pick;
     // Otherwise toward the middle of the safe circle, where everyone's going.
-    if (zone) return this.safe(bot, zone.storm.next ?? zone.storm.now);
+    if (zone) return this.via(b, this.safe(bot, zone.storm.next ?? zone.storm.now));
     return null;
   }
 
-  /** A spot inside a circle (not its exact middle, so they don't all stand on one block). */
+  /**
+   * Where to send the kit on the way to `to`. The kit plans with a small budget (a few thousand
+   * cells looked at), and a far goal round a detour (a chest indoors across the island, the way out
+   * of the quarry) is past it: it finds no way, and the bot stands where it is, in the storm if that's
+   * where it is. So for a far goal the bot plans the whole way itself, now and then, with a budget
+   * big enough, and gives the kit a waypoint a stretch along it.
+   */
+  private via(b: Brain, to: Vec3): Vec3 {
+    const p = b.bot.position;
+    if (Math.hypot(to.x - p.x, to.z - p.z) < 28) return to;
+    const now = this.game.clock.now;
+    let r = b.route;
+    if (!r || now > r.until || Math.hypot(r.to.x - to.x, r.to.z - to.z) > 4) {
+      const cells = this.nav.path(p, to, FAR);
+      // (No way at all: try again in a while, not every time the kit asks.)
+      r = b.route = { to: { ...to }, cells: cells ?? [], until: now + (cells ? 12 : 6) };
+    }
+    if (!r.cells.length) return to;
+    // Where it is on the way (it may have been off fighting), and a stretch on from there.
+    let near = 0;
+    let best = Infinity;
+    r.cells.forEach((c, i) => {
+      const d = Math.hypot(c.at.x - p.x, c.y - p.y, c.at.z - p.z);
+      if (d < best) [best, near] = [d, i];
+    });
+    if (best > 6) {
+      // Well off it: the whole way again, from here, the next time it's asked.
+      b.route = null;
+      return to;
+    }
+    return r.cells[Math.min(r.cells.length - 1, near + 24)].at;
+  }
+
+  /**
+   * Somewhere well inside a circle that a bot can walk to: one of the few reachable spots (the chests'
+   * places) nearest its middle, the bot's own pick of them so they don't all stand on one block; or,
+   * with none inside, the ground near its middle (under any tree there, not on top of it).
+   */
   private safe(bot: Bot, c: { x: number; z: number; r: number }): Vec3 {
-    const a = (parseInt(bot.id.replace(/\D/g, '') || '1', 10) % 12) * 0.52;
-    const r = Math.min(c.r * 0.55, 20);
+    const mine = parseInt(bot.id.replace(/\D/g, '') || '1', 10);
+    const inside = this.hot.filter((h) => Math.hypot(h.x - c.x, h.z - c.z) < c.r * 0.75).sort((a, b) => Math.hypot(a.x - c.x, a.z - c.z) - Math.hypot(b.x - c.x, b.z - c.z));
+    if (inside.length) return inside[mine % Math.min(3, inside.length)];
+    const a = (mine % 12) * 0.52;
+    const r = Math.min(c.r * 0.4, 12);
     const x = c.x + Math.cos(a) * r;
     const z = c.z + Math.sin(a) * r;
-    return { x, y: this.game.world.surfaceY(x, z) + 1, z };
+    return { x, y: this.groundY(x, z) + 1, z };
+  }
+
+  /** The ground's top block at (x, z): below any tree there. */
+  private groundY(x: number, z: number): number {
+    const w = this.game.world;
+    const [bx, bz] = [Math.floor(x), Math.floor(z)];
+    let y = w.surfaceY(bx, bz);
+    for (let i = 0; i < 32 && y > 0; i++) {
+      const name = w.blockName(w.getBlock(bx, y, bz));
+      if (!name.endsWith('_leaves') && !name.endsWith('_log')) break;
+      y--;
+    }
+    return y;
   }
 
   private insideSafe(x: number, z: number): boolean {
@@ -296,7 +414,6 @@ export class Bots {
   private pickupFor(bot: Bot): Vec3 | null {
     const have = carried(bot);
     const inv = bot.inventory;
-    const worst = have.length ? Math.min(...have.map((g) => g.tier)) : -1;
     let best: (typeof lying)[number] | null = null;
     let bestD = 55;
     for (const pk of lying) {
@@ -304,7 +421,7 @@ export class Bots {
       const item = pk.item;
       const gun = parseGun(item);
       const wants = gun
-        ? have.length < MAX_GUNS || gun.tier > worst
+        ? (have.find((g) => g.family === gun.family)?.tier ?? -1) < gun.tier
         : item === 'bandage'
           ? inv.count('bandage') < 5
           : item === 'shield'
@@ -351,8 +468,10 @@ export class Bots {
   private lob(bot: Bot, at: Vec3, mind: BotMind): boolean {
     if (bot.inventory.count('frag') < 1) return false;
     const d = Math.hypot(at.x - bot.position.x, at.z - bot.position.z);
-    if (d < 7 || d > 24) return false;
-    return throwables.of(this.game)?.throw(bot, 'frag', { at, cook: mind.skill * 1.2 }) ?? false;
+    if (d < 10 || d > 24) return false;
+    // Not from behind cover or indoors, where it bounces back off the wall in front; not when one more hit would finish it.
+    if (bot.health < 35 || !this.game.world.lineOfSight(bot.eye, { x: at.x, y: at.y + 1.5, z: at.z })) return false;
+    return throwables.of(this.game)?.throw(bot, 'frag', { at, cook: mind.skill * 0.6 }) ?? false;
   }
 
   /** What a bot does besides fight: open the chest it's reached, and heal when nobody's shooting. */
@@ -371,7 +490,45 @@ export class Bots {
         b.chest = -1;
       }
     }
-    this.heal(b, mind, now);
+    this.escape(b, mind, now);
+    if (!b.escaping) this.heal(b, mind, now);
+  }
+
+  /**
+   * Out in the storm (or about to be, as it closes) and the walking grid has no way back (down a
+   * pit, in the water, behind something): straight for the circle's middle, sprinting and jumping.
+   */
+  private escape(b: Brain, mind: BotMind | null, now: number) {
+    const bot = b.bot;
+    const zone = this.w.zone();
+    const c = zone?.storm.now;
+    const out = c ? Math.hypot(bot.position.x - c.x, bot.position.z - c.z) - c.r : -Infinity;
+    const lost = !mind?.goal || !mind.path;
+    if (c && !mind?.target && lost && (out > 0 || (zone!.storm.step === 'shrink' && out > -6))) {
+      if (b.healing) {
+        bot.controls.button(2, false);
+        b.healing = null;
+      }
+      // Stuck on something (a cliff, a wall) for a second and a half: off at an angle for a moment, the other way next time.
+      const p = bot.position;
+      if (!b.escaping) b.escapeCheck = { x: p.x, z: p.z, t: now };
+      else if (now - b.escapeCheck.t > 1.5) {
+        if (Math.hypot(p.x - b.escapeCheck.x, p.z - b.escapeCheck.z) < 1.5 && now > b.veerUntil) {
+          b.veer = b.veer > 0 ? -1.2 : 1.2;
+          b.veerUntil = now + 1.4;
+        }
+        b.escapeCheck = { x: p.x, z: p.z, t: now };
+      }
+      const a = Math.atan2(c.z - p.z, c.x - p.x) + (now < b.veerUntil ? b.veer : 0);
+      bot.controls.lookAt({ x: p.x + Math.cos(a) * 20, y: bot.eye.y, z: p.z + Math.sin(a) * 20 });
+      bot.controls.hold('KeyW');
+      bot.controls.hold('ShiftLeft');
+      if (Math.floor(now * 3) % 2 === 0) bot.controls.press('Space');
+      b.escaping = true;
+    } else if (b.escaping) {
+      bot.controls.release();
+      b.escaping = false;
+    }
   }
 
   private heal(b: Brain, mind: BotMind | null, now: number) {

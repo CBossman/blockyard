@@ -53,6 +53,19 @@ export function quarry(): Site {
   s.chest(2, 7, 2, 'north', 3);
   s.set(0, 12, 0, 'lamp').set(0, FLOOR + 6, 0, 'lamp');
 
+  // A haul road: a straight stair three wide from the floor up the north side to the rim, cut through
+  // the terraces (the quickest way out, and the only one when the storm is coming).
+  for (let k = 0; k <= -FLOOR; k++) {
+    const z = -4 - k;
+    const y = FLOOR + k;
+    for (let x = -1; x <= 1; x++) {
+      for (let below = FLOOR; below < y; below++) s.set(x, below, z, 'stone');
+      s.stairs(x, y, z, 'cobblestone', 'north');
+      s.clear(x, y + 1, z, x, y + 4, z);
+    }
+    for (const x of [-2, 2]) s.box(x, FLOOR, z, x, y, z, 'andesite');
+  }
+
   // Chests on the way down and at the bottom.
   s.chest(-12, -3, 3, 'east', 2);
   s.chest(10, -6, -5, 'west', 2);

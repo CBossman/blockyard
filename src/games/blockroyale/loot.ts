@@ -15,7 +15,6 @@ import type { LootSpot } from './island/kit';
  * 0..4). Floor loot is one item, rolled the same way.
  */
 
-export const MAX_GUNS = 5;
 export const MAX_HEALTH = 100;
 export const MAX_SHIELD = 100;
 /** A bandage heals this much, but not past this health: a med kit is for the rest. */
@@ -132,50 +131,82 @@ export function carried(p: Player): { slot: number; item: string; family: Family
   return out;
 }
 
-/** A gun's worth, to decide what to keep: its tier first, then its family's. */
+/** A gun's worth, to decide which to hold: its tier first, then its family's. */
 const worth = (g: { family: FamilyId; tier: number }) => g.tier * 10 + FAMILIES[g.family].worth;
 
 /**
- * Someone walks over a gun: they take it if there's room, or if it's better than the worst thing
- * they carry (which drops where they stand). The same family at the same tier tops up their
- * ammo; a worse one of a family they have stays where it is. Returns whether it was taken.
+ * The hotbar has a place for everything, so the keys always mean the same: 1 rifle, 2 shotgun,
+ * 3 SMG, 4 sniper, 5 pistol, 6 bandages, 7 med kits, 8 shields, 9 frags. One gun of each family:
+ * a better one takes its place.
+ */
+export const SLOT: Record<string, number> = { trailblazer: 0, boomstick: 1, zipper: 2, longshot: 3, plinker: 4, bandage: 5, medkit: 6, shield: 7, frag: 8 };
+const STACK: Record<string, number> = { bandage: 10, medkit: 3, shield: 4, frag: 6 };
+
+/** Where an item goes in the hotbar. */
+export const slotOf = (item: string): number => SLOT[parseGun(item)?.family ?? item] ?? -1;
+
+/** Put an item straight into its place (a starting gun, a cheat's kit), replacing what's there. */
+export function equip(p: Player, item: string, count = 1) {
+  const slot = slotOf(item);
+  if (slot >= 0) p.inventory.set(slot, { item, count });
+  else p.inventory.give(item, count);
+}
+
+/**
+ * Someone walks over a gun: it goes in its family's place. A better one than they have there takes
+ * it (the old one drops where they stand), the same tier tops up their ammo, a worse one stays where
+ * it lies. In hand, if it's better than what they're holding. Returns whether it was taken.
  */
 function takeGun(game: GameContext, p: Player, item: string): boolean {
   const incoming = parseGun(item)!;
-  const have = carried(p);
-  const same = have.find((g) => g.family === incoming.family);
-  const drop = (g: { item: string; tier: number }, at: Vec3) => {
-    p.inventory.take(g.item, 1);
-    spawn(game, [{ item: g.item, count: 1, beam: RARITIES[g.tier].color }], at, { burst: 1, from: p });
-  };
-  const where = { x: p.position.x, y: p.position.y + 0.8, z: p.position.z };
-  if (same) {
-    if (incoming.tier > same.tier) {
-      drop(same, where);
-      p.inventory.give(item, 1);
+  const slot = SLOT[incoming.family];
+  const cur = p.inventory.slots[slot];
+  const had = cur ? parseGun(cur.item) : null;
+  if (cur && had) {
+    if (incoming.tier < had.tier) return false;
+    if (incoming.tier === had.tier) {
+      const k = gunsOf(game);
+      const a = k?.ammo(p, cur.item);
+      const full = GUNS[cur.item].reserve ?? 0;
+      if (!k || !a || a.reserve >= full) return false;
+      k.setAmmo(p, cur.item, { magazine: a.magazine, reserve: full });
       return true;
     }
-    if (incoming.tier === same.tier) {
-      const k = gunsOf(game);
-      const a = k?.ammo(p, item);
-      if (k && a) {
-        k.setAmmo(p, item, { magazine: a.magazine, reserve: GUNS[item].reserve ?? a.reserve });
-        return true;
-      }
-    }
-    return false;
+    spawn(game, [{ item: cur.item, count: 1, beam: RARITIES[had.tier].color }], { x: p.position.x, y: p.position.y + 0.8, z: p.position.z }, { burst: 1, from: p });
   }
-  if (have.length < MAX_GUNS) {
-    p.inventory.give(item, 1);
-    return true;
+  const held = p.inventory.held;
+  const holding = held ? parseGun(held.item) : null;
+  p.inventory.set(slot, { item, count: 1 });
+  if (!holding || p.inventory.selected === slot || worth(incoming) > worth(holding)) p.inventory.select(slot);
+  return true;
+}
+
+/** Healing, shields and frags into their places, up to a stack each: how many didn't fit. */
+function stow(p: Player, item: string, count: number): number {
+  const slot = SLOT[item];
+  const cur = p.inventory.slots[slot];
+  // (Its place taken by something else: wherever there's room.)
+  if (cur && cur.item !== item) return p.inventory.give(item, count);
+  const have = cur?.count ?? 0;
+  const n = Math.max(0, Math.min(STACK[item] - have, count));
+  if (n > 0) p.inventory.set(slot, { item, count: have + n });
+  return count - n;
+}
+
+/** Left (or put back) where it lies: it's not pulled back to them until they've stepped away from it. */
+function leave(game: GameContext, p: Player, item: string, count: number, beam: string) {
+  lying.push(game.items.spawnPickup(item, { x: p.position.x, y: p.position.y + 0.8, z: p.position.z }, { count, from: p, beam, velocity: { x: 0, y: 3, z: 0 }, despawn: 1e9 }));
+}
+
+/** Walking over healing, a shield or frags: into its place, the rest left lying. */
+function collect(game: GameContext, p: Player, item: string, count: number, name: string): boolean {
+  const left = stow(p, item, count);
+  if (left > 0) leave(game, p, item, left, BEAMS[item as keyof typeof BEAMS]);
+  if (left < count) {
+    game.audio.play('pickup', { at: p.position, volume: 0.6 });
+    p.hud.toast(`+${count - left} ${name}`);
   }
-  const weakest = have.reduce((a, b) => (worth(a) <= worth(b) ? a : b));
-  if (worth(incoming) > worth(weakest)) {
-    drop(weakest, where);
-    p.inventory.give(item, 1);
-    return true;
-  }
-  return false;
+  return true;
 }
 
 /** Define every item the game has. */
@@ -187,16 +218,7 @@ export function defineItems(game: GameContext) {
         if (takeGun(g, p, id)) {
           g.audio.play('pickup', { at: p.position, volume: 0.6 });
           p.hud.toast(`+${gun.name}`);
-        } else {
-          // Left where it lies: it's not pulled back to them until they've stepped away from it.
-          lying.push(
-            g.items.spawnPickup(
-              id,
-              { x: p.position.x, y: p.position.y + 0.8, z: p.position.z },
-              { from: p, beam: RARITIES[parseGun(id)!.tier].color, velocity: { x: 0, y: 3, z: 0 }, despawn: 1e9 },
-            ),
-          );
-        }
+        } else leave(g, p, id, 1, RARITIES[parseGun(id)!.tier].color);
         return true;
       },
     });
@@ -205,6 +227,7 @@ export function defineItems(game: GameContext) {
   game.items.define('bandage', {
     kind: 'consumable',
     name: 'Bandage',
+    onPickup: (g, n, p) => collect(g, p, 'bandage', n, 'Bandage'),
     icon: 'heart',
     stack: 10,
     useTime: 3.2,
@@ -215,6 +238,7 @@ export function defineItems(game: GameContext) {
   game.items.define('medkit', {
     kind: 'consumable',
     name: 'Med Kit',
+    onPickup: (g, n, p) => collect(g, p, 'medkit', n, 'Med Kit'),
     icon: 'health_potion',
     stack: 3,
     useTime: 6.5,
@@ -225,6 +249,7 @@ export function defineItems(game: GameContext) {
   game.items.define('shield', {
     kind: 'consumable',
     name: 'Shield Potion',
+    onPickup: (g, n, p) => collect(g, p, 'shield', n, 'Shield Potion'),
     icon: 'health_potion',
     stack: 4,
     useTime: 4,
@@ -240,6 +265,7 @@ export function defineItems(game: GameContext) {
   game.items.define('frag', {
     kind: 'throwable',
     name: 'Frag Cube',
+    onPickup: (g, n, p) => collect(g, p, 'frag', n, 'Frag Cube'),
     icon: 'heart',
     stack: 6,
     key: 'KeyG',
@@ -270,9 +296,7 @@ export function defineItems(game: GameContext) {
       }
       if (!topped) {
         // Nothing to top up: it stays.
-        lying.push(
-          g.items.spawnPickup('ammo', { x: p.position.x, y: p.position.y + 0.8, z: p.position.z }, { from: p, beam: BEAMS.ammo, velocity: { x: 0, y: 3, z: 0 }, despawn: 1e9 }),
-        );
+        leave(g, p, 'ammo', 1, BEAMS.ammo);
         return true;
       }
       g.audio.play('pickup', { at: p.position, volume: 0.6 });

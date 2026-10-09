@@ -53,7 +53,8 @@ export const shared = defineShared({
       display: "'Barlow Condensed', 'Arial Narrow', Impact, sans-serif",
       text: "'Barlow', 'Helvetica Neue', system-ui, sans-serif",
       fonts: ['Barlow Condensed:600;700', 'Barlow:500;700'],
-      colors: { accent: '#ff8a2a', ink: '#12141a', paper: '#f3efe6', text: '#ffffff', danger: '#ff4a5a', good: '#5fd35f' },
+      // (Panels in charcoal, like the game's own widgets: the text on them is white.)
+      colors: { accent: '#ff8a2a', ink: '#12141a', paper: '#1b1e27', text: '#ffffff', danger: '#ff4a5a', good: '#5fd35f' },
     },
   },
 });
