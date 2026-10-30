@@ -11,9 +11,10 @@ import obby from './obby/server';
 import sandbox from './sandbox/server';
 import heartHunt from './heart-hunt/server';
 import golf from './golf/server';
+import regatta from './regatta/server';
 
 /** The games a server hosts, as it runs them (shared definition and rules), in the launcher's order. */
-export const games: GameDefinition[] = [callofblocky, blockfront, blockjam, blockice, arena, starfighter, skyship, bedwars, golf, obby, sandbox, heartHunt];
+export const games: GameDefinition[] = [callofblocky, blockfront, blockjam, blockice, arena, starfighter, skyship, bedwars, golf, obby, sandbox, heartHunt, regatta];
 
 /**
  * Development-only games (a development server hosts them when named; the headless tests use
