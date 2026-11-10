@@ -260,8 +260,11 @@ export interface ClientCamera {
    * camera, which goes on underneath (they still look round, and walk if they're free to). Call it
    * every frame to move it. What's in first person is hidden while it's taken, and the world
    * loads round the camera. Only this screen's view: the game's server knows nothing of it.
+   * `shadows`, for a view of the ground from far off (a strategy game's slanted look down): the
+   * sun's shadows are drawn round `at`, out to `radius`, rather than round the camera as far as the
+   * player's settings have them (which wouldn't reach what's on the screen).
    */
-  take(pose: { position: PlainVec3; target: PlainVec3; fov?: number }): void;
+  take(pose: { position: PlainVec3; target: PlainVec3; fov?: number; shadows?: { at: PlainVec3; radius: number } }): void;
   /** Give the view back: it eases from the last pose taken into the player's own camera over `ease` seconds (default 1; 0: at once). */
   release(ease?: number): void;
   /** Client code has the camera (`take`), or it's still easing back. */

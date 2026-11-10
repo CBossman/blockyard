@@ -1,0 +1,59 @@
+import { defineMeta } from '@platform';
+
+/**
+ * Block Command: a real-time strategy game of the modern age, in the way of Age of Mythology. Up to
+ * four commanders each build a base, gather steel and oil, raise barracks and factories and march
+ * infantry and tanks on the others; free for all, two against two, or all together against bots.
+ */
+export default defineMeta({
+  id: 'command',
+  title: 'Block Command',
+  tagline: 'Build a base, gather steel and oil, and march armour on your rivals. Four commanders, one front.',
+  accent: '#e8392e',
+  instances: true,
+  controls: [
+    ['Left click / drag', 'select your units and buildings (drag for a box)'],
+    ['Right click', 'move · attack · gather (on a deposit) · rally (with a building selected)'],
+    ['Engineer selected', 'pick a building to place, then click the ground'],
+    ['Building selected', 'train units from its panel; the HQ also advances your era (C), unlocking tanks, labs, helicopters and artillery'],
+    ['Q, then click', 'attack-move: fight whatever you meet on the way (Q held + right click too)'],
+    ['P', "call your doctrine's special power"],
+    ['Double click', 'select every unit of that kind on screen'],
+    ['H', 'halt'],
+    ['T', 'stance: aggressive · hold ground · hold fire'],
+    ['Right click a bunker / transport', 'infantry go in (U lets them out; a transport lands them on the nearest shore)'],
+    ['M / G (engineer)', 'build a bunker / a dock on a lake shore (gunboats and transports)'],
+    ['Hills', 'high ground reaches and sees further, and is harder to hit from below'],
+    ['Walls', 'an engineer drags a line of wall (J): nothing on the ground gets past it, and a gate (L) lets only your side through; an army that finds no way round shoots its way in'],
+    ['Flanking', 'tanks and other ground vehicles take 30% more from shots in the rear: come at them from two sides'],
+    ['Stars', 'units earn up to three stars from kills: more damage and health'],
+    ['. (full stop)', 'select your idle engineers (again: the next one)'],
+    ['F8', 'let a bot play for you (again: take back command)'],
+    ['E / R / B', 'select all engineers / all army / look at base (nothing selected)'],
+    ['Space', 'jump to the latest alert, else back to base'],
+    ['WASD / edge / wheel', 'move and zoom the view'],
+    ['Ctrl + 1-9 / 1-9', 'save / recall a group of units'],
+    ['Shift + any order', 'queue it after what they are doing: waypoints'],
+    ['Y, then click', 'patrol between here and there'],
+    ['R / E / G', 'each kind of unit selected has its own ability: grenades, flare, brace, smoke, barrage, flak, rockets'],
+    ['X', 'fall back to the nearest depot or HQ; near one, units out of the fight heal'],
+    ['R (engineers)', 'lay a mine: hidden from the enemy, but scouts find and defuse them'],
+    ['Depots', 'engineers can drop off at them, so a depot by a far deposit is a forward base'],
+    ['Wrecks and rubble', 'what the fighting leaves: engineers can strip it for steel'],
+    ['N (building selected)', 'repeat: keep training the last unit you ordered there'],
+    ['Supply drops', 'gold on the minimap: the first side standing on one alone takes it'],
+    ['Right drag', 'move and face the way you drag'],
+    ['Hold Alt', 'show ranges, sight, health and territory'],
+    ['Alt + click', 'ping the map for your team'],
+    ['K', 'the tech tree'],
+    ['Enter / Shift + Enter', 'chat to everyone / to your team'],
+    ['Esc', 'cancel (with nothing chosen: the menu)'],
+  ],
+  achievements: {
+    veteran: { title: 'Decorated', description: 'Raise a unit to three stars' },
+    first_blood: { title: 'First Blood', description: 'Destroy an enemy unit' },
+    tank_column: { title: 'Armoured Column', description: 'Have five tanks at once' },
+    victory: { title: 'Last Flag Standing', description: 'Win a match' },
+    flawless: { title: 'Untouched', description: 'Win without losing a building', hidden: true },
+  },
+});

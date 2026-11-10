@@ -857,7 +857,7 @@ export class Runtime {
             const p = worldCamera.localToWorld(new THREE.Vector3(local.x, local.y, local.z));
             return { x: p.x, y: p.y, z: p.z };
           },
-          take: (pose) => taken.take(pose.position, pose.target, pose.fov),
+          take: (pose) => taken.take(pose.position, pose.target, pose.fov, pose.shadows),
           release: (ease) => taken.release(ease),
           get taken() {
             return taken.active;
@@ -1557,7 +1557,7 @@ export class Runtime {
       saveQuality(0);
     }
     this.look = this.quality.apply(s, deviceDpr());
-    this.renderer.applySettings(toRenderSettings(this.look.settings));
+    this.renderer.applySettings(this.renderSettings(this.look));
     const rd = this.viewDistance(s);
     if (this.chunks.renderDistance !== rd) this.chunks.setRenderDistance(rd);
     this.chunks.occlusion = s.occlusion;
@@ -1590,12 +1590,19 @@ export class Runtime {
     document.documentElement.style.setProperty('--touch-zoom', String(Math.round(Math.min(1.4, Math.max(1, Math.min(w, h) / 480)) * 100) / 100));
   }
 
+  /** The renderer's settings: the look as auto quality has it, less the clouds if the game's world has none. */
+  private renderSettings(look: Look) {
+    const s = toRenderSettings(look.settings);
+    if (this.def.world?.clouds === false) s.clouds = false;
+    return s;
+  }
+
   /** Auto quality moved a notch: draw the settings as it has them now. */
   private applyQuality() {
     saveQuality(this.quality.level);
     const was = this.look;
     this.look = this.quality.apply(this.settings, deviceDpr());
-    this.renderer.applySettings(toRenderSettings(this.look.settings));
+    this.renderer.applySettings(this.renderSettings(this.look));
     if (!was || was.dpr !== this.look.dpr || was.settings.renderScale !== this.look.settings.renderScale) this.resize();
   }
 
@@ -2070,6 +2077,7 @@ export class Runtime {
   private present(dt: number, t0: number) {
     const medium = this.camera.position.y < 256 ? this.eyeMedium() : 'air';
     this.hud.setMedium(medium);
+    this.renderer.shadowsAround = this.taken.shadows;
     this.renderer.render(this.camera, this.env, this.hooks, medium === 'water' ? 1 : medium === 'lava' ? 2 : 0);
     this.gameHud.update(dt, this.camera, window.innerWidth, window.innerHeight);
     const cpu = performance.now() - t0;

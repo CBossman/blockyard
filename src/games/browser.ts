@@ -50,6 +50,7 @@ export async function devGames(): Promise<GameEntry[]> {
     import('./lasertag/meta'),
     import('./siege/meta'),
     import('./blockilization/meta'),
+    import('./command/meta'),
   ]);
   const clients = [
     () => import('./starfighter/previews/shipyard.client'),
@@ -66,6 +67,7 @@ export async function devGames(): Promise<GameEntry[]> {
     () => import('./lasertag/client'),
     () => import('./siege/client'),
     () => import('./blockilization/client'),
+    () => import('./command/client'),
   ];
   return metas.map((m, i) => entry(m.default, clients[i]));
 }

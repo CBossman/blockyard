@@ -302,6 +302,8 @@ export class PlayerCamera {
  */
 export class CameraTake {
   private pose: { position: THREE.Vector3; quaternion: THREE.Quaternion; fov: number | null } | null = null;
+  /** Where the pose taken wants the sun's shadows drawn (while it's held). */
+  private around: { x: number; y: number; z: number; radius: number } | null = null;
   /** Taken now (not easing back). */
   private held = false;
   private easeTime = 0;
@@ -313,7 +315,13 @@ export class CameraTake {
     return this.pose !== null;
   }
 
-  take(position: { x: number; y: number; z: number }, target: { x: number; y: number; z: number }, fov?: number) {
+  /** The shadows the view taken asks for: round a point of its own, not round the camera. */
+  get shadows(): { x: number; y: number; z: number; radius: number } | null {
+    return this.held ? this.around : null;
+  }
+
+  take(position: { x: number; y: number; z: number }, target: { x: number; y: number; z: number }, fov?: number, shadows?: { at: { x: number; y: number; z: number }; radius: number }) {
+    this.around = shadows && shadows.radius > 0 ? { x: shadows.at.x, y: shadows.at.y, z: shadows.at.z, radius: shadows.radius } : null;
     const p = new THREE.Vector3(position.x, position.y, position.z);
     const t = new THREE.Vector3(target.x, target.y, target.z);
     // (Looking straight down or up: any turn about the vertical will do.)

@@ -269,6 +269,11 @@ export interface WorldOptions {
    * a small space (an arena, a street), there's nothing further to load, mesh and draw.
    */
   maxViewDistance?: number;
+  /**
+   * Clouds in the sky and their shadows drifting over the land. Default true; `false` for a game
+   * whose view should be clear and evenly lit throughout (a board seen from above).
+   */
+  clouds?: boolean;
   /** Save block edits and the player position between sessions. Default false. */
   persist?: boolean;
   /**

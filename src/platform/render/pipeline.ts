@@ -106,6 +106,8 @@ export class Renderer {
     shadow: THREE.RawShaderMaterial;
   };
   readonly shadowCamera = new THREE.OrthographicCamera();
+  /** Shadows round this point and this far out, not round the camera (a camera taken to look at the ground from far off). */
+  shadowsAround: { x: number; y: number; z: number; radius: number } | null = null;
   settings: RenderSettings;
   width = 1;
   height = 1;
@@ -503,10 +505,16 @@ export class Renderer {
     // 2. Shadow map.
     const s = this.settings;
     if (this.shadowRT && s.shadowRes > 0 && env.lightDir.y > 0.02) {
+      // Round the camera, as far as the settings say; or round the spot a taken camera names, as far
+      // as it says (no fading out by how far from the camera: it's all far from it).
+      const at = this.shadowsAround;
+      const radius = at ? at.radius : s.shadowDistance;
+      this.uniforms.uShadowParams.value.y = at ? 1e6 : radius;
+      this.uniforms.uShadowParams.value.z = ((2 * radius) / s.shadowRes) * 1.8;
       const m = engine.shadow_camera(
         new Float64Array([env.lightDir.x, env.lightDir.y, env.lightDir.z]),
-        new Float64Array([camera.position.x, camera.position.y, camera.position.z]),
-        s.shadowDistance,
+        new Float64Array(at ? [at.x, at.y, at.z] : [camera.position.x, camera.position.y, camera.position.z]),
+        radius,
         SHADOW_DEPTH,
         s.shadowRes,
       );

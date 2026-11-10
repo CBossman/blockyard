@@ -38,6 +38,7 @@ export async function devGames(): Promise<GameDefinition[]> {
     import('./lasertag/server'),
     import('./siege/server'),
     import('./blockilization/server'),
+    import('./command/server'),
   ]);
   return loaded.map((m) => m.default);
 }
