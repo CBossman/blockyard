@@ -1,5 +1,5 @@
-import { FLANK, fromBehind } from '../../src/games/command/defs';
-import { BASES, LAKES, MESAS, TREES, deposits, heightAt, wallLine, wallSnap } from '../../src/games/command/map';
+import { FLANK, TRADE, fromBehind, tradeGet } from '../../src/games/command/defs';
+import { BASES, HALF, LAKES, MESAS, TREES, deposits, heightAt, wallLine, wallPlan, wallSnap } from '../../src/games/command/map';
 import { BUILDING_ORDER, UNIT_ORDER, rankBits, stanceBits, type State } from '../../src/games/command/protocol';
 import { readFileSync } from 'node:fs';
 import { GameHost } from '../../src/platform/host/game';
@@ -444,7 +444,7 @@ function standing() {
   send('move', { ids: carriers, x: d.x, z: d.z });
   h.run(60, { until: () => !state().drops.some((x) => x.id === d.id) });
   check(!state().drops.some((x) => x.id === d.id), 'drops: and goes to whoever gets there');
-  check(BUILDING_ORDER.length === 11, 'the buildings are as they were, and the wall and its gate');
+  check(BUILDING_ORDER.length === 12, 'the buildings are as they were, and the wall, its gate and the trade post');
 }
 
 /** Surrender: alone against bots it ends the match, with the bots standing and the player not. */
@@ -567,9 +567,111 @@ function walls() {
   check(!early && inside, `walls: and comes in through the breach, not before (${ring().length} lengths left, early ${early})`);
 }
 
+/**
+ * The trade post: a lot of steel sold for oil; the next fetches less; the price climbs back. And
+ * selling one way and buying back the other never pays.
+ */
+function trade() {
+  check(tradeGet('steel', 1) * tradeGet('oil', 1) < TRADE.lot * TRADE.lot && tradeGet('steel', 0.5) < tradeGet('steel', 1), 'trade: a round trip loses, and a lower price fetches less');
+  const def = allGames.find((g) => g.id === 'command')!;
+  const host = new GameHost(def, { engine: readFileSync('engine/pkg/voxel_engine_bg.wasm'), seed: 7, remote: true, radius: 9, budget: Infinity, cheats: true, room: 't' });
+  const heard = new Map<string, Map<string, unknown>>();
+  const step = (seconds: number) => {
+    for (let t = 0; t < seconds; t += 1 / 30) for (const [id, batch] of host.step(1 / 30)) for (const e of (batch as { events?: { t: string; call?: { target: string; method: string; args: unknown[] } }[] }).events ?? []) if (e.t === 'call' && e.call?.target === 'message') (heard.get(id) ?? heard.set(id, new Map()).get(id)!).set(e.call.method, e.call.args[0]);
+  };
+  const join = (name: string) => { const c = host.connect(name); host.command(c.id, { t: 'start', name } as never); return c.id; };
+  const send = (id: string, name: string, data: unknown = {}) => host.command(id, { t: 'message', msg: { t: 'game', name, data } } as never);
+  const ann = join('Ann');
+  const bob = join('Bob');
+  step(1);
+  const state = () => heard.get(ann)?.get('state') as State;
+  send(bob, 'lobby', { op: 'ready' });
+  step(0.3);
+  send(ann, 'lobby', { op: 'start' });
+  step(8);
+  const seat = state().mine[ann];
+  const me = () => state().seats.find((x) => x.seat === seat)!;
+  const MARKET = BUILDING_ORDER.indexOf('market');
+  const market = () => { const a = heard.get(ann)!.get('b') as number[]; for (let i = 0; i < a.length; i += 9) if (a[i + 1] === MARKET && a[i + 2] === seat) return { id: a[i], built: a[i + 6] }; return null; };
+  const u = heard.get(ann)!.get('u') as number[];
+  const engineers: number[] = [];
+  for (let i = 0; i < u.length; i += 8) if (u[i + 2] === seat && u[i + 1] === 0) engineers.push(u[i]);
+  // Gather a while, then put one up beside the HQ (wherever there's room).
+  step(50);
+  const B = BASES[seat];
+  for (const [dx, dz] of [[14, 0], [-14, 0], [0, 14], [0, -14], [14, 14], [-14, 14], [14, -14], [-14, -14]]) {
+    send(ann, 'build', { kind: 'market', x: B.x + dx, z: B.z + dz, ids: engineers.slice(0, 2) });
+    step(1);
+    if (market()) break;
+  }
+  check(!!market(), 'trade: a trade post is laid');
+  for (let t = 0; t < 120 && market()!.built < 100; t += 5) step(5);
+  check(market()!.built >= 100, 'trade: and built');
+  for (let t = 0; t < 120 && me().steel < 120; t += 5) step(5);
+  const [steel0, oil0, fetch0] = [me().steel, me().oil, me().trade[0]];
+  send(ann, 'trade', { id: market()!.id, sell: 'steel' });
+  step(0.2);
+  check(fetch0 === TRADE.oil && me().oil - oil0 === fetch0 && steel0 - me().steel <= TRADE.lot + 5 && steel0 - me().steel >= TRADE.lot - 20, `trade: a hundred steel fetches ${fetch0} oil (${steel0}→${me().steel} steel, ${oil0}→${me().oil} oil)`);
+  const fetch1 = me().trade[0];
+  check(fetch1 < fetch0, `trade: and the next fetches less (${fetch1})`);
+  step(40);
+  check(me().trade[0] > fetch1, `trade: the price climbs back (${me().trade[0]})`);
+}
+
+/**
+ * A bot walls its base: every base's plan has gates on its lines and no line too long to drag; a
+ * turtle on Hard, given time, puts up its walls and gates, and its army still goes out through them.
+ */
+function botWalls() {
+  for (const b of BASES) {
+    const p = wallPlan(b.x, b.z);
+    const cells = p.lines.map((l) => wallLine(l[0], l[1], l[2], l[3], 99));
+    check(p.lines.length >= 2 && cells.every((c) => c.length <= 40) && p.gates.every((g) => cells.some((c) => c.some((q) => q.x === g.x && q.z === g.z))), `bot walls: a plan for the base at ${b.x}, ${b.z} (${p.lines.length} lines, ${p.gates.length} gates)`);
+    check(cells.flat().every((q) => Math.abs(q.x) <= HALF && Math.abs(q.z) <= HALF), 'bot walls: all of it on the map');
+  }
+  const h = launch('command', { seed: 12 });
+  const player = h.ctx.player.id;
+  const state = () => h.find('message', 'state').at(-1)?.args[0] as State;
+  const units = () => h.find('message', 'u').at(-1)?.args[0] as number[];
+  const blds = () => h.find('message', 'b').at(-1)?.args[0] as number[];
+  const lobby = (data: object) => h.send({ t: 'game', player, name: 'lobby', data });
+  h.run(1);
+  // The player beside a turtle (so what it builds is in sight), against a bot.
+  lobby({ op: 'preset', preset: 'teams' });
+  lobby({ op: 'peace', peace: 5 });
+  lobby({ op: 'difficulty', seat: 1, difficulty: 'hard' });
+  lobby({ op: 'style', seat: 1, style: 'turtle' });
+  lobby({ op: 'kind', seat: 3, kind: 'closed' });
+  lobby({ op: 'sit', seat: 2 });
+  lobby({ op: 'team', seat: 1, team: 0 });
+  lobby({ op: 'team', seat: 2, team: 0 });
+  lobby({ op: 'team', seat: 0, team: 1 });
+  lobby({ op: 'start' });
+  h.run(9);
+  check(state().phase === 'play', 'bot walls: the match begins');
+  const RAMPART = BUILDING_ORDER.indexOf('rampart');
+  const GATE = BUILDING_ORDER.indexOf('gate');
+  const walls = () => { const b = blds(); let r = 0; let g = 0; for (let i = 0; i < b.length; i += 9) if (b[i + 2] === 1 && b[i + 6] >= 100) { if (b[i + 1] === RAMPART) r++; if (b[i + 1] === GATE) g++; } return { r, g }; };
+  h.run(600, { until: () => walls().r >= 30 && walls().g >= 2 });
+  const w1 = walls();
+  check(w1.r >= 30 && w1.g >= 2, `bot walls: the turtle walls its base (${w1.r} lengths and ${w1.g} gates built by ${state().time} s)`);
+  // And it still goes out: one of its units that was inside them, well outside.
+  const B = BASES[1];
+  let out = 0;
+  const inside = new Set<number>();
+  { const u = units(); for (let i = 0; i < u.length; i += 8) if (u[i + 2] === 1 && Math.hypot(u[i + 3] - B.x, u[i + 4] - B.z) < 26) inside.add(u[i]); }
+  for (let t = 0; t < 420 && !out; t += 10) {
+    h.run(10);
+    const u = units();
+    for (let i = 0; i < u.length; i += 8) if (inside.has(u[i]) && Math.hypot(u[i + 3] - B.x, u[i + 4] - B.z) > 55) out++;
+  }
+  check(out > 0, `bot walls: and its units still go out through the gates (by ${state().time} s)`);
+}
+
 export default function command() {
   flanking();
   walls();
+  trade();
   surrender();
   field();
   standing();
@@ -582,4 +684,6 @@ export default function command() {
   play('teams', 4, 1);
   const coop = play('coop', 4, 1);
   check(coop.seats.filter((s) => s.team === 1).length === 2, 'coop: two bot enemies');
+  // (Last: it leaves the lobby set for a peace, which would carry over to the matches after it.)
+  botWalls();
 }

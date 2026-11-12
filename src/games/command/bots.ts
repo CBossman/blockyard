@@ -1,5 +1,5 @@
 import { ABILITIES, AGE_NEEDS, BUILDINGS, CARRY, SIGHT, UNITS, ageOf, type BuildingKind, type ResKind, type UnitKind } from './defs';
-import { BASES, HALF, LAKES, inHill, inLake, inMesa, inside, lakeOf } from './map';
+import { BASES, CAMPS, HALF, LAKES, inHill, inLake, inMesa, inside, lakeOf, wallLine, wallPlan } from './map';
 import type { Building, Slot, Unit, World } from './server';
 
 /**
@@ -25,11 +25,11 @@ import type { Building, Slot, Unit, World } from './server';
  * barracks it keeps, and whether it goes for the air or the lakes.
  */
 export const STYLES = {
-  balanced: { name: 'Balanced', army: 15, grow: 5, towers: 1, bunkers: 0, age2: 300, age3: 780, barracks: 1, air: false, navy: false, tanks: 1 },
-  rusher: { name: 'Rusher', army: 11, grow: 4, towers: 0, bunkers: 0, age2: 420, age3: 960, barracks: 2, air: false, navy: false, tanks: 0.6 },
-  turtle: { name: 'Turtle', army: 20, grow: 6, towers: 3, bunkers: 2, age2: 330, age3: 840, barracks: 1, air: false, navy: false, tanks: 1.4 },
-  air: { name: 'Air Force', army: 15, grow: 5, towers: 1, bunkers: 0, age2: 270, age3: 660, barracks: 1, air: true, navy: false, tanks: 0.8 },
-  navy: { name: 'Navy', army: 15, grow: 5, towers: 1, bunkers: 1, age2: 330, age3: 840, barracks: 1, air: false, navy: true, tanks: 1 },
+  balanced: { name: 'Balanced', army: 15, grow: 5, towers: 1, bunkers: 0, age2: 300, age3: 780, barracks: 1, air: false, navy: false, tanks: 1, walls: true },
+  rusher: { name: 'Rusher', army: 11, grow: 4, towers: 0, bunkers: 0, age2: 420, age3: 960, barracks: 2, air: false, navy: false, tanks: 0.6, walls: false },
+  turtle: { name: 'Turtle', army: 20, grow: 6, towers: 3, bunkers: 2, age2: 330, age3: 840, barracks: 1, air: false, navy: false, tanks: 1.4, walls: true },
+  air: { name: 'Air Force', army: 15, grow: 5, towers: 1, bunkers: 0, age2: 270, age3: 660, barracks: 1, air: true, navy: false, tanks: 0.8, walls: true },
+  navy: { name: 'Navy', army: 15, grow: 5, towers: 1, bunkers: 1, age2: 330, age3: 840, barracks: 1, air: false, navy: true, tanks: 1, walls: true },
 };
 export type Style = keyof typeof STYLES;
 const STYLE_IDS = Object.keys(STYLES) as Style[];
@@ -64,6 +64,8 @@ export class BotBrain {
   private seenBuildings = new Map<number, { kind: BuildingKind; seat: number; x: number; z: number }>();
   private scoutStop = 0;
   private scoutedAt = -99;
+  /** When it next looks over its walls. */
+  private wallAt = 0;
 
   readonly kind: Style;
   constructor(readonly skill: number, kind?: Style) {
@@ -83,7 +85,10 @@ export class BotBrain {
     const base = BASES[s.seat];
     const st = STYLES[this.kind];
     const mine = [...w.units.values()].filter((u) => u.seat === s.seat);
-    const bld = [...w.buildings.values()].filter((b) => b.seat === s.seat);
+    // (Its walls apart from the rest: they're not what it counts, builds or guards like a building.)
+    const all = [...w.buildings.values()].filter((b) => b.seat === s.seat);
+    const bld = all.filter((b) => !BUILDINGS[b.kind].wall);
+    const walls = all.filter((b) => BUILDINGS[b.kind].wall);
     const kinds = (k: UnitKind) => mine.filter((u) => u.kind === k);
     const count = (k: BuildingKind) => bld.filter((b) => b.kind === k).length;
     const engineers = kinds('engineer');
@@ -93,7 +98,7 @@ export class BotBrain {
     const age = ageOf(s.techs);
 
     // What's at the door: enemy fighters in the base.
-    const home = foes.filter((f) => f.seat !== WILD && fights(f) && (hyp(f.x, f.z, base.x, base.z) < 34 || bld.some((b) => hyp(f.x, f.z, b.x, b.z) < 16)));
+    const home = foes.filter((f) => f.seat !== WILD && fights(f) && (hyp(f.x, f.z, base.x, base.z) < 34 || bld.some((b) => hyp(f.x, f.z, b.x, b.z) < 16) || walls.some((b) => hyp(f.x, f.z, b.x, b.z) < 9)));
 
     // --- Engineers ---------------------------------------------------------------------------
     const queued = (b: Building, k: UnitKind) => b.queue.filter((q) => q.kind === k).length;
@@ -157,6 +162,16 @@ export class BotBrain {
       const e = spare.shift();
       if (e) w.command([e.id], s.seat, { t: 'build', id: b.id });
     }
+    // Its walls: two engineers at a time on what's still to build of them (each goes on to the next when it's done).
+    const toWall = walls.filter((b) => b.built < 1 && !raiding(b.x, b.z, 14));
+    let onWalls = engineers.filter((e) => e.order.t === 'build' && walls.some((b) => b.id === (e.order as { id: number }).id)).length;
+    while (toWall.length && onWalls < 2) {
+      const e = spare.shift();
+      if (!e) break;
+      const b = toWall.sort((p, q) => hyp(p.x, p.z, e.x, e.z) - hyp(q.x, q.z, e.x, e.z))[0];
+      w.command([e.id], s.seat, { t: 'build', id: b.id });
+      onWalls++;
+    }
     // And what's damaged gets mended, once the fighting's over.
     if (smart && !home.length) {
       const hurt = bld.filter((b) => b.built >= 1 && b.hp < BUILDINGS[b.kind].hp * 0.7 && !engineers.some((e) => e.order.t === 'repair' && e.order.id === b.id))[0];
@@ -204,6 +219,27 @@ export class BotBrain {
             if (!inHill(x, z, 3) && w.place(s.seat, 'depot', x, z, [builder.id])) break;
           }
         }
+      }
+    }
+
+    // --- Walls: once it has a barracks and steel to spare, its base walled in, gates first; looked over
+    // every few seconds, a length at a time as steel comes in, so what's knocked down goes back up. Not by a camp still guarded.
+    if (smart && st.walls && hq && !home.length && !poor && w.time >= this.wallAt && w.time > (this.kind === 'turtle' ? 300 : 480) && count('barracks') > 0 && s.steel >= 100) {
+      this.wallAt = w.time + 6;
+      const guarded = CAMPS.filter((_, i) => [...w.units.values()].some((u) => u.camp === i));
+      const free = (x: number, z: number) => !guarded.some((c) => hyp(c.x, c.z, x, z) < 15);
+      const plan = wallPlan(base.x, base.z);
+      for (const g of plan.gates) {
+        if (!free(g.x, g.z) || walls.some((b) => b.kind === 'gate' && hyp(b.x, b.z, g.x, g.z) < 8)) continue;
+        // (Its spot taken by a tree, say: the next along the wall.)
+        const along = plan.lines.find((l) => (l[0] === l[2] && l[0] === g.x) || (l[1] === l[3] && l[1] === g.z));
+        const ax = along && along[1] === along[3] ? 3 : 0;
+        const az = ax ? 0 : 3;
+        for (const k of [0, 1, -1, 2, -2]) if (w.place(s.seat, 'gate', g.x + ax * k, g.z + az * k, [])) break;
+      }
+      for (const l of plan.lines) for (const c of wallLine(l[0], l[1], l[2], l[3])) {
+        if (s.steel < 60) break;
+        if (free(c.x, c.z)) w.place(s.seat, 'rampart', c.x, c.z, []);
       }
     }
 

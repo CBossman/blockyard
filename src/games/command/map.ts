@@ -205,3 +205,41 @@ export const TREES: Spot[] = (() => {
   }
   return out;
 })();
+
+/** How far past each thing on the land the grid units find their way on counts a cell shut (to the cell's middle, plus half a cell). */
+export const SHUT = { lake: 0.6, mesa: 0.8, tree: 0.9, deposit: 1.8, building: 1 };
+/** Whether the cell round (x, z) is shut to walkers by the land itself: water, a mesa or a tree. */
+export function landShut(x: number, z: number): boolean {
+  const near = (cx: number, cz: number, r: number) => Math.hypot(x - cx, z - cz) <= r + WALL_CELL * 0.5;
+  return LAKES.some((l) => near(l.x, l.z, l.r + SHUT.lake)) || MESAS.some((m) => near(m.x, m.z, m.r + SHUT.mesa)) || TREES.some((t) => near(t.x, t.z, SHUT.tree));
+}
+
+/**
+ * A base's walls, as a bot puts them up: a square round it, `r` out, but a side that would come near
+ * the map's edge is left out and the two beside it run on to the edge instead (the edge is wall
+ * enough). Two gates in each side: one level with the base, one further towards the middle.
+ */
+export function wallPlan(bx: number, bz: number, r = 32): { lines: [number, number, number, number][]; gates: { x: number; z: number }[] } {
+  const edge = HALF - WALL_CELL / 2;
+  const span = (c: number) => {
+    const loOpen = c - r > -edge + 14;
+    const hiOpen = c + r < edge - 14;
+    return { lo: wallSnap(loOpen ? c - r : -edge), hi: wallSnap(hiOpen ? c + r : edge), loOpen, hiOpen };
+  };
+  const X = span(bx);
+  const Z = span(bz);
+  const lines: [number, number, number, number][] = [];
+  const gates: { x: number; z: number }[] = [];
+  const side = (alongZ: boolean, at: number, lo: number, hi: number, mid: number) => {
+    lines.push(alongZ ? [at, lo, at, hi] : [lo, at, hi, at]);
+    for (const g of [mid, mid + (Math.sign(-mid) || 1) * 12]) {
+      const v = wallSnap(Math.max(lo + WALL_CELL, Math.min(hi - WALL_CELL, g)));
+      gates.push(alongZ ? { x: at, z: v } : { x: v, z: at });
+    }
+  };
+  if (X.loOpen) side(true, X.lo, Z.lo, Z.hi, bz);
+  if (X.hiOpen) side(true, X.hi, Z.lo, Z.hi, bz);
+  if (Z.loOpen) side(false, Z.lo, X.lo, X.hi, bx);
+  if (Z.hiOpen) side(false, Z.hi, X.lo, X.hi, bx);
+  return { lines, gates };
+}

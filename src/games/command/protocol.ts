@@ -42,6 +42,8 @@ export interface Seat {
   rallyIn: number;
   hero: boolean;
   techs: TechId[];
+  /** What a lot of steel, and a lot of oil, fetches at its trade post now. */
+  trade: [number, number];
   /** A bot's way of playing (`bots.ts`), shown by its name. */
   style: string;
   /** What its army is worth, and what it has gathered in the last minute (the strength panel). */
@@ -117,7 +119,7 @@ export interface State {
 
 /** The kinds, in the order their indexes in `u` and `b` mean. */
 export const UNIT_ORDER: UnitKind[] = ['engineer', 'rifle', 'tank', 'heli', 'scout', 'artillery', 'aa', 'hero', 'guard', 'brute', 'at', 'gunboat', 'transport'];
-export const BUILDING_ORDER: BuildingKind[] = ['hq', 'depot', 'barracks', 'factory', 'airfield', 'lab', 'tower', 'bunker', 'dock', 'rampart', 'gate'];
+export const BUILDING_ORDER: BuildingKind[] = ['hq', 'depot', 'barracks', 'factory', 'airfield', 'lab', 'tower', 'bunker', 'dock', 'rampart', 'gate', 'market'];
 
 export interface Shot {
   x: number;

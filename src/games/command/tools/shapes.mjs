@@ -1323,6 +1323,58 @@ building('gate', (m) => {
   return m;
 });
 
+building('market', (m) => {
+  // A trade post: an open hall under a striped awning, a counter and crates under it; steel
+  // girders stacked on one side of the yard, oil drums on the other; a weighbridge before it, a
+  // price board on a post, and a crane to lift the loads.
+  pad(m, -11, 11, -11, 11, 'concreteDark');
+  // The hall: steel columns, a roof sloping to the front in stripes of the team's colour.
+  for (const [x, z] of [[-9, -9], [8, -9], [-9, 2], [8, 2]]) m.box([x, 1, z], [x + 1, z < 0 ? 14 : 11, z + 1], 'steelDark');
+  for (let z = -10; z <= 3; z++) {
+    const y = 14 - Math.max(0, Math.floor((z + 9) / 4));
+    for (let x = -10; x <= 9; x++) m.set(x, y, z, Math.floor((x + 10) / 3) % 2 ? 'team' : 'white');
+  }
+  for (let x = -10; x <= 9; x++) if (x % 2) m.set(x, 10, 4, Math.floor((x + 10) / 3) % 2 ? 'teamDark' : 'white');
+  // A back wall of corrugated steel; the counter, the crates and a lamp.
+  m.box([-9, 1, -10], [9, 13, -9], 'corrugated');
+  for (let x = -8; x < 9; x += 2) m.box([x, 1, -10], [x + 1, 13, -9], 'corrugatedDark');
+  m.box([-6, 1, -1], [6, 4, 1], 'wood');
+  m.box([-6, 4, -1], [6, 5, 1], 'woodLight');
+  for (const [x, z, h] of [[-8, -7, 3], [-5, -7, 5], [-2, -7, 3], [3, -7, 4], [6, -6, 2]]) {
+    m.box([x, 1, z], [x + 3, 1 + h, z + 3], 'crate');
+    m.box([x + 1, 1, z + 2], [x + 2, 1 + h, z + 3], 'crateDark');
+  }
+  m.box([-1, 10, -2], [1, 11, 0], 'lamp');
+  // Girders on the left of the yard, steel on chocks; drums on the right.
+  for (let i = 0; i < 3; i++) {
+    m.box([-10, 1 + i * 2, 5 + i], [-4, 2 + i * 2, 6 + i], i % 2 ? 'steel' : 'steelLight');
+    m.box([-10, 1 + i * 2, 8 - i], [-4, 2 + i * 2, 9 - i], 'steelDark');
+  }
+  m.box([-10, 1, 9], [-9, 2, 11], 'woodDark');
+  m.box([-5, 1, 9], [-4, 2, 11], 'woodDark');
+  for (const [x, z, c] of [[5, 6, 'drum'], [7, 6, 'drumRed'], [9, 6, 'drum'], [5, 8, 'drumRed'], [7, 8, 'drum'], [9, 8, 'drum'], [6, 10, 'drum'], [8, 10, 'drumRed']]) {
+    m.disc(x, z, 1, 1, 4, c);
+    m.box([x - 1, 3, z - 1], [x, 4, z], 'steelDark');
+  }
+  // The weighbridge between them, its edges in warning stripes.
+  m.box([-3, 0, 4], [3, 1, 10], 'steelDark');
+  for (let x = -3; x < 3; x++) {
+    m.set(x, 1, 4, (x & 1) ? 'hazard' : 'black');
+    m.set(x, 1, 9, (x & 1) ? 'black' : 'hazard');
+  }
+  // The price board: black, two rows of lit figures, on a post.
+  m.box([9, 1, -3], [10, 15, -2], 'gunmetal');
+  m.box([8, 15, -6], [11, 21, 1], 'black');
+  for (const y of [16, 19]) for (let z = -5; z < 0; z++) if ((z + y) % 3) m.set(11, y, z, 'lit');
+  // The crane: a mast at the back corner, a jib out over the yard, a hook on its line.
+  m.box([-11, 1, -11], [-9, 25, -9], 'hazard');
+  for (let j = 2; j < 25; j += 3) m.box([-11, j, -11], [-9, j + 1, -9], 'black');
+  for (let i = 0; i < 14; i++) m.set(-10 + i, 25, -10 + Math.floor(i * 1.1), 'hazard');
+  m.box([2, 13, 3], [3, 25, 4], 'steelDark');
+  m.box([1, 12, 3], [4, 13, 4], 'gunmetal');
+  return m;
+});
+
 building('tower', (m) => {
   // A guard tower: four legs braced, a platform walled with sandbags, a tin roof, a searchlight
   // and a machine gun; a ladder.

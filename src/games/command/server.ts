@@ -1,10 +1,10 @@
 import { defineServer, math, type GameContext, type Player, type Prop, type PropModel } from '@platform';
 import { BotBrain, STYLES, type Style } from './bots';
-import { ABILITIES, DROP, DROP_KINDS, HEAL, MAX_WALLS, MINE, RETREAT, SALVAGE, SPACE, STAND, WAVE_UNITS, wavePay, waveWorth, type Ability, type DropKind } from './defs';
+import { ABILITIES, DROP, DROP_KINDS, HEAL, MAX_WALLS, MINE, RETREAT, SALVAGE, SPACE, STAND, WAVE_UNITS, wavePay, waveWorth, type Ability, type DropKind, TRADE, tradeGet } from './defs';
 import { MODEL_SIZE } from './modelfiles';
 import { DIFFICULTIES, BOARDS, COVER_RANGE, FLANK, fromBehind, HIGH, VET, rankOf, AGE_NEEDS, ARMOR, VERSUS, BUILDABLE, BUILDINGS, ageOf, CARRY, DOCTRINES, DOCTRINE_IDS, GATHER_RATE, HERO, MAX_POP, NEEDS, RELIC, SIGHT, START, TECHS, TECH_IDS, UNITS, type BuildingKind, type DoctrineId, type Mode, type ResKind, type TechId, type UnitKind, type DifficultyId } from './defs';
 import { DRESSING } from './dressing';
-import { BASES, CAMPS, FLOOR, HALF, LAKES, MESAS, TREES, deposits, heightAt, inHill, inLake, inMesa, hashYaw, inside, lakeOf, shore, wallLine, wallSnap, type Deposit } from './map';
+import { BASES, CAMPS, FLOOR, HALF, LAKES, MESAS, TREES, deposits, heightAt, inHill, inLake, inMesa, hashYaw, inside, lakeOf, shore, wallLine, wallSnap, SHUT, type Deposit } from './map';
 import { DEPOSIT_MODELS, DRESSING as DRESS_MODELS, FLAGS, PORTRAITS, SCALE, modelFor, variantOf } from './models';
 import { BUILDING_ORDER, UNIT_ORDER, type Seat, type Shot, type State, type Summary, type Lobby, type LobbySeat } from './protocol';
 import { shared } from './shared';
@@ -124,6 +124,8 @@ export interface Slot {
   /** What it has researched; and when its commander's Rally is ready again. */
   techs: Set<TechId>;
   rallyAt: number;
+  /** Its trade post's prices (a share of full price, steel then oil) as of `at`. */
+  trade: { steel: number; oil: number; at: number };
   /** The match in numbers (the summary at the end), and its army's worth every few seconds. */
   stats: { trained: number; killed: number; lost: number; built: number; razed: number; steel: number; oil: number };
   army: number[];
@@ -384,7 +386,7 @@ function startMatch(game: GameContext, chosen: Mode, skill: number, plan?: SeatP
   const humans = game.players.slice(0, 4);
   const seat = (n: number, team: number, player: Player | null, name: string, skill: number, style?: Style): void => {
     const doctrine = (player && picked.get(player.id)) || DOCTRINE_IDS[Math.floor(Math.random() * DOCTRINE_IDS.length)];
-    slots[n] = { seat: n, name, team, player, bot: player ? null : new BotBrain(skill, style), steel: Math.round(START.steel * startScale), oil: Math.round(START.oil * startScale), pop: 0, cap: 0, alive: true, lost: 0, doctrine, powerAt: DOCTRINES[doctrine].power.first, revealUntil: 0, techs: new Set(), rallyAt: 30, stats: newStats(), army: [], banked: [] };
+    slots[n] = { seat: n, name, team, player, bot: player ? null : new BotBrain(skill, style), steel: Math.round(START.steel * startScale), oil: Math.round(START.oil * startScale), pop: 0, cap: 0, alive: true, lost: 0, doctrine, powerAt: DOCTRINES[doctrine].power.first, revealUntil: 0, techs: new Set(), rallyAt: 30, trade: { steel: 1, oil: 1, at: 0 }, stats: newStats(), army: [], banked: [] };
   };
   if (plan) for (const x of plan) seat(x.seat, x.team, x.player, x.name, x.skill, x.style);
   else if (mode === 'stand') {
@@ -428,7 +430,7 @@ function startMatch(game: GameContext, chosen: Mode, skill: number, plan?: SeatP
     for (let k = 0; k < 2; k++) addUnit(game, s.seat, 'rifle', b.x + (k ? 9 : -9) * Math.sign(-b.x || 1), b.z + 3 * (k ? 1 : -1));
   }
   // The wild: guards round each camp's relic.
-  slots[NEUTRAL] = { seat: NEUTRAL, name: 'The wild', team: 99, player: null, bot: null, steel: 0, oil: 0, pop: 0, cap: 99, alive: true, lost: 0, doctrine: 'industrial', powerAt: 1e9, revealUntil: 0, techs: new Set(), rallyAt: 1e9, stats: newStats(), army: [], banked: [] };
+  slots[NEUTRAL] = { seat: NEUTRAL, name: 'The wild', team: 99, player: null, bot: null, steel: 0, oil: 0, pop: 0, cap: 99, alive: true, lost: 0, doctrine: 'industrial', powerAt: 1e9, revealUntil: 0, techs: new Set(), rallyAt: 1e9, trade: { steel: 1, oil: 1, at: 0 }, stats: newStats(), army: [], banked: [] };
   CAMPS.forEach((c, i) => {
     relics.push({ x: c.x, z: c.z, owner: -1, progress: 0 });
     const guards: [UnitKind, number, number][] = [['brute', 0, 3], ['guard', -4, -2], ['guard', 4, -2], ['guard', 0, -5]];
@@ -916,6 +918,11 @@ function researchTick(b: Building, dt: number): void {
   dirty = true;
 }
 
+/** What `sell` fetches at a slot's trade post now (a share of full price): where it was, climbing back since. */
+function priceNow(s: Slot, sell: ResKind): number {
+  return Math.min(1, s.trade[sell] + (time - s.trade.at) * TRADE.recover);
+}
+
 function research(b: Building, tech: TechId): boolean {
   const s = slots[b.seat]!;
   const cost = TECHS[tech].cost;
@@ -1017,12 +1024,13 @@ function rebuildGrid(): void {
   const block = (cx: number, cz: number, r: number) => {
     for (let i = gcell(cx - r); i <= gcell(cx + r); i++) for (let j = gcell(cz - r); j <= gcell(cz + r); j++) if (Math.hypot(i * CELL - HALF + CELL / 2 - cx, j * CELL - HALF + CELL / 2 - cz) <= r + CELL * 0.5) grid[j * GN + i] = 1;
   };
-  for (const bl of buildings.values()) if (!BUILDINGS[bl.kind].wall) block(bl.x, bl.z, BUILDINGS[bl.kind].radius + 1);
-  for (const n of nodes) if (n.amount > 0 && !n.salvage) block(n.x, n.z, 1.8);
-  for (const l of LAKES) block(l.x, l.z, l.r + 0.6);
-  for (const m of MESAS) block(m.x, m.z, m.r + 0.8);
+  // (The same reaches as `landShut` and the screen's wall ghost, so a wall's drawn where it'll go.)
+  for (const bl of buildings.values()) if (!BUILDINGS[bl.kind].wall) block(bl.x, bl.z, BUILDINGS[bl.kind].radius + SHUT.building);
+  for (const n of nodes) if (n.amount > 0 && !n.salvage) block(n.x, n.z, SHUT.deposit);
+  for (const l of LAKES) block(l.x, l.z, l.r + SHUT.lake);
+  for (const m of MESAS) block(m.x, m.z, m.r + SHUT.mesa);
   for (const d of DRESSING) if (d.block) block(d.x, d.z, d.block);
-  for (const t of TREES) block(t.x, t.z, 0.9);
+  for (const t of TREES) block(t.x, t.z, SHUT.tree);
   wallAt.clear();
   for (const bl of buildings.values()) {
     if (!BUILDINGS[bl.kind].wall) continue;
@@ -1998,17 +2006,20 @@ function train(b: Building, kind: UnitKind): boolean {
 function place(game: GameContext, seat: number, kind: BuildingKind, x: number, z: number, builders: number[], queue = false): boolean {
   const s = slots[seat];
   const def = BUILDINGS[kind];
-  if (!s || !BUILDABLE.includes(kind) || ageOf(s.techs) < (AGE_NEEDS[kind] ?? 1) || !canAfford(s, def.cost) || Math.abs(x) > HALF - 6 || Math.abs(z) > HALF - 6) return false;
+  if (!s || !BUILDABLE.includes(kind) || ageOf(s.techs) < (AGE_NEEDS[kind] ?? 1) || !canAfford(s, def.cost) || Math.abs(x) > HALF - (def.wall ? 1 : 6) || Math.abs(z) > HALF - (def.wall ? 1 : 6)) return false;
   const needs = NEEDS[kind];
   if (needs && ![...buildings.values()].some((b) => b.seat === seat && b.kind === needs && b.built >= 1)) return false;
-  // A length of wall or a gate: on its cell of the grid, hard up against whatever's beside it, and over hills.
+  // A length of wall or a gate: on its cell of the grid, hard up against whatever's beside it, and over
+  // hills. Not on a cell that's shut already (a tree, a rock, a building, the water): that's wall enough.
   const wall = !!def.wall;
   if (wall) {
     x = wallSnap(x);
     z = wallSnap(z);
     let n = 0;
     for (const b of buildings.values()) if (b.seat === seat && BUILDINGS[b.kind].wall) n++;
-    if (n >= MAX_WALLS || TREES.some((t) => dist(x, z, t.x, t.z) < 1.7)) return false;
+    if (n >= MAX_WALLS) return false;
+    if (gridDirty) rebuildGrid();
+    if (grid[gcell(z) * GN + gcell(x)] === 1) return false;
   }
   let over: Building | null = null;
   for (const b of buildings.values()) {
@@ -2021,10 +2032,12 @@ function place(game: GameContext, seat: number, kind: BuildingKind, x: number, z
       else return false;
     } else if (d < def.radius + BUILDINGS[b.kind].radius + (wall || other ? 0 : 1)) return false;
   }
-  for (const n of nodes) if (n.amount > 0 && dist(x, z, n.x, n.z) < (wall ? 2.8 : def.radius + 3)) return false;
-  if (kind === 'dock' ? !canDock(x, z) : inLake(x, z, wall ? 1 : def.radius + 1)) return false;
-  if (inMesa(x, z, wall ? 1 : def.radius + 1) || (!wall && inHill(x, z, def.radius))) return false;
-  if (DRESSING.some((d) => d.block && dist(x, z, d.x, d.z) < def.radius + d.block + 0.5)) return false;
+  for (const n of nodes) if (n.amount > 0 && dist(x, z, n.x, n.z) < (wall ? 1.5 : def.radius + 3)) return false;
+  if (!wall) {
+    if (kind === 'dock' ? !canDock(x, z) : inLake(x, z, def.radius + 1)) return false;
+    if (inMesa(x, z, def.radius + 1) || inHill(x, z, def.radius)) return false;
+    if (DRESSING.some((d) => d.block && dist(x, z, d.x, d.z) < def.radius + d.block + 0.5)) return false;
+  }
   s.steel -= def.cost.steel;
   s.oil -= def.cost.oil;
   if (over) {
@@ -2225,6 +2238,17 @@ function order(game: GameContext, player: Player, name: string, data: unknown): 
   } else if (name === 'repair') {
     const b = buildings.get(Number(d.id));
     if (b && teamOf(b.seat) === slot.team) for (const u of us) if (u.kind === 'engineer') give(u, { t: 'repair', id: b.id }, queue);
+  } else if (name === 'trade') {
+    const b = buildings.get(Number(d.id));
+    const sell: ResKind = d.sell === 'oil' ? 'oil' : 'steel';
+    if (!b || b.seat !== slot.seat || b.kind !== 'market' || b.built < 1) return;
+    if (slot[sell] < TRADE.lot) return player.hud.toast(`Not enough ${sell}`);
+    const price = priceNow(slot, sell);
+    slot[sell] -= TRADE.lot;
+    slot[sell === 'steel' ? 'oil' : 'steel'] += tradeGet(sell, price);
+    slot.trade = { ...slot.trade, steel: priceNow(slot, 'steel'), oil: priceNow(slot, 'oil'), at: time };
+    slot.trade[sell] = Math.max(TRADE.floor, price - TRADE.drop);
+    dirty = true;
   } else if (name === 'research') {
     const b = buildings.get(Number(d.id));
     if (b && b.seat === slot.seat && TECH_IDS.includes(d.tech as TechId)) {
@@ -2320,7 +2344,7 @@ function tell(game: GameContext, dt: number): void {
     stateIn = 0.5;
     const seats: Seat[] = slots
       .filter((s): s is Slot => !!s && s.seat !== NEUTRAL)
-      .map((s) => ({ seat: s.seat, name: s.name, team: s.team, color: s.seat % TEAM_COLORS.length, human: !!s.player, steel: Math.floor(s.steel), oil: Math.floor(s.oil), pop: s.pop, cap: s.cap, alive: s.alive, doctrine: s.doctrine, units: [...units.values()].filter((u) => u.seat === s.seat).length, buildings: [...buildings.values()].filter((b) => b.seat === s.seat).length, powerIn: Math.max(0, Math.ceil(s.powerAt - time)), rallyIn: Math.max(0, Math.ceil(s.rallyAt - time)), hero: [...units.values()].some((u) => u.seat === s.seat && u.kind === 'hero'), techs: [...s.techs], style: s.bot?.style ?? '', worth: [...units.values()].filter((u) => u.seat === s.seat && u.kind !== 'engineer').reduce((a, u) => a + UNITS[u.kind].cost.steel + UNITS[u.kind].cost.oil, 0), income: Math.round(s.stats.steel + s.stats.oil - (s.banked[s.banked.length - 6] ?? 0)) }));
+      .map((s) => ({ seat: s.seat, name: s.name, team: s.team, color: s.seat % TEAM_COLORS.length, human: !!s.player, steel: Math.floor(s.steel), oil: Math.floor(s.oil), pop: s.pop, cap: s.cap, alive: s.alive, doctrine: s.doctrine, units: [...units.values()].filter((u) => u.seat === s.seat).length, buildings: [...buildings.values()].filter((b) => b.seat === s.seat).length, powerIn: Math.max(0, Math.ceil(s.powerAt - time)), rallyIn: Math.max(0, Math.ceil(s.rallyAt - time)), hero: [...units.values()].some((u) => u.seat === s.seat && u.kind === 'hero'), techs: [...s.techs], trade: [tradeGet('steel', priceNow(s, 'steel')), tradeGet('oil', priceNow(s, 'oil'))], style: s.bot?.style ?? '', worth: [...units.values()].filter((u) => u.seat === s.seat && u.kind !== 'engineer').reduce((a, u) => a + UNITS[u.kind].cost.steel + UNITS[u.kind].cost.oil, 0), income: Math.round(s.stats.steel + s.stats.oil - (s.banked[s.banked.length - 6] ?? 0)) }));
     const mine: Record<string, number> = {};
     for (const s of slots) if (s?.player) mine[s.player.id] = s.seat;
     const state: State = { phase, mode, seats, mine, peaceUntil, watchers: phase === 'lobby' ? lobby.watchers.map((w) => w.name) : game.players.filter((p) => !slotOf(p)).map((p) => p.name), deposits: nodes.map((n) => Math.floor(n.amount)), salvage: nodes.filter((n) => n.salvage && n.amount > 0).map((n) => ({ id: n.id, x: n.x, z: n.z, scrap: n.scrap!, kind: 'steel' as const })), relics: relics.map((r) => ({ owner: r.owner, pct: Math.round((r.progress / RELIC.hold) * 100) })), drops: drops.map((x) => ({ id: x.id, x: x.x, z: x.z, landIn: Math.max(0, x.at - time) })), ...(mode === 'stand' && phase !== 'lobby' ? { stand: { wave, total: STAND.total, nextIn: wave < STAND.total ? Math.ceil(waveIn) : 0, left: [...units.values()].filter((u) => u.seat === STAND.seat).length } } : {}), time: Math.floor(time), winners, ...(phase === 'lobby' ? { lobby } : {}), ...(phase === 'briefing' ? { briefing: Math.ceil(briefingLeft) } : {}), ...(summary ? { summary } : {}) };

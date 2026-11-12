@@ -10,7 +10,7 @@ export interface Cost {
 }
 
 export type UnitKind = 'engineer' | 'rifle' | 'scout' | 'at' | 'tank' | 'artillery' | 'aa' | 'heli' | 'hero' | 'guard' | 'brute' | 'gunboat' | 'transport';
-export type BuildingKind = 'hq' | 'depot' | 'barracks' | 'factory' | 'airfield' | 'lab' | 'tower' | 'bunker' | 'dock' | 'rampart' | 'gate';
+export type BuildingKind = 'hq' | 'depot' | 'barracks' | 'factory' | 'airfield' | 'lab' | 'tower' | 'bunker' | 'dock' | 'rampart' | 'gate' | 'market';
 export type TechId = 'armor' | 'ordnance' | 'optics' | 'logistics' | 'age2' | 'age3';
 
 export interface UnitDef {
@@ -136,6 +136,7 @@ export const BUILDINGS: Record<BuildingKind, BuildingDef> = {
   dock: { name: 'Dock', hp: 760, cost: { steel: 160, oil: 40 }, time: 22, radius: 3, pop: 0, trains: ['gunboat', 'transport'], blurb: 'Build it on a lake’s shore. Launches gunboats and transports.' },
   rampart: { name: 'Wall', hp: 260, cost: { steel: 10, oil: 0 }, time: 3, radius: 1.5, pop: 0, trains: [], wall: true, blurb: 'Drag to lay a line of it. Nothing on the ground gets past: not theirs, and not yours either, so leave a gap or build a gate. Helicopters fly over, and guns shoot over.' },
   gate: { name: 'Gate', hp: 320, cost: { steel: 40, oil: 0 }, time: 4, radius: 1.5, pop: 0, trains: [], wall: true, blurb: 'A way through a wall for your side only. Put it in a gap, or on a length of your own wall to replace it.' },
+  market: { name: 'Trade Post', hp: 600, cost: { steel: 120, oil: 0 }, time: 18, radius: 3, pop: 0, trains: [], blurb: 'Swaps steel for oil and oil for steel, a hundred at a time. Every sale gets you less for the next, and the price comes back slowly.' },
   tower: { name: 'Guard Tower', hp: 520, cost: { steel: 130, oil: 30 }, time: 14, radius: 1.9, pop: 0, trains: [], guns: { damage: 13, rate: 1.3, range: 18, hits: 'both' }, blurb: 'Shoots anything that comes near, air and ground.' },
 };
 
@@ -174,11 +175,21 @@ export const ageOf = (techs: Iterable<TechId>): number => {
 };
 
 /** What an engineer can put up. */
-export const BUILDABLE: BuildingKind[] = ['depot', 'barracks', 'factory', 'airfield', 'lab', 'tower', 'bunker', 'dock', 'rampart', 'gate'];
+export const BUILDABLE: BuildingKind[] = ['depot', 'barracks', 'factory', 'airfield', 'lab', 'tower', 'bunker', 'dock', 'rampart', 'gate', 'market'];
 /** The most lengths of wall and gates one commander can have standing. */
 export const MAX_WALLS = 150;
 /** Their keys on the command grid. */
-export const BUILD_KEYS: Record<string, string> = { depot: 'Z', barracks: 'X', factory: 'C', airfield: 'V', lab: 'B', tower: 'N', bunker: 'M', dock: 'G', rampart: 'J', gate: 'L' };
+export const BUILD_KEYS: Record<string, string> = { depot: 'Z', barracks: 'X', factory: 'C', airfield: 'V', lab: 'B', tower: 'N', bunker: 'M', dock: 'G', rampart: 'J', gate: 'L', market: 'I' };
+
+/**
+ * The trade post's prices. Each sale is a lot of a hundred; at full price a hundred steel buys
+ * `oil` oil and a hundred oil buys `steel` steel (the two together lose a fifth, so trading back and
+ * forth never pays). Every sale knocks what that resource fetches down by `drop` (to no less than
+ * `floor` of full price), and it climbs back by `recover` of full price a second.
+ */
+export const TRADE = { lot: 100, oil: 50, steel: 160, drop: 0.1, floor: 0.4, recover: 0.005 };
+/** What a lot of `sell` fetches, at `price` (a share of full price). */
+export const tradeGet = (sell: ResKind, price: number) => Math.floor(sell === 'steel' ? TRADE.oil * price : TRADE.steel * price);
 /** What can go into a bunker or a transport: soldiers on foot. */
 export const BOARDS: UnitKind[] = ['engineer', 'rifle', 'scout', 'at', 'hero'];
 /** How much further a soldier in a bunker reaches. */

@@ -1,6 +1,7 @@
 import type { Client } from '@platform/client';
 import { ABILITIES, RETREAT, SIGHT, AGE_NAMES, AGE_NEEDS, BOARDS, BUILDABLE, BUILDINGS, BUILD_KEYS, DOCTRINES, HIGH, MODES, NEEDS, STANCES, TEAM_COLORS, TECHS, TECH_IDS, VET, ageOf, versusText, UNITS, type BuildingKind, type DoctrineId, type UnitKind } from '../defs';
-import { BASES, CAMPS, FLOOR, HALF, HILLS, LAKES, MESAS, TREES, deposits, inHill, inLake, inMesa, lakeOf, wallLine, wallSnap } from '../map';
+import { BASES, CAMPS, FLOOR, HALF, HILLS, LAKES, MESAS, SHUT, TREES, WALL_CELL, deposits, inHill, inLake, inMesa, lakeOf, landShut, wallLine, wallSnap } from '../map';
+import { DRESSING } from '../dressing';
 import { UNIT_ORDER, cargoBits, rankBits, stanceBits, type State } from '../protocol';
 import { cam, drag, lookAt, setDrift, toGround, toScreen, view, zoom } from './camera';
 import { iconHtml, iconPath, withIcons } from './icons';
@@ -362,6 +363,11 @@ function commands(): Cmd[] {
       const gated = tech === 'age3' && !me.techs.includes('age2');
       out.push({ key: rk, code: `Key${rk}`, name: t.name, glyph: era ? '▲' : '⚙', cost: done ? 'done' : gated ? 'needs Era II' : costText(t.cost), tip: `<b>${t.name}</b>${tipCost(t.cost, t.time)}<p>${t.blurb}</p>${done ? '<div class="tsub">Researched.</div>' : gated ? '<div class="tsub"><em>Needs Era II.</em></div>' : ''}`, ok: !done && !gated && b.queue < 1000 && can(t.cost), on: b.queue >= 1000 && TECH_IDS[Math.floor(b.queue / 1000) - 1] === tech, run: () => client.send('research', { id: b.id, tech }) });
     });
+    if (b.kind === 'market') {
+      const [forSteel, forOil] = me.trade ?? [0, 0];
+      out.push({ key: 'Z', code: 'KeyZ', name: 'Sell steel', glyph: '⇄', cost: `+${forSteel}●`, ok: me.steel >= 100, tip: `<b>Sell 100 steel</b><p>For ${forSteel} oil now. Each sale gets less for the next; the price climbs back slowly.</p>`, run: () => client.send('trade', { id: b.id, sell: 'steel' }) });
+      out.push({ key: 'X', code: 'KeyX', name: 'Sell oil', glyph: '⇄', cost: `+${forOil}`, ok: me.oil >= 100, tip: `<b>Sell 100 oil</b><p>For ${forOil} steel now. Each sale gets less for the next; the price climbs back slowly.</p>`, run: () => client.send('trade', { id: b.id, sell: 'oil' }) });
+    }
     if (def.holds) out.push({ key: 'U', code: 'KeyU', name: 'Unload', glyph: '⇪', cost: `${b.held}/${def.holds}`, ok: b.held > 0, tip: `<b>Unload</b><p>Everyone out of the ${def.name}, round it.</p><div class="tsub">Right click it with infantry to send them in.</div>`, run: () => client.send('unload', { id: b.id, boat: false }) });
   } else if (us.length) {
     if (us.some((u) => u.kind === 'engineer')) {
@@ -922,7 +928,7 @@ export function draw(): void {
     ? ui.placing === 'dock'
       ? 'Place the Dock on a lake’s shore (green when it fits). Right click cancels.'
       : ui.placing === 'rampart'
-        ? 'Wall: press and drag to lay a line of it (10 steel a length), or click for one. Right click cancels.'
+        ? 'Wall: press and drag to lay a line of it (10 steel a length), or click for one. Trees, rocks and buildings in its way are left standing as part of it. Right click cancels.'
         : ui.placing === 'gate'
           ? 'Gate: click a gap in a wall, or a length of your own wall to replace it. Right click cancels.'
       : `Place the ${BUILDINGS[ui.placing].name}: click the ground (not on a hill). Right click cancels.`
@@ -1032,10 +1038,21 @@ function drawSummary(s: State): void {
 }
 
 /** Whether a building may go here, as the server will judge it (near enough: not the other buildings). */
+/** Whether a wall's cell is shut already (the server's grid: the land, a building, a deposit): a wall skips it, as it's wall enough. */
+function cellShut(x: number, z: number): boolean {
+  const near = (cx: number, cz: number, r: number) => Math.hypot(x - cx, z - cz) <= r + WALL_CELL * 0.5;
+  return (
+    landShut(x, z) ||
+    ui.buildings.some((b) => !BUILDINGS[b.kind].wall && near(b.x, b.z, BUILDINGS[b.kind].radius + SHUT.building)) ||
+    DEPOSITS.some((n) => !n.salvage && (ui.state?.deposits[n.id] ?? 1) > 0 && near(n.x, n.z, SHUT.deposit)) ||
+    DRESSING.some((d) => d.block && near(d.x, d.z, d.block))
+  );
+}
+
 function fits(kind: BuildingKind, x: number, z: number): boolean {
   const r = BUILDINGS[kind].radius;
   if (BUILDINGS[kind].wall) {
-    if (inMesa(x, z, 1) || inLake(x, z, 1) || TREES.some((t) => Math.hypot(t.x - x, t.z - z) < 1.7)) return false;
+    if (Math.abs(x) > HALF - 1 || Math.abs(z) > HALF - 1 || cellShut(x, z)) return false;
     const me = mySeat();
     return !ui.buildings.some((b) => {
       const d = Math.hypot(b.x - x, b.z - z);
@@ -1144,6 +1161,11 @@ export function frameUi(c: Client): void {
     const kind = ui.placing;
     const spots = !BUILDINGS[kind].wall ? [ui.mouse] : kind === 'rampart' && wallFrom ? wallLine(wallFrom.x, wallFrom.z, ui.mouse.x, ui.mouse.z) : [{ x: wallSnap(ui.mouse.x), z: wallSnap(ui.mouse.z) }];
     for (const p of spots) {
+      // (A cell a tree or a rock has already: left as it is, faintly.)
+      if (BUILDINGS[kind].wall && cellShut(p.x, p.z)) {
+        ring(p.x, p.z, 0.8, { fill: 'rgba(200,200,200,0.25)', stroke: '#c8c8c8', 'stroke-width': 1.5, 'stroke-dasharray': '4 4' });
+        continue;
+      }
       const ok = fits(kind, p.x, p.z);
       ring(p.x, p.z, BUILDINGS[kind].radius, ok ? { fill: 'rgba(76,208,74,0.35)', stroke: '#7dff7d', 'stroke-width': 3 } : { fill: 'rgba(240,68,56,0.3)', stroke: '#f04438', 'stroke-width': 3 });
     }
