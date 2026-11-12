@@ -1348,7 +1348,13 @@ function unitTick(game: GameContext, u: Unit, dt: number): void {
         const d = dist(u.x, u.z, t.x, t.z) - t.radius;
         // (A boat that's as near as its lake lets it get, and still out of reach, gives up.)
         if (d > range) {
-          if (step(u, t.x, t.z, dt, range + t.radius - 0.5) && u.lake >= 0) u.order = { t: 'idle' };
+          // Shot at on the way to it (its target run off behind its friends, say): it fights back
+          // first, and goes on after the target once nothing's in reach.
+          const back = fighter && u.stance !== 2 && u.hitAt > time - 2.5 ? nearestEnemy(u.seat, u.x, u.z, range, hits) : null;
+          if (back) {
+            u.yaw = Math.atan2(back.x - u.x, back.z - u.z);
+            fire(game, u, back);
+          } else if (step(u, t.x, t.z, dt, range + t.radius - 0.5) && u.lake >= 0) u.order = { t: 'idle' };
         } else fire(game, u, o);
       }
     }

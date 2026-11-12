@@ -638,7 +638,11 @@ function botWalls() {
   h.run(1);
   // The player beside a turtle (so what it builds is in sight), against a bot.
   lobby({ op: 'preset', preset: 'teams' });
+  // (Every rule set here: the lobby keeps what the matches before this one left it with.)
   lobby({ op: 'peace', peace: 5 });
+  lobby({ op: 'resources', resources: 'normal' });
+  lobby({ op: 'difficulty', seat: 0, difficulty: 'normal' });
+  lobby({ op: 'style', seat: 0, style: 'balanced' });
   lobby({ op: 'difficulty', seat: 1, difficulty: 'hard' });
   lobby({ op: 'style', seat: 1, style: 'turtle' });
   lobby({ op: 'kind', seat: 3, kind: 'closed' });
@@ -669,8 +673,60 @@ function botWalls() {
   check(out > 0, `bot walls: and its units still go out through the gates (by ${state().time} s)`);
 }
 
+/**
+ * Told to attack one enemy that runs off behind its friends, soldiers shot at on the way fight back,
+ * not walk on through the fire after it.
+ */
+function chase() {
+  const def = allGames.find((g) => g.id === 'command')!;
+  const host = new GameHost(def, { engine: readFileSync('engine/pkg/voxel_engine_bg.wasm'), seed: 5, remote: true, radius: 9, budget: Infinity, cheats: true, room: 'c' });
+  const heard = new Map<string, Map<string, unknown>>();
+  const step = (seconds: number) => {
+    for (let t = 0; t < seconds; t += 1 / 30) for (const [id, batch] of host.step(1 / 30)) for (const e of (batch as { events?: { t: string; call?: { target: string; method: string; args: unknown[] } }[] }).events ?? []) if (e.t === 'call' && e.call?.target === 'message') (heard.get(id) ?? heard.set(id, new Map()).get(id)!).set(e.call.method, e.call.args[0]);
+  };
+  const join = (name: string) => { const c = host.connect(name); host.command(c.id, { t: 'start', name } as never); return c.id; };
+  const send = (id: string, name: string, data: unknown = {}) => host.command(id, { t: 'message', msg: { t: 'game', name, data } } as never);
+  const ann = join('Ann');
+  const bob = join('Bob');
+  step(1);
+  const state = () => heard.get(ann)?.get('state') as State;
+  send(bob, 'lobby', { op: 'ready' });
+  step(0.3);
+  send(ann, 'lobby', { op: 'start' });
+  step(8);
+  const annS = state().mine[ann];
+  const bobS = state().mine[bob];
+  const list = (id: string) => { const a = heard.get(id)!.get('u') as number[]; const o: { id: number; kind: number; seat: number; x: number; z: number; hp: number }[] = []; for (let i = 0; i < a.length; i += 8) o.push({ id: a[i], kind: a[i + 1], seat: a[i + 2], x: a[i + 3], z: a[i + 4], hp: a[i + 5] }); return o; };
+  const P = { x: (BASES[annS].x + BASES[bobS].x) / 2 + 4, z: (BASES[annS].z + BASES[bobS].z) / 2 + 6 };
+  const toAnn = { x: BASES[annS].x - P.x, z: BASES[annS].z - P.z };
+  const k = 16 / Math.hypot(toAnn.x, toAnn.z);
+  // Bob's riflemen hold the spot; Ann's, holding fire, a little way off.
+  const all = list(bob).filter((u) => u.seat === bobS && u.kind === 1).map((u) => u.id);
+  // (The one sent for: a rifleman, as quick as theirs, so they can't just catch him and be done.)
+  const guy = all[0];
+  const bobRifles = all.slice(1);
+  const annRifles = list(ann).filter((u) => u.seat === annS && u.kind === 1).map((u) => u.id);
+  send(bob, 'stance', { ids: all, stance: 1 });
+  send(ann, 'stance', { ids: annRifles, stance: 2 });
+  send(bob, 'move', { ids: bobRifles, x: P.x, z: P.z });
+  send(bob, 'move', { ids: [guy], x: P.x, z: P.z });
+  send(ann, 'move', { ids: annRifles, x: P.x + toAnn.x * k, z: P.z + toAnn.z * k });
+  step(45);
+  // (Their health as Bob sees it: they may go out of Ann's sight.)
+  const hp0 = list(bob).filter((u) => bobRifles.includes(u.id)).reduce((n, u) => n + u.hp, 0);
+  // Ann goes for one of them; he runs for home, behind the rest.
+  send(ann, 'stance', { ids: annRifles, stance: 0 });
+  send(ann, 'attack', { ids: annRifles, id: guy });
+  send(bob, 'move', { ids: [guy], x: BASES[bobS].x, z: BASES[bobS].z });
+  step(15);
+  const hp1 = list(bob).filter((u) => bobRifles.includes(u.id)).reduce((n, u) => n + u.hp, 0);
+  check(annRifles.length > 0 && bobRifles.length > 0 && hp0 > 0, `chase: the two sides in place (${annRifles.length} against ${bobRifles.length})`);
+  check(hp1 < hp0, `chase: shot at on their way after him, they fight back (the rest of Bob's riflemen ${hp0} → ${hp1} health)`);
+}
+
 export default function command() {
   flanking();
+  chase();
   walls();
   trade();
   surrender();
