@@ -891,6 +891,36 @@ function hoverCard(sx: number, sy: number): string {
   return '';
 }
 
+/**
+ * Sets a panel's markup only when it has changed. The panels are drawn again with every update from
+ * the server, several times a second; were their buttons made anew each time, one pressed just before
+ * a redraw and let go just after would never be clicked.
+ */
+const drawn = new WeakMap<HTMLElement, string>();
+function setHtml(e: HTMLElement, html: string): void {
+  if (drawn.get(e) === html) return;
+  drawn.set(e, html);
+  e.innerHTML = html;
+}
+
+/** The grid's buttons, each made anew only when it has changed (a countdown on one leaves the rest be). */
+function setButtons(grid: HTMLElement, list: string[]): void {
+  if (grid.children.length !== list.length) {
+    grid.innerHTML = list.join('');
+    list.forEach((h, i) => drawn.set(grid.children[i] as HTMLElement, h));
+    return;
+  }
+  list.forEach((h, i) => {
+    const old = grid.children[i] as HTMLElement;
+    if (drawn.get(old) === h) return;
+    const t = document.createElement('template');
+    t.innerHTML = h;
+    const fresh = t.content.firstElementChild as HTMLElement;
+    old.replaceWith(fresh);
+    drawn.set(fresh, h);
+  });
+}
+
 export function draw(): void {
   const s = ui.state;
   if (!s) return;
@@ -945,7 +975,8 @@ export function draw(): void {
           : '';
 
   // What's selected.
-  const info = el('.cm-info');
+  // (Written out first, and onto the page only if it's changed: see `setHtml`.)
+  const info = { innerHTML: '' };
   const b = ui.selB !== null ? ui.buildings.find((x) => x.id === ui.selB) : undefined;
   const us = ui.units.filter((u) => ui.sel.has(u.id));
   if (b) {
@@ -984,15 +1015,17 @@ export function draw(): void {
     info.innerHTML = `<h3>${d.name} doctrine</h3><div class="sub">${d.passive}.</div><div class="sub" style="margin-top:4px"><b style="color:#e8eef5">${d.power.name} (P)</b>: ${d.power.blurb}</div><div class="sub" style="margin-top:8px">Select your engineers or a building. Drag to box-select, double click for all of a kind.</div>`;
   }
 
+  setHtml(el('.cm-info'), info.innerHTML);
+
   // The commands.
   const cmds = commands();
-  el('.cm-grid').innerHTML = cmds
+  setButtons(el('.cm-grid'), cmds
     .map((c, i) => {
       if (!c.key) return '<button class="cb empty" disabled></button>';
       const pic = c.icon ? client.hud.icon({ item: c.icon }).outerHTML : `<div class="g">${iconHtml(c.glyph ?? '')}</div>`;
       return `<button class="cb ${c.ok ? '' : 'no'} ${c.on ? 'on' : ''}" data-cmd="${i}">${pic}<span class="k">${c.key}</span>${c.cost ? `<span class="c">${c.cost}</span>` : ''}<span class="n">${c.name}</span>${c.cooldown ? `<div class="cd">${c.cooldown}s</div>` : ''}</button>`;
     })
-    .join('');
+  );
 }
 
 /**

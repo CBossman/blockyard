@@ -652,18 +652,19 @@ function botWalls() {
   const RAMPART = BUILDING_ORDER.indexOf('rampart');
   const GATE = BUILDING_ORDER.indexOf('gate');
   const walls = () => { const b = blds(); let r = 0; let g = 0; for (let i = 0; i < b.length; i += 9) if (b[i + 2] === 1 && b[i + 6] >= 100) { if (b[i + 1] === RAMPART) r++; if (b[i + 1] === GATE) g++; } return { r, g }; };
-  h.run(600, { until: () => walls().r >= 30 && walls().g >= 2 });
+  // (Lengths by a camp still guarded wait for it to be cleared, which takes a while longer.)
+  h.run(900, { until: () => walls().r >= 30 && walls().g >= 2 });
   const w1 = walls();
   check(w1.r >= 30 && w1.g >= 2, `bot walls: the turtle walls its base (${w1.r} lengths and ${w1.g} gates built by ${state().time} s)`);
-  // And it still goes out: one of its units that was inside them, well outside.
+  // And it still goes out: a unit trained since (inside them, where all it trains from is), well outside.
   const B = BASES[1];
   let out = 0;
-  const inside = new Set<number>();
-  { const u = units(); for (let i = 0; i < u.length; i += 8) if (u[i + 2] === 1 && Math.hypot(u[i + 3] - B.x, u[i + 4] - B.z) < 26) inside.add(u[i]); }
+  const before = new Set<number>();
+  { const u = units(); for (let i = 0; i < u.length; i += 8) if (u[i + 2] === 1) before.add(u[i]); }
   for (let t = 0; t < 420 && !out; t += 10) {
     h.run(10);
     const u = units();
-    for (let i = 0; i < u.length; i += 8) if (inside.has(u[i]) && Math.hypot(u[i + 3] - B.x, u[i + 4] - B.z) > 55) out++;
+    for (let i = 0; i < u.length; i += 8) if (u[i + 2] === 1 && !before.has(u[i]) && Math.hypot(u[i + 3] - B.x, u[i + 4] - B.z) > 55) out++;
   }
   check(out > 0, `bot walls: and its units still go out through the gates (by ${state().time} s)`);
 }

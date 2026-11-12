@@ -21,10 +21,11 @@ export interface Spot {
  * field. Clear the guards, then hold the relic to have it pay steel.
  */
 export const CAMPS: Spot[] = [
-  { x: -45, z: 45 },
-  { x: 45, z: -45 },
-  { x: -62, z: -32 },
-  { x: 62, z: 32 },
+  // (Well out from every base: midway between two on the map's side, or further in.)
+  { x: -44, z: 27 },
+  { x: 44, z: -27 },
+  { x: -68, z: 0 },
+  { x: 68, z: 0 },
 ];
 
 /** The four players' bases, then the two a co-op game's bots take. */
@@ -48,7 +49,7 @@ export interface Deposit extends Spot {
 }
 
 /** The scrap out on the field: bombed-out houses and burned-out tanks, each worth some steel to whoever strips it. */
-const SCRAP: [ 'ruin' | 'henge', number, number][] = [['ruin', -24, 22], ['ruin', 24, -22], ['henge', -52, 24], ['henge', 52, -24], ['ruin', -8, -32], ['ruin', 8, 32], ['henge', -8, 64], ['henge', 8, -64]];
+const SCRAP: [ 'ruin' | 'henge', number, number][] = [['ruin', -24, 22], ['ruin', 24, -22], ['henge', -58, 42], ['henge', 58, -42], ['ruin', -8, -32], ['ruin', 8, 32], ['henge', -8, 64], ['henge', 8, -64]];
 
 /** A fixed small random (0..1), so every screen and the server agree. */
 export function hash(a: number, b: number): number {
@@ -73,8 +74,10 @@ export function deposits(): Deposit[] {
   });
   for (const [x, z, kind] of [[-14, -10, 'steel'], [14, 10, 'steel'], [0, 0, 'oil'], [-12, 14, 'oil'], [12, -14, 'oil'], [0, -22, 'steel'], [0, 22, 'steel']] as [number, number, ResKind][]) add(x, z, kind, 2600);
   for (const c of CAMPS) {
-    add(c.x + 7, c.z + 5, 'steel', 3500);
-    add(c.x - 7, c.z + 5, 'oil', 2500);
+    // (Mirrored, as the map is: the east half's camps are the west half's turned round the middle.)
+    const s = c.x < 0 ? 1 : -1;
+    add(c.x + 7 * s, c.z + 5 * s, 'steel', 3500);
+    add(c.x - 7 * s, c.z + 5 * s, 'oil', 2500);
   }
   for (const [scrap, x, z] of SCRAP) {
     if (inLake(x, z, 3) || inMesa(x, z, 3) || inHill(x, z, 1)) continue;

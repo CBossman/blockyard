@@ -38,7 +38,7 @@ const STYLE_IDS = Object.keys(STYLES) as Style[];
 const WILD = 6;
 const hyp = (ax: number, az: number, bx: number, bz: number) => Math.hypot(ax - bx, az - bz);
 /** What a unit is worth in a fight: what it cost (the camps' guards cost nothing, so their worth is set). */
-const worth = (k: UnitKind) => (k === 'guard' ? 110 : k === 'brute' ? 280 : UNITS[k].cost.steel + UNITS[k].cost.oil);
+const worth = (k: UnitKind) => (k === 'guard' ? 90 : k === 'brute' ? 210 : UNITS[k].cost.steel + UNITS[k].cost.oil);
 const power = (list: Unit[]) => list.reduce((n, u) => n + (worth(u.kind) * u.hp) / u.max, 0);
 const fights = (u: Unit) => u.kind !== 'engineer' && UNITS[u.kind].damage > 0;
 const ARMOUR: UnitKind[] = ['tank', 'artillery', 'aa', 'brute', 'gunboat'];

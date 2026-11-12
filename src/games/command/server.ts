@@ -1310,7 +1310,7 @@ function unitTick(game: GameContext, u: Unit, dt: number): void {
     return;
   }
   // A wild unit doesn't wander: past its leash it goes back to its spot.
-  if (u.home && o.t !== 'move' && dist(u.x, u.z, u.home.x, u.home.z) > 20) {
+  if (u.home && o.t !== 'move' && dist(u.x, u.z, u.home.x, u.home.z) > 14) {
     u.order = { t: 'move', x: u.home.x, z: u.home.z, attack: false };
     return;
   }
