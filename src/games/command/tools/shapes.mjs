@@ -339,6 +339,21 @@ foot('hero', (m, x) => {
   return m;
 });
 
+foot('medic', (m, x) => {
+  // A medic: a white vest with red crosses, a helmet banded white with its cross, a satchel at the hip.
+  soldier(m, 0, 0, { ...x, vest: 'white', shirt: 'olive', legs: 'oliveDark', helmet: 'helmet', pack: 'white' });
+  m.box([-1, 7, 2], [1, 8, 3], 'drumRed');
+  m.box([0, 6, 2], [1, 9, 3], 'drumRed');
+  m.box([-1, 7, -3], [1, 8, -2], 'drumRed');
+  m.box([0, 6, -3], [1, 9, -2], 'drumRed');
+  m.box([-3, 14, -3], [3, 15, 3], 'white');
+  m.box([-1, 14, 3], [1, 15, 4], 'drumRed');
+  m.box([-1, 14, -4], [1, 15, -3], 'drumRed');
+  m.box([-1, 7, -5], [1, 9, -4], 'drumRed');
+  m.box([3, 4, -1], [5, 7, 2], 'khaki');
+  return m;
+});
+
 foot('guard', (m, x) => soldier(m, 0, 0, { ...x, vest: 'tan', shirt: 'team', legs: 'khaki', helmet: 'bandana', bandColour: 'drumRed', weapon: 'ak' }));
 
 unit('scout', (m) => {
@@ -649,6 +664,8 @@ plain('arms_at', (m) => m.box([3, 6, -1], [4, 9, 1], 'olive').box([-4, 6, -1], [
 plain('arm_e_r', (m) => m.box([3, 6, -1], [4, 9, 1], 'khaki').box([3, 5, -1], [4, 6, 1], 'skin').box([3, 0, 0], [4, 5, 1], 'woodLight').box([3, -3, -2], [4, 0, 3], 'steelLight'));
 plain('arm_e_l', (m) => m.box([-4, 6, -1], [-3, 9, 1], 'khaki').box([-4, 5, -1], [-3, 6, 1], 'skin').box([-6, 2, -1], [-3, 5, 2], 'drumRed').box([-5, 5, 0], [-4, 6, 1], 'black'));
 plain('arm_h_r', (m) => m.box([3, 6, -1], [4, 9, 1], 'olive').box([3, 5, -1], [4, 6, 1], 'skin').box([3, 4, 0], [4, 6, 3], 'black'));
+plain('arm_m_r', (m) => m.box([3, 6, -1], [4, 9, 1], 'olive').box([3, 5, -1], [4, 6, 1], 'skin').box([3, 2, -1], [6, 5, 2], 'white').box([4, 3, 2], [5, 4, 2], 'drumRed').box([4, 2, -2], [5, 5, -1], 'drumRed').box([4, 5, 0], [5, 6, 1], 'black'));
+plain('arm_m_l', (m) => m.box([-4, 6, -1], [-3, 9, 1], 'olive').box([-4, 5, -1], [-3, 6, 1], 'skin'));
 plain('arm_h_l', (m) => m.box([-4, 6, -1], [-3, 9, 1], 'olive').box([-4, 5, -1], [-3, 6, 1], 'skin'));
 // What turns on the buildings and the helicopter (each about its own origin).
 plain('tail_rotor', (m) => m.box([0, -4, -1], [1, 4, 0], 'black').box([0, -1, -4], [1, 0, 3], 'black').box([0, -4, -1], [1, -3, 0], 'hazard').box([0, 3, -1], [1, 4, 0], 'hazard'));
@@ -1372,6 +1389,100 @@ building('market', (m) => {
   for (let i = 0; i < 14; i++) m.set(-10 + i, 25, -10 + Math.floor(i * 1.1), 'hazard');
   m.box([2, 13, 3], [3, 25, 4], 'steelDark');
   m.box([1, 12, 3], [4, 13, 4], 'gunmetal');
+  return m;
+});
+
+building('uplink', (m) => {
+  // A satellite uplink: a great dish on a turntable, tilted at the sky, its rim in the team's
+  // colour; a control room of lit screens beside it; two lattice masts with warning lights; a
+  // row of power cabinets and cable runs over the pad; a fence of posts round the edge.
+  pad(m, -15, 15, -15, 15, 'concrete', 'concreteDark');
+  for (let x = -14; x < 14; x += 4) for (let z = -14; z < 14; z += 4) m.box([x, 0, z], [x + 1, 1, z + 1], 'concreteLight');
+  // The pedestal: a stepped drum, a band of the team's colour, the turntable and the yoke.
+  m.disc(0, -2, 7, 1, 3, 'concreteDark');
+  m.disc(0, -2, 5.5, 3, 10, 'offwhite');
+  m.ring(0, -2, 4.5, 5.5, 6, 8, 'team');
+  m.disc(0, -2, 4.5, 10, 12, 'steelDark');
+  m.box([-4, 12, -3], [-2, 19, -1], 'steel');
+  m.box([2, 12, -3], [4, 19, -1], 'steel');
+  m.box([-1, 1, 3], [1, 4, 4], 'screen');
+  // The dish: a paraboloid shell (its axis tilted 35 degrees from straight up, towards +z: to the south, where the view is from), white,
+  // the rim the team's colour, the feed horn at its focus on three struts, glowing.
+  const cy = 18;
+  const cz = -3;
+  const tilt = (-35 * Math.PI) / 180;
+  const R = 12;
+  const f = 7;
+  const ct = Math.cos(tilt);
+  const st = Math.sin(tilt);
+  for (let j = 8; j < 36; j++)
+    for (let k = -20; k < 15; k++)
+      for (let i = -14; i < 14; i++) {
+        // Into the dish's own frame: its axis (v), across it (u, along x) and w.
+        const y = j + 0.5 - cy;
+        const z = k + 0.5 - cz;
+        const v = y * ct - z * st;
+        const w = y * st + z * ct;
+        const u = i + 0.5;
+        const r2 = u * u + w * w;
+        if (r2 > R * R) continue;
+        const surf = r2 / (4 * f) - 0.5;
+        if (Math.abs(v - surf) > 0.75) continue;
+        const r = Math.sqrt(r2);
+        m.set(i, j, k, r > R - 1.2 ? 'teamDark' : Math.round(r) % 4 === 0 ? 'offwhite' : 'dish');
+      }
+  const at = (v, u, w) => [Math.floor(u), Math.floor(cy + v * ct + w * st), Math.floor(cz - v * st + w * ct)];
+  for (let t = 0; t <= 1; t += 0.04)
+    for (const [eu, ew] of [[0, 9], [-8, -5], [8, -5]]) {
+      const v = ((eu * eu + ew * ew) / (4 * f)) * (1 - t) + (f - 0.5) * t;
+      const [x, y, z] = at(v, eu * (1 - t), ew * (1 - t));
+      m.set(x, y, z, 'steelDark');
+    }
+  {
+    const [x, y, z] = at(f - 0.5, 0, 0);
+    m.box([x - 1, y - 1, z - 1], [x + 1, y + 1, z + 1], 'gunmetal');
+    m.set(x, y + 1, z, 'screen');
+    m.set(x - 1, y + 1, z - 1, 'screen');
+  }
+  // The control room: low, lit screens along its front, a band of the team's colour, kit on the roof.
+  m.box([-14, 1, 6], [-3, 8, 14], 'white');
+  m.box([-14, 1, 6], [-3, 2, 14], 'offwhite');
+  windowsZ(m, -13, -4, 14, 3, 6, 3, 0.9, 41);
+  windowsX(m, 7, 13, -3, 3, 6, 3, 0.9, 42);
+  m.box([-14, 8, 6], [-3, 9, 14], 'steelDark');
+  m.box([-14, 7, 14], [-3, 8, 15], 'team');
+  m.box([-12, 9, 8], [-8, 11, 12], 'steelLight');
+  m.box([-11, 11, 9], [-9, 12, 11], 'gunmetal');
+  m.box([-7, 9, 10], [-6, 14, 11], 'steelDark');
+  m.box([-8, 14, 9], [-5, 15, 12], 'dish');
+  // Two lattice masts, a red light on each.
+  for (const [x, z, h] of [[11, 10, 30], [11, -12, 24]]) {
+    for (let y = 1; y < h; y++) {
+      m.set(x, y, z, 'steelDark');
+      m.set(x + 1, y, z + 1, 'steelDark');
+      if (y % 3 === 0) {
+        m.set(x + 1, y, z, 'steelLight');
+        m.set(x, y, z + 1, 'steelLight');
+      }
+    }
+    m.box([x, h, z], [x + 2, h + 1, z + 2], 'redLight');
+    m.box([x - 2, h - 6, z], [x + 4, h - 5, z + 1], 'steelLight');
+  }
+  // Power cabinets in a row, their lights, and cable runs to the pedestal.
+  for (let z = -12; z <= -4; z += 4) {
+    m.box([-14, 1, z], [-11, 6, z + 3], 'steelLight');
+    m.box([-11, 4, z + 1], [-10, 5, z + 2], hash(z, 3, 7) < 0.5 ? 'greenLight' : 'screen');
+  }
+  for (let x = -10; x < -5; x++) m.set(x, 1, -6, 'rubber');
+  for (let z = 3; z < 6; z++) m.set(-3, 1, z, 'rubber');
+  for (let x = 5; x < 11; x++) m.set(x, 1, 2, 'rubber');
+  // A fence of posts round the edge: hazard paint at the corners.
+  for (let a = -14; a <= 14; a += 3)
+    for (const [x, z] of [[a, -14], [a, 14], [-14, a], [14, a]]) {
+      if (m.has(x, 1, z)) continue;
+      m.box([x, 1, z], [x + 1, 4, z + 1], Math.abs(a) >= 13 ? 'hazard' : 'steelLight');
+    }
+  flagpole(m, 13, 13, 16);
   return m;
 });
 

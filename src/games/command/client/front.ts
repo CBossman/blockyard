@@ -147,6 +147,7 @@ function renderTable(l: Lobby): void {
     <h2>Starting resources</h2><div class="cm-opts">${choice('resources', 'resources', 'low', 'Low', l.resources === 'low')}${choice('resources', 'resources', 'normal', 'Normal', l.resources === 'normal')}${choice('resources', 'resources', 'high', 'High', l.resources === 'high')}</div>
     <h2>Peace at the start</h2><div class="cm-opts">${[0, 3, 5, 10].map((m) => choice('peace', 'peace', m, m ? `${m} min` : 'None', l.peace === m)).join('')}</div>
     <h2>Fog of war</h2><div class="cm-opts">${`<button data-l="fog" class="${l.fog ? 'on' : ''}"${dis}>${l.fog ? 'On' : 'Off: everyone sees everything'}</button>`}</div>
+    <h2>Uplink victory</h2><div class="cm-opts">${`<button data-l="uplink" class="${l.uplink ? 'on' : ''}"${dis}>${l.uplink ? 'On: an uplink that stands five minutes wins' : 'Off: conquest only'}</button>`}</div>
     <h2>Your doctrine</h2>${DOCTRINE_IDS.map((id) => `<button class="cm-doc ${ui.doctrine === id ? 'on' : ''}" data-doc="${id}"><b>${DOCTRINES[id].name}</b><span>${DOCTRINES[id].passive}. Power: ${DOCTRINES[id].power.name}.</span></button>`).join('')}
   </div></div>`;
   const table = el('.cm-table');

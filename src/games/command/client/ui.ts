@@ -1,5 +1,5 @@
 import type { Client } from '@platform/client';
-import { ABILITIES, RETREAT, SIGHT, AGE_NAMES, AGE_NEEDS, BOARDS, BUILDABLE, BUILDINGS, BUILD_KEYS, DOCTRINES, HIGH, MODES, NEEDS, STANCES, TEAM_COLORS, TECHS, TECH_IDS, VET, ageOf, versusText, UNITS, type BuildingKind, type DoctrineId, type UnitKind } from '../defs';
+import { ABILITIES, ALARM, ARMOR, RETREAT, SIGHT, AGE_NAMES, AGE_NEEDS, BOARDS, BUILDABLE, BUILDINGS, BUILD_KEYS, DOCTRINES, HIGH, MODES, NEEDS, STANCES, TEAM_COLORS, TECHS, TECH_IDS, VET, ageOf, versusText, UNITS, type BuildingKind, type DoctrineId, type UnitKind } from '../defs';
 import { BASES, CAMPS, FLOOR, HALF, HILLS, LAKES, MESAS, SHUT, TREES, WALL_CELL, deposits, inHill, inLake, inMesa, lakeOf, landShut, wallLine, wallSnap } from '../map';
 import { DRESSING } from '../dressing';
 import { UNIT_ORDER, cargoBits, rankBits, stanceBits, type State } from '../protocol';
@@ -137,7 +137,7 @@ html.cm-c-own body *:not(.ui):not(.ui *) { cursor: pointer !important; }
 .cm-pl i { width: 11px; height: 11px; border-radius: 2px; display: inline-block; }
 .cm-pl.dead { opacity: 0.35; text-decoration: line-through; }
 .cm-pl small { color: var(--dim); }
-.cm-bar { position: absolute; left: 0; right: 0; bottom: 0; height: 192px; display: grid; grid-template-columns: 196px 1fr 292px; background: linear-gradient(#18232f, #0c1219); border-top: 3px solid #3a526b; box-shadow: 0 -8px 24px rgba(0,0,0,0.45); }
+.cm-bar { position: absolute; left: 0; right: 0; bottom: 0; height: 192px; display: grid; grid-template-columns: 196px 1fr 352px; background: linear-gradient(#18232f, #0c1219); border-top: 3px solid #3a526b; box-shadow: 0 -8px 24px rgba(0,0,0,0.45); }
 .cm-bar > div { padding: 8px 10px; border-right: 2px solid #0a0f15; }
 .cm-bar > div:last-child { border-right: 0; }
 .cm-mini { padding: 8px 14px 8px 12px !important; display: grid; place-items: center; }
@@ -154,7 +154,7 @@ html.cm-c-own body *:not(.ui):not(.ui *) { cursor: pointer !important; }
 .cm-pt { position: relative; width: 46px; height: 46px; background: radial-gradient(#2a3b4e, #121b25); border: 2px solid var(--edge); border-radius: 3px; }
 .cm-pt img { width: 100%; height: 100%; object-fit: contain; }
 .cm-pt .hp { position: absolute; left: 3px; right: 3px; bottom: 2px; height: 4px; background: #0a0f15; } .cm-pt .hp i { display: block; height: 100%; background: #4cd04a; }
-.cm-grid { display: grid; grid-template-columns: repeat(4, 1fr); grid-auto-rows: 1fr; gap: 6px; padding: 8px !important; }
+.cm-grid { display: grid; grid-template-columns: repeat(5, 1fr); grid-auto-rows: 1fr; gap: 6px; padding: 8px !important; }
 .cb { position: relative; cursor: pointer; background: linear-gradient(#233246, #172231); border: 2px solid #3a526b; border-radius: 4px; padding: 0; color: #e8eef5; font-family: inherit; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; overflow: hidden; }
 .cb:hover { border-color: var(--hi); background: linear-gradient(#2c3f56, #1b2a3b); }
 .cb img { position: absolute; top: 2px; left: 50%; transform: translateX(-50%); width: 34px; height: 34px; object-fit: contain; }
@@ -358,7 +358,7 @@ function commands(): Cmd[] {
     (def.research ?? []).forEach((tech, i) => {
       const t = TECHS[tech];
       const done = me.techs.includes(tech);
-      const rk = (def.trains.length ? 'CB' : 'ZXCV')[i];
+      const rk = (def.trains.length ? 'CB' : 'ZXCVBN')[i];
       const era = tech === 'age2' || tech === 'age3';
       const gated = tech === 'age3' && !me.techs.includes('age2');
       out.push({ key: rk, code: `Key${rk}`, name: t.name, glyph: era ? '▲' : '⚙', cost: done ? 'done' : gated ? 'needs Era II' : costText(t.cost), tip: `<b>${t.name}</b>${tipCost(t.cost, t.time)}<p>${t.blurb}</p>${done ? '<div class="tsub">Researched.</div>' : gated ? '<div class="tsub"><em>Needs Era II.</em></div>' : ''}`, ok: !done && !gated && b.queue < 1000 && can(t.cost), on: b.queue >= 1000 && TECH_IDS[Math.floor(b.queue / 1000) - 1] === tech, run: () => client.send('research', { id: b.id, tech }) });
@@ -368,12 +368,21 @@ function commands(): Cmd[] {
       out.push({ key: 'Z', code: 'KeyZ', name: 'Sell steel', glyph: '⇄', cost: `+${forSteel}●`, ok: me.steel >= 100, tip: `<b>Sell 100 steel</b><p>For ${forSteel} oil now. Each sale gets less for the next; the price climbs back slowly.</p>`, run: () => client.send('trade', { id: b.id, sell: 'steel' }) });
       out.push({ key: 'X', code: 'KeyX', name: 'Sell oil', glyph: '⇄', cost: `+${forOil}`, ok: me.oil >= 100, tip: `<b>Sell 100 oil</b><p>For ${forOil} steel now. Each sale gets less for the next; the price climbs back slowly.</p>`, run: () => client.send('trade', { id: b.id, sell: 'oil' }) });
     }
+    if (b.kind === 'hq') out.push({ key: 'M', code: 'KeyM', name: 'Alarm', glyph: '⍾', ok: true, tip: `<b>Alarm</b><p>Every engineer within ${ALARM.reach} of the headquarters drops what it's doing and shelters inside (up to ${def.holds}). Each one inside makes its guns fire ${Math.round(ALARM.boost * 100)}% faster.</p><div class="tsub">Unload (U) when the raid's over: they go straight back to work.</div>`, run: () => {
+        client.send('alarm', { id: b.id });
+        client.audio.play('cm_bell');
+      } });
     if (def.holds) out.push({ key: 'U', code: 'KeyU', name: 'Unload', glyph: '⇪', cost: `${b.held}/${def.holds}`, ok: b.held > 0, tip: `<b>Unload</b><p>Everyone out of the ${def.name}, round it.</p><div class="tsub">Right click it with infantry to send them in.</div>`, run: () => client.send('unload', { id: b.id, boat: false }) });
   } else if (us.length) {
     if (us.some((u) => u.kind === 'engineer')) {
       BUILDABLE.forEach((k) => {
         const need = NEEDS[k];
         const key = BUILD_KEYS[k];
+        // (The uplink, in a match it can't win: shown, but off.)
+        if (k === 'uplink' && !s.uplinkOn) {
+          out.push({ key, code: `Key${key}`, name: BUILDINGS[k].name, icon: pic(k), cost: 'off', ok: false, tip: `<b>${BUILDINGS[k].name}</b><p>Not in this match: ${s.mode === 'stand' ? 'there is no one to win against in Last Stand' : 'the host turned uplink victory off'}.</p>`, run: () => undefined });
+          return;
+        }
         out.push({
           key,
           code: `Key${key}`,
@@ -448,7 +457,7 @@ function commands(): Cmd[] {
   if (!out.length) {
     const sel = (kinds: UnitKind[]) => () => select(mine().filter((u) => kinds.includes(u.kind)).map((u) => u.id), null);
     out.push({ key: 'E', code: 'KeyE', name: 'Engineers', icon: pic('engineer'), ok: true, run: sel(['engineer']) });
-    out.push({ key: 'R', code: 'KeyR', name: 'Army', icon: pic('tank'), ok: true, run: sel(['rifle', 'scout', 'at', 'tank', 'artillery', 'aa', 'heli', 'hero']) });
+    out.push({ key: 'R', code: 'KeyR', name: 'Army', icon: pic('tank'), ok: true, run: sel(['rifle', 'scout', 'at', 'medic', 'tank', 'artillery', 'aa', 'heli', 'hero']) });
     out.push({ key: 'B', code: 'KeyB', name: 'Base', icon: pic('hq'), ok: true, run: () => { const h = ui.buildings.find((x) => x.seat === me.seat && x.kind === 'hq'); if (h) lookAt(h.x, h.z); } });
   }
   // The special power is always the grid's last button.
@@ -702,6 +711,18 @@ function listen(): void {
       const myTeam = meSeat()?.team;
       const hurt = g && ui.sel.size && ui.units.some((x) => ui.sel.has(x.id) && x.kind === 'engineer') ? ui.buildings.find((x) => ui.state?.seats.find((s) => s.seat === x.seat)?.team === myTeam && x.hp < 100 && Math.hypot(x.x - g.x, x.z - g.z) < BUILDINGS[x.kind].radius + 1) : undefined;
       if (hurt && ids.length) return void client.send('repair', { ids, id: hurt.id, queue });
+      // And at one of our side's damaged vehicles, they mend it.
+      if (ids.length && ui.units.some((x) => ui.sel.has(x.id) && x.kind === 'engineer')) {
+        const wreck = ui.units.find((x) => {
+          if (ui.state?.seats.find((s) => s.seat === x.seat)?.team !== myTeam || x.hp >= 100 || ARMOR[x.kind] !== 'vehicle' || UNITS[x.kind].naval) return false;
+          const p = toScreen(x.x, FLOOR + liftOf(x), x.z);
+          return !!p && Math.hypot(p.x - e.clientX, p.y - e.clientY) < 30;
+        });
+        if (wreck) {
+          if (g) mark(g, '#ffd27a');
+          return void client.send('repair', { ids, id: wreck.id, unit: true, queue });
+        }
+      }
       if (ids.length) {
         if (what.t === 'unit' || what.t === 'building') {
           client.send('attack', { ids, id: what.id, building: what.t === 'building', queue });
@@ -814,7 +835,9 @@ function listenMini(): void {
 // ---------------------------------------------------------------------------------------------
 // The panels, again: when the state comes or the selection changes.
 
-const PLURAL: Record<UnitKind, string> = { at: 'AT Teams', gunboat: 'Gunboats', transport: 'Transports', guard: 'Camp Guards', brute: 'Camp Brutes', engineer: 'Engineers', rifle: 'Infantry', scout: 'Scouts', tank: 'Tanks', artillery: 'Artillery', aa: 'Anti-Air', heli: 'Helicopters', hero: 'Commander' };
+const PLURAL: Record<UnitKind, string> = { medic: 'Medics', at: 'AT Teams', gunboat: 'Gunboats', transport: 'Transports', guard: 'Camp Guards', brute: 'Camp Brutes', engineer: 'Engineers', rifle: 'Infantry', scout: 'Scouts', tank: 'Tanks', artillery: 'Artillery', aa: 'Anti-Air', heli: 'Helicopters', hero: 'Commander' };
+/** Those on foot (a squad's ring hugs the men, not a vehicle's width). */
+const FOOTED = new Set<UnitKind>(['engineer', 'rifle', 'at', 'hero', 'guard', 'medic']);
 const pct = (v: number) => Math.max(0, Math.min(100, v));
 const hpColor = (p: number) => (p > 55 ? '#4cd04a' : p > 25 ? '#ffc83a' : '#f04438');
 
@@ -824,7 +847,7 @@ function doing(u: U): { text: string; glyph: string; color: string } {
   if (u.flags & 2) return { text: 'Carrying steel home', glyph: '▣', color: '#cfd8e6' };
   if (u.flags & 4) return { text: 'Carrying oil home', glyph: '●', color: '#cfd8e6' };
   if (u.flags & 1) {
-    if (u.kind !== 'engineer') return { text: 'At work', glyph: '⚒', color: '#ffd27a' };
+    if (u.kind !== 'engineer') return { text: u.kind === 'medic' ? 'Healing' : 'At work', glyph: '⚒', color: '#ffd27a' };
     const site = ui.buildings.find((b) => b.built < 100 && Math.hypot(b.x - u.x, b.z - u.z) < BUILDINGS[b.kind].radius + 3);
     if (site) return { text: `Building a ${BUILDINGS[site.kind].name}`, glyph: '⚒', color: '#ffd27a' };
     const d = DEPOSITS.filter((n) => (ui.state?.deposits[n.id] ?? 1) > 0).sort((p, q) => Math.hypot(p.x - u.x, p.z - u.z) - Math.hypot(q.x - u.x, q.z - u.z))[0];
@@ -946,7 +969,7 @@ export function draw(): void {
   el('.pop').title = AGE_NAMES[ageOf(me?.techs ?? [])];
   el('.pop').innerHTML = `<span style="font-size:22px">☻</span>${me?.pop ?? 0}<small>/ ${me?.cap ?? 0}</small>`;
   const mode = MODES.find((m) => m.id === s.mode)?.name ?? '';
-  el('.cm-mid').innerHTML = `<span>${mode}</span><span style="color:#ffc83a">${AGE_NAMES[ageOf(me?.techs ?? [])]}</span><b>${Math.floor(s.time / 60)}:${String(s.time % 60).padStart(2, '0')}</b>${s.stand ? `<span style="color:#ff9a5a">Wave ${s.stand.wave}/${s.stand.total}${s.stand.nextIn ? ` · next ${Math.floor(s.stand.nextIn / 60)}:${String(s.stand.nextIn % 60).padStart(2, '0')}` : ''}${s.stand.left ? ` · ${s.stand.left} left` : ''}</span>` : ''}${me ? '' : '<span style="color:#9fd0ff">Watching</span>'}`;
+  el('.cm-mid').innerHTML = `<span>${mode}</span><span style="color:#ffc83a">${AGE_NAMES[ageOf(me?.techs ?? [])]}</span><b>${Math.floor(s.time / 60)}:${String(s.time % 60).padStart(2, '0')}</b>${s.stand ? `<span style="color:#ff9a5a">Wave ${s.stand.wave}/${s.stand.total}${s.stand.nextIn ? ` · next ${Math.floor(s.stand.nextIn / 60)}:${String(s.stand.nextIn % 60).padStart(2, '0')}` : ''}${s.stand.left ? ` · ${s.stand.left} left` : ''}</span>` : ''}${(s.uplinks ?? []).filter((u) => u.left >= 0).map((u) => `<span style="color:${color(u.seat)}">Uplink ${Math.floor(u.left / 60)}:${String(u.left % 60).padStart(2, '0')}</span>`).join('')}${me ? '' : '<span style="color:#9fd0ff">Watching</span>'}`;
   el('.cm-players').innerHTML = s.seats.map((x) => `<div class="cm-pl ${x.alive ? '' : 'dead'}" title="${x.human ? 'Player' : `Bot: ${x.style}`}"><i style="background:${color(x.seat)}"></i>${esc(x.name)}${x.human ? '' : x.style ? `<em>${x.style}</em>` : '<small>bot</small>'}</div>`).join('');
   const vb = el('.cm-voice');
   vb.textContent = voices.on ? '🔊' : '🔇';
@@ -1048,6 +1071,7 @@ function drawSummary(s: State): void {
   const won = s.winners.includes(me);
   const names = s.seats.filter((x) => s.winners.includes(x.seat)).map((x) => x.name);
   const title = s.stand ? (s.winners.length && !s.winners.includes(4) ? 'You held' : `Overrun on wave ${s.stand.wave}`) : me < 0 ? (names.length ? `${names.join(' and ')} win${names.length === 1 ? 's' : ''}` : 'Everyone is out') : won ? 'Victory' : 'Defeat';
+  const how = s.wonBy === 'uplink' ? (won ? 'Your uplink held' : 'Their uplink held') : '';
   const rows = sum.seats
     .map((x) => {
       const seat = s.seats.find((y) => y.seat === x.seat);
@@ -1064,7 +1088,7 @@ function drawSummary(s: State): void {
   const grid = [0, 0.5, 1].map((f) => `<line x1="34" x2="${W - 10}" y1="${Y(top * f)}" y2="${Y(top * f)}" stroke="#1d2a38"/><text x="30" y="${Y(top * f) + 4}" fill="#8497ad" font-size="11" text-anchor="end">${Math.round(top * f)}</text>`).join('');
   const minutes = Array.from({ length: Math.floor(((n - 1) * sum.every) / 60) + 1 }, (_, m) => m).filter((m) => m % Math.max(1, Math.ceil(((n - 1) * sum.every) / 60 / 8)) === 0).map((m) => `<text x="${X((m * 60) / sum.every)}" y="${H - 6}" fill="#8497ad" font-size="11" text-anchor="middle">${m}m</text>`).join('');
   const lines = sum.seats.map((x) => `<polyline fill="none" stroke="${color(x.seat)}" stroke-width="${x.seat === me ? 3.5 : 2}" stroke-linejoin="round" points="${x.army.map((v, i) => `${X(i)},${Y(v)}`).join(' ')}"/>`).join('');
-  box.querySelector('.ui')!.innerHTML = `<h1>${title}</h1><div class="when">${names.length ? `${names.join(' and ')} won` : 'No one is left'} after ${Math.floor(s.time / 60)}:${String(s.time % 60).padStart(2, '0')}</div>
+  box.querySelector('.ui')!.innerHTML = `<h1>${title}</h1><div class="when">${names.length ? `${names.join(' and ')} won` : 'No one is left'}${how ? ` (${how.toLowerCase()})` : ''} after ${Math.floor(s.time / 60)}:${String(s.time % 60).padStart(2, '0')}</div>
     <table><tr><th>Commander</th><th>Trained</th><th>Killed</th><th>Lost</th><th>Built</th><th>Razed</th><th>Steel</th><th>Oil</th></tr>${rows}</table>
     <h2>Army strength</h2><svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${grid}${minutes}${lines}</svg>
     <div class="btns"><button class="go" data-sum="rematch">Rematch</button><button data-sum="again">Back to setup</button><button data-sum="close">Look at the field</button></div>`;
@@ -1132,10 +1156,10 @@ export function frameUi(c: Client): void {
     add('rect', { x: x - w / 2 - 1, y: y - 1, width: w + 2, height: 7, fill: '#0a0f15' });
     add('rect', { x: x - w / 2, y, width: (w * Math.max(0, p)) / 100, height: 5, fill: hpColor(p) });
   };
-  const ring = (cx: number, cz: number, r: number, attrs: Record<string, string | number>) => {
+  const ring = (cx: number, cz: number, r: number, attrs: Record<string, string | number>, y = FLOOR + 0.05, n = 40) => {
     const pts: string[] = [];
-    for (let i = 0; i < 40; i++) {
-      const p = toScreen(cx + Math.cos((i / 40) * Math.PI * 2) * r, FLOOR + 0.05, cz + Math.sin((i / 40) * Math.PI * 2) * r);
+    for (let i = 0; i < n; i++) {
+      const p = toScreen(cx + Math.cos((i / n) * Math.PI * 2) * r, y, cz + Math.sin((i / n) * Math.PI * 2) * r);
       if (p) pts.push(`${p.x},${p.y}`);
     }
     add('polygon', { points: pts.join(' '), ...attrs });
@@ -1163,7 +1187,12 @@ export function frameUi(c: Client): void {
     const p = toScreen(at.x, g + (air ? 5 : 0), at.z);
     const top = toScreen(at.x, g + (air ? 10.5 : UNITS[u.kind].naval ? 4.6 : u.kind === 'tank' ? 4 : 4.6), at.z);
     if (!p || !top) continue;
-    if (sel) add('ellipse', { cx: p.x, cy: p.y, rx: air ? 16 : UNITS[u.kind].naval ? 26 : 20, ry: air ? 7 : UNITS[u.kind].naval ? 11 : 9, fill: 'none', stroke: '#eaffea', 'stroke-width': 2.5 });
+    // Selected: a ring on the ground round it, as big as it is (under a helicopter, where its shadow falls).
+    if (sel) {
+      const r = air ? 3.4 : UNITS[u.kind].naval ? 4.2 : FOOTED.has(u.kind) ? Math.max(1.1, UNITS[u.kind].size * 0.62) : Math.max(1.4, UNITS[u.kind].size * 0.64);
+      const y = UNITS[u.kind].naval ? FLOOR - 0.6 : g + 0.08;
+      ring(at.x, at.z, r, { fill: '#7dff7d', 'fill-opacity': 0.12, stroke: '#7dff7d', 'stroke-width': 2, 'stroke-opacity': 0.95 }, y, 24);
+    }
     if (sel || u.hp < 100) bar(top.x, top.y - 6, 32, u.hp);
     // A veteran's stars: gold chevrons over it.
     for (let k = 0; k < rank; k++) {
@@ -1232,12 +1261,15 @@ export function frameUi(c: Client): void {
     const busy = b.built < 100 || b.queue >= 1000 || (b.queue >= 0 && BUILDINGS[b.kind].trains.length > 0);
     if (busy) text(p.x, p.y + 28, buildingDoing(b), '#ffd27a', 11);
   }
-  // Over each of ours, a mark for what it's at (mining, building, carrying, fighting, idle).
+  // Over each of ours, a mark for what it's at: always for what wants seeing to (an idle engineer, an engineer
+  // caught in a fight); for the rest (mining, building, carrying, fighting) only when it's selected,
+  // so a battle isn't buried under badges.
   const me = mySeat();
   for (const u of ui.units) {
     if (u.seat !== me) continue;
     const w = doing(u);
     if (!w.glyph) continue;
+    if (!ui.sel.has(u.id) && !(u.kind === 'engineer' && (w.glyph === 'zz' || w.glyph === '⚔'))) continue;
     const at = drawnAt.get(u.id) ?? u;
     const air = !!UNITS[u.kind].air;
     const top = toScreen(at.x, groundOf(u, at) + (air ? 10.5 : UNITS[u.kind].naval ? 4.6 : u.kind === 'tank' ? 4 : 4.6), at.z);
@@ -1434,6 +1466,16 @@ function drawMini(): void {
     g.beginPath();
     g.arc(X(l.x), X(l.z), l.r * k, 0, Math.PI * 2);
     g.fill();
+  }
+  // Uplinks: a ring in the owner's colour, pulsing once it's running.
+  for (const u of ui.state?.uplinks ?? []) {
+    const r = 6 + (u.left >= 0 ? Math.sin(performance.now() / 150) * 2 : 0);
+    g.strokeStyle = color(u.seat);
+    g.lineWidth = 2.5;
+    g.beginPath();
+    g.arc(X(u.x), X(u.z), r, 0, Math.PI * 2);
+    g.stroke();
+    g.lineWidth = 1;
   }
   // Supply drops: a pulsing gold square.
   for (const d of ui.state?.drops ?? []) {

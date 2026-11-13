@@ -71,6 +71,8 @@ export interface Lobby {
   preset: Mode;
   resources: 'low' | 'normal' | 'high';
   fog: boolean;
+  /** Whether a Satellite Uplink can win the match (and be built). */
+  uplink: boolean;
   /** Minutes at the start when no side can attack another. */
   peace: number;
   watchers: { id: string; name: string }[];
@@ -106,6 +108,12 @@ export interface State {
   stand?: { wave: number; total: number; nextIn: number; left: number };
   time: number;
   winners: number[];
+  /** How it was won, if not by wiping out the others: an uplink that stood its time. */
+  wonBy?: 'uplink';
+  /** Whether an uplink can be built (and win) this match. */
+  uplinkOn: boolean;
+  /** Every uplink on the map (everyone sees them): whose, where, and seconds left on its clock (-1: still being built). */
+  uplinks: { seat: number; x: number; z: number; left: number }[];
   /** The match being set up (in the lobby), and seconds left of the briefing. */
   lobby?: Lobby;
   briefing?: number;
@@ -118,8 +126,8 @@ export interface State {
 }
 
 /** The kinds, in the order their indexes in `u` and `b` mean. */
-export const UNIT_ORDER: UnitKind[] = ['engineer', 'rifle', 'tank', 'heli', 'scout', 'artillery', 'aa', 'hero', 'guard', 'brute', 'at', 'gunboat', 'transport'];
-export const BUILDING_ORDER: BuildingKind[] = ['hq', 'depot', 'barracks', 'factory', 'airfield', 'lab', 'tower', 'bunker', 'dock', 'rampart', 'gate', 'market'];
+export const UNIT_ORDER: UnitKind[] = ['engineer', 'rifle', 'tank', 'heli', 'scout', 'artillery', 'aa', 'hero', 'guard', 'brute', 'at', 'gunboat', 'transport', 'medic'];
+export const BUILDING_ORDER: BuildingKind[] = ['hq', 'depot', 'barracks', 'factory', 'airfield', 'lab', 'tower', 'bunker', 'dock', 'rampart', 'gate', 'market', 'uplink'];
 
 export interface Shot {
   x: number;

@@ -112,15 +112,15 @@ let now = 0;
 
 /** How many men a unit's squad has (at full strength). */
 const SQUAD: Partial<Record<UnitKind, number>> = { rifle: 3, guard: 2, at: 2 };
-const FOOT: UnitKind[] = ['engineer', 'rifle', 'hero', 'guard', 'at'];
+const FOOT: UnitKind[] = ['engineer', 'rifle', 'hero', 'guard', 'at', 'medic'];
 const SPOTS = [[0, 0.75], [-0.8, -0.45], [0.8, -0.45]];
 /** Which trousers each kind on foot wears. */
-const LEGS: Partial<Record<UnitKind, string>> = { engineer: 'ic_leg_e', rifle: 'ic_leg', at: 'ic_leg', hero: 'ic_leg', guard: 'ic_leg_w' };
+const LEGS: Partial<Record<UnitKind, string>> = { engineer: 'ic_leg_e', rifle: 'ic_leg', at: 'ic_leg', hero: 'ic_leg', medic: 'ic_leg', guard: 'ic_leg_w' };
 /** A leg's hip on its model: voxels up from the ground, and out from the middle. */
 const HIP_Y = 5 / 16;
 const HIP_X = 2 / 16;
 /** What each kind's arms are, on the field. */
-const ARMS: Partial<Record<UnitKind, string[]>> = { rifle: ['ic_arms_rifle'], guard: ['ic_arms_ak'], at: ['ic_arms_at'], engineer: ['ic_arm_e_r', 'ic_arm_e_l'], hero: ['ic_arm_h_r', 'ic_arm_h_l'] };
+const ARMS: Partial<Record<UnitKind, string[]>> = { rifle: ['ic_arms_rifle'], guard: ['ic_arms_ak'], at: ['ic_arms_at'], engineer: ['ic_arm_e_r', 'ic_arm_e_l'], hero: ['ic_arm_h_r', 'ic_arm_h_l'], medic: ['ic_arm_m_r', 'ic_arm_m_l'] };
 /** The shoulders on a soldier's model, in voxels up from the ground. */
 const SHOULDER_Y = 9 / 16;
 const flagOf = (seat: number) => `flag_${seat >= 6 ? 6 : seat % 6}`;

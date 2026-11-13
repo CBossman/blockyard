@@ -46,6 +46,7 @@ function warmUp(client: Client, dt: number): void {
 const known = new Set<number>();
 const done = new Set<number>();
 let puffAt = 0;
+let beamAt = 0;
 const clockText = (t: number) => `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
 
 export default defineClient(shared, {
@@ -260,8 +261,27 @@ export default defineClient(shared, {
       if (d.air) client.fx.burst({ x: d.x, y: FLOOR + 0.4, z: d.z }, { color: '#d8cdaa', count: 2, speed: 5, size: 0.18, life: 0.8, drag: 2, gravity: -0.2 });
       else puff(client, d.x + (Math.random() - 0.5) * 1.6, FLOOR + 0.4, d.z + (Math.random() - 0.5) * 1.6, 's', 0.55, 0.85, 0, 0.8, 0);
     }
+    // A live uplink: pulses of light up its beam into the sky, in its side's colour, and a glow at the dish's feed.
+    if (clock > beamAt) {
+      beamAt = clock + 0.15;
+      for (const u of ui.state?.uplinks ?? []) {
+        if (u.left < 0 || !inView(u.x, u.z, 60)) continue;
+        const k = SCALE.uplink / 16;
+        const feed = { x: u.x, y: FLOOR + 23.3 * k, z: u.z + 0.7 * k };
+        const c = TEAM_COLORS[u.seat % TEAM_COLORS.length];
+        client.fx.tracer(feed, { x: feed.x, y: feed.y + 140, z: feed.z }, c, { speed: 70, length: 12, width: 0.45, glow: 4 });
+        client.fx.flare(feed, 2.2);
+        // (The last minute: faster, and sparks.)
+        if (u.left <= 60) client.fx.burst(feed, { color: c, count: 6, speed: 4, size: 0.18, glow: 1.5, life: 0.5, gravity: -2 });
+      }
+    }
     if (clock > puffAt) {
       puffAt = clock + 0.45;
+      // A medic at work: green sparks rising off it.
+      for (const u of ui.units) {
+        if (u.kind !== 'medic' || !(u.flags & 1) || !inView(u.x, u.z, 6)) continue;
+        client.fx.burst({ x: u.x, y: FLOOR + heightAt(u.x, u.z) + 1.6, z: u.z }, { color: '#7dff7d', count: 5, speed: 1.4, size: 0.16, glow: 1.2, life: 0.8, gravity: -2.5 });
+      }
       for (const b of ui.buildings) {
         if (!inView(b.x, b.z, 12)) continue;
         if (b.built < 100) client.fx.burst({ x: b.x + (Math.random() - 0.5) * 4, y: FLOOR + 1 + Math.random() * 3, z: b.z + (Math.random() - 0.5) * 4 }, { color: '#ffd27a', count: 3, speed: 3, size: 0.2, glow: 0.8, life: 0.3, gravity: 4 });

@@ -40,7 +40,8 @@ const hyp = (ax: number, az: number, bx: number, bz: number) => Math.hypot(ax - 
 /** What a unit is worth in a fight: what it cost (the camps' guards cost nothing, so their worth is set). */
 const worth = (k: UnitKind) => (k === 'guard' ? 90 : k === 'brute' ? 210 : UNITS[k].cost.steel + UNITS[k].cost.oil);
 const power = (list: Unit[]) => list.reduce((n, u) => n + (worth(u.kind) * u.hp) / u.max, 0);
-const fights = (u: Unit) => u.kind !== 'engineer' && UNITS[u.kind].damage > 0;
+/** What goes with the army: whatever fights, and the medics who keep it going. */
+const fights = (u: Unit) => u.kind !== 'engineer' && (UNITS[u.kind].damage > 0 || u.kind === 'medic');
 const ARMOUR: UnitKind[] = ['tank', 'artillery', 'aa', 'brute', 'gunboat'];
 /** What's worth shooting first, by what's shooting: rockets for armour, cannon for the rocket teams. */
 const PREFERS: Partial<Record<UnitKind, UnitKind[]>> = { at: ARMOUR, heli: ARMOUR, tank: ['at'], rifle: ['at', 'artillery'] };
@@ -116,6 +117,15 @@ export class BotBrain {
         w.command([e.id], s.seat, { t: 'move', x: clamp(e.x + ((e.x - f.x) / d) * 16), z: clamp(e.z + ((e.z - f.z) / d) * 16), attack: false });
       }
     }
+    // A real assault on the HQ, more than the army at home can hold: the alarm, and the engineers shelter (and man its guns).
+    // It's over: out they come, back to work.
+    if (smart && hq && hq.built >= 1) {
+      const atDoor = home.filter((f) => hyp(f.x, f.z, hq.x, hq.z) < 30);
+      const guards = mine.filter((u) => fights(u) && hyp(u.x, u.z, hq.x, hq.z) < 30);
+      const sheltered = engineers.filter((e) => e.inside?.id === hq.id && !e.inside.boat).length;
+      if (atDoor.length >= 3 && power(atDoor) > power(guards) * 1.2) w.alarm(s.seat);
+      else if (sheltered && !home.length) w.unload(hq.id, false);
+    }
     const nodeOf = (u: Unit) => (u.order.t === 'gather' ? w.deposits[u.order.node] : undefined);
     const load = new Map<number, number>();
     for (const e of engineers) {
@@ -155,7 +165,7 @@ export class BotBrain {
       load.set(node, (load.get(node) ?? 0) + 1);
     }
     /** Engineers that can be spared, nearest home first (not ones carrying a load home, or already building). */
-    const spare = engineers.filter((e) => e.order.t === 'idle' || (e.order.t === 'gather' && e.carry < 8)).sort((a, b) => hyp(a.x, a.z, base.x, base.z) - hyp(b.x, b.z, base.x, base.z));
+    const spare = engineers.filter((e) => !e.inside && (e.order.t === 'idle' || (e.order.t === 'gather' && e.carry < 8))).sort((a, b) => hyp(a.x, a.z, base.x, base.z) - hyp(b.x, b.z, base.x, base.z));
     // Whatever's half built with no one on it gets someone (its builder was killed, say).
     for (const b of bld) {
       if (b.built >= 1 || raiding(b.x, b.z, 14) || engineers.some((e) => e.order.t === 'build' && e.order.id === b.id)) continue;
@@ -177,6 +187,12 @@ export class BotBrain {
       const hurt = bld.filter((b) => b.built >= 1 && b.hp < BUILDINGS[b.kind].hp * 0.7 && !engineers.some((e) => e.order.t === 'repair' && e.order.id === b.id))[0];
       const e = hurt && spare.shift();
       if (e) w.command([e.id], s.seat, { t: 'repair', id: hurt.id });
+    }
+    // And the armour back at the base, badly knocked about.
+    if (smart && !home.length) {
+      const dented = mine.find((u) => ARMOUR.includes(u.kind) && !UNITS[u.kind].naval && u.hp < u.max * 0.6 && hyp(u.x, u.z, base.x, base.z) < 40 && !engineers.some((e) => e.order.t === 'repair' && e.order.id === u.id));
+      const e = dented && spare.shift();
+      if (e) w.command([e.id], s.seat, { t: 'repair', id: dented.id, unit: true });
     }
 
     // --- The eras and the base ------------------------------------------------------------------
@@ -204,6 +220,8 @@ export class BotBrain {
       else if (age >= 2 && this.skill > 0.5 && w.time > 660 && count('lab') < 1 && bld.some((b) => b.kind === 'barracks' && b.built >= 1)) next = 'lab';
       else if (w.time > (st.towers > 1 ? 300 : 480) && count('tower') < st.towers + Math.floor(this.skill * 2)) next = 'tower';
       else if (s.pop + 6 >= s.cap && count('depot') < 6) next = 'depot';
+      // Late and rich, a smart bot goes for the uplink (a turtle sooner): a way to win without marching on anyone.
+      else if (smart && w.uplinkOn && age >= 3 && count('uplink') < 1 && count('lab') > 0 && w.time > (this.kind === 'turtle' ? 1200 : 1680) && s.steel >= BUILDINGS.uplink.cost.steel + 150 && s.oil >= BUILDINGS.uplink.cost.oil + 50) next = 'uplink';
       const afford = !!next && s.steel >= BUILDINGS[next].cost.steel && s.oil >= BUILDINGS[next].cost.oil;
       saving = !!next && !afford && armyNow >= 4 && next !== 'dock';
       const builder = spare.shift();
@@ -255,7 +273,9 @@ export class BotBrain {
         const wantScout = kinds('scout').length < 1 && w.time > 180 && w.time - this.scoutedAt > 120;
         if (wantScout) this.scoutedAt = w.time;
         // Anti-tank teams when the enemy fields armour: about one for each, up to half its infantry and two.
-        kind = wantScout ? 'scout' : enemyArmour > kinds('at').length * 0.85 && kinds('at').length < 2 + kinds('rifle').length / 2 ? 'at' : 'rifle';
+        // (From Era II, a medic for every six riflemen.)
+        const wantMedic = age >= 2 && kinds('medic').length < Math.floor(kinds('rifle').length / 6);
+        kind = wantScout ? 'scout' : wantMedic ? 'medic' : enemyArmour > kinds('at').length * 0.85 && kinds('at').length < 2 + kinds('rifle').length / 2 ? 'at' : 'rifle';
       } else if (b.kind === 'factory') {
         // Flak for helicopters; artillery to crack what's dug in; otherwise tanks.
         const shells = age >= 3 && w.time > 900 && kinds('artillery').length < 2 + forts && (forts >= 2 || Math.random() < (this.kind === 'turtle' ? 0.5 : 0.3));
@@ -268,7 +288,7 @@ export class BotBrain {
     // Research: the lab takes the upgrades in turn as it can pay.
     for (const b of bld) {
       if (b.kind !== 'lab' || b.built < 1 || b.research) continue;
-      for (const tech of ['ordnance', 'armor', 'logistics', 'optics'] as const) if (w.research(b, tech)) break;
+      for (const tech of ['ordnance', 'armor', 'logistics', 'optics', 'engines', 'medicine'] as const) if (w.research(b, tech)) break;
     }
 
     // --- The war --------------------------------------------------------------------------------
@@ -371,6 +391,8 @@ export class BotBrain {
     }
 
     const need = st.army + this.wave * st.grow + Math.round((1 - this.skill) * 8);
+    // An enemy uplink running: everything goes at it now, and keeps going.
+    const urgent = !!this.uplinkAgainst(w, enemies) && w.time >= w.peaceUntil;
     const full = s.pop >= Math.min(s.cap, 60) - 2;
     // (No one comes for you early: time to build a base before the first fight.)
     const firstAttack = this.skill < 0.4 ? 900 : this.skill < 0.8 ? 660 : 540;
@@ -382,7 +404,11 @@ export class BotBrain {
       this.go(w, s, rest, r.x, r.z, true);
     } else if (this.mode === 'build') {
       this.go(w, s, rest.filter((u) => u.order.t === 'idle' && hyp(u.x, u.z, base.x, base.z) > 30), front.x, front.z, true);
-      if (!w.stand && !home.length && w.time >= Math.max(firstAttack, w.peaceUntil - 20, this.nextPush) && (rest.length >= need || (full && rest.length >= 6))) {
+      if (urgent && rest.length >= 3) {
+        this.chooseFoe(w, s, enemies);
+        this.wave++;
+        this.mode = 'push';
+      } else if (!w.stand && !home.length && w.time >= Math.max(firstAttack, w.peaceUntil - 20, this.nextPush) && (rest.length >= need || (full && rest.length >= 6))) {
         const t = this.chooseFoe(w, s, enemies);
         // Not against what it knows it can't beat, unless it can't get any bigger.
         if (t && (!smart || full || rest.length >= need * 1.5 || power(rest) >= this.strengthOf(this.foeSeat) * 0.7)) {
@@ -402,7 +428,7 @@ export class BotBrain {
       }
     } else {
       const t = this.target(w, s, enemies);
-      const spent = rest.length < Math.max(3, need / 3);
+      const spent = rest.length < (urgent ? 1 : Math.max(3, need / 3));
       if (!t || spent) this.fallBack(w, s, rest, front, smart ? 14 : 0);
       else {
         // The ones at the front of the attack: if what's round them is too much, get out.
@@ -413,7 +439,7 @@ export class BotBrain {
         const dug = [...this.seenBuildings.values()].filter((b) => (b.kind === 'tower' || b.kind === 'bunker') && hyp(b.x, b.z, cx, cz) < 22).length;
         const theirs = power(facing) + dug * FORT;
         const ourLocal = power(rest.filter((u) => hyp(u.x, u.z, cx, cz) < 26));
-        if (smart && theirs > ourLocal * 1.35 && hyp(cx, cz, base.x, base.z) > 40) this.fallBack(w, s, rest, front, 20);
+        if (smart && !urgent && theirs > ourLocal * 1.35 && hyp(cx, cz, base.x, base.z) > 40) this.fallBack(w, s, rest, front, 20);
         else {
           // On with the attack: those at the front at once, those coming from home in groups of three or more.
           const far = rest.filter((u) => hyp(u.x, u.z, cx, cz) > 40);
@@ -458,7 +484,7 @@ export class BotBrain {
       if (u.seat !== WILD) this.seenUnits.set(u.id, { kind: u.kind, seat: u.seat, t: w.time });
     }
     for (const [id, m] of this.seenUnits) if (!w.units.has(id) || w.time - m.t > 120) this.seenUnits.delete(id);
-    for (const b of w.buildings.values()) if (against.has(b.seat) && !BUILDINGS[b.kind].wall && sees(b.x, b.z)) this.seenBuildings.set(b.id, { kind: b.kind, seat: b.seat, x: b.x, z: b.z });
+    for (const b of w.buildings.values()) if (against.has(b.seat) && !BUILDINGS[b.kind].wall && (b.kind === 'uplink' || sees(b.x, b.z))) this.seenBuildings.set(b.id, { kind: b.kind, seat: b.seat, x: b.x, z: b.z });
     for (const [id, b] of this.seenBuildings) if ((!w.buildings.has(id) && sees(b.x, b.z)) || !against.has(b.seat)) this.seenBuildings.delete(id);
     return foes;
   }
@@ -489,6 +515,12 @@ export class BotBrain {
 
   /** Where to strike: the chosen enemy's HQ if it has seen it, else the nearest of its buildings it knows, else where its base must be. */
   private target(w: World, s: Slot, enemies: Slot[]): { x: number; z: number } | null {
+    // (An enemy uplink comes before everything: it wins them the match.)
+    const up = this.uplinkAgainst(w, enemies);
+    if (up) {
+      this.foeSeat = up.seat;
+      return up;
+    }
     if (!enemies.some((e) => e.seat === this.foeSeat)) {
       if (!enemies.length) return null;
       return this.chooseFoe(w, s, enemies);
@@ -499,6 +531,12 @@ export class BotBrain {
     if (hq) return hq;
     const near = known.sort((a, b) => hyp(a.x, a.z, base.x, base.z) - hyp(b.x, b.z, base.x, base.z))[0];
     return near ?? BASES[this.foeSeat];
+  }
+
+  /** An enemy uplink, if there is one (everyone sees them): the nearest to its clock running out. */
+  private uplinkAgainst(w: World, enemies: Slot[]): Building | null {
+    const seats = new Set(enemies.map((e) => e.seat));
+    return [...w.buildings.values()].filter((b) => b.kind === 'uplink' && seats.has(b.seat)).sort((a, b) => (a.doneAt ?? 1e9) - (b.doneAt ?? 1e9))[0] ?? null;
   }
 
   /** Where to gather before going in: on the way, well short of the army it's going to meet, on open ground. */

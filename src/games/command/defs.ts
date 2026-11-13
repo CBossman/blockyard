@@ -9,9 +9,9 @@ export interface Cost {
   oil: number;
 }
 
-export type UnitKind = 'engineer' | 'rifle' | 'scout' | 'at' | 'tank' | 'artillery' | 'aa' | 'heli' | 'hero' | 'guard' | 'brute' | 'gunboat' | 'transport';
-export type BuildingKind = 'hq' | 'depot' | 'barracks' | 'factory' | 'airfield' | 'lab' | 'tower' | 'bunker' | 'dock' | 'rampart' | 'gate' | 'market';
-export type TechId = 'armor' | 'ordnance' | 'optics' | 'logistics' | 'age2' | 'age3';
+export type UnitKind = 'engineer' | 'rifle' | 'scout' | 'at' | 'tank' | 'artillery' | 'aa' | 'heli' | 'hero' | 'guard' | 'brute' | 'gunboat' | 'transport' | 'medic';
+export type BuildingKind = 'hq' | 'depot' | 'barracks' | 'factory' | 'airfield' | 'lab' | 'tower' | 'bunker' | 'dock' | 'rampart' | 'gate' | 'market' | 'uplink';
+export type TechId = 'armor' | 'ordnance' | 'optics' | 'logistics' | 'age2' | 'age3' | 'medicine' | 'engines';
 
 export interface UnitDef {
   name: string;
@@ -59,6 +59,7 @@ export const UNITS: Record<UnitKind, UnitDef> = {
   brute: { name: 'Camp Brute', hp: 420, speed: 4.6, damage: 24, rate: 0.7, range: 6, cost: { steel: 0, oil: 0 }, time: 1, pop: 0, from: 'hq', size: 2.6, blurb: 'A wild brute. Hits hard up close.' },
   gunboat: { name: 'Gunboat', hp: 320, speed: 7, damage: 16, rate: 1.3, range: 15, cost: { steel: 130, oil: 60 }, time: 16, pop: 2, from: 'dock', size: 3.4, hits: 'both', naval: true, blurb: 'Rules its lake: a deck gun and a machine gun that reach the shore, and helicopters overhead.' },
   transport: { name: 'Transport', hp: 260, speed: 8.5, damage: 0, rate: 0, range: 0, cost: { steel: 90, oil: 30 }, time: 12, pop: 1, from: 'dock', size: 3.6, naval: true, holds: 6, blurb: 'Ferries up to six infantry across its lake. Right click it with infantry to board; U lands them on the nearest shore.' },
+  medic: { name: 'Medic', hp: 80, speed: 6.4, damage: 0, rate: 0, range: 0, cost: { steel: 60, oil: 30 }, time: 9, pop: 1, from: 'barracks', size: 2.2, blurb: 'Patches up the soldiers and engineers round them, the most hurt first, and goes to those nearby who need it. Unarmed: keep them behind the line.' },
   hero: { name: 'Commander', hp: 700, speed: 6, damage: 22, rate: 1.6, range: 11, cost: { steel: 300, oil: 150 }, time: 26, pop: 3, from: 'hq', size: 2.2, hits: 'both', limit: 1, blurb: 'One per army. Its aura speeds the fire of units near it, and Rally (F) heals and inspires them.' },
 };
 
@@ -75,7 +76,7 @@ for (const u of Object.values(UNITS)) {
 
 /** What each unit is, for what hits it hard: soldiers, armour, aircraft. */
 export type ArmorClass = 'infantry' | 'vehicle' | 'air';
-export const ARMOR: Record<UnitKind, ArmorClass> = { engineer: 'infantry', rifle: 'infantry', scout: 'infantry', at: 'infantry', hero: 'infantry', guard: 'infantry', tank: 'vehicle', artillery: 'vehicle', aa: 'vehicle', brute: 'vehicle', heli: 'air', gunboat: 'vehicle', transport: 'vehicle' };
+export const ARMOR: Record<UnitKind, ArmorClass> = { engineer: 'infantry', medic: 'infantry', rifle: 'infantry', scout: 'infantry', at: 'infantry', hero: 'infantry', guard: 'infantry', tank: 'vehicle', artillery: 'vehicle', aa: 'vehicle', brute: 'vehicle', heli: 'air', gunboat: 'vehicle', transport: 'vehicle' };
 /**
  * The counters: how much of its damage each unit does to each kind of target (1 when not listed).
  * Rifles beat AT teams, AT teams beat tanks, tanks beat rifles; artillery breaks buildings and
@@ -126,17 +127,18 @@ export interface BuildingDef {
 }
 
 export const BUILDINGS: Record<BuildingKind, BuildingDef> = {
-  hq: { name: 'Headquarters', hp: 2600, cost: { steel: 0, oil: 0 }, time: 0, radius: 4.2, pop: 12, trains: ['engineer', 'hero'], research: ['age2', 'age3'], guns: { damage: 20, rate: 1.2, range: 20, hits: 'both' }, blurb: 'Your base. Trains engineers and your commander. Its guns defend it. Lose it and the rest of your base falls within a minute.' },
+  hq: { name: 'Headquarters', hp: 2600, cost: { steel: 0, oil: 0 }, time: 0, radius: 4.2, pop: 12, trains: ['engineer', 'hero'], research: ['age2', 'age3'], holds: 10, guns: { damage: 20, rate: 1.2, range: 20, hits: 'both' }, blurb: 'Your base. Trains engineers and your commander. Its guns defend it, faster for every engineer sheltering inside (ring the Alarm). Lose it and the rest of your base falls within a minute.' },
   depot: { name: 'Supply Depot', hp: 450, cost: { steel: 100, oil: 0 }, time: 12, radius: 2.4, pop: 10, trains: [], blurb: 'Room for ten more people. Engineers can bring what they gather here, so one by a far deposit is a forward base; and units out of the fighting heal near it.' },
-  barracks: { name: 'Barracks', hp: 750, cost: { steel: 150, oil: 0 }, time: 20, radius: 3.4, pop: 0, trains: ['rifle', 'scout', 'at'], blurb: 'Trains infantry, scouts and anti-tank teams.' },
+  barracks: { name: 'Barracks', hp: 750, cost: { steel: 150, oil: 0 }, time: 20, radius: 3.4, pop: 0, trains: ['rifle', 'scout', 'at', 'medic'], blurb: 'Trains infantry, scouts, anti-tank teams and (from Era II) medics.' },
   factory: { name: 'Factory', hp: 950, cost: { steel: 250, oil: 60 }, time: 28, radius: 4, pop: 0, trains: ['tank', 'artillery', 'aa'], blurb: 'Builds tanks, artillery and anti-air.' },
   airfield: { name: 'Airfield', hp: 800, cost: { steel: 220, oil: 140 }, time: 30, radius: 4.4, pop: 0, trains: ['heli'], blurb: 'Builds helicopters. Needs a factory.' },
-  lab: { name: 'Research Lab', hp: 650, cost: { steel: 200, oil: 80 }, time: 24, radius: 3, pop: 0, trains: [], research: ['armor', 'ordnance', 'optics', 'logistics'], blurb: 'Researches upgrades for your whole army. Needs a barracks.' },
+  lab: { name: 'Research Lab', hp: 650, cost: { steel: 200, oil: 80 }, time: 24, radius: 3, pop: 0, trains: [], research: ['armor', 'ordnance', 'optics', 'logistics', 'medicine', 'engines'], blurb: 'Researches upgrades for your whole army. Needs a barracks.' },
   bunker: { name: 'Bunker', hp: 1000, cost: { steel: 140, oil: 0 }, time: 16, radius: 2.4, pop: 0, trains: [], holds: 6, blurb: 'Shelters six infantry: they fire from cover with 3 more reach and can’t be hit until it falls. Right click it with infantry to go in; U lets them out.' },
   dock: { name: 'Dock', hp: 760, cost: { steel: 160, oil: 40 }, time: 22, radius: 3, pop: 0, trains: ['gunboat', 'transport'], blurb: 'Build it on a lake’s shore. Launches gunboats and transports.' },
   rampart: { name: 'Wall', hp: 260, cost: { steel: 10, oil: 0 }, time: 3, radius: 1.5, pop: 0, trains: [], wall: true, blurb: 'Drag to lay a line of it. Nothing on the ground gets past: not theirs, and not yours either, so leave a gap or build a gate. Helicopters fly over, and guns shoot over.' },
   gate: { name: 'Gate', hp: 320, cost: { steel: 40, oil: 0 }, time: 4, radius: 1.5, pop: 0, trains: [], wall: true, blurb: 'A way through a wall for your side only. Put it in a gap, or on a length of your own wall to replace it.' },
   market: { name: 'Trade Post', hp: 600, cost: { steel: 120, oil: 0 }, time: 18, radius: 3, pop: 0, trains: [], blurb: 'Swaps steel for oil and oil for steel, a hundred at a time. Every sale gets you less for the next, and the price comes back slowly.' },
+  uplink: { name: 'Satellite Uplink', hp: 2400, cost: { steel: 900, oil: 700 }, time: 80, radius: 4.4, pop: 0, trains: [], blurb: 'A second way to win. Once it is finished, every commander on the map sees it, and a clock starts: if it still stands five minutes later, your side wins. Expect everyone to come for it. One each.' },
   tower: { name: 'Guard Tower', hp: 520, cost: { steel: 130, oil: 30 }, time: 14, radius: 1.9, pop: 0, trains: [], guns: { damage: 13, rate: 1.3, range: 18, hits: 'both' }, blurb: 'Shoots anything that comes near, air and ground.' },
 };
 
@@ -159,6 +161,8 @@ export const TECHS: Record<TechId, TechDef> = {
   optics: { name: 'Optics', cost: { steel: 120, oil: 80 }, time: 35, blurb: 'Your guns reach 20% further, and everything sees a fifth further.' },
   age2: { name: 'Mechanized Era', cost: { steel: 250, oil: 100 }, time: 45, blurb: 'Era II: factories (tanks, anti-air), the lab and your commander.' },
   age3: { name: 'Modern Era', cost: { steel: 400, oil: 250 }, time: 65, blurb: 'Era III: airfields (helicopters) and artillery.' },
+  medicine: { name: 'Field Medicine', cost: { steel: 160, oil: 80 }, time: 35, blurb: 'Your units heal slowly anywhere once they are out of the fighting, not only by a depot.' },
+  engines: { name: 'Turbo Engines', cost: { steel: 180, oil: 140 }, time: 40, blurb: 'Your vehicles, boats and helicopters move 15% faster.' },
   logistics: { name: 'Logistics', cost: { steel: 150, oil: 30 }, time: 35, blurb: 'Engineers gather, build and repair 30% faster.' },
 };
 for (const t of Object.values(TECHS)) t.time = Math.round(t.time * PACE.research);
@@ -167,7 +171,7 @@ export const TECH_IDS = Object.keys(TECHS) as TechId[];
 export const UNIT_KINDS = Object.keys(UNITS) as UnitKind[];
 export const BUILDING_KINDS = Object.keys(BUILDINGS) as BuildingKind[];
 /** The era (1 to 3) each unit or building needs. Researched at the HQ: Mechanized Era, then Modern Era. */
-export const AGE_NEEDS: Partial<Record<UnitKind | BuildingKind, number>> = { tank: 2, aa: 2, hero: 2, artillery: 3, heli: 3, factory: 2, lab: 2, airfield: 3, dock: 2, gunboat: 2 };
+export const AGE_NEEDS: Partial<Record<UnitKind | BuildingKind, number>> = { tank: 2, aa: 2, hero: 2, medic: 2, artillery: 3, heli: 3, factory: 2, lab: 2, airfield: 3, dock: 2, gunboat: 2, uplink: 3 };
 export const AGE_NAMES = ['', 'Era I', 'Era II', 'Era III'];
 export const ageOf = (techs: Iterable<TechId>): number => {
   const t = new Set(techs);
@@ -175,11 +179,11 @@ export const ageOf = (techs: Iterable<TechId>): number => {
 };
 
 /** What an engineer can put up. */
-export const BUILDABLE: BuildingKind[] = ['depot', 'barracks', 'factory', 'airfield', 'lab', 'tower', 'bunker', 'dock', 'rampart', 'gate', 'market'];
+export const BUILDABLE: BuildingKind[] = ['depot', 'barracks', 'factory', 'airfield', 'lab', 'tower', 'bunker', 'dock', 'rampart', 'gate', 'market', 'uplink'];
 /** The most lengths of wall and gates one commander can have standing. */
 export const MAX_WALLS = 150;
 /** Their keys on the command grid. */
-export const BUILD_KEYS: Record<string, string> = { depot: 'Z', barracks: 'X', factory: 'C', airfield: 'V', lab: 'B', tower: 'N', bunker: 'M', dock: 'G', rampart: 'J', gate: 'L', market: 'I' };
+export const BUILD_KEYS: Record<string, string> = { depot: 'Z', barracks: 'X', factory: 'C', airfield: 'V', lab: 'B', tower: 'N', bunker: 'M', dock: 'G', rampart: 'J', gate: 'L', market: 'I', uplink: 'O' };
 
 /**
  * The trade post's prices. Each sale is a lot of a hundred; at full price a hundred steel buys
@@ -191,7 +195,7 @@ export const TRADE = { lot: 100, oil: 50, steel: 160, drop: 0.1, floor: 0.4, rec
 /** What a lot of `sell` fetches, at `price` (a share of full price). */
 export const tradeGet = (sell: ResKind, price: number) => Math.floor(sell === 'steel' ? TRADE.oil * price : TRADE.steel * price);
 /** What can go into a bunker or a transport: soldiers on foot. */
-export const BOARDS: UnitKind[] = ['engineer', 'rifle', 'scout', 'at', 'hero'];
+export const BOARDS: UnitKind[] = ['engineer', 'rifle', 'scout', 'at', 'hero', 'medic'];
 /** How much further a soldier in a bunker reaches. */
 export const COVER_RANGE = 3;
 
@@ -226,7 +230,11 @@ export const fromBehind = (yaw: number, x: number, z: number, fx: number, fz: nu
   return d > 0.01 && (Math.sin(yaw) * dx + Math.cos(yaw) * dz) / d < -0.5;
 };
 /** What a building needs standing first. */
-export const NEEDS: Partial<Record<BuildingKind, BuildingKind>> = { airfield: 'factory', lab: 'barracks', bunker: 'barracks' };
+export const NEEDS: Partial<Record<BuildingKind, BuildingKind>> = { airfield: 'factory', lab: 'barracks', bunker: 'barracks', uplink: 'lab' };
+/** The alarm: the HQ calls in every engineer of its side this near, and each one inside makes its guns fire this much faster. */
+export const ALARM = { reach: 50, boost: 0.15 };
+/** The uplink: how long it must stand, finished, for its side to win (seconds). Not in Last Stand. */
+export const UPLINK = { hold: 300 };
 
 /** The commander's aura (blocks, and the share of fire rate it adds) and Rally: its radius, how long it lasts, the heal and the fire-rate boost, and its recharge. */
 export const HERO = { aura: 14, auraRate: 0.2, rally: { radius: 20, seconds: 9, heal: 0.25, rate: 0.4, cooldown: 50 } };
@@ -271,6 +279,8 @@ export const ABILITIES: Partial<Record<UnitKind, Ability>> = {
 /** A depot or the HQ patches up whoever rests near it: how near (from its edge), how much a second, and how long since it was hit. */
 /** Mines: how near sets one off, how many a side may have down, and how far off a scout sees them and how near it defuses them. */
 export const MINE = { trigger: 1.9, most: 10, spot: 11, defuse: 3 };
+/** A medic: how near it heals (blocks), how fast (health a second, one patient at a time), and how far it goes to find one. */
+export const MEDIC = { reach: 8, rate: 7, seek: 18 };
 export const HEAL = { radius: 11, rate: 0.05, calm: 6 };
 /** Falling back to the nearest depot or HQ: how much faster, and for how long. */
 export const RETREAT = { speed: 1.35, seconds: 10 };
@@ -282,7 +292,7 @@ export const SALVAGE = { share: 0.4, most: 32 };
  * model's real footprint and a little room, so tanks don't sit in each other and rotors don't cross.
  * (Two different kinds keep the average of theirs.)
  */
-export const SPACE: Record<UnitKind, number> = { engineer: 2, rifle: 3.4, at: 3.1, guard: 3, hero: 2.8, scout: 3, tank: 5.8, artillery: 6, aa: 5, heli: 7, brute: 5, gunboat: 6.8, transport: 6.4 };
+export const SPACE: Record<UnitKind, number> = { engineer: 2, medic: 2.8, rifle: 3.4, at: 3.1, guard: 3, hero: 2.8, scout: 3, tank: 7.6, artillery: 8, aa: 6.8, heli: 8.4, brute: 5.8, gunboat: 6.8, transport: 6.4 };
 
 export const START = { steel: 300, oil: 80 };
 export const MAX_POP = 60;

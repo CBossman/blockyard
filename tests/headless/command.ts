@@ -444,7 +444,7 @@ function standing() {
   send('move', { ids: carriers, x: d.x, z: d.z });
   h.run(60, { until: () => !state().drops.some((x) => x.id === d.id) });
   check(!state().drops.some((x) => x.id === d.id), 'drops: and goes to whoever gets there');
-  check(BUILDING_ORDER.length === 12, 'the buildings are as they were, and the wall, its gate and the trade post');
+  check(BUILDING_ORDER.length === 13, 'the buildings are as they were, and the wall, its gate, the trade post and the uplink');
 }
 
 /** Surrender: alone against bots it ends the match, with the bots standing and the player not. */
@@ -619,6 +619,180 @@ function trade() {
 }
 
 /**
+ * The uplink: one that stands its time wins its side the match; and the bots, seeing one go up
+ * against them, send their army at it.
+ */
+function uplink() {
+  const h = launch('command', { seed: 21 });
+  const player = h.ctx.player.id;
+  const state = () => h.find('message', 'state').at(-1)?.args[0] as State;
+  const units = () => h.find('message', 'u').at(-1)?.args[0] as number[];
+  const lobby = (data: object) => h.send({ t: 'game', player, name: 'lobby', data });
+  h.run(1);
+  lobby({ op: 'preset', preset: 'ffa' });
+  lobby({ op: 'peace', peace: 0 });
+  lobby({ op: 'resources', resources: 'normal' });
+  for (const seat of [1, 2, 3]) {
+    lobby({ op: 'kind', seat, kind: 'bot' });
+    lobby({ op: 'difficulty', seat, difficulty: 'hard' });
+    lobby({ op: 'style', seat, style: 'balanced' });
+  }
+  lobby({ op: 'start' });
+  h.run(9);
+  check(state().phase === 'play', 'uplink: the match begins');
+  const me = Object.values(state().mine)[0];
+  const B = BASES[me];
+  const at = { x: B.x + Math.sign(-B.x) * 22, z: B.z + Math.sign(-B.z) * 10 };
+  check(!state().uplinks.length, 'uplink: none at the start');
+  // A bot with an army: it goes for the uplink as soon as it's up.
+  const foe = me === 1 ? 2 : 1;
+  h.ctx.commands.run(`army tank 8 ${foe}`);
+  h.run(2);
+  h.ctx.commands.run(`raise uplink ${me} ${at.x} ${at.z}`);
+  h.run(1);
+  const up = state().uplinks[0];
+  check(up && up.seat === me && up.left > 290 && up.left <= 300, `uplink: it's up, its clock running (${JSON.stringify(up)})`);
+  let near = 0;
+  for (let t = 0; t < 150 && !near; t += 3) {
+    h.run(3);
+    const u = units();
+    for (let i = 0; i < u.length; i += 8) if (u[i + 2] === foe && Math.hypot(u[i + 3] - at.x, u[i + 4] - at.z) < 30) near++;
+  }
+  check(near > 0, `uplink: the bot's tanks come for it (by ${state().time} s)`);
+  // Kept standing (they're held off): its side wins when the clock runs out.
+  h.ctx.commands.run(`army tank 30 ${me} ${at.x} ${at.z}`);
+  h.run(320, { until: () => state().phase === 'over' });
+  const s = state();
+  check(s.phase === 'over' && s.wonBy === 'uplink' && s.winners.includes(me) && s.winners.length === 1, `uplink: it held, and its side won (${s.phase}, ${s.wonBy}, winners ${s.winners}, uplinks ${JSON.stringify(s.uplinks)})`);
+}
+
+/** Medics: hurt soldiers near one are patched up, faster than the HQ's slow mending would. */
+function medic() {
+  const h = launch('command', { seed: 5 });
+  const player = h.ctx.player.id;
+  const state = () => h.find('message', 'state').at(-1)?.args[0] as State;
+  const units = () => h.find('message', 'u').at(-1)?.args[0] as number[];
+  const lobby = (data: object) => h.send({ t: 'game', player, name: 'lobby', data });
+  h.run(1);
+  lobby({ op: 'preset', preset: 'ffa' });
+  lobby({ op: 'peace', peace: 10 });
+  lobby({ op: 'start' });
+  h.run(9);
+  check(state().phase === 'play', 'medic: the match begins');
+  const me = Object.values(state().mine)[0];
+  const B = BASES[me];
+  // Out in the field, away from any depot: two squads, one with a medic.
+  const RIFLE = UNIT_ORDER.indexOf('rifle');
+  const MEDIC = UNIT_ORDER.indexOf('medic');
+  const far = (dx: number) => ({ x: B.x + Math.sign(-B.x) * 50 + dx, z: B.z + Math.sign(-B.z) * 30 });
+  const a = far(0);
+  const b = far(30);
+  h.ctx.commands.run(`army rifle 3 ${me} ${a.x} ${a.z}`);
+  h.ctx.commands.run(`army medic 1 ${me} ${a.x} ${a.z + 4}`);
+  h.ctx.commands.run(`army rifle 3 ${me} ${b.x} ${b.z}`);
+  h.run(1);
+  h.ctx.commands.run(`hurt ${me} 0.3`);
+  h.run(1);
+  const health = (p: { x: number; z: number }) => {
+    const u = units();
+    let n = 0;
+    let sum = 0;
+    for (let i = 0; i < u.length; i += 8) if (u[i + 2] === me && u[i + 1] === RIFLE && Math.hypot(u[i + 3] - p.x, u[i + 4] - p.z) < 12) {
+      n++;
+      sum += u[i + 5];
+    }
+    return n ? sum / n : -1;
+  };
+  check(units().some((_, i) => i % 8 === 1 && units()[i] === MEDIC), 'medic: one is on the field');
+  const [a0, b0] = [health(a), health(b)];
+  h.run(40);
+  const [a1, b1] = [health(a), health(b)];
+  check(a0 > 0 && b0 > 0 && a1 >= 85 && b1 - b0 < 10, `medic: the squad with a medic is patched up (${a0}% → ${a1}%), the one without isn't (${b0}% → ${b1}%)`);
+}
+
+/** Engineers sent at a damaged tank of their side mend it; a tank no one sees to stays as it is. */
+function mend() {
+  const h = launch('command', { seed: 6 });
+  const player = h.ctx.player.id;
+  const state = () => h.find('message', 'state').at(-1)?.args[0] as State;
+  const units = () => h.find('message', 'u').at(-1)?.args[0] as number[];
+  const lobby = (data: object) => h.send({ t: 'game', player, name: 'lobby', data });
+  h.run(1);
+  lobby({ op: 'preset', preset: 'ffa' });
+  lobby({ op: 'peace', peace: 10 });
+  lobby({ op: 'start' });
+  h.run(9);
+  const me = Object.values(state().mine)[0];
+  const B = BASES[me];
+  const at = { x: B.x + Math.sign(-B.x) * 50, z: B.z + Math.sign(-B.z) * 30 };
+  const TANK = UNIT_ORDER.indexOf('tank');
+  const ENGINEER = UNIT_ORDER.indexOf('engineer');
+  h.ctx.commands.run(`army tank 2 ${me} ${at.x} ${at.z}`);
+  h.ctx.commands.run(`army engineer 2 ${me} ${at.x} ${at.z + 12}`);
+  h.run(1);
+  h.ctx.commands.run(`hurt ${me} 0.4`);
+  h.run(1);
+  const find = (kind: number) => {
+    const u = units();
+    const out: { id: number; hp: number; x: number; z: number }[] = [];
+    for (let i = 0; i < u.length; i += 8) if (u[i + 2] === me && u[i + 1] === kind && Math.hypot(u[i + 3] - at.x, u[i + 4] - at.z) < 20) out.push({ id: u[i], hp: u[i + 5], x: u[i + 3], z: u[i + 4] });
+    return out;
+  };
+  const tanks = find(TANK);
+  const engineers = find(ENGINEER);
+  check(tanks.length === 2 && engineers.length === 2, `mend: two tanks and two engineers out in the field (${tanks.length}, ${engineers.length})`);
+  h.send({ t: 'game', player, name: 'repair', data: { ids: engineers.map((e) => e.id), id: tanks[0].id, unit: true } });
+  h.run(25);
+  const hp = (id: number) => {
+    const u = units();
+    for (let i = 0; i < u.length; i += 8) if (u[i] === id) return u[i + 5];
+    return -1;
+  };
+  check(hp(tanks[0].id) >= 95 && hp(tanks[1].id) <= tanks[1].hp + 2, `mend: the tank seen to is mended (${tanks[0].hp}% → ${hp(tanks[0].id)}%), the other isn't (${tanks[1].hp}% → ${hp(tanks[1].id)}%)`);
+}
+
+/** The alarm: the engineers by the HQ shelter in it; let out, they go back to work. */
+function alarm() {
+  const h = launch('command', { seed: 8 });
+  const player = h.ctx.player.id;
+  const state = () => h.find('message', 'state').at(-1)?.args[0] as State;
+  const units = () => h.find('message', 'u').at(-1)?.args[0] as number[];
+  const blds = () => h.find('message', 'b').at(-1)?.args[0] as number[];
+  const lobby = (data: object) => h.send({ t: 'game', player, name: 'lobby', data });
+  h.run(1);
+  lobby({ op: 'preset', preset: 'ffa' });
+  lobby({ op: 'peace', peace: 10 });
+  lobby({ op: 'start' });
+  h.run(9);
+  h.run(10);
+  const me = Object.values(state().mine)[0];
+  const ENGINEER = UNIT_ORDER.indexOf('engineer');
+  const HQ = BUILDING_ORDER.indexOf('hq');
+  const out = () => {
+    const u = units();
+    let n = 0;
+    for (let i = 0; i < u.length; i += 8) if (u[i + 2] === me && u[i + 1] === ENGINEER) n++;
+    return n;
+  };
+  const hq = () => {
+    const b = blds();
+    for (let i = 0; i < b.length; i += 9) if (b[i + 2] === me && b[i + 1] === HQ) return { id: b[i], held: b[i + 8] };
+    return null;
+  };
+  const n0 = out();
+  check(n0 >= 4 && hq()?.held === 0, `alarm: engineers at work, none in the HQ (${n0}, ${hq()?.held})`);
+  h.send({ t: 'game', player, name: 'alarm', data: { id: hq()!.id } });
+  h.run(12);
+  check(hq()!.held === n0 && out() === 0, `alarm: all of them shelter in the HQ (${hq()!.held} in, ${out()} out)`);
+  h.send({ t: 'game', player, name: 'unload', data: { id: hq()!.id, boat: false } });
+  h.run(15);
+  const u = units();
+  let working = 0;
+  for (let i = 0; i < u.length; i += 8) if (u[i + 2] === me && u[i + 1] === ENGINEER && !(u[i + 7] & 8)) working++;
+  check(hq()!.held === 0 && working === n0, `alarm: let out, they're all back at work (${working} of ${n0})`);
+}
+
+/**
  * A bot walls its base: every base's plan has gates on its lines and no line too long to drag; a
  * turtle on Hard, given time, puts up its walls and gates, and its army still goes out through them.
  */
@@ -743,4 +917,8 @@ export default function command() {
   check(coop.seats.filter((s) => s.team === 1).length === 2, 'coop: two bot enemies');
   // (Last: it leaves the lobby set for a peace, which would carry over to the matches after it.)
   botWalls();
+  uplink();
+  medic();
+  mend();
+  alarm();
 }

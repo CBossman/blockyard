@@ -258,7 +258,7 @@ function renderTech(): void {
   const age = ageOf(me.techs);
   const has = (k: BuildingKind) => ui.buildings.some((b) => b.seat === me.seat && b.kind === k && b.built >= 100);
   const BLD: BuildingKind[] = ['hq', 'depot', 'barracks', 'tower', 'bunker', 'factory', 'lab', 'dock', 'airfield'];
-  const UN: UnitKind[] = ['engineer', 'rifle', 'scout', 'at', 'tank', 'aa', 'hero', 'gunboat', 'transport', 'artillery', 'heli'];
+  const UN: UnitKind[] = ['engineer', 'rifle', 'scout', 'at', 'medic', 'tank', 'aa', 'hero', 'gunboat', 'transport', 'artillery', 'heli'];
   const eraOf = (k: UnitKind | BuildingKind) => AGE_NEEDS[k] ?? 1;
   const node = (img: string, name: string, sub: string, cls: string) => `<div class="cm-tn ${cls}">${img}<div>${name}<small>${sub}</small></div></div>`;
   const col = (era: number) => {
@@ -275,7 +275,7 @@ function renderTech(): void {
       return node(icon(pic(k)), UNITS[k].name, !open ? `Needs ${AGE_NAMES[era]}` : got ? `Train at your ${BUILDINGS[from].name}` : `Needs a ${BUILDINGS[from].name}`, open && got ? 'now' : 'locked');
     });
     const upgrade = (id: TechId, gl: string) => node(`<div class="g">${iconHtml(gl)}</div>`, TECHS[id].name, me.techs.includes(id) ? 'Researched' : `${TECHS[id].cost.steel} steel, ${TECHS[id].cost.oil} oil`, me.techs.includes(id) ? 'have' : open ? 'now' : 'locked');
-    const ups = era === 1 ? [upgrade('age2', '▲')] : era === 2 ? [upgrade('age3', '▲'), upgrade('armor', '⚙'), upgrade('ordnance', '⚙'), upgrade('optics', '⚙'), upgrade('logistics', '⚙')] : [];
+    const ups = era === 1 ? [upgrade('age2', '▲')] : era === 2 ? [upgrade('age3', '▲'), upgrade('armor', '⚙'), upgrade('ordnance', '⚙'), upgrade('optics', '⚙'), upgrade('logistics', '⚙'), upgrade('medicine', '⚙'), upgrade('engines', '⚙')] : [];
     return `<div><h2 class="${open ? '' : 'locked'}">${AGE_NAMES[era]}${age === era ? ' · you are here' : ''}</h2>${blds.join('')}${units.join('')}${ups.join('')}</div>`;
   };
   el('.cm-tech').innerHTML = `<div class="ui"><h1>Tech tree<small>${DOCTRINES[me.doctrine].name} doctrine. Press K or click outside to close.</small></h1><div class="cm-tree">${col(1)}${col(2)}${col(3)}</div></div>`;

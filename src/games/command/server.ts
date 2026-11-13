@@ -1,7 +1,6 @@
 import { defineServer, math, type GameContext, type Player, type Prop, type PropModel } from '@platform';
 import { BotBrain, STYLES, type Style } from './bots';
-import { ABILITIES, DROP, DROP_KINDS, HEAL, MAX_WALLS, MINE, RETREAT, SALVAGE, SPACE, STAND, WAVE_UNITS, wavePay, waveWorth, type Ability, type DropKind, TRADE, tradeGet } from './defs';
-import { MODEL_SIZE } from './modelfiles';
+import { ABILITIES, DROP, DROP_KINDS, HEAL, MAX_WALLS, MINE, RETREAT, SALVAGE, SPACE, STAND, WAVE_UNITS, wavePay, waveWorth, type Ability, type DropKind, TRADE, tradeGet, UPLINK, MEDIC, ALARM } from './defs';
 import { DIFFICULTIES, BOARDS, COVER_RANGE, FLANK, fromBehind, HIGH, VET, rankOf, AGE_NEEDS, ARMOR, VERSUS, BUILDABLE, BUILDINGS, ageOf, CARRY, DOCTRINES, DOCTRINE_IDS, GATHER_RATE, HERO, MAX_POP, NEEDS, RELIC, SIGHT, START, TECHS, TECH_IDS, UNITS, type BuildingKind, type DoctrineId, type Mode, type ResKind, type TechId, type UnitKind, type DifficultyId } from './defs';
 import { DRESSING } from './dressing';
 import { BASES, CAMPS, FLOOR, HALF, LAKES, MESAS, TREES, deposits, heightAt, inHill, inLake, inMesa, hashYaw, inside, lakeOf, shore, wallLine, wallSnap, SHUT, type Deposit } from './map';
@@ -25,7 +24,7 @@ type Order =
   | { t: 'attack'; id: number; building: boolean }
   | { t: 'gather'; node: number; phase: 'to' | 'work' | 'back'; slot?: number; held?: number }
   | { t: 'build'; id: number }
-  | { t: 'repair'; id: number }
+  | { t: 'repair'; id: number; /** A vehicle, not a building. */ unit?: boolean }
   /** Into a bunker (a building) or a transport (a boat). */
   | { t: 'enter'; id: number; boat: boolean }
   /** Into reach of a spot, then its special ability on it. */
@@ -103,6 +102,8 @@ export interface Building {
   /** Keep training `lastKind` (the last unit asked for) whenever the queue runs out. */
   loop: boolean;
   lastKind: UnitKind | null;
+  /** An uplink: when it was finished (its clock runs from then). */
+  doneAt?: number;
 }
 
 export interface Slot {
@@ -152,9 +153,13 @@ export interface World {
   peaceUntil: number;
   rally(seat: number): boolean;
   unload(id: number, boat: boolean): boolean;
+  /** The HQ's alarm: its engineers near run into it (how many went). */
+  alarm(seat: number): number;
   canDock(x: number, z: number): boolean;
   /** Last Stand: no one to march on, so it holds its ground. */
   stand: boolean;
+  /** Whether an uplink can be built (and win) this match. */
+  uplinkOn: boolean;
   /** Supply drops on their way down or on the ground; `at`: when it lands. */
   drops: { id: number; x: number; z: number; at: number }[];
   /** How many mines a seat has down. */
@@ -189,6 +194,8 @@ let nextId = 1;
 let shots: Shot[] = [];
 let booms: number[] = [];
 let winners: number[] = [];
+/** How the match was won, if not by force of arms. */
+let wonBy: State['wonBy'];
 let summary: Summary | undefined;
 let stateIn = 0;
 let sendIn = 0;
@@ -206,13 +213,15 @@ let mineIn = 0;
 
 // The match being set up, which stays as it was for a rematch.
 const makeSeat = (seat: number): LobbySeat => ({ seat, kind: seat < 4 ? 'bot' : 'closed', name: '', id: '', team: seat % 4, style: 'random', difficulty: 'normal', ready: false });
-const lobby: Lobby = { seats: [0, 1, 2, 3, 4, 5].map(makeSeat), host: '', preset: 'ffa', resources: 'normal', fog: true, peace: 0, watchers: [] };
+const lobby: Lobby = { seats: [0, 1, 2, 3, 4, 5].map(makeSeat), host: '', preset: 'ffa', resources: 'normal', fog: true, uplink: true, peace: 0, watchers: [] };
 const BRIEFING = 7;
 const START_RES = { low: 0.5, normal: 1, high: 2.5 };
 let briefingLeft = 0;
 let rematchIn = 0;
 let peaceUntil = 0;
 let startScale = 1;
+/** This match: whether an uplink can win it (the lobby's choice; never in Last Stand). */
+let uplinkOn = true;
 /** Those who left a match under way, by id and by name, and their seat: back in, it's theirs again. */
 const gone = new Map<string, number>();
 /** When each player last spoke or pinged (so no one can flood). */
@@ -289,6 +298,70 @@ export default defineServer(shared, {
       }
     });
     game.events.on('clientMessage', ({ player, name, data }) => order(game, player, name, data));
+    // Developer tools (not in a published game): an army on the spot, and the coffers filled.
+    game.commands.register('army', {
+      usage: '<kind> [count] [seat] [x] [z] [attack x z]',
+      help: 'Puts units of a kind down for a seat (at its HQ, or at x z), and sends them to attack-move',
+      cheat: true,
+      run: ([kind, count, seat, x, z, ax, az]) => {
+        if (phase !== 'play' || !(kind in UNITS)) return `Kinds: ${Object.keys(UNITS).join(', ')} (during a match)`;
+        const s = Number(seat ?? 0);
+        if (!slots[s]) return 'No such seat';
+        const hq = [...buildings.values()].find((b) => b.seat === s && b.kind === 'hq');
+        const cx = x === undefined ? (hq?.x ?? 0) : Number(x);
+        const cz = z === undefined ? (hq?.z ?? 0) : Number(z);
+        const n = Math.max(1, Math.min(60, Number(count) || 1));
+        const side = Math.ceil(Math.sqrt(n));
+        const made: number[] = [];
+        for (let i = 0; i < n; i++) made.push(addUnit(game, s, kind as UnitKind, cx + ((i % side) - side / 2) * 3.4, cz + (Math.floor(i / side) - side / 2) * 3.4).id);
+        if (ax !== undefined) formation(made.map((id) => units.get(id)!), Number(ax), Number(az), true);
+        dirty = true;
+        return `${n} ${kind} for seat ${s}`;
+      },
+    });
+    game.commands.register('raise', {
+      usage: '<kind> [seat] [x] [z] [built share]',
+      help: 'Puts a building down for a seat (finished, or that much built)',
+      cheat: true,
+      run: ([kind, seat, x, z, share]) => {
+        if (phase !== 'play' || !(kind in BUILDINGS)) return `Kinds: ${Object.keys(BUILDINGS).join(', ')} (during a match)`;
+        const s = Number(seat ?? 0);
+        if (!slots[s]) return 'No such seat';
+        const part = share === undefined ? 1 : Math.max(0, Math.min(1, Number(share)));
+        const b = addBuilding(game, s, kind as BuildingKind, Number(x ?? 0), Number(z ?? 0), part >= 1);
+        if (part < 1) {
+          b.built = part;
+          grow(b);
+        } else if (b.kind === 'uplink') uplinkUp(game, b);
+        recap(s);
+        dirty = true;
+        return `${kind} for seat ${s}`;
+      },
+    });
+    game.commands.register('hurt', {
+      usage: '<seat> [share]',
+      help: 'Every unit of a seat down to a share of its health (default a third)',
+      cheat: true,
+      run: ([seat, share]) => {
+        const k = Math.max(0.01, Math.min(1, Number(share ?? 0.33)));
+        let n = 0;
+        for (const u of units.values()) if (u.seat === Number(seat)) {
+          u.hp = Math.max(1, u.max * k);
+          n++;
+        }
+        dirty = true;
+        return `${n} hurt`;
+      },
+    });
+    game.commands.register('rich', {
+      help: 'Every commander gets 9999 steel and oil, and every era',
+      cheat: true,
+      run: () => {
+        for (const s of slots) if (s) { s.steel = 9999; s.oil = 9999; s.techs.add('age2'); s.techs.add('age3'); }
+        dirty = true;
+        return 'rich';
+      },
+    });
   },
 
   start(game) {
@@ -333,6 +406,7 @@ function reset(game: GameContext): void {
   shots = [];
   booms = [];
   winners = [];
+  wonBy = undefined;
   summary = undefined;
   later = [];
   flares = [];
@@ -383,6 +457,7 @@ function startMatch(game: GameContext, chosen: Mode, skill: number, plan?: SeatP
   gone.clear();
   peaceUntil = 0;
   if (!plan) startScale = 1;
+  uplinkOn = chosen !== 'stand' && (!plan || lobby.uplink);
   const humans = game.players.slice(0, 4);
   const seat = (n: number, team: number, player: Player | null, name: string, skill: number, style?: Style): void => {
     const doctrine = (player && picked.get(player.id)) || DOCTRINE_IDS[Math.floor(Math.random() * DOCTRINE_IDS.length)];
@@ -507,6 +582,7 @@ function lobbyOrder(game: GameContext, player: Player, d: Record<string, unknown
     }
   } else if (op === 'resources' && (d.resources === 'low' || d.resources === 'normal' || d.resources === 'high')) lobby.resources = d.resources;
   else if (op === 'fog') lobby.fog = !lobby.fog;
+  else if (op === 'uplink') lobby.uplink = !lobby.uplink;
   else if (op === 'peace' && [0, 3, 5, 10].includes(Number(d.peace))) lobby.peace = Number(d.peace);
   else if (op === 'start') {
     const on = lobby.seats.filter((x) => x.kind !== 'closed');
@@ -521,6 +597,9 @@ const newStats = () => ({ trained: 0, killed: 0, lost: 0, built: 0, razed: 0, st
 /** Seconds between the samples of each army's worth (the summary's chart). */
 const SAMPLE = 10;
 let sampleIn = 0;
+
+/** How much of a vehicle's health an engineer mends a second. */
+const REPAIR_UNIT = 0.035;
 
 /** How high a unit's model floats over the ground: helicopters well above it. */
 const lift = (kind: UnitKind) => FLOOR + (UNITS[kind].air ? 5 : 0);
@@ -538,8 +617,17 @@ function addUnit(game: GameContext, seat: number, kind: UnitKind, x: number, z: 
   return u;
 }
 
-/** How far under the floor a building stands, so much of it built: it rises out of the ground as it goes up. */
-const sunk = (kind: BuildingKind, built: number) => FLOOR - ((MODEL_SIZE[kind].hi[1] / 16) * SCALE[kind] * (1 - built)) * 0.94;
+/**
+ * How big a building stands, so much of it built: it grows up inside its scaffolding from a third of
+ * its size. (Not sunk into the ground and rising out of it: a model lit by the light where its
+ * middle is would be lit by the dark under the ground, and come up black.)
+ */
+const growth = (built: number) => 0.35 + 0.65 * Math.min(1, Math.max(0, built));
+/** A building's model to the size its building has got to. */
+const grow = (b: Building) => {
+  b.prop.position.set(b.x, FLOOR + rise(b.kind, b.x, b.z), b.z);
+  b.prop.scale = SCALE[b.kind] * growth(b.built);
+};
 /** A wall goes over a hill, standing on it (other buildings only go on the flat). */
 const rise = (kind: BuildingKind, x: number, z: number) => (BUILDINGS[kind].wall ? heightAt(x, z) : 0);
 
@@ -552,7 +640,7 @@ function mowFor(game: GameContext, kind: BuildingKind, x: number, z: number): vo
 }
 
 function addBuilding(game: GameContext, seat: number, kind: BuildingKind, x: number, z: number, built: boolean): Building {
-  const prop = game.props.spawn(models.kinds[kind][variantOf(seat)], { position: { x, y: sunk(kind, built ? 1 : 0) + rise(kind, x, z), z }, scale: SCALE[kind] });
+  const prop = game.props.spawn(models.kinds[kind][variantOf(seat)], { position: { x, y: FLOOR + rise(kind, x, z), z }, scale: SCALE[kind] * growth(built ? 1 : 0) });
   const b: Building = { id: nextId++, seat, kind, x, z, hp: built ? BUILDINGS[kind].hp : BUILDINGS[kind].hp * 0.2, built: built ? 1 : 0, loop: false, lastKind: null, prop, queue: [], rally: null, research: null, cool: 0 };
   buildings.set(b.id, b);
   gridDirty = true;
@@ -614,9 +702,18 @@ function simulate(game: GameContext, dt: number): void {
   }
   relicTick(game, dt);
   healTick(dt);
+  medicTick(dt);
   mineTick(game, dt);
   dropTick(game, dt);
   if (mode === 'stand') standTick(game, dt);
+  // An uplink that has stood its time: its side wins.
+  for (const b of buildings.values()) {
+    if (!uplinkOn || b.kind !== 'uplink' || b.doneAt === undefined || time - b.doneAt < UPLINK.hold || !slots[b.seat]?.alive) continue;
+    wonBy = 'uplink';
+    game.hud.banner('Uplink online', `${slots[b.seat]!.name}’s side wins by the Satellite Uplink`, { duration: 4 });
+    checkEnd(game, true, teamOf(b.seat));
+    return;
+  }
   flares = flares.filter((f) => f.until > time);
   sampleIn -= dt;
   if (sampleIn <= 0) {
@@ -832,6 +929,39 @@ function healTick(dt: number): void {
   for (const u of units.values()) {
     if (u.hp >= u.max || u.inside || u.seat === NEUTRAL || time - u.hitAt < HEAL.calm) continue;
     if (posts.some((b) => teamOf(b.seat) === teamOf(u.seat) && dist(b.x, b.z, u.x, u.z) < BUILDINGS[b.kind].radius + HEAL.radius)) u.hp = Math.min(u.max, u.hp + u.max * HEAL.rate * 0.5);
+    // (Field Medicine: anywhere, at a third of the rate.)
+    else if (has(u.seat, 'medicine')) u.hp = Math.min(u.max, u.hp + u.max * HEAL.rate * 0.5 * 0.34);
+  }
+}
+
+/**
+ * Medics: each heals the most hurt of its side's people on foot in reach (not itself), as it goes;
+ * one standing about with no one to see to walks to the nearest hurt one not far off (unless holding its ground).
+ */
+function medicTick(dt: number): void {
+  for (const m of units.values()) {
+    if (m.kind !== 'medic' || m.inside) continue;
+    let best: Unit | null = null;
+    let worst = 1;
+    let near: Unit | null = null;
+    let nd = MEDIC.seek;
+    for (const v of units.values()) {
+      if (v === m || v.inside || v.hp >= v.max || ARMOR[v.kind] !== 'infantry' || teamOf(v.seat) !== teamOf(m.seat)) continue;
+      const d = dist(m.x, m.z, v.x, v.z);
+      if (d <= MEDIC.reach && v.hp / v.max < worst) {
+        worst = v.hp / v.max;
+        best = v;
+      }
+      if (d < nd) {
+        nd = d;
+        near = v;
+      }
+    }
+    if (best) {
+      best.hp = Math.min(best.max, best.hp + MEDIC.rate * dt);
+      m.busy = time;
+      if (m.order.t === 'idle') m.yaw = Math.atan2(best.x - m.x, best.z - m.z);
+    } else if (near && m.order.t === 'idle' && m.stance === 0) step(m, near.x, near.z, dt, MEDIC.reach - 2);
   }
 }
 
@@ -862,7 +992,7 @@ function trainTick(game: GameContext, b: Building, dt: number): void {
   // (Its pop was counted when it was queued.)
   slots[b.seat]!.pop -= UNITS[q.kind].pop;
   if (b.rally) {
-    let at = rallySpot(b.seat, b.rally.x, b.rally.z);
+    let at = rallySpot(b.seat, b.rally.x, b.rally.z, SPACE[q.kind]);
     if (u.lake >= 0) at = inside(u.lake, at.x, at.z);
     u.order = { t: 'move', x: at.x, z: at.z, attack: q.kind !== 'engineer' };
   }
@@ -944,7 +1074,9 @@ function towerTick(game: GameContext, b: Building, dt: number): void {
   if (b.cool > 0) return;
   const e = nearestEnemy(b.seat, b.x, b.z, g.range * (has(b.seat, 'optics') ? 1.2 : 1), g.hits);
   if (!e) return;
-  b.cool = 1 / g.rate;
+  // (The HQ fires faster for the engineers sheltering in it.)
+  const crew = b.kind === 'hq' ? cargo(b.id, false).filter((u) => u.kind === 'engineer').length : 0;
+  b.cool = 1 / (g.rate * (1 + ALARM.boost * crew));
   const dmg = g.damage * (has(b.seat, 'ordnance') ? 1.2 : 1);
   shots.push({ x: round1(b.x), y: FLOOR + 7, z: round1(b.z), tx: round1(e.x), ty: FLOOR + heightAt(e.x, e.z) + 1.5, tz: round1(e.z), big: false, k: -1 });
   if (e.building) damageBuilding(game, e.id, dmg, b.seat);
@@ -1205,7 +1337,7 @@ function findPath(x0: number, z0: number, x1: number, z1: number, team = -1): { 
 function move(u: Unit, tx: number, tz: number, dt: number, stop: number): boolean {
   const d = dist(u.x, u.z, tx, tz);
   if (d <= stop) return true;
-  const k = Math.min(UNITS[u.kind].speed * (u.sprintUntil > time ? RETREAT.speed : 1) * dt, d - stop) / d;
+  const k = Math.min(UNITS[u.kind].speed * (u.sprintUntil > time ? RETREAT.speed : 1) * (ARMOR[u.kind] !== 'infantry' && has(u.seat, 'engines') ? 1.15 : 1) * dt, d - stop) / d;
   u.x += (tx - u.x) * k;
   u.z += (tz - u.z) * k;
   u.yaw = Math.atan2(tx - u.x, tz - u.z);
@@ -1385,6 +1517,23 @@ function unitTick(game: GameContext, u: Unit, dt: number): void {
     return;
   }
   if (o.t === 'gather') return gatherTick(game, u, o, dt);
+  if (o.t === 'repair' && o.unit) {
+    // A vehicle: up to it, and mended, as long as it stays put long enough (it's followed if it moves).
+    const v = units.get(o.id);
+    if (!v || v.hp >= v.max || teamOf(v.seat) !== teamOf(u.seat) || v.inside) {
+      u.order = u.next.shift() ?? { t: 'idle' };
+      return;
+    }
+    // (From as near as the crowding lets it get: they keep their distance from a tank.)
+    const r = (SPACE[v.kind] + SPACE[u.kind]) / 2 + 1;
+    if (dist(u.x, u.z, v.x, v.z) > r) step(u, v.x, v.z, dt, r - 0.4);
+    else {
+      u.yaw = Math.atan2(v.x - u.x, v.z - u.z);
+      u.busy = time;
+      v.hp = Math.min(v.max, v.hp + v.max * REPAIR_UNIT * dt * (has(u.seat, 'logistics') ? 1.3 : 1));
+    }
+    return;
+  }
   if (o.t === 'repair') {
     const b = buildings.get(o.id);
     if (!b || b.built < 1 || b.hp >= BUILDINGS[b.kind].hp) {
@@ -1419,9 +1568,10 @@ function unitTick(game: GameContext, u: Unit, dt: number): void {
       const before = b.built;
       b.built = Math.min(1, b.built + (dt * (has(u.seat, 'logistics') ? 1.3 : 1)) / BUILDINGS[b.kind].time);
       b.hp = Math.min(BUILDINGS[b.kind].hp, b.hp + (BUILDINGS[b.kind].hp * 0.8 * dt) / BUILDINGS[b.kind].time);
-      b.prop.position.set(b.x, sunk(b.kind, b.built) + rise(b.kind, b.x, b.z), b.z);
+      grow(b);
       if (before < 1 && b.built >= 1) {
         if (!BUILDINGS[b.kind].wall) slots[b.seat]!.stats.built++;
+        if (b.kind === 'uplink') uplinkUp(game, b);
         recap(b.seat);
         dirty = true;
       }
@@ -1664,6 +1814,16 @@ function addSalvage(game: GameContext, x: number, z: number, amount: number, scr
   dirty = true;
 }
 
+/** An uplink finished: its clock starts, and everyone on the map is told (and sees it from now on). */
+function uplinkUp(game: GameContext, b: Building): void {
+  b.doneAt = time;
+  const s = slots[b.seat]!;
+  const m = Math.floor(UPLINK.hold / 60);
+  game.hud.banner('Satellite Uplink', `${s.name} has finished an uplink. Destroy it within ${m} minutes, or their side wins`, { duration: 4 });
+  game.hud.feed(`${s.name} has finished a Satellite Uplink`, { color: TEAM_COLORS[b.seat % TEAM_COLORS.length] });
+  for (const o of slots) if (o?.player && o.team !== s.team) game.clients.send(o.player, 'alert', { x: round1(b.x), z: round1(b.z), what: 'An enemy uplink is online: destroy it!' });
+}
+
 /** Tell a human their things are under attack (at most every eight seconds), with where. */
 const alertedAt = new Map<number, number>();
 function alert(game: GameContext, seat: number, x: number, z: number, what: string): void {
@@ -1735,6 +1895,10 @@ function damageBuilding(game: GameContext, id: number, amount: number, by: numbe
   b.prop.remove();
   buildings.delete(id);
   gridDirty = true;
+  if (b.kind === 'uplink' && b.doneAt !== undefined) {
+    game.hud.banner('Uplink destroyed', `${slots[b.seat]!.name}’s Satellite Uplink is down`, { duration: 3 });
+    game.hud.feed(`${slots[b.seat]!.name}’s uplink has been destroyed`, { color: TEAM_COLORS[b.seat % TEAM_COLORS.length] });
+  }
   if (b.kind === 'hq') {
     game.hud.feed(`${slots[b.seat]!.name}’s headquarters has fallen`, { color: TEAM_COLORS[b.seat % TEAM_COLORS.length] });
     slots[b.seat]!.player?.hud.pop('Headquarters lost', { sub: `Your base falls in ${HQ_FALL} seconds`, color: '#f04438' });
@@ -1796,6 +1960,16 @@ function board(u: Unit, o: { id: number; boat: boolean }): void {
   dirty = true;
 }
 
+/** The alarm: a side's engineers near its HQ run into it, nearest first, as many as there's room for. How many went. */
+function ringAlarm(seat: number): number {
+  const b = [...buildings.values()].find((x) => x.seat === seat && x.kind === 'hq' && x.built >= 1);
+  if (!b) return 0;
+  const room = (BUILDINGS.hq.holds ?? 0) - cargo(b.id, false).length - [...units.values()].filter((u) => u.order.t === 'enter' && !u.order.boat && u.order.id === b.id).length;
+  const go = [...units.values()].filter((u) => u.seat === seat && u.kind === 'engineer' && !u.inside && u.order.t !== 'enter' && dist(u.x, u.z, b.x, b.z) < ALARM.reach).sort((p, q) => dist(p.x, p.z, b.x, b.z) - dist(q.x, q.z, b.x, b.z)).slice(0, Math.max(0, room));
+  for (const u of go) give(u, { t: 'enter', id: b.id, boat: false }, false);
+  return go.length;
+}
+
 /** Everyone out of a bunker (round it) or a transport (onto the shore nearest it, which it must be near). */
 function unload(id: number, boat: boolean): boolean {
   const held = cargo(id, boat);
@@ -1830,7 +2004,8 @@ function unload(id: number, boat: boolean): boolean {
     u.inside = null;
     u.x = u.px = Math.max(-HALF, Math.min(HALF, spots[i].x));
     u.z = u.pz = Math.max(-HALF, Math.min(HALF, spots[i].z));
-    u.order = { t: 'idle' };
+    // (Engineers let out go back to work.)
+    u.order = (!boat && u.kind === 'engineer' && gatherOrder(u)) || { t: 'idle' };
   });
   dirty = true;
   return true;
@@ -1900,11 +2075,11 @@ function formation(list: Unit[], x: number, z: number, attack: boolean, queue = 
 }
 
 /** Where the next unit out of a building takes its place at the rally point: round it in a spiral, not on top of the last. */
-function rallySpot(seat: number, x: number, z: number): { x: number; z: number } {
-  const k = [...units.values()].filter((u) => u.seat === seat && u.order.t === 'idle' && dist(u.x, u.z, x, z) < 14).length;
+function rallySpot(seat: number, x: number, z: number, room = 3.4): { x: number; z: number } {
+  const k = [...units.values()].filter((u) => u.seat === seat && u.order.t === 'idle' && dist(u.x, u.z, x, z) < 14 + room).length;
   if (!k) return { x, z };
   const a = k * 2.4;
-  const r = 3.4 * Math.sqrt(k);
+  const r = Math.max(3.4, room) * Math.sqrt(k);
   return { x: Math.max(-HALF + 2, Math.min(HALF - 2, x + Math.cos(a) * r)), z: Math.max(-HALF + 2, Math.min(HALF - 2, z + Math.sin(a) * r)) };
 }
 
@@ -1950,8 +2125,8 @@ function crowd(): void {
   }
 }
 
-function checkEnd(game: GameContext, force = false): void {
-  const alive = slots.filter((s): s is Slot => !!s && s.alive && s.seat !== NEUTRAL);
+function checkEnd(game: GameContext, force = false, team?: number): void {
+  const alive = slots.filter((s): s is Slot => !!s && s.alive && s.seat !== NEUTRAL && (team === undefined || s.team === team));
   const teams = new Set(alive.map((s) => s.team));
   if (teams.size > 1 && !force) return;
   phase = 'over';
@@ -2015,6 +2190,8 @@ function place(game: GameContext, seat: number, kind: BuildingKind, x: number, z
   if (!s || !BUILDABLE.includes(kind) || ageOf(s.techs) < (AGE_NEEDS[kind] ?? 1) || !canAfford(s, def.cost) || Math.abs(x) > HALF - (def.wall ? 1 : 6) || Math.abs(z) > HALF - (def.wall ? 1 : 6)) return false;
   const needs = NEEDS[kind];
   if (needs && ![...buildings.values()].some((b) => b.seat === seat && b.kind === needs && b.built >= 1)) return false;
+  // (One uplink each, and none in Last Stand: there's no one to win against there.)
+  if (kind === 'uplink' && (!uplinkOn || [...buildings.values()].some((b) => b.seat === seat && b.kind === 'uplink'))) return false;
   // A length of wall or a gate: on its cell of the grid, hard up against whatever's beside it, and over
   // hills. Not on a cell that's shut already (a tree, a rock, a building, the water): that's wall enough.
   const wall = !!def.wall;
@@ -2122,10 +2299,12 @@ function world(game: GameContext): World {
     relics,
     peaceUntil,
     rally: (seat) => useRally(game, seat),
+    alarm: (seat) => ringAlarm(seat),
     unload,
     canDock,
     train,
     stand: mode === 'stand',
+    uplinkOn,
     drops,
     minesOf: (seat) => mines.filter((m) => m.seat === seat).length,
     ability: (seat, ids, kind, x, z) => {
@@ -2206,7 +2385,8 @@ function order(game: GameContext, player: Player, name: string, data: unknown): 
     const building = d.building === true;
     const t = targetOf({ id: Number(d.id), building });
     const team = building ? teamOf(buildings.get(Number(d.id))?.seat ?? -1) : teamOf(units.get(Number(d.id))?.seat ?? -1);
-    if (t && team !== slot.team) for (const u of us) give(u, { t: 'attack', id: Number(d.id), building }, queue);
+    // (The unarmed, a medic or a transport, go along to it instead.)
+    if (t && team !== slot.team) for (const u of us) give(u, UNITS[u.kind].damage > 0 ? { t: 'attack', id: Number(d.id), building } : { t: 'move', x: t.x, z: t.z, attack: false }, queue);
   } else if (name === 'gather') {
     const n = nodes[Number(d.id)];
     if (n && n.amount > 0) for (const u of us) if (u.kind === 'engineer') give(u, { t: 'gather', node: n.id, phase: u.carry >= CARRY ? 'back' : 'to' }, queue);
@@ -2241,6 +2421,9 @@ function order(game: GameContext, player: Player, name: string, data: unknown): 
   } else if (name === 'autoplay') {
     slot.bot = slot.bot ? null : new BotBrain(0.7, typeof d.style === 'string' && d.style in STYLES ? (d.style as Style) : undefined);
     player.hud.toast(slot.bot ? 'A bot is playing for you (press again to take over)' : 'You\u2019re in command');
+  } else if (name === 'repair' && d.unit === true) {
+    const v = units.get(Number(d.id));
+    if (v && teamOf(v.seat) === slot.team && ARMOR[v.kind] === 'vehicle' && !UNITS[v.kind].naval) for (const u of us) if (u.kind === 'engineer') give(u, { t: 'repair', id: v.id, unit: true }, queue);
   } else if (name === 'repair') {
     const b = buildings.get(Number(d.id));
     if (b && teamOf(b.seat) === slot.team) for (const u of us) if (u.kind === 'engineer') give(u, { t: 'repair', id: b.id }, queue);
@@ -2260,6 +2443,9 @@ function order(game: GameContext, player: Player, name: string, data: unknown): 
     if (b && b.seat === slot.seat && TECH_IDS.includes(d.tech as TechId)) {
       if (!research(b, d.tech as TechId)) player.hud.toast('Can\u2019t research that now');
     }
+  } else if (name === 'alarm') {
+    // The alarm: the engineers near the HQ run into it, nearest first, as many as there's room for.
+    if (!ringAlarm(slot.seat)) player.hud.toast('No engineers near enough (or no room)');
   } else if (name === 'enter') {
     const boat = d.boat === true;
     const id = Number(d.id);
@@ -2335,6 +2521,10 @@ function orderPoint(o: Order): [number, number, number] | null {
     const n = nodes[o.node];
     return n ? [3, round1(n.x), round1(n.z)] : null;
   }
+  if (o.t === 'repair' && o.unit) {
+    const v = units.get(o.id);
+    return v ? [4, round1(v.x), round1(v.z)] : null;
+  }
   if (o.t === 'build' || o.t === 'repair') {
     const b = buildings.get(o.id);
     return b ? [4, round1(b.x), round1(b.z)] : null;
@@ -2353,7 +2543,7 @@ function tell(game: GameContext, dt: number): void {
       .map((s) => ({ seat: s.seat, name: s.name, team: s.team, color: s.seat % TEAM_COLORS.length, human: !!s.player, steel: Math.floor(s.steel), oil: Math.floor(s.oil), pop: s.pop, cap: s.cap, alive: s.alive, doctrine: s.doctrine, units: [...units.values()].filter((u) => u.seat === s.seat).length, buildings: [...buildings.values()].filter((b) => b.seat === s.seat).length, powerIn: Math.max(0, Math.ceil(s.powerAt - time)), rallyIn: Math.max(0, Math.ceil(s.rallyAt - time)), hero: [...units.values()].some((u) => u.seat === s.seat && u.kind === 'hero'), techs: [...s.techs], trade: [tradeGet('steel', priceNow(s, 'steel')), tradeGet('oil', priceNow(s, 'oil'))], style: s.bot?.style ?? '', worth: [...units.values()].filter((u) => u.seat === s.seat && u.kind !== 'engineer').reduce((a, u) => a + UNITS[u.kind].cost.steel + UNITS[u.kind].cost.oil, 0), income: Math.round(s.stats.steel + s.stats.oil - (s.banked[s.banked.length - 6] ?? 0)) }));
     const mine: Record<string, number> = {};
     for (const s of slots) if (s?.player) mine[s.player.id] = s.seat;
-    const state: State = { phase, mode, seats, mine, peaceUntil, watchers: phase === 'lobby' ? lobby.watchers.map((w) => w.name) : game.players.filter((p) => !slotOf(p)).map((p) => p.name), deposits: nodes.map((n) => Math.floor(n.amount)), salvage: nodes.filter((n) => n.salvage && n.amount > 0).map((n) => ({ id: n.id, x: n.x, z: n.z, scrap: n.scrap!, kind: 'steel' as const })), relics: relics.map((r) => ({ owner: r.owner, pct: Math.round((r.progress / RELIC.hold) * 100) })), drops: drops.map((x) => ({ id: x.id, x: x.x, z: x.z, landIn: Math.max(0, x.at - time) })), ...(mode === 'stand' && phase !== 'lobby' ? { stand: { wave, total: STAND.total, nextIn: wave < STAND.total ? Math.ceil(waveIn) : 0, left: [...units.values()].filter((u) => u.seat === STAND.seat).length } } : {}), time: Math.floor(time), winners, ...(phase === 'lobby' ? { lobby } : {}), ...(phase === 'briefing' ? { briefing: Math.ceil(briefingLeft) } : {}), ...(summary ? { summary } : {}) };
+    const state: State = { phase, mode, seats, mine, peaceUntil, watchers: phase === 'lobby' ? lobby.watchers.map((w) => w.name) : game.players.filter((p) => !slotOf(p)).map((p) => p.name), deposits: nodes.map((n) => Math.floor(n.amount)), salvage: nodes.filter((n) => n.salvage && n.amount > 0).map((n) => ({ id: n.id, x: n.x, z: n.z, scrap: n.scrap!, kind: 'steel' as const })), relics: relics.map((r) => ({ owner: r.owner, pct: Math.round((r.progress / RELIC.hold) * 100) })), drops: drops.map((x) => ({ id: x.id, x: x.x, z: x.z, landIn: Math.max(0, x.at - time) })), ...(mode === 'stand' && phase !== 'lobby' ? { stand: { wave, total: STAND.total, nextIn: wave < STAND.total ? Math.ceil(waveIn) : 0, left: [...units.values()].filter((u) => u.seat === STAND.seat).length } } : {}), time: Math.floor(time), winners, wonBy, uplinkOn, uplinks: [...buildings.values()].filter((b) => b.kind === 'uplink').map((b) => ({ seat: b.seat, x: round1(b.x), z: round1(b.z), left: b.doneAt === undefined ? -1 : Math.max(0, Math.ceil(UPLINK.hold - (time - b.doneAt))) })), ...(phase === 'lobby' ? { lobby } : {}), ...(phase === 'briefing' ? { briefing: Math.ceil(briefingLeft) } : {}), ...(summary ? { summary } : {}) };
     game.clients.send('all', 'state', state);
   }
   if (phase === 'lobby') return;
@@ -2377,7 +2567,7 @@ function tell(game: GameContext, dt: number): void {
       const u: number[] = [];
       for (const v of units.values()) if (!v.inside && (teamOf(v.seat) === mineTeam || seen(v.x, v.z))) u.push(v.id, UNIT_ORDER.indexOf(v.kind), v.seat, round1(v.x), round1(v.z), Math.round((v.hp / v.max) * 100), Math.round(v.yaw * 10), (time - v.busy < 0.3 ? 1 : 0) + (v.carry > 0 ? (v.carryRes === 'oil' ? 4 : 2) : 0) + (v.order.t === 'idle' ? 8 : 0) + rankOf(v.xp) * 16 + (heightAt(v.x, v.z) >= 1 ? 64 : 0) + v.stance * 128 + (UNITS[v.kind].holds ? cargo(v.id, true).length * 512 : 0));
       const b: number[] = [];
-      for (const v of buildings.values()) if (teamOf(v.seat) === mineTeam || seen(v.x, v.z)) b.push(v.id, BUILDING_ORDER.indexOf(v.kind), v.seat, round1(v.x), round1(v.z), Math.round((v.hp / BUILDINGS[v.kind].hp) * 100), Math.round(v.built * 100), v.research ? 1000 + Math.round((v.research.t / TECHS[v.research.id].time) * 100) + TECH_IDS.indexOf(v.research.id) * 1000 : v.queue.length ? Math.round((v.queue[0].t / UNITS[v.queue[0].kind].time) * 100) : -1, BUILDINGS[v.kind].holds ? cargo(v.id, false).length : 0);
+      for (const v of buildings.values()) if (teamOf(v.seat) === mineTeam || v.kind === 'uplink' || seen(v.x, v.z)) b.push(v.id, BUILDING_ORDER.indexOf(v.kind), v.seat, round1(v.x), round1(v.z), Math.round((v.hp / BUILDINGS[v.kind].hp) * 100), Math.round(v.built * 100), v.research ? 1000 + Math.round((v.research.t / TECHS[v.research.id].time) * 100) + TECH_IDS.indexOf(v.research.id) * 1000 : v.queue.length ? Math.round((v.queue[0].t / UNITS[v.queue[0].kind].time) * 100) : -1, BUILDINGS[v.kind].holds ? cargo(v.id, false).length : 0);
       game.clients.send(sl.player, 'u', u);
       game.clients.send(sl.player, 'b', b);
       // What each of this side's buildings has in hand, and where its units are bound.

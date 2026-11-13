@@ -54,6 +54,10 @@ export function setupSounds(c: Client): void {
       s.noise({ duration: 0.05, from: 4200 * p, to: 1100 * p, filter: 'bandpass', q: 1, volume: 0.28, delay: i * 0.065 });
     }
   });
+  // The HQ's alarm: a bell struck three times (a fundamental and its inharmonic partials, ringing out).
+  a.define('cm_bell', (s) => {
+    for (let i = 0; i < 3; i++) for (const [f, v] of [[660, 0.32], [1584, 0.14], [2280, 0.08], [330, 0.12]] as const) s.tone({ wave: 'sine', from: f, duration: 1.1, volume: v, delay: i * 0.42, attack: 0.002 });
+  }, { reverb: 0.4 });
   // Coming in, then tearing away.
   a.define('cm_jet', (s) => {
     s.noise({ duration: 1.5, from: 420, to: 3200, filter: 'bandpass', q: 0.6, volume: 0.55, attack: 0.9 });
@@ -129,6 +133,7 @@ const LINES: Record<'select' | 'move' | 'attack', Partial<Record<UnitKind | 'any
     aa: ['Flak up.', 'Watching the skies.'],
     heli: ['Air support here.', 'Rotors turning.'],
     hero: ['Commander here.', 'With you.'],
+    medic: ['Medic here.', 'Who needs patching?', 'Patching up.'],
     gunboat: ['Gunboat ready.', 'Decks clear.'],
     transport: ['Transport here.', 'Room aboard.'],
   },

@@ -154,3 +154,6 @@ export function toGround(sx: number, sy: number, y = FLOOR): { x: number; z: num
   const t = (y - b.py) / dy;
   return { x: b.px + dx * t, z: b.pz + dz * t };
 }
+
+// (For the automated screenshots: the view can be put anywhere.)
+(globalThis as { __commandCam?: unknown }).__commandCam = { cam, look: (x: number, z: number, d: number) => Object.assign(cam, { x, z, dist: (goal = d) }) };
