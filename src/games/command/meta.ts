@@ -20,7 +20,7 @@ export default defineMeta({
     ['P', "call your doctrine's special power"],
     ['Double click', 'select every unit of that kind on screen'],
     ['H', 'halt'],
-    ['T', 'stance: aggressive · hold ground · hold fire'],
+    ['T', 'stance: aggressive · hold ground · hold fire (troops shot at on the move fight back, unless holding fire)'],
     ['Right click a bunker / transport', 'infantry go in (U lets them out; a transport lands them on the nearest shore)'],
     ['M / G (engineer)', 'build a bunker / a dock on a lake shore (gunboats and transports)'],
     ['Hills', 'high ground reaches and sees further, and is harder to hit from below'],

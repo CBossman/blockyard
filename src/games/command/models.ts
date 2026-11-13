@@ -58,7 +58,7 @@ export const FLAGS: Record<string, string> = { flag_0: flag0, flag_1: flag1, fla
 const TALL: Record<string, number> = { engineer: 2.6, rifle: 2.6, at: 2.6, guard: 2.7, hero: 3.3, medic: 2.6 };
 const LONG: Record<string, number> = { scout: 3.3, tank: 6.2, artillery: 6.8, aa: 5.3, heli: 7.2, brute: 5.3, gunboat: 7.2, transport: 6.6 };
 const WIDE: Record<string, number> = {
-  hq: 10.6, depot: 5.6, barracks: 7.8, factory: 9.6, airfield: 10.6, lab: 7.2, tower: 4.4, bunker: 5.6, dock: 7.2, rampart: 3, gate: 3, market: 7.2, uplink: 9.6,
+  hq: 10.6, depot: 5.6, barracks: 7.8, factory: 9.6, airfield: 10.6, lab: 7.2, tower: 4.4, bunker: 5.6, dock: 7.2, rampart: 3, gate: 9, market: 7.2, uplink: 9.6,
   steel: 5.6, oil: 2.1, crate: 1.1, drum: 0.9, scorch: 1, shell: 0.34, mine: 1.5, airdrop: 2.9, chute: 7.4, tracks: 3.2,
   rubble: 5.6, house: 5.6, hut: 3.8, wall: 5.4, tent: 5.6, relic: 4.8, ruin: 5.4, henge: 5.6,
 };
@@ -75,6 +75,8 @@ export const SCALE: Record<string, number> = {
   ...Object.fromEntries([...Object.keys(TALL), ...Object.keys(LONG), ...Object.keys(WIDE)].map((k) => [k, fit(k)])),
   // The rotor turns over the helicopter, at its scale.
   rotor: fit('heli'),
+  // A gate's doors, at the gatehouse's scale.
+  gate_door: fit('gate'),
 };
 
 /** Models set on the field that aren't units, buildings or steel and oil: the camps' caches, and the scrap. */

@@ -506,7 +506,7 @@ function walls() {
   const annS = state().mine[ann];
   const bobS = state().mine[bob];
   const list = (id: string) => { const a = heard.get(id)!.get('u') as number[]; const o: { id: number; kind: number; seat: number; x: number; z: number }[] = []; for (let i = 0; i < a.length; i += 8) o.push({ id: a[i], kind: a[i + 1], seat: a[i + 2], x: a[i + 3], z: a[i + 4] }); return o; };
-  const blds = () => { const a = heard.get(ann)!.get('b') as number[]; const o: { id: number; kind: number; seat: number; x: number; z: number; hp: number; built: number }[] = []; for (let i = 0; i < a.length; i += 9) o.push({ id: a[i], kind: a[i + 1], seat: a[i + 2], x: a[i + 3], z: a[i + 4], hp: a[i + 5], built: a[i + 6] }); return o; };
+  const blds = () => { const a = heard.get(ann)!.get('b') as number[]; const o: { id: number; kind: number; seat: number; x: number; z: number; hp: number; built: number; state: number }[] = []; for (let i = 0; i < a.length; i += 9) o.push({ id: a[i], kind: a[i + 1], seat: a[i + 2], x: a[i + 3], z: a[i + 4], hp: a[i + 5], built: a[i + 6], state: a[i + 8] }); return o; };
   const RAMPART = BUILDING_ORDER.indexOf('rampart');
   const GATE = BUILDING_ORDER.indexOf('gate');
   const steel = () => state().seats.find((s) => s.seat === annS)!.steel;
@@ -544,12 +544,27 @@ function walls() {
   // A gate in place of a length of it (the middle of one side), and he's out.
   send(ann, 'build', { kind: 'gate', x: C.x, z: C.z - k, ids: engineers });
   step(1);
-  check(ring().filter((b) => b.kind === GATE).length === 1 && ring().length === 16, 'walls: a gate takes the place of a length of wall');
+  check(ring().filter((b) => b.kind === GATE).length === 1 && ring().length === 14, `walls: a gatehouse takes the place of three lengths of wall (${ring().length} pieces)`);
   for (let t = 0; t < 60 && ring().some((b) => b.built < 100); t += 3) step(3);
   check(ring().every((b) => b.built >= 100), 'walls: and is built');
   send(ann, 'move', { ids: [man.id], x: BASES[annS].x, z: BASES[annS].z });
   step(15);
   check(Math.hypot(at().x - C.x, at().z - C.z) > 9, `walls: its own side goes out through the gate (${Math.hypot(at().x - C.x, at().z - C.z).toFixed(1)} from the middle)`);
+  // Back in: the doors open for him as he comes near. Locked, they stay shut, and he's walled in; unlocked, he's out again.
+  send(ann, 'move', { ids: [man.id], x: C.x, z: C.z });
+  step(15);
+  const gate = () => ring().find((b) => b.kind === GATE)!;
+  check(Math.hypot(at().x - C.x, at().z - C.z) < 3 && (gate().state & 4) !== 0, `gates: he comes back in, and its doors stand open while he's near (state ${gate().state})`);
+  send(ann, 'lock', { id: gate().id });
+  step(2);
+  check((gate().state & 2) !== 0 && (gate().state & 4) === 0, `gates: locked, its doors shut (state ${gate().state})`);
+  send(ann, 'move', { ids: [man.id], x: BASES[annS].x, z: BASES[annS].z });
+  step(12);
+  check(Math.abs(at().x - C.x) < 5 && Math.abs(at().z - C.z) < 5, `gates: and no one gets through a locked gate, not even its own side (${(at().x - C.x).toFixed(1)}, ${(at().z - C.z).toFixed(1)})`);
+  send(ann, 'lock', { id: gate().id });
+  send(ann, 'move', { ids: [man.id], x: BASES[annS].x, z: BASES[annS].z });
+  step(15);
+  check(Math.hypot(at().x - C.x, at().z - C.z) > 9, `gates: unlocked, he's out again (${Math.hypot(at().x - C.x, at().z - C.z).toFixed(1)} from the middle)`);
   // Bob's riflemen, sent to fight in the middle of the ring: no way in, so they shoot one.
   const raiders = list(bob).filter((u) => u.seat === bobS && u.kind === 1).map((u) => u.id);
   send(bob, 'move', { ids: raiders, x: C.x, z: C.z, attack: true });
@@ -559,9 +574,9 @@ function walls() {
   const within = () => list(bob).some((u) => raiders.includes(u.id) && Math.abs(u.x - C.x) < 4 && Math.abs(u.z - C.z) < 4);
   for (let t = 0; t < 300 && !inside; t += 3) {
     step(3);
-    if (ring().length < 16 || ring().some((b) => b.hp < 100)) hurt = true;
-    if (ring().length === 16 && within()) early = true;
-    inside = ring().length < 16 && within();
+    if (ring().length < 14 || ring().some((b) => b.hp < 100)) hurt = true;
+    if (ring().length === 14 && within()) early = true;
+    inside = ring().length < 14 && within();
   }
   check(raiders.length > 0 && hurt, `walls: an enemy with no way in shoots at the wall (${raiders.length} riflemen)`);
   check(!early && inside, `walls: and comes in through the breach, not before (${ring().length} lengths left, early ${early})`);
@@ -924,6 +939,8 @@ export default function command() {
   ranks();
   elites();
   botSense();
+  routes();
+  errands();
 }
 
 /** A mixed army sent a long way: it keeps together on the march, and arrives armour in front, guns at the back. */
@@ -1049,4 +1066,103 @@ function botSense() {
   }
   const tanks = [...got.values()];
   check(tanks.length > 0 && tanks.some((d) => d > 12), `bots: badly hurt and far from home, they pull out of the fight (${tanks.map((d) => d.toFixed(0)).join(', ')} from where they were)`);
+}
+
+/** A tank put down in the slot between a factory and a wall finds its way out and round, not stuck against either. */
+function routes() {
+  const h = launch('command', { seed: 6 });
+  const player = h.ctx.player.id;
+  const state = () => h.find('message', 'state').at(-1)?.args[0] as State;
+  const units = () => h.find('message', 'u').at(-1)?.args[0] as number[];
+  const lobby = (data: object) => h.send({ t: 'game', player, name: 'lobby', data });
+  h.run(1);
+  lobby({ op: 'preset', preset: 'ffa' });
+  lobby({ op: 'peace', peace: 10 });
+  lobby({ op: 'start' });
+  h.run(9);
+  const me = Object.values(state().mine)[0];
+  const B = BASES[me];
+  // Open ground a way out from the base.
+  const free = (x: number, z: number) => [...TREES, ...deposits()].every((t) => Math.hypot(t.x - x, t.z - z) > 16) && [...LAKES, ...MESAS].every((l) => Math.hypot(l.x - x, l.z - z) > l.r + 20) && heightAt(x, z) === 0;
+  let S = { x: wallSnap(B.x * 0.5), z: wallSnap(B.z * 0.5) };
+  for (let r = 0; r < 14 && !free(S.x, S.z); r++) for (let i = -r; i <= r; i++) for (let j = -r; j <= r; j++) if (!free(S.x, S.z) && free(wallSnap(B.x * 0.5) + i * 3, wallSnap(B.z * 0.5) + j * 3)) S = { x: wallSnap(B.x * 0.5) + i * 3, z: wallSnap(B.z * 0.5) + j * 3 };
+  check(free(S.x, S.z), 'routes: open ground to build on');
+  h.ctx.commands.run(`raise factory ${me} ${S.x} ${S.z}`);
+  // A wall hard up against its east side, longer than the factory, and the tank squeezed in between.
+  const wx = wallSnap(S.x + 6.2);
+  for (let k = -5; k <= 5; k++) h.ctx.commands.run(`raise rampart ${me} ${wx} ${S.z + k * 3}`);
+  h.ctx.commands.run(`army tank 1 ${me} ${S.x + 4.6} ${S.z + 1}`);
+  h.run(0.5);
+  const TANK = UNIT_ORDER.indexOf('tank');
+  const tank = () => { const u = units(); for (let i = 0; i < u.length; i += 8) if (u[i + 2] === me && u[i + 1] === TANK && Math.hypot(u[i + 3] - S.x, u[i + 4] - S.z) < 40) return { id: u[i], x: u[i + 3], z: u[i + 4] }; return null; };
+  const t0 = tank()!;
+  check(!!t0, 'routes: the tank is in the slot');
+  // Sent to the far (west) side of the factory: out of the slot, round the factory.
+  const to = { x: S.x - 16, z: S.z };
+  h.send({ t: 'game', player, name: 'move', data: { ids: [t0.id], x: to.x, z: to.z } });
+  h.run(30);
+  const t1 = tank()!;
+  check(Math.hypot(t1.x - to.x, t1.z - to.z) < 4, `routes: it gets out and round to where it was sent (${Math.hypot(t1.x - to.x, t1.z - to.z).toFixed(1)} off)`);
+}
+
+/**
+ * An engineer sent to build a length of wall goes to it from the side it's on, not round the wall to the
+ * far side; and riflemen walking past an enemy who shoots at them fight back.
+ */
+function errands() {
+  const h = launch('command', { seed: 6 });
+  const player = h.ctx.player.id;
+  const state = () => h.find('message', 'state').at(-1)?.args[0] as State;
+  const units = () => h.find('message', 'u').at(-1)?.args[0] as number[];
+  const lobby = (data: object) => h.send({ t: 'game', player, name: 'lobby', data });
+  const send = (name: string, data: unknown) => h.send({ t: 'game', player, name, data });
+  h.run(1);
+  lobby({ op: 'preset', preset: 'ffa' });
+  lobby({ op: 'peace', peace: 0 });
+  lobby({ op: 'sit', seat: 3 });
+  lobby({ op: 'start' });
+  h.run(9);
+  const me = state().mine[player];
+  const B = BASES[me];
+  // A long wall out from the base, with a gap in the middle of it; an engineer on the east side, told to close the gap.
+  const free = (x: number, z: number) => Math.hypot(x - B.x, z - B.z) > 30 && TREES.every((t) => Math.hypot(t.x - x, t.z - z) > 5) && deposits().every((t) => Math.hypot(t.x - x, t.z - z) > 8) && [...LAKES, ...MESAS].every((l) => Math.hypot(l.x - x, l.z - z) > l.r + 8) && heightAt(x, z) === 0;
+  // (The open spot nearest a little way out from the base, the whole wall's length of it.)
+  const spots: { x: number; z: number }[] = [];
+  for (let x = -HALF + 24; x <= HALF - 24; x += 3) for (let z = -HALF + 24; z <= HALF - 24; z += 3) if ([-18, 0, 18].every((k) => free(wallSnap(x), wallSnap(z) + k))) spots.push({ x: wallSnap(x), z: wallSnap(z) });
+  const W = spots.sort((p, q) => Math.hypot(p.x - B.x * 0.45, p.z - B.z * 0.45) - Math.hypot(q.x - B.x * 0.45, q.z - B.z * 0.45))[0] ?? { x: 0, z: 0 };
+  check(free(W.x, W.z), 'errands: open ground for a wall');
+  for (let k = -6; k <= 6; k++) if (k) h.ctx.commands.run(`raise rampart ${me} ${W.x} ${W.z + k * 3}`);
+  const ENG = UNIT_ORDER.indexOf('engineer');
+  const before = new Set<number>();
+  { const u = units(); for (let i = 0; i < u.length; i += 8) before.add(u[i]); }
+  h.ctx.commands.run(`army engineer 1 ${me} ${W.x + 12} ${W.z + 1}`);
+  h.run(0.3);
+  const eng = () => { const u = units(); for (let i = 0; i < u.length; i += 8) if (u[i + 1] === ENG && !before.has(u[i])) return { id: u[i], x: u[i + 3], z: u[i + 4] }; return null; };
+  const e0 = eng()!;
+  send('wall', { x: W.x, z: W.z, x1: W.x, z1: W.z, ids: [e0.id] });
+  h.run(3);
+  const e1 = eng()!;
+  check(Math.hypot(e1.x - W.x, e1.z - W.z) < 5 && e1.x > W.x, `errands: the engineer goes straight to the gap from its own side, not round the wall to the far side (${(e1.x - W.x).toFixed(1)}, ${(e1.z - W.z).toFixed(1)} from it)`);
+
+  // Riflemen walking past the wild's riflemen (no one's: they stay where they're put and shoot), who shoot at them: they fight back.
+  const RIFLE = UNIT_ORDER.indexOf('rifle');
+  const P = { x: B.x * 0.4, z: B.z * 0.4 };
+  const across = { x: -Math.sign(B.z) * 7, z: Math.sign(B.x) * 7 };
+  h.ctx.commands.run(`army rifle 3 6 ${P.x} ${P.z}`);
+  h.run(0.2);
+  const theirs = () => { const u = units(); const o: number[] = []; for (let i = 0; i < u.length; i += 8) if (u[i + 2] === 6 && u[i + 1] === RIFLE && Math.hypot(u[i + 3] - P.x, u[i + 4] - P.z) < 15) o.push(u[i + 5]); return o; };
+  const seen = new Set<number>();
+  { const u = units(); for (let i = 0; i < u.length; i += 8) seen.add(u[i]); }
+  h.ctx.commands.run(`army rifle 3 ${me} ${P.x - across.x * 3} ${P.z - across.z * 3}`);
+  h.run(0.2);
+  const mine: number[] = [];
+  { const u = units(); for (let i = 0; i < u.length; i += 8) if (u[i + 2] === me && u[i + 1] === RIFLE && !seen.has(u[i])) mine.push(u[i]); }
+  send('move', { ids: mine, x: P.x + across.x * 3, z: P.z + across.z * 3 });
+  // (Watched as it goes: theirs may be out of sight by the end.)
+  let low = 100;
+  for (let t = 0; t < 8; t += 0.5) {
+    h.run(0.5);
+    for (const v of theirs()) low = Math.min(low, v);
+  }
+  check(mine.length === 3 && low < 100, `errands: shot at on the way past, they fight back (the enemy's riflemen down to ${low}%)`);
 }

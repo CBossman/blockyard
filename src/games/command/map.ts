@@ -124,6 +124,32 @@ export function inside(lake: number, x: number, z: number, pad = 2): { x: number
  */
 export const WALL_CELL = 3;
 export const wallSnap = (v: number): number => Math.floor((v + HALF) / WALL_CELL) * WALL_CELL - HALF + WALL_CELL / 2;
+/**
+ * A gate is a gatehouse three cells long, set in a wall line: `axis` 0 runs along x (the way through
+ * is along z), 1 along z. These are its cells, the middle one first.
+ */
+export const gateCells = (x: number, z: number, axis: number): { x: number; z: number }[] => {
+  const cx = wallSnap(x);
+  const cz = wallSnap(z);
+  const ax = axis ? 0 : WALL_CELL;
+  const az = axis ? WALL_CELL : 0;
+  return [{ x: cx, z: cz }, { x: cx - ax, z: cz - az }, { x: cx + ax, z: cz + az }];
+};
+/**
+ * Which way a gate dropped at a spot runs: along the wall it's set in (`wall` says whether a cell has
+ * a length of one's own wall). With wall on neither line, or both, along x.
+ */
+export function gateAxis(x: number, z: number, wall: (x: number, z: number) => boolean): number {
+  const cx = wallSnap(x);
+  const cz = wallSnap(z);
+  let alongX = 0;
+  let alongZ = 0;
+  for (const k of [-2, -1, 1, 2]) {
+    if (wall(cx + k * WALL_CELL, cz)) alongX++;
+    if (wall(cx, cz + k * WALL_CELL)) alongZ++;
+  }
+  return alongZ > alongX ? 1 : 0;
+}
 /** The cells of a wall dragged from one point to another: each next to the last by a side (never only a corner), so nothing on foot slips between. */
 export function wallLine(x0: number, z0: number, x1: number, z1: number, max = 40): { x: number; z: number }[] {
   let x = wallSnap(x0);

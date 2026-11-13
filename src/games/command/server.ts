@@ -1,9 +1,9 @@
 import { defineServer, math, type GameContext, type Player, type Prop, type PropModel } from '@platform';
 import { BotBrain, STYLES, type Style } from './bots';
-import { ABILITIES, DROP, DROP_KINDS, HEAL, MAX_WALLS, MINE, RETREAT, SALVAGE, SPACE, STAND, WAVE_UNITS, wavePay, waveWorth, type Ability, type DropKind, TRADE, tradeGet, UPLINK, MEDIC, ALARM } from './defs';
+import { ABILITIES, DROP, DROP_KINDS, HEAL, MAX_WALLS, MINE, RETREAT, SALVAGE, SPACE, BODY, STAND, WAVE_UNITS, wavePay, waveWorth, type Ability, type DropKind, TRADE, tradeGet, UPLINK, MEDIC, ALARM } from './defs';
 import { DIFFICULTIES, BOARDS, COVER_RANGE, FLANK, fromBehind, HIGH, VET, rankOf, AGE_NEEDS, ARMOR, VERSUS, BUILDABLE, BUILDINGS, ageOf, CARRY, DOCTRINES, DOCTRINE_IDS, GATHER_RATE, HERO, MAX_POP, NEEDS, RELIC, SIGHT, START, TECHS, TECH_IDS, UNITS, type BuildingKind, type DoctrineId, type Mode, type ResKind, type TechId, type UnitKind, type DifficultyId } from './defs';
 import { DRESSING } from './dressing';
-import { BASES, CAMPS, FLOOR, HALF, LAKES, MESAS, TREES, deposits, heightAt, inHill, inLake, inMesa, hashYaw, inside, lakeOf, shore, wallLine, wallSnap, SHUT, type Deposit } from './map';
+import { BASES, CAMPS, FLOOR, HALF, LAKES, MESAS, TREES, deposits, heightAt, inHill, inLake, inMesa, hashYaw, inside, lakeOf, shore, wallLine, wallSnap, gateCells, gateAxis, SHUT, type Deposit } from './map';
 import { DEPOSIT_MODELS, DRESSING as DRESS_MODELS, FLAGS, PORTRAITS, SCALE, modelFor, variantOf } from './models';
 import { BUILDING_ORDER, UNIT_ORDER, type Seat, type Shot, type State, type Summary, type Lobby, type LobbySeat } from './protocol';
 import { shared } from './shared';
@@ -20,7 +20,7 @@ import { TEAM_COLORS } from './defs';
 /** Where an order sends a unit. */
 type Order =
   | { t: 'idle' }
-  | { t: 'move'; x: number; z: number; attack: boolean; /** Which way to face on arriving. */ face?: number; /** The column's marching speed, kept to until near the end. */ pace?: number }
+  | { t: 'move'; x: number; z: number; attack: boolean; /** Which way to face on arriving. */ face?: number; /** The column's marching speed, kept to until near the end. */ pace?: number; /** Getting away: it doesn't turn to fight even when it's shot at. */ flee?: boolean }
   | { t: 'attack'; id: number; building: boolean }
   | { t: 'gather'; node: number; phase: 'to' | 'work' | 'back'; slot?: number; held?: number }
   | { t: 'build'; id: number }
@@ -82,6 +82,9 @@ export interface Unit {
   sprintUntil: number;
   /** When it was last hit (it heals only out of the fighting). */
   hitAt: number;
+  /** Where it was when it last got anywhere, and how many times it has looked again since; a sidestep it's taking to get unstuck. */
+  prog?: { x: number; z: number; t: number; n: number };
+  dodge?: { a: number; until: number };
 }
 
 export interface Building {
@@ -104,6 +107,8 @@ export interface Building {
   lastKind: UnitKind | null;
   /** An uplink: when it was finished (its clock runs from then). */
   doneAt?: number;
+  /** A gate: which way it runs (`gateCells`), how far open its doors are (0..1), whether it's locked, and its doors. */
+  gate?: { axis: number; open: number; locked: boolean; doors: Prop[] };
 }
 
 export interface Slot {
@@ -136,6 +141,7 @@ export interface Slot {
 
 /** A match as the rules (and the bots) see it. */
 export interface World {
+  /** (A gate's `axis`: which way it runs; found from the wall it's set in when not given.) */
   slots: (Slot | null)[];
   units: Map<number, Unit>;
   buildings: Map<number, Building>;
@@ -144,7 +150,7 @@ export interface World {
   enemies(seat: number): Slot[];
   trainable(b: Building, kind: UnitKind): boolean;
   train(b: Building, kind: UnitKind): boolean;
-  place(seat: number, kind: BuildingKind, x: number, z: number, builders: number[]): boolean;
+  place(seat: number, kind: BuildingKind, x: number, z: number, builders: number[], axis?: number): boolean;
   command(ids: number[], seat: number, o: Order): void;
   power(seat: number, x: number, z: number): boolean;
   research(b: Building, tech: TechId): boolean;
@@ -230,7 +236,7 @@ const gone = new Map<string, number>();
 const spokeAt = new Map<string, number>();
 const pingedAt = new Map<string, number>();
 const DRESS_KINDS: string[] = [...DRESS_MODELS].filter((k) => !(UNIT_ORDER as string[]).includes(k) && !(BUILDING_ORDER as string[]).includes(k));
-let models: { kinds: Record<string, PropModel[]>; steel: PropModel; oil: PropModel };
+let models: { kinds: Record<string, PropModel[]>; door: PropModel[]; steel: PropModel; oil: PropModel };
 
 const euler = new math.Euler();
 
@@ -246,7 +252,7 @@ export default defineServer(shared, {
       const model = game.props.gltf(modelFor(k), { radius: 9 });
       kinds[k] = [model];
     }
-    models = { kinds, steel: game.props.gltf(DEPOSIT_MODELS.steel, { radius: 5 }), oil: game.props.gltf(DEPOSIT_MODELS.oil, { radius: 5 }) };
+    models = { kinds, door: [0, 1, 2, 3, 4, 5, 6].map((v) => game.props.gltf(modelFor('gate_door', v), { radius: 4 })), steel: game.props.gltf(DEPOSIT_MODELS.steel, { radius: 5 }), oil: game.props.gltf(DEPOSIT_MODELS.oil, { radius: 5 }) };
 
     // (The interface's pictures of them are items no one carries; each screen draws their looks.)
     for (const id of [...Object.keys(PORTRAITS), ...Object.keys(FLAGS)]) game.items.define(id, { kind: 'misc', name: id });
@@ -411,7 +417,7 @@ export default defineServer(shared, {
 });
 
 function reset(game: GameContext): void {
-  for (const b of buildings.values()) b.prop.remove();
+  for (const b of buildings.values()) unprop(b);
   for (const p of nodeProps.values()) p.remove();
   units = new Map();
   buildings = new Map();
@@ -661,9 +667,42 @@ function mowFor(game: GameContext, kind: BuildingKind, x: number, z: number): vo
   }
 }
 
-function addBuilding(game: GameContext, seat: number, kind: BuildingKind, x: number, z: number, built: boolean): Building {
+/** A building off the field: its model, and a gate's doors. */
+function unprop(b: Building): void {
+  b.prop.remove();
+  for (const d of b.gate?.doors ?? []) d.remove();
+}
+
+/** Where a gate's doors in the gatehouse model hang: their hinges this far either side of the middle (blocks, at the model's scale). */
+const HINGE = (17 / 16) * 3;
+/** A gate's doors, swung as far open as it is (both swing the same way, out of the gatehouse), and hidden until it's built. */
+function hang(b: Building): void {
+  const g = b.gate;
+  if (!g) return;
+  const yaw = g.axis ? Math.PI / 2 : 0;
+  // (Along the wall: x for axis 0, and turned a quarter for axis 1.)
+  const ux = Math.cos(yaw);
+  const uz = -Math.sin(yaw);
+  const swing = (Math.PI / 2) * g.open * 0.92;
+  g.doors.forEach((d, i) => {
+    const side = i ? 1 : -1;
+    d.visible = b.built >= 1;
+    d.position.set(b.x + ux * HINGE * side, b.prop.position.y, b.z + uz * HINGE * side);
+    // The left one runs from its hinge towards the middle (+x), the right one (turned round) the other way.
+    d.quaternion.setFromEuler(euler.set(0, yaw + (i ? Math.PI : 0) + (i ? swing : -swing), 0));
+  });
+}
+
+function addBuilding(game: GameContext, seat: number, kind: BuildingKind, x: number, z: number, built: boolean, axis = 0): Building {
   const prop = game.props.spawn(models.kinds[kind][variantOf(seat)], { position: { x, y: FLOOR + rise(kind, x, z), z }, scale: SCALE[kind] * growth(built ? 1 : 0) });
   const b: Building = { id: nextId++, seat, kind, x, z, hp: built ? BUILDINGS[kind].hp : BUILDINGS[kind].hp * 0.2, built: built ? 1 : 0, loop: false, lastKind: null, prop, queue: [], rally: null, research: null, cool: 0 };
+  if (kind === 'gate') {
+    prop.quaternion.setFromEuler(euler.set(0, axis ? Math.PI / 2 : 0, 0));
+    // (Its two doors, hung on the gatehouse's towers: shown once it's built.)
+    const doors = [0, 1].map(() => game.props.spawn(models.door[variantOf(seat)], { position: { x, y: FLOOR, z }, scale: SCALE.gate_door }));
+    b.gate = { axis, open: 0, locked: false, doors };
+    hang(b);
+  }
   buildings.set(b.id, b);
   gridDirty = true;
   recap(seat);
@@ -724,6 +763,7 @@ function simulate(game: GameContext, dt: number): void {
   }
   relicTick(game, dt);
   healTick(dt);
+  gateTick(dt);
   medicTick(dt);
   mineTick(game, dt);
   dropTick(game, dt);
@@ -943,6 +983,24 @@ function standTick(game: GameContext, dt: number): void {
 }
 
 /** Depots and headquarters patch up those resting near them. */
+/**
+ * Gates: the doors swing open as one of its own side's on the ground comes near (and isn't locked out),
+ * and shut again once they're through.
+ */
+function gateTick(dt: number): void {
+  for (const b of buildings.values()) {
+    const g = b.gate;
+    if (!g) continue;
+    const team = teamOf(b.seat);
+    const want = !g.locked && b.built >= 1 && [...units.values()].some((u) => !u.inside && u.lake < 0 && !UNITS[u.kind].air && teamOf(u.seat) === team && Math.abs(u.x - b.x) < 9 && Math.abs(u.z - b.z) < 9 && dist(u.x, u.z, b.x, b.z) < 8.5);
+    const was = g.open;
+    g.open = Math.max(0, Math.min(1, g.open + (want ? 1.6 : -1.1) * dt));
+    if (g.open !== was || (b.built >= 1) !== g.doors[0].visible) {
+      hang(b);
+    }
+  }
+}
+
 function healTick(dt: number): void {
   healIn -= dt;
   if (healIn > 0) return;
@@ -1190,9 +1248,12 @@ function rebuildGrid(): void {
   wallAt.clear();
   for (const bl of buildings.values()) {
     if (!BUILDINGS[bl.kind].wall) continue;
-    const c = gcell(bl.z) * GN + gcell(bl.x);
-    grid[c] = bl.kind === 'gate' ? GATE + Math.max(0, teamOf(bl.seat)) : WALL;
-    wallAt.set(c, bl.id);
+    for (const p of bl.gate ? gateCells(bl.x, bl.z, bl.gate.axis) : [bl]) {
+      const c = gcell(p.z) * GN + gcell(p.x);
+      // (A locked gate is a wall to everyone.)
+      grid[c] = bl.gate && !bl.gate.locked ? GATE + Math.max(0, teamOf(bl.seat)) : WALL;
+      wallAt.set(c, bl.id);
+    }
   }
   gridDirty = false;
   gridVer++;
@@ -1217,28 +1278,57 @@ function findPath(x0: number, z0: number, x1: number, z1: number, team = -1): { 
   lastBreach = null;
   const pass = passOf(team);
   const shut = (n: number) => grid[n] !== 0 && grid[n] !== pass;
-  const start = gcell(z0) * GN + gcell(x0);
+  let start = gcell(z0) * GN + gcell(x0);
+  // Starting in a shut cell (pressed up against a building, or squeezed into the edge of a wall): the way
+  // begins at the nearest free one to where it really is, so it isn't penned in by its own corner of the grid.
+  let out0: { x: number; z: number } | null = null;
+  if (shut(start)) {
+    const si = start % GN;
+    const sj = Math.floor(start / GN);
+    let best = 1e9;
+    for (let r = 1; r <= 3 && !out0; r++) {
+      for (let di = -r; di <= r; di++) for (let dj = -r; dj <= r; dj++) {
+        if (Math.max(Math.abs(di), Math.abs(dj)) !== r) continue;
+        const i = si + di;
+        const j = sj + dj;
+        if (i < 0 || j < 0 || i >= GN || j >= GN || shut(j * GN + i)) continue;
+        const cx = i * CELL - HALF + CELL / 2;
+        const cz = j * CELL - HALF + CELL / 2;
+        // (The nearest of them, a little towards where it's going.)
+        const sc = dist(cx, cz, x0, z0) + 0.25 * dist(cx, cz, x1, z1);
+        if (sc < best) {
+          best = sc;
+          out0 = { x: cx, z: cz };
+        }
+      }
+    }
+    if (out0) start = gcell(out0.z) * GN + gcell(out0.x);
+  }
   let goalI = gcell(x1);
   let goalJ = gcell(z1);
   // A goal inside something is moved to the nearest free cell.
+  // A goal inside something (a deposit, a building): any free cell round it will do, the first one the
+  // search comes to: the near side of it, not one picked blind that may be round the far side of a wall.
+  let ends: Set<number> | null = null;
   if (shut(goalJ * GN + goalI)) {
-    let found = false;
-    for (let r = 1; r < 8 && !found; r++) {
-      for (let di = -r; di <= r && !found; di++) {
-        for (let dj = -r; dj <= r && !found; dj++) {
+    ends = new Set();
+    let first = -1;
+    for (let r = 1; r < 8 && (first < 0 || r <= first + 1); r++) {
+      for (let di = -r; di <= r; di++) {
+        for (let dj = -r; dj <= r; dj++) {
           if (Math.max(Math.abs(di), Math.abs(dj)) !== r) continue;
           const i = goalI + di;
           const j = goalJ + dj;
           if (i >= 0 && j >= 0 && i < GN && j < GN && !shut(j * GN + i)) {
-            goalI = i;
-            goalJ = j;
-            found = true;
+            ends.add(j * GN + i);
+            if (first < 0) first = r;
           }
         }
       }
     }
+    if (!ends.size) ends = null;
   }
-  const goal = goalJ * GN + goalI;
+  let goal = ends ? [...ends][0] : goalJ * GN + goalI;
   const g = new Float32Array(GN * GN).fill(1e9);
   const from = new Int32Array(GN * GN).fill(-1);
   const closed = new Uint8Array(GN * GN);
@@ -1284,7 +1374,10 @@ function findPath(x0: number, z0: number, x1: number, z1: number, team = -1): { 
   push(start);
   while (heap.length) {
     const cur = pop();
-    if (cur === goal) break;
+    if (cur === goal || ends?.has(cur)) {
+      goal = cur;
+      break;
+    }
     if (closed[cur]) continue;
     closed[cur] = 1;
     const ci = cur % GN;
@@ -1336,6 +1429,7 @@ function findPath(x0: number, z0: number, x1: number, z1: number, team = -1): { 
   const cells: { x: number; z: number }[] = [];
   for (let c = goal; c !== start && c >= 0; c = from[c]) cells.push({ x: (c % GN) * CELL - HALF + CELL / 2, z: Math.floor(c / GN) * CELL - HALF + CELL / 2 });
   cells.reverse();
+  if (out0) cells.unshift(out0);
   // Pulled tight: from each corner, the furthest one that can be seen.
   const out: { x: number; z: number }[] = [];
   let px = x0;
@@ -1391,6 +1485,24 @@ function step(u: Unit, tx: number, tz: number, dt: number, stop: number): boolea
     if (!u.path.length && lastBreach) breachAt(u, lastBreach);
   }
   while (u.path.length && dist(u.x, u.z, u.path[0].x, u.path[0].z) < 1.4) u.path.shift();
+  // Stuck (pressed against a corner by the crowd, say): it looks for its way again, and if that's no
+  // better, sidesteps for a moment.
+  const pr = u.prog;
+  if (!pr || dist(pr.x, pr.z, u.x, u.z) > 1.2) u.prog = { x: u.x, z: u.z, t: time, n: 0 };
+  else if (time - pr.t > 1.6) {
+    pr.t = time;
+    pr.n++;
+    u.pathFor = null;
+    if (pr.n >= 2) u.dodge = { a: Math.atan2(tz - u.z, tx - u.x) + (Math.random() < 0.5 ? 1 : -1) * (Math.PI / 2 + Math.random() * 0.6), until: time + 0.7 };
+  }
+  if (u.dodge && u.dodge.until > time) {
+    const nx = u.x + Math.cos(u.dodge.a) * 2;
+    const nz = u.z + Math.sin(u.dodge.a) * 2;
+    if (!isBlocked(nx, nz, team) || grid[gcell(nz) * GN + gcell(nx)] === 1) {
+      move(u, nx, nz, dt, 0);
+      return false;
+    }
+  }
   const next = u.path[0];
   if (!next) {
     // Straight at it, there being no better way: but never through a wall. One of theirs in the way is to be broken down.
@@ -1469,7 +1581,7 @@ function unitTick(game: GameContext, u: Unit, dt: number): void {
   }
   // A wild unit doesn't wander: past its leash it goes back to its spot.
   if (u.home && o.t !== 'move' && dist(u.x, u.z, u.home.x, u.home.z) > 14) {
-    u.order = { t: 'move', x: u.home.x, z: u.home.z, attack: false };
+    u.order = { t: 'move', x: u.home.x, z: u.home.z, attack: false, flee: true };
     return;
   }
 
@@ -1519,6 +1631,12 @@ function unitTick(game: GameContext, u: Unit, dt: number): void {
     return;
   }
   if (o.t === 'move') {
+    // Shot at on its way, a fighter turns to fight (then goes on to where it was going): unless it's getting
+    // away on purpose (running, holding its fire, or told to fall back).
+    if (!o.attack && fighter && !o.flee && u.stance !== 2 && u.sprintUntil <= time && time - u.hitAt < 2 && !u.home && nearestEnemy(u.seat, u.x, u.z, range + 4, def.hits)) {
+      u.order = { ...o, attack: true };
+      return;
+    }
     // Attack-moving, a fighter shoots whatever is in reach as it goes (and stops to).
     const e = o.attack && fighter ? nearestEnemy(u.seat, u.x, u.z, range, def.hits) : null;
     if (e) {
@@ -1921,7 +2039,7 @@ function damageBuilding(game: GameContext, id: number, amount: number, by: numbe
     unload(b.id, false);
     for (const v of held) v.hp = Math.max(1, v.hp - v.max * 0.3);
   }
-  b.prop.remove();
+  unprop(b);
   buildings.delete(id);
   gridDirty = true;
   if (b.kind === 'uplink' && b.doneAt !== undefined) {
@@ -2074,11 +2192,11 @@ function give(u: Unit, o: Order, queue: boolean): void {
   u.order = o;
 }
 
-function formation(list: Unit[], x: number, z: number, attack: boolean, queue = false, face?: number): void {
+function formation(list: Unit[], x: number, z: number, attack: boolean, queue = false, face?: number, flee?: boolean): void {
   const n = list.length;
   if (!n) return;
   if (n === 1) {
-    give(list[0], { t: 'move', x, z, attack, face }, queue);
+    give(list[0], { t: 'move', x, z, attack, face, flee }, queue);
     return;
   }
   const cols = Math.ceil(Math.sqrt(n * 1.8));
@@ -2117,7 +2235,7 @@ function formation(list: Unit[], x: number, z: number, attack: boolean, queue = 
   // slowest to get there does (and closes up at its own speed for the last stretch).
   const march = kinds.size > 1 && len > 20 && !queue;
   const takes = march ? Math.max(...spots.filter((p) => !UNITS[p.u.kind].air).map((p) => dist(p.u.x, p.u.z, p.x, p.z) / UNITS[p.u.kind].speed)) : 0;
-  for (const p of spots) give(p.u, { t: 'move', x: p.x, z: p.z, attack, face, pace: march && !UNITS[p.u.kind].air ? Math.max(1, dist(p.u.x, p.u.z, p.x, p.z) / takes) : undefined }, queue);
+  for (const p of spots) give(p.u, { t: 'move', x: p.x, z: p.z, attack, face, flee, pace: march && !UNITS[p.u.kind].air ? Math.max(1, dist(p.u.x, p.u.z, p.x, p.z) / takes) : undefined }, queue);
 }
 
 /** Where each kind takes its place in a formation: low numbers at the front. */
@@ -2138,13 +2256,13 @@ function crowd(): void {
   for (let i = 0; i < list.length; i++) {
     const a = list[i];
     const ra = UNITS[a.kind].size * 0.5;
-    const sa = SPACE[a.kind] * 0.5;
+    const sa = BODY[a.kind] * 0.5;
     for (let j = i + 1; j < list.length; j++) {
       const b = list[j];
       if (layer(a) !== layer(b)) continue;
       const dx = b.x - a.x;
       const dz = b.z - a.z;
-      const min = sa + SPACE[b.kind] * 0.5;
+      const min = sa + BODY[b.kind] * 0.5;
       if (Math.abs(dx) > min || Math.abs(dz) > min) continue;
       const d = Math.hypot(dx, dz) || 0.001;
       if (d >= min) continue;
@@ -2160,8 +2278,46 @@ function crowd(): void {
       continue;
     }
     for (const bl of UNITS[a.kind].air ? [] : buildings.values()) {
-      // (Its own side goes through a gate.)
-      if (bl.kind === 'gate' && teamOf(bl.seat) === teamOf(a.seat)) continue;
+      if (bl.gate) {
+        // A gate: its own side goes through (unless it's locked); to anyone else it's a slab three lengths long.
+        if (!bl.gate.locked && teamOf(bl.seat) === teamOf(a.seat)) continue;
+        const along = bl.gate.axis ? a.z - bl.z : a.x - bl.x;
+        const across = bl.gate.axis ? a.x - bl.x : a.z - bl.z;
+        const hx = 4.5 + ra * 0.6;
+        const hz = 1.5 + ra * 0.6;
+        if (Math.abs(along) < hx && Math.abs(across) < hz) {
+          // (Out by the nearer side.)
+          if (hx - Math.abs(along) < hz - Math.abs(across)) {
+            const v = Math.sign(along || 1) * hx;
+            if (bl.gate.axis) a.z = bl.z + v;
+            else a.x = bl.x + v;
+          } else {
+            const v = Math.sign(across || 1) * hz;
+            if (bl.gate.axis) a.x = bl.x + v;
+            else a.z = bl.z + v;
+          }
+        }
+        continue;
+      }
+      if (BUILDINGS[bl.kind].wall) {
+        // A length of wall is a square block of its cell: out by the nearer side, so whatever's pressed
+        // against a wall slides along it (round, it'd catch every unit at the joins between lengths).
+        const dx = a.x - bl.x;
+        const dz = a.z - bl.z;
+        const h = 1.5 + ra * 0.8;
+        if (Math.abs(dx) < h && Math.abs(dz) < h) {
+          // (Never out through a side joined to the next length of the line: that's only into it.)
+          if (gridDirty) rebuildGrid();
+          const sx = Math.sign(dx || 1);
+          const sz = Math.sign(dz || 1);
+          const joinX = grid[gcell(bl.z) * GN + gcell(bl.x + sx * CELL)] >= WALL;
+          const joinZ = grid[gcell(bl.z + sz * CELL) * GN + gcell(bl.x)] >= WALL;
+          const byX = joinZ && !joinX ? true : joinX && !joinZ ? false : h - Math.abs(dx) < h - Math.abs(dz);
+          if (byX) a.x = bl.x + sx * h;
+          else a.z = bl.z + sz * h;
+        }
+        continue;
+      }
       const r = BUILDINGS[bl.kind].radius + ra;
       const d = dist(a.x, a.z, bl.x, bl.z);
       if (d < r && d > 0.001) {
@@ -2233,7 +2389,7 @@ function train(b: Building, kind: UnitKind): boolean {
   return true;
 }
 
-function place(game: GameContext, seat: number, kind: BuildingKind, x: number, z: number, builders: number[], queue = false): boolean {
+function place(game: GameContext, seat: number, kind: BuildingKind, x: number, z: number, builders: number[], queue = false, axisIn?: number): boolean {
   const s = slots[seat];
   const def = BUILDINGS[kind];
   if (!s || !BUILDABLE.includes(kind) || ageOf(s.techs) < (AGE_NEEDS[kind] ?? 1) || !canAfford(s, def.cost) || Math.abs(x) > HALF - (def.wall ? 1 : 6) || Math.abs(z) > HALF - (def.wall ? 1 : 6)) return false;
@@ -2244,6 +2400,10 @@ function place(game: GameContext, seat: number, kind: BuildingKind, x: number, z
   // A length of wall or a gate: on its cell of the grid, hard up against whatever's beside it, and over
   // hills. Not on a cell that's shut already (a tree, a rock, a building, the water): that's wall enough.
   const wall = !!def.wall;
+  // (A gate: three cells along the wall it's set in.)
+  const ownWall = (cx: number, cz: number) => [...buildings.values()].some((b) => b.seat === seat && BUILDINGS[b.kind].wall && dist(b.x, b.z, cx, cz) < 1);
+  const axis = kind === 'gate' ? (axisIn === 0 || axisIn === 1 ? axisIn : gateAxis(x, z, ownWall)) : 0;
+  const cells = kind === 'gate' ? gateCells(x, z, axis) : [{ x, z }];
   if (wall) {
     x = wallSnap(x);
     z = wallSnap(z);
@@ -2251,20 +2411,25 @@ function place(game: GameContext, seat: number, kind: BuildingKind, x: number, z
     for (const b of buildings.values()) if (b.seat === seat && BUILDINGS[b.kind].wall) n++;
     if (n >= MAX_WALLS) return false;
     if (gridDirty) rebuildGrid();
-    if (grid[gcell(z) * GN + gcell(x)] === 1) return false;
+    for (const c of cells) if (Math.abs(c.x) > HALF - 1 || Math.abs(c.z) > HALF - 1 || grid[gcell(c.z) * GN + gcell(c.x)] === 1) return false;
   }
-  let over: Building | null = null;
+  const over: Building[] = [];
   for (const b of buildings.values()) {
-    const d = dist(x, z, b.x, b.z);
     const other = !!BUILDINGS[b.kind].wall;
-    if (wall && other) {
-      if (d >= 2.9) continue;
-      // (A gate goes onto a length of one's own wall, in its place.)
-      if (kind === 'gate' && b.kind === 'rampart' && b.seat === seat) over = b;
-      else return false;
-    } else if (d < def.radius + BUILDINGS[b.kind].radius + (wall || other ? 0 : 1)) return false;
+    for (const c of cells) {
+      const d = dist(c.x, c.z, b.x, b.z);
+      if (wall && other) {
+        // (Another gate's cells are its own.)
+        const hit = b.gate ? gateCells(b.x, b.z, b.gate.axis).some((q) => dist(q.x, q.z, c.x, c.z) < 2.9) : d < 2.9;
+        if (!hit) continue;
+        // (A gate goes onto lengths of one's own wall, in their place.)
+        if (kind === 'gate' && b.kind === 'rampart' && b.seat === seat) {
+          if (!over.includes(b)) over.push(b);
+        } else return false;
+      } else if (b.gate && !wall ? gateCells(b.x, b.z, b.gate.axis).some((q) => dist(q.x, q.z, x, z) < def.radius + 1.5) : d < def.radius + BUILDINGS[b.kind].radius + (wall || other ? 0 : 1)) return false;
+    }
   }
-  for (const n of nodes) if (n.amount > 0 && dist(x, z, n.x, n.z) < (wall ? 1.5 : def.radius + 3)) return false;
+  for (const n of nodes) if (n.amount > 0 && cells.some((c) => dist(c.x, c.z, n.x, n.z) < (wall ? 1.5 : def.radius + 3))) return false;
   if (!wall) {
     if (kind === 'dock' ? !canDock(x, z) : inLake(x, z, def.radius + 1)) return false;
     if (inMesa(x, z, def.radius + 1) || inHill(x, z, def.radius)) return false;
@@ -2272,11 +2437,11 @@ function place(game: GameContext, seat: number, kind: BuildingKind, x: number, z
   }
   s.steel -= def.cost.steel;
   s.oil -= def.cost.oil;
-  if (over) {
-    over.prop.remove();
-    buildings.delete(over.id);
+  for (const o of over) {
+    unprop(o);
+    buildings.delete(o.id);
   }
-  const b = addBuilding(game, seat, kind, x, z, false);
+  const b = addBuilding(game, seat, kind, x, z, false, axis);
   for (const id of builders) {
     const u = units.get(id);
     if (u && u.seat === seat && u.kind === 'engineer') give(u, { t: 'build', id: b.id }, queue);
@@ -2360,7 +2525,7 @@ function world(game: GameContext): World {
       const sl = slots[seat];
       return !!sl && useAbility(game, sl, ids.map((id) => units.get(id)).filter((u): u is Unit => !!u && u.seat === seat), kind, x, z, false);
     },
-    place: (seat, kind, x, z, builders) => place(game, seat, kind, x, z, builders),
+    place: (seat, kind, x, z, builders, axis) => place(game, seat, kind, x, z, builders, false, axis),
     say: (seat, text) => {
       const sl = slots[seat];
       if (sl && mode !== 'stand') game.hud.feed(`${sl.name}: “${text}”`, { color: TEAM_COLORS[seat % TEAM_COLORS.length] });
@@ -2368,7 +2533,7 @@ function world(game: GameContext): World {
     power: (seat, x, z) => usePower(game, seat, x, z),
     command: (ids, seat, o) => {
       if (o.t === 'move' && ids.length > 1) {
-        formation(ids.map((id) => units.get(id)).filter((u): u is Unit => !!u && u.seat === seat), o.x, o.z, o.attack);
+        formation(ids.map((id) => units.get(id)).filter((u): u is Unit => !!u && u.seat === seat), o.x, o.z, o.attack, false, undefined, o.flee);
         return;
       }
       for (const id of ids) {
@@ -2443,7 +2608,16 @@ function order(game: GameContext, player: Player, name: string, data: unknown): 
   } else if (name === 'gather') {
     const n = nodes[Number(d.id)];
     if (n && n.amount > 0) for (const u of us) if (u.kind === 'engineer') give(u, { t: 'gather', node: n.id, phase: u.carry >= CARRY ? 'back' : 'to' }, queue);
-  } else if (name === 'build' && at && BUILDABLE.includes(d.kind as BuildingKind)) place(game, slot.seat, d.kind as BuildingKind, x, z, us.map((u) => u.id), queue);
+  } else if (name === 'build' && at && BUILDABLE.includes(d.kind as BuildingKind)) place(game, slot.seat, d.kind as BuildingKind, x, z, us.map((u) => u.id), queue, d.axis === 0 || d.axis === 1 ? d.axis : undefined);
+  else if (name === 'lock') {
+    // A gate locked (shut to everyone, its own side too), or opened again.
+    const b = buildings.get(Number(d.id));
+    if (b?.gate && b.seat === slot.seat) {
+      b.gate.locked = !b.gate.locked;
+      gridDirty = true;
+      dirty = true;
+    }
+  }
   else if (name === 'wall' && at) {
     // A line of wall, dragged: a length on each cell from one end to the other, as far as the steel goes; the engineers build them one after another.
     const x1 = Number(d.x1);
@@ -2620,7 +2794,7 @@ function tell(game: GameContext, dt: number): void {
       const u: number[] = [];
       for (const v of units.values()) if (!v.inside && (teamOf(v.seat) === mineTeam || seen(v.x, v.z))) u.push(v.id, UNIT_ORDER.indexOf(v.kind), v.seat, round1(v.x), round1(v.z), Math.round((v.hp / v.max) * 100), Math.round(v.yaw * 10), (time - v.busy < 0.3 ? 1 : 0) + (v.carry > 0 ? (v.carryRes === 'oil' ? 4 : 2) : 0) + (v.order.t === 'idle' ? 8 : 0) + rankOf(v.xp) * 16 + (heightAt(v.x, v.z) >= 1 ? 64 : 0) + v.stance * 128 + (UNITS[v.kind].holds ? cargo(v.id, true).length * 512 : 0));
       const b: number[] = [];
-      for (const v of buildings.values()) if (teamOf(v.seat) === mineTeam || v.kind === 'uplink' || seen(v.x, v.z)) b.push(v.id, BUILDING_ORDER.indexOf(v.kind), v.seat, round1(v.x), round1(v.z), Math.round((v.hp / BUILDINGS[v.kind].hp) * 100), Math.round(v.built * 100), v.research ? 1000 + Math.round((v.research.t / TECHS[v.research.id].time) * 100) + TECH_IDS.indexOf(v.research.id) * 1000 : v.queue.length ? Math.round((v.queue[0].t / UNITS[v.queue[0].kind].time) * 100) : -1, BUILDINGS[v.kind].holds ? cargo(v.id, false).length : 0);
+      for (const v of buildings.values()) if (teamOf(v.seat) === mineTeam || v.kind === 'uplink' || seen(v.x, v.z)) b.push(v.id, BUILDING_ORDER.indexOf(v.kind), v.seat, round1(v.x), round1(v.z), Math.round((v.hp / BUILDINGS[v.kind].hp) * 100), Math.round(v.built * 100), v.research ? 1000 + Math.round((v.research.t / TECHS[v.research.id].time) * 100) + TECH_IDS.indexOf(v.research.id) * 1000 : v.queue.length ? Math.round((v.queue[0].t / UNITS[v.queue[0].kind].time) * 100) : -1, BUILDINGS[v.kind].holds ? cargo(v.id, false).length : v.gate ? v.gate.axis + (v.gate.locked ? 2 : 0) + (v.gate.open > 0.5 ? 4 : 0) : 0);
       game.clients.send(sl.player, 'u', u);
       game.clients.send(sl.player, 'b', b);
       // What each of this side's buildings has in hand, and where its units are bound.
@@ -2657,7 +2831,7 @@ function tell(game: GameContext, dt: number): void {
     const u: number[] = [];
     for (const v of units.values()) if (!v.inside) u.push(v.id, UNIT_ORDER.indexOf(v.kind), v.seat, round1(v.x), round1(v.z), Math.round((v.hp / v.max) * 100), Math.round(v.yaw * 10), (time - v.busy < 0.3 ? 1 : 0) + (v.carry > 0 ? (v.carryRes === 'oil' ? 4 : 2) : 0) + rankOf(v.xp) * 16);
     const b: number[] = [];
-    for (const v of buildings.values()) b.push(v.id, BUILDING_ORDER.indexOf(v.kind), v.seat, round1(v.x), round1(v.z), Math.round((v.hp / BUILDINGS[v.kind].hp) * 100), Math.round(v.built * 100), v.queue.length ? 1 : -1, 0);
+    for (const v of buildings.values()) b.push(v.id, BUILDING_ORDER.indexOf(v.kind), v.seat, round1(v.x), round1(v.z), Math.round((v.hp / BUILDINGS[v.kind].hp) * 100), Math.round(v.built * 100), v.queue.length ? 1 : -1, v.gate ? v.gate.axis + (v.gate.locked ? 2 : 0) : 0);
     game.clients.send(p, 'u', u);
     game.clients.send(p, 'b', b);
     game.clients.send(p, 'eyes', { all: true, eyes: [] });

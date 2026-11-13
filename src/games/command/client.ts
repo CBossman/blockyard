@@ -45,6 +45,8 @@ function warmUp(client: Client, dt: number): void {
 /** Our units and buildings already seen (so a new one is news). */
 const known = new Set<number>();
 const done = new Set<number>();
+/** Each gate's doors as last heard (open or shut), to hear them swing. */
+const gates = new Map<number, boolean>();
 let puffAt = 0;
 let beamAt = 0;
 const clockText = (t: number) => `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
@@ -119,6 +121,14 @@ export default defineClient(shared, {
           client.hud.toast(`${BUILDINGS[b.kind].name} complete`);
         }
         done.add(b.id);
+      }
+      // A gate's doors swinging open or shut, where it can be seen.
+      for (const b of list) {
+        if (b.kind !== 'gate') continue;
+        const open = (b.held & 4) !== 0;
+        const was = gates.get(b.id);
+        if (was !== undefined && was !== open) client.audio.play('cm_gate', { at: { x: b.x, y: FLOOR + 2, z: b.z }, volume: 0.7 });
+        gates.set(b.id, open);
       }
       ui.buildings = list;
       updateScaffolds(client, list);

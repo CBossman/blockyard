@@ -1,6 +1,6 @@
 import type { Client } from '@platform/client';
 import { ABILITIES, ALARM, ARMOR, SPACE, RETREAT, SIGHT, AGE_NAMES, AGE_NEEDS, BOARDS, BUILDABLE, BUILDINGS, BUILD_KEYS, DOCTRINES, HIGH, MODES, NEEDS, STANCES, TEAM_COLORS, TECHS, TECH_IDS, VET, ageOf, versusText, UNITS, type BuildingKind, type DoctrineId, type UnitKind } from '../defs';
-import { BASES, CAMPS, FLOOR, HALF, HILLS, LAKES, MESAS, SHUT, TREES, WALL_CELL, deposits, inHill, inLake, inMesa, lakeOf, landShut, wallLine, wallSnap } from '../map';
+import { BASES, CAMPS, FLOOR, HALF, HILLS, LAKES, MESAS, SHUT, TREES, WALL_CELL, deposits, inHill, inLake, inMesa, lakeOf, landShut, wallLine, wallSnap, gateCells, gateAxis } from '../map';
 import { DRESSING } from '../dressing';
 import { UNIT_ORDER, cargoBits, rankBits, stanceBits, type State } from '../protocol';
 import { cam, drag, lookAt, setDrift, toGround, toScreen, view, zoom } from './camera';
@@ -47,7 +47,7 @@ export interface B {
   hp: number;
   built: number;
   queue: number;
-  /** How many are inside it (a bunker). */
+  /** How many are inside it (a bunker); a gate's way (1: along z), +2 if it's locked, +4 if its doors are open. */
   held: number;
 }
 
@@ -372,6 +372,10 @@ function commands(): Cmd[] {
         client.send('alarm', { id: b.id });
         client.audio.play('cm_bell');
       } });
+    if (b.kind === 'gate' && b.seat === me.seat) {
+      const locked = (b.held & 2) !== 0;
+      out.push({ key: 'Z', code: 'KeyZ', name: locked ? 'Unlock' : 'Lock', glyph: locked ? '🔓' : '🔒', ok: true, on: locked, cost: locked ? 'locked' : 'open to you', tip: `<b>${locked ? 'Unlock' : 'Lock'} gate</b><p>${locked ? 'Open it to your side again: its doors swing open as your troops come near.' : 'Shut it to everyone, your own side too, until you unlock it. The enemy can never come through either way.'}</p>`, run: () => client.send('lock', { id: b.id }) });
+    }
     if (def.holds) out.push({ key: 'U', code: 'KeyU', name: 'Unload', glyph: '⇪', cost: `${b.held}/${def.holds}`, ok: b.held > 0, tip: `<b>Unload</b><p>Everyone out of the ${def.name}, round it.</p><div class="tsub">Right click it with infantry to send them in.</div>`, run: () => client.send('unload', { id: b.id, boat: false }) });
   } else if (us.length) {
     if (us.some((u) => u.kind === 'engineer')) {
@@ -983,7 +987,7 @@ export function draw(): void {
       : ui.placing === 'rampart'
         ? 'Wall: press and drag to lay a line of it (10 steel a length), or click for one. Trees, rocks and buildings in its way are left standing as part of it. Right click cancels.'
         : ui.placing === 'gate'
-          ? 'Gate: click a gap in a wall, or a length of your own wall to replace it. Right click cancels.'
+          ? 'Gate: a gatehouse three lengths wide. Click a gap in a wall, or your own wall (it takes the place of three lengths); it lines up with the wall. Right click cancels.'
       : `Place the ${BUILDINGS[ui.placing].name}: click the ground (not on a hill). Right click cancels.`
     : ui.aim === 'ability' && ui.abKind
       ? `${ABILITIES[ui.abKind]!.name}: click where (or on the minimap). Those out of reach walk into it first.`
@@ -1004,7 +1008,7 @@ export function draw(): void {
   const us = ui.units.filter((u) => ui.sel.has(u.id));
   if (b) {
     const def = BUILDINGS[b.kind];
-    const status = b.built < 100 ? `Under construction: ${b.built}%` : def.holds ? `Inside: ${b.held} of ${def.holds}${b.held ? ' (U lets them out)' : ' (right click it with infantry)'}` : def.pop ? `Room for ${def.pop} people` : def.trains.length ? `Trains ${def.trains.map((t) => PLURAL[t]).join(', ')}` : def.research ? 'Researches upgrades for the whole army' : def.guns ? 'Shoots anything in reach' : '';
+    const status = b.built < 100 ? `Under construction: ${b.built}%` : b.kind === 'gate' ? ((b.held & 2) ? 'Locked: shut to everyone (Z unlocks)' : 'Opens for your side, shut to the enemy (Z locks)') : def.holds ? `Inside: ${b.held} of ${def.holds}${b.held ? ' (U lets them out)' : ' (right click it with infantry)'}` : def.pop ? `Room for ${def.pop} people` : def.trains.length ? `Trains ${def.trains.map((t) => PLURAL[t]).join(', ')}` : def.research ? 'Researches upgrades for the whole army' : def.guns ? 'Shoots anything in reach' : '';
     const trains = def.trains.length > 0 && b.built >= 100;
     const rq = b.queue >= 1000 ? { tech: TECH_IDS[Math.floor(b.queue / 1000) - 1], pct: b.queue % 1000 } : null;
     info.innerHTML = `<div class="row">${client.hud.icon({ item: pic(b.kind, b.seat) }).outerHTML.replace('<img', '<img class="big"')}<div style="flex:1"><h3>${def.name}</h3><div class="sub">${def.blurb}</div><div class="sub">${status}</div>
@@ -1106,14 +1110,26 @@ function cellShut(x: number, z: number): boolean {
   );
 }
 
+/** Where a gate dropped here would go (its three cells, lined up with the player's wall). */
+function gateAt(x: number, z: number): { x: number; z: number }[] {
+  const me = mySeat();
+  return gateCells(x, z, gateAxis(x, z, (cx, cz) => ui.buildings.some((b) => b.seat === me && BUILDINGS[b.kind].wall && Math.hypot(b.x - cx, b.z - cz) < 1)));
+}
+
+/** The cells a wall or a gate already standing takes up. */
+const cellsOf = (b: B) => (b.kind === 'gate' ? gateCells(b.x, b.z, b.held & 1) : [b]);
+
 function fits(kind: BuildingKind, x: number, z: number): boolean {
   const r = BUILDINGS[kind].radius;
+  if (kind === 'gate') {
+    const me = mySeat();
+    return gateAt(x, z).every((c) => Math.abs(c.x) <= HALF - 1 && Math.abs(c.z) <= HALF - 1 && !cellShut(c.x, c.z) && !ui.buildings.some((b) => (BUILDINGS[b.kind].wall ? cellsOf(b).some((q) => Math.hypot(q.x - c.x, q.z - c.z) < 2.9) && !(b.kind === 'rampart' && b.seat === me) : Math.hypot(b.x - c.x, b.z - c.z) < r + BUILDINGS[b.kind].radius)));
+  }
   if (BUILDINGS[kind].wall) {
     if (Math.abs(x) > HALF - 1 || Math.abs(z) > HALF - 1 || cellShut(x, z)) return false;
-    const me = mySeat();
     return !ui.buildings.some((b) => {
       const d = Math.hypot(b.x - x, b.z - z);
-      return BUILDINGS[b.kind].wall ? d < 2.9 && !(kind === 'gate' && b.kind === 'rampart' && b.seat === me) : d < r + BUILDINGS[b.kind].radius;
+      return BUILDINGS[b.kind].wall ? cellsOf(b).some((q) => Math.hypot(q.x - x, q.z - z) < 2.9) : d < r + BUILDINGS[b.kind].radius;
     });
   }
   if (inMesa(x, z, r + 1) || inHill(x, z, r)) return false;
@@ -1221,8 +1237,14 @@ export function frameUi(c: Client): void {
   if (ui.placing && ui.mouse) {
     // (A wall: each cell of the line being dragged, or the one under the mouse.)
     const kind = ui.placing;
-    const spots = !BUILDINGS[kind].wall ? [ui.mouse] : kind === 'rampart' && wallFrom ? wallLine(wallFrom.x, wallFrom.z, ui.mouse.x, ui.mouse.z) : [{ x: wallSnap(ui.mouse.x), z: wallSnap(ui.mouse.z) }];
+    const spots = !BUILDINGS[kind].wall ? [ui.mouse] : kind === 'rampart' && wallFrom ? wallLine(wallFrom.x, wallFrom.z, ui.mouse.x, ui.mouse.z) : kind === 'gate' ? gateAt(ui.mouse.x, ui.mouse.z) : [{ x: wallSnap(ui.mouse.x), z: wallSnap(ui.mouse.z) }];
+    // (A gate fits or doesn't as a whole.)
+    const gateOk = kind === 'gate' && fits(kind, ui.mouse.x, ui.mouse.z);
     for (const p of spots) {
+      if (kind === 'gate') {
+        ring(p.x, p.z, BUILDINGS[kind].radius, gateOk ? { fill: 'rgba(76,208,74,0.35)', stroke: '#7dff7d', 'stroke-width': 3 } : { fill: 'rgba(240,68,56,0.3)', stroke: '#f04438', 'stroke-width': 3 });
+        continue;
+      }
       // (A cell a tree or a rock has already: left as it is, faintly.)
       if (BUILDINGS[kind].wall && cellShut(p.x, p.z)) {
         ring(p.x, p.z, 0.8, { fill: 'rgba(200,200,200,0.25)', stroke: '#c8c8c8', 'stroke-width': 1.5, 'stroke-dasharray': '4 4' });

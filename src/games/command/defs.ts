@@ -136,7 +136,7 @@ export const BUILDINGS: Record<BuildingKind, BuildingDef> = {
   bunker: { name: 'Bunker', hp: 1000, cost: { steel: 140, oil: 0 }, time: 16, radius: 2.4, pop: 0, trains: [], holds: 6, blurb: 'Shelters six infantry: they fire from cover with 3 more reach and can’t be hit until it falls. Right click it with infantry to go in; U lets them out.' },
   dock: { name: 'Dock', hp: 760, cost: { steel: 160, oil: 40 }, time: 22, radius: 3, pop: 0, trains: ['gunboat', 'transport'], blurb: 'Build it on a lake’s shore. Launches gunboats and transports.' },
   rampart: { name: 'Wall', hp: 260, cost: { steel: 10, oil: 0 }, time: 3, radius: 1.5, pop: 0, trains: [], wall: true, blurb: 'Drag to lay a line of it. Nothing on the ground gets past: not theirs, and not yours either, so leave a gap or build a gate. Helicopters fly over, and guns shoot over.' },
-  gate: { name: 'Gate', hp: 320, cost: { steel: 40, oil: 0 }, time: 4, radius: 1.5, pop: 0, trains: [], wall: true, blurb: 'A way through a wall for your side only. Put it in a gap, or on a length of your own wall to replace it.' },
+  gate: { name: 'Gate', hp: 700, cost: { steel: 50, oil: 0 }, time: 8, radius: 1.5, pop: 0, trains: [], wall: true, blurb: 'A gatehouse three lengths wide, set in a wall: its doors swing open as your side comes near and shut behind them, and stay shut to the enemy. Lock it (select it) to keep everyone out. Put it in a gap, or on your own wall to replace three lengths.' },
   market: { name: 'Trade Post', hp: 600, cost: { steel: 120, oil: 0 }, time: 18, radius: 3, pop: 0, trains: [], blurb: 'Swaps steel for oil and oil for steel, a hundred at a time. Every sale gets you less for the next, and the price comes back slowly.' },
   uplink: { name: 'Satellite Uplink', hp: 2400, cost: { steel: 900, oil: 700 }, time: 80, radius: 4.4, pop: 0, trains: [], blurb: 'A second way to win. Once it is finished, every commander on the map sees it, and a clock starts: if it still stands five minutes later, your side wins. Expect everyone to come for it. One each.' },
   tower: { name: 'Guard Tower', hp: 520, cost: { steel: 130, oil: 30 }, time: 14, radius: 1.9, pop: 0, trains: [], guns: { damage: 13, rate: 1.3, range: 18, hits: 'both' }, blurb: 'Shoots anything that comes near, air and ground.' },
@@ -294,6 +294,12 @@ export const SALVAGE = { share: 0.4, most: 32 };
  * (Two different kinds keep the average of theirs.)
  */
 export const SPACE: Record<UnitKind, number> = { engineer: 2, medic: 2.8, rifle: 3.4, at: 3.1, guard: 3, hero: 2.8, scout: 3, tank: 7.6, artillery: 8, aa: 6.8, heli: 8.4, brute: 5.8, gunboat: 6.8, transport: 6.4 };
+/**
+ * How much room each kind's body takes when they jostle (centre to centre with another of its own):
+ * smaller than `SPACE`, which is how far apart they stand in ranks, so a tank squeezes past a squad, a
+ * building or through a gate rather than shoving everything about it into the walls.
+ */
+export const BODY: Record<UnitKind, number> = { engineer: 1.8, medic: 2.2, rifle: 2.6, at: 2.5, guard: 2.4, hero: 2.4, scout: 2.4, tank: 4.6, artillery: 4.8, aa: 4.2, heli: 7, brute: 4.4, gunboat: 6.4, transport: 6 };
 
 export const START = { steel: 300, oil: 80 };
 export const MAX_POP = 60;

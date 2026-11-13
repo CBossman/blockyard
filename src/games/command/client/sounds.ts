@@ -64,6 +64,12 @@ export function setupSounds(c: Client): void {
     s.noise({ duration: 1.6, from: 2600, to: 240, filter: 'lowpass', volume: 0.5, delay: 1.1, attack: 0.05 });
     s.tone({ wave: 'sawtooth', from: 210, to: 60, duration: 2.4, volume: 0.1, lowpass: 520 });
   });
+  // A gate's steel doors: a clank, and a grinding swing.
+  a.define('cm_gate', (s) => {
+    s.tone({ wave: 'square', from: 120 * s.pitch, to: 90 * s.pitch, duration: 0.08, volume: 0.12, lowpass: 900 });
+    s.noise({ duration: 0.7, from: 380, to: 260, filter: 'bandpass', q: 4, volume: 0.1, delay: 0.05, attack: 0.15 });
+    s.tone({ wave: 'sawtooth', from: 70, to: 58, duration: 0.65, volume: 0.05, lowpass: 400, delay: 0.05 });
+  });
   a.define('cm_thump', (s) => {
     s.tone({ wave: 'sine', from: 140 * s.pitch, to: 50 * s.pitch, duration: 0.2, volume: 0.45 });
     s.noise({ duration: 0.12, from: 800, to: 200, filter: 'lowpass', volume: 0.3 });

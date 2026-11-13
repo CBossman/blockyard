@@ -222,7 +222,7 @@ export class BotBrain {
         if (!f) continue;
         const d = hyp(e.x, e.z, f.x, f.z) || 1;
         const clamp = (v: number) => Math.max(-HALF + 6, Math.min(HALF - 6, v));
-        w.command([e.id], s.seat, { t: 'move', x: clamp(e.x + ((e.x - f.x) / d) * 16), z: clamp(e.z + ((e.z - f.z) / d) * 16), attack: false });
+        w.command([e.id], s.seat, { t: 'move', x: clamp(e.x + ((e.x - f.x) / d) * 16), z: clamp(e.z + ((e.z - f.z) / d) * 16), attack: false, flee: true });
       }
     }
     // A real assault on the HQ, more than the army at home can hold: the alarm, and the engineers shelter (and man its guns).
@@ -361,7 +361,7 @@ export class BotBrain {
         const along = plan.lines.find((l) => (l[0] === l[2] && l[0] === g.x) || (l[1] === l[3] && l[1] === g.z));
         const ax = along && along[1] === along[3] ? 3 : 0;
         const az = ax ? 0 : 3;
-        for (const k of [0, 1, -1, 2, -2]) if (w.place(s.seat, 'gate', g.x + ax * k, g.z + az * k, [])) break;
+        for (const k of [0, 1, -1, 2, -2]) if (w.place(s.seat, 'gate', g.x + ax * k, g.z + az * k, [], ax ? 0 : 1)) break;
       }
       for (const l of plan.lines) for (const c of wallLine(l[0], l[1], l[2], l[3])) {
         if (s.steel < 60) break;
@@ -422,7 +422,7 @@ export class BotBrain {
           this.wounded.add(u.id);
           this.raid.delete(u.id);
           this.flank.delete(u.id);
-          w.command([u.id], s.seat, { t: 'move', x: post.x + (Math.random() - 0.5) * 6, z: post.z + (Math.random() - 0.5) * 6, attack: false });
+          w.command([u.id], s.seat, { t: 'move', x: post.x + (Math.random() - 0.5) * 6, z: post.z + (Math.random() - 0.5) * 6, attack: false, flee: true });
         }
       }
     } else this.wounded.clear();
@@ -700,7 +700,7 @@ export class BotBrain {
     this.flankAt = null;
     this.nextPush = w.time + 240;
     this.until = w.time + seconds;
-    if (army.length) w.command(army.map((u) => u.id), s.seat, { t: 'move', x: front.x, z: front.z, attack: seconds === 0 });
+    if (army.length) w.command(army.map((u) => u.id), s.seat, { t: 'move', x: front.x, z: front.z, attack: seconds === 0, flee: seconds > 0 });
   }
 
   /** Order a group somewhere, leaving alone those already on their way there or in a fight. */
@@ -821,7 +821,7 @@ export class BotBrain {
     const ids = [...this.raid].filter((id) => w.units.has(id));
     this.raid.clear();
     this.raidTo = null;
-    if (ids.length) w.command(ids, s.seat, { t: 'move', x: front.x, z: front.z, attack: false });
+    if (ids.length) w.command(ids, s.seat, { t: 'move', x: front.x, z: front.z, attack: false, flee: true });
   }
 
   /** Its units' special abilities, where they'd earn their keep. */

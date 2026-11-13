@@ -1351,19 +1351,45 @@ building('rampart', (m) => {
 });
 
 building('gate', (m) => {
-  // A gate: four concrete posts, open between them every way, a road through, a slab over it
-  // edged in the team's colour, warning stripes on the posts.
-  m.box([-8, 0, -8], [8, 1, 8], 'asphalt');
-  for (const [x, z] of [[-8, -8], [4, -8], [-8, 4], [4, 4]]) {
-    m.box([x, 0, z], [x + 4, 20, z + 4], 'concrete');
-    m.box([x, 0, z], [x + 4, 3, z + 4], 'concreteDark');
-    for (let j = 7; j < 11; j++) for (let a = 0; a < 4; a++) for (let b = 0; b < 4; b++) m.set(x + a, j, z + b, (a + b + j) % 4 < 2 ? 'hazard' : 'black');
+  // A gatehouse three lengths of wall wide: a concrete tower at each end (as tall again as the wall,
+  // the team's band, firing slits, sandbags on the top and a lamp), a steel beam over the way through
+  // in hazard stripes with the team's colour, and a road under it. Its doors (`gate_door`) hang on the
+  // towers' inner faces, 17 either side of the middle.
+  m.box([-17, 0, -8], [17, 1, 8], 'asphalt');
+  for (let x = -16; x < 16; x += 6) m.box([x, 1, -1], [x + 3, 1, 0], 'white');
+  for (const x0 of [-24, 17]) {
+    m.box([x0, 0, -8], [x0 + 7, 30, 8], 'concrete');
+    m.box([x0, 0, -8], [x0 + 7, 3, 8], 'concreteDark');
+    m.box([x0, 22, -8], [x0 + 7, 24, 8], 'team');
+    // Slits front and back, and the crest: a parapet round a sandbagged top.
+    for (const z of [-8, 7]) {
+      m.box([x0 + 2, 16, z], [x0 + 5, 18, z + 1], 'black');
+      m.box([x0 + 2, 8, z], [x0 + 5, 10, z + 1], 'black');
+    }
+    m.box([x0, 30, -8], [x0 + 7, 32, 8], 'concreteDark');
+    m.box([x0 + 1, 30, -7], [x0 + 6, 32, 7], 'sand');
+    for (let z = -7; z < 7; z += 3) m.box([x0 + 1, 32, z], [x0 + 6, 33, z + 2], 'khaki');
+    m.box([x0 + 3, 33, -1], [x0 + 4, 36, 0], 'steelDark');
+    m.set(x0 + 3, 36, -1, 'lit');
+    // (Hinges: dark steel on the inner face where a door hangs.)
+    const inner = x0 < 0 ? x0 + 6 : x0;
+    for (const y of [4, 15]) m.box([inner, y, -2], [inner + 1, y + 2, 2], 'steelDark');
   }
-  m.box([-8, 20, -8], [8, 22, 8], 'concreteDark');
-  m.box([-8, 22, -8], [8, 24, 8], 'team');
-  m.box([-6, 22, -6], [6, 24, 6], 'concreteDark');
-  m.box([-1, 24, -1], [1, 27, 1], 'steelDark');
-  m.set(0, 27, 0, 'lit');
+  // The beam over the way through, in hazard stripes, and the team's colour along its middle.
+  for (let x = -17; x < 17; x++) for (let y = 21; y < 26; y++) for (let z = -3; z < 3; z++) m.set(x, y, z, y === 23 ? 'team' : (x + y) % 6 < 3 ? 'hazard' : 'black');
+  m.box([-17, 26, -3], [17, 27, 3], 'steelDark');
+  return m;
+});
+
+building('gate_door', (m) => {
+  // One of a gate's two doors, hung from its hinge (here, at the origin): ribbed steel plate, the team's
+  // colour across it and a hazard stripe at its foot; a bolt where it meets the other.
+  m.box([0, 1, -1], [17, 20, 1], 'steel');
+  for (let x = 1; x < 17; x += 4) m.box([x, 1, -1], [x + 1, 20, 1], 'steelDark');
+  m.box([0, 12, -1], [17, 15, 1], 'team');
+  for (let x = 0; x < 17; x++) for (const y of [1, 2]) m.box([x, y, -1], [x + 1, y + 1, 1], (x + y) % 4 < 2 ? 'hazard' : 'black');
+  m.box([0, 19, -1], [17, 20, 1], 'steelDark');
+  m.box([15, 8, -2], [17, 10, 2], 'steelLight');
   return m;
 });
 
