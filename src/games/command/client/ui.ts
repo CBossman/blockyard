@@ -1,5 +1,5 @@
 import type { Client } from '@platform/client';
-import { ABILITIES, ALARM, ARMOR, RETREAT, SIGHT, AGE_NAMES, AGE_NEEDS, BOARDS, BUILDABLE, BUILDINGS, BUILD_KEYS, DOCTRINES, HIGH, MODES, NEEDS, STANCES, TEAM_COLORS, TECHS, TECH_IDS, VET, ageOf, versusText, UNITS, type BuildingKind, type DoctrineId, type UnitKind } from '../defs';
+import { ABILITIES, ALARM, ARMOR, SPACE, RETREAT, SIGHT, AGE_NAMES, AGE_NEEDS, BOARDS, BUILDABLE, BUILDINGS, BUILD_KEYS, DOCTRINES, HIGH, MODES, NEEDS, STANCES, TEAM_COLORS, TECHS, TECH_IDS, VET, ageOf, versusText, UNITS, type BuildingKind, type DoctrineId, type UnitKind } from '../defs';
 import { BASES, CAMPS, FLOOR, HALF, HILLS, LAKES, MESAS, SHUT, TREES, WALL_CELL, deposits, inHill, inLake, inMesa, lakeOf, landShut, wallLine, wallSnap } from '../map';
 import { DRESSING } from '../dressing';
 import { UNIT_ORDER, cargoBits, rankBits, stanceBits, type State } from '../protocol';
@@ -1018,7 +1018,7 @@ export function draw(): void {
       const rank = rankBits(one.flags);
       const hpMax = Math.round(d.hp * (1 + rank * VET.hp));
       const extra = [
-        rank ? `${'★'.repeat(rank)} veteran: +${Math.round(rank * VET.damage * 100)}% damage, +${Math.round(rank * VET.hp * 100)}% health` : one.kind !== 'engineer' && d.damage ? 'No stars yet: kills earn them' : '',
+        rank ? `${'★'.repeat(rank)} ${VET.names[rank]}: +${Math.round(rank * VET.damage * 100)}% damage, +${Math.round(rank * VET.rate * 100)}% fire rate, +${Math.round(rank * VET.hp * 100)}% health${rank >= 3 ? ', mends itself between fights' : ''}` : one.kind !== 'engineer' && d.damage ? 'Recruit: hits and kills earn stars' : '',
         one.flags & 64 ? `On high ground: +${HIGH.range * 100}% reach, +${HIGH.sight * 100}% sight` : '',
         d.damage && one.kind !== 'engineer' ? `Stance: ${STANCES[stanceBits(one.flags)].name} (T)` : '',
         d.holds ? `Aboard: ${cargoBits(one.flags)} of ${d.holds}` : '',
@@ -1298,6 +1298,9 @@ export function frameUi(c: Client): void {
       add('circle', { cx: to.x, cy: to.y, r: 3.5, fill: LINE[plan[k]], 'fill-opacity': 0.85 });
       from = to;
     }
+    // (The last: the spot it'll take, its size, so a formation shows before it's formed.)
+    const kind = ui.units.find((u) => u.id === id)?.kind;
+    if (kind && plan.length >= 3 && !UNITS[kind].air) ring(plan[plan.length - 2], plan[plan.length - 1], SPACE[kind] * 0.32, { fill: 'none', stroke: LINE[plan[plan.length - 3]], 'stroke-width': 1.2, 'stroke-opacity': 0.4, 'stroke-dasharray': '4 3' }, FLOOR + 0.1, 20);
   }
   // Marks on the ground: rings that close on where an order went; a ping's are bigger, and pulse.
   const nowMs = performance.now();

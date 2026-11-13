@@ -32,6 +32,46 @@ export const STYLES = {
   navy: { name: 'Navy', army: 15, grow: 5, towers: 1, bunkers: 1, age2: 330, age3: 840, barracks: 1, air: false, navy: true, tanks: 1, walls: true },
 };
 export type Style = keyof typeof STYLES;
+
+/**
+ * Who each style is: its commanders' names, and what they say to the table when they go in, when
+ * they pull out, and when an attack on their base is beaten off (`{foe}` is the one it's about).
+ */
+const PERSONAS: Record<Style, { names: string[]; attack: string[]; retreat: string[]; hold: string[] }> = {
+  balanced: {
+    names: ['Hale', 'Mercer', 'Quinn'],
+    attack: ['Advancing on {foe}. Steady now.', 'All units forward. {foe} is first.', 'By the book, {foe}. Here we come.'],
+    retreat: ['Pull back and regroup.', 'Fall back. We\u2019ll be back.'],
+    hold: ['Base secure. Good try, {foe}.', 'Line held. Back to work.'],
+  },
+  rusher: {
+    names: ['Blitz', 'Dash', 'Rook'],
+    attack: ['Too slow, {foe}!', 'Ready or not, {foe}.', 'Why wait? Go, go, go!'],
+    retreat: ['Tactical retreat. Totally planned.', 'Fine. Round two in a minute.'],
+    hold: ['Cute. My turn, {foe}.', 'That\u2019s it? Really?'],
+  },
+  turtle: {
+    names: ['Holt', 'Granite', 'Moss'],
+    attack: ['The walls are done. Now, {foe}.', 'Slowly, surely. We\u2019re coming, {foe}.'],
+    retreat: ['Back behind the walls.', 'Home. The walls will hold.'],
+    hold: ['Nothing gets through these walls.', 'Did you think it would be that easy, {foe}?'],
+  },
+  air: {
+    names: ['Falcon', 'Skye', 'Talon'],
+    attack: ['Wheels up. Target: {foe}.', 'Look up, {foe}.'],
+    retreat: ['Break off, back to base.', 'Pulling out. Refuel and rearm.'],
+    hold: ['Radar\u2019s clear. Nice try, {foe}.'],
+  },
+  navy: {
+    names: ['Marlow', 'Drake', 'Tide'],
+    attack: ['All ahead full, {foe}.', 'Weigh anchor. {foe} is in range.'],
+    retreat: ['Come about. Back to port.', 'Withdraw. The tide will turn.'],
+    hold: ['The harbour holds, {foe}.'],
+  },
+};
+/** A bot's rank says how good it is. */
+const rankName = (skill: number, adaptive: boolean) => (adaptive ? 'Col.' : skill < 0.5 ? 'Lt.' : skill < 0.8 ? 'Maj.' : 'Gen.');
+const pick = <T,>(list: T[]) => list[Math.floor(Math.random() * list.length)];
 const STYLE_IDS = Object.keys(STYLES) as Style[];
 
 /** The wild's seat: the camps' guards. It's in the way, but it's no one to go to war with. */
@@ -67,20 +107,77 @@ export class BotBrain {
   private scoutedAt = -99;
   /** When it next looks over its walls. */
   private wallAt = 0;
+  /** The flankers of the attack being got ready (unit ids), and where they gather. */
+  private flank = new Set<number>();
+  private flankAt: { x: number; z: number } | null = null;
+  /** A raiding party out after the enemy's engineers (unit ids), where it's going, and when it gives up. */
+  private raid = new Set<number>();
+  private raidTo: { x: number; z: number } | null = null;
+  private raidUntil = 0;
+  private raidAt = 0;
+  /** Where it last saw the enemy's engineers at work. */
+  private seenWork = new Map<number, { seat: number; x: number; z: number; t: number }>();
+  /** The badly hurt, sent home to mend before they go back in. */
+  private wounded = new Set<number>();
+  /** When it last said anything; and how big the attack on its base was (to know when it's been beaten off). */
+  private saidAt = -99;
+  private siege = 0;
+  private siegeBy = -1;
+  /** An adaptive bot: when it next sizes up the match. */
+  private tuneAt = 150;
 
   readonly kind: Style;
-  constructor(readonly skill: number, kind?: Style) {
+  /** How much of the job it does (an adaptive bot's moves as the match goes). */
+  skill: number;
+  constructor(skill: number, kind?: Style, readonly adaptive = false) {
+    this.skill = skill;
     this.kind = kind ?? STYLE_IDS[Math.floor(Math.random() * STYLE_IDS.length)];
+  }
+  /** Its name at the table: its rank (how good it is) and a name of its style's. */
+  callsign(seat: number): string {
+    const names = PERSONAS[this.kind].names;
+    return `${rankName(this.skill, this.adaptive)} ${names[seat % names.length]}`;
   }
   /** Its style's name, for the scoreboard. */
   get style(): string {
     return STYLES[this.kind].name;
   }
 
+  /** A word to the table, now and then (not more than once a minute). */
+  private say(w: World, s: Slot, what: 'attack' | 'retreat' | 'hold', foe = this.foeSeat): void {
+    // (Not a player's own seat, played for them while they're away: it's their name.)
+    if (s.player || w.time - this.saidAt < 60 || w.stand || Math.random() > 0.75) return;
+    this.saidAt = w.time;
+    const name = w.slots[foe]?.name ?? 'you';
+    w.say(s.seat, pick(PERSONAS[this.kind][what]).replace('{foe}', name));
+  }
+
+  /**
+   * An adaptive bot, once a minute: how it's doing against the people it's up against (their armies
+   * and their incomes, or the bots' if there are no people), and a little sharper if it's behind, a
+   * little easier if it's well ahead.
+   */
+  private tune(w: World, s: Slot): void {
+    if (!this.adaptive || w.time < this.tuneAt) return;
+    this.tuneAt = w.time + 60;
+    const strength = (x: Slot) => (x.army[x.army.length - 1] ?? 0) + 6 * Math.max(0, (x.banked[x.banked.length - 1] ?? 0) - (x.banked[x.banked.length - 7] ?? 0));
+    const foes = w.enemies(s.seat).filter((e) => e.seat !== WILD);
+    const people = foes.filter((e) => e.player);
+    const them = Math.max(1, ...(people.length ? people : foes).map(strength));
+    const ratio = strength(s) / them;
+    if (ratio < 0.75) this.skill = Math.min(0.95, this.skill + 0.06);
+    else if (ratio > 1.5) {
+      this.skill = Math.max(0.3, this.skill - 0.06);
+      // (Well ahead: a breather before the next attack.)
+      this.nextPush = Math.max(this.nextPush, w.time + 45);
+    }
+  }
+
   think(w: World, s: Slot, dt: number): void {
     this.clock -= dt;
     if (this.clock > 0) return;
     this.clock = 1.2 - this.skill * 0.5;
+    this.tune(w, s);
     const smart = this.skill >= 0.5;
     const sharp = this.skill >= 0.8;
     const base = BASES[s.seat];
@@ -100,6 +197,17 @@ export class BotBrain {
 
     // What's at the door: enemy fighters in the base.
     const home = foes.filter((f) => f.seat !== WILD && fights(f) && (hyp(f.x, f.z, base.x, base.z) < 34 || bld.some((b) => hyp(f.x, f.z, b.x, b.z) < 16) || walls.some((b) => hyp(f.x, f.z, b.x, b.z) < 9)));
+    // A real attack on the base, beaten off: it says so.
+    if (home.length) {
+      const p = power(home);
+      if (p > this.siege) {
+        this.siege = p;
+        this.siegeBy = home[0].seat;
+      }
+    } else {
+      if (this.siege >= 600 && hq) this.say(w, s, 'hold', this.siegeBy);
+      this.siege = 0;
+    }
 
     // --- Engineers ---------------------------------------------------------------------------
     const queued = (b: Building, k: UnitKind) => b.queue.filter((q) => q.kind === k).length;
@@ -294,11 +402,34 @@ export class BotBrain {
     // --- The war --------------------------------------------------------------------------------
     const scout = smart ? kinds('scout')[0] : undefined;
     const raiders = sharp && st.air && kinds('heli').length >= 3 ? kinds('heli') : [];
-    const army = mine.filter((u) => fights(u) && u.lake < 0 && !u.inside && u !== scout && !raiders.includes(u));
     const enemies = w.enemies(s.seat).filter((e) => e.seat !== WILD);
     const sx = Math.sign(-base.x || 1);
     const sz = Math.sign(-base.z || 1);
     const front = { x: base.x + sx * 22, z: base.z + sz * 22 };
+    // The badly hurt, far from home and in a fight, go back to mend (at the HQ or a depot) and rejoin
+    // when they're fit; not when the base itself is under attack, or an enemy uplink is counting down.
+    const careful = this.skill >= 0.6;
+    if (careful) {
+      for (const id of this.wounded) {
+        const u = w.units.get(id);
+        if (!u || u.hp >= u.max * 0.8 || home.length) this.wounded.delete(id);
+      }
+      if (posts.length && !home.length && !this.uplinkAgainst(w, enemies)) {
+        for (const u of mine) {
+          if (!fights(u) || u.kind === 'medic' || u.lake >= 0 || u.inside || this.wounded.has(u.id) || u.hp > u.max * 0.3 || w.time - u.hitAt > 4) continue;
+          const post = [...posts].sort((a, b) => hyp(a.x, a.z, u.x, u.z) - hyp(b.x, b.z, u.x, u.z))[0];
+          if (hyp(post.x, post.z, u.x, u.z) < 30) continue;
+          this.wounded.add(u.id);
+          this.raid.delete(u.id);
+          this.flank.delete(u.id);
+          w.command([u.id], s.seat, { t: 'move', x: post.x + (Math.random() - 0.5) * 6, z: post.z + (Math.random() - 0.5) * 6, attack: false });
+        }
+      }
+    } else this.wounded.clear();
+    // Raids: a few quick units off after the enemy's engineers at their work, while the main army waits.
+    for (const id of this.raid) if (!w.units.has(id)) this.raid.delete(id);
+    if (this.raid.size && (w.time > this.raidUntil || this.raid.size < 2 || home.length)) this.endRaid(w, s, front);
+    const army = mine.filter((u) => fights(u) && u.lake < 0 && !u.inside && u !== scout && !raiders.includes(u) && !this.wounded.has(u.id) && !this.raid.has(u.id));
 
     // The scout goes round the enemy's bases and the camps, and reports.
     if (scout && scout.order.t === 'idle') {
@@ -390,6 +521,8 @@ export class BotBrain {
       if (best >= 0 && bd < 150 && Math.random() < 0.5 + this.skill * 0.4) this.camp = best;
     }
 
+    if (careful && !w.stand) this.raiding(w, s, rest, foes, enemies, front);
+
     const need = st.army + this.wave * st.grow + Math.round((1 - this.skill) * 8);
     // An enemy uplink running: everything goes at it now, and keeps going.
     const urgent = !!this.uplinkAgainst(w, enemies) && w.time >= w.peaceUntil;
@@ -415,6 +548,8 @@ export class BotBrain {
           this.wave++;
           this.mode = smart ? 'muster' : 'push';
           this.until = w.time + 35;
+          this.planFlank(rest, t, base);
+          this.say(w, s, 'attack');
         }
       }
     } else if (this.mode === 'muster') {
@@ -422,8 +557,12 @@ export class BotBrain {
       if (!t) this.mode = 'build';
       else {
         const stage = this.stage(t, base);
-        this.go(w, s, rest, stage.x, stage.z, true);
-        const there = rest.filter((u) => hyp(u.x, u.z, stage.x, stage.z) < 18).length;
+        // (The flankers gather off to one side, to come in on the enemy's flank.)
+        const flankers = this.flankAt ? rest.filter((u) => this.flank.has(u.id)) : [];
+        const fa = this.flankAt;
+        this.go(w, s, rest.filter((u) => !flankers.includes(u)), stage.x, stage.z, true);
+        if (fa) this.go(w, s, flankers, fa.x, fa.z, true);
+        const there = rest.filter((u) => (fa && flankers.includes(u) ? hyp(u.x, u.z, fa.x, fa.z) : hyp(u.x, u.z, stage.x, stage.z)) < 18).length;
         if (there >= rest.length * 0.7 || w.time >= this.until) this.mode = 'push';
       }
     } else {
@@ -439,7 +578,10 @@ export class BotBrain {
         const dug = [...this.seenBuildings.values()].filter((b) => (b.kind === 'tower' || b.kind === 'bunker') && hyp(b.x, b.z, cx, cz) < 22).length;
         const theirs = power(facing) + dug * FORT;
         const ourLocal = power(rest.filter((u) => hyp(u.x, u.z, cx, cz) < 26));
-        if (smart && !urgent && theirs > ourLocal * 1.35 && hyp(cx, cz, base.x, base.z) > 40) this.fallBack(w, s, rest, front, 20);
+        if (smart && !urgent && theirs > ourLocal * 1.35 && hyp(cx, cz, base.x, base.z) > 40) {
+          this.fallBack(w, s, rest, front, 20);
+          this.say(w, s, 'retreat');
+        }
         else {
           // On with the attack: those at the front at once, those coming from home in groups of three or more.
           const far = rest.filter((u) => hyp(u.x, u.z, cx, cz) > 40);
@@ -470,7 +612,7 @@ export class BotBrain {
     for (const u of mine) if (!u.inside) eyes.push(u.x, u.z, UNITS[u.kind].sight ?? (UNITS[u.kind].air ? SIGHT.air : SIGHT.unit));
     for (const b of bld) if (b.built >= 1) eyes.push(b.x, b.z, SIGHT.building);
     // (From 0.8 it sees the whole map: Hard says so. Every other bot plays in the fog.)
-    const all = s.revealUntil > w.time || this.skill >= 0.8;
+    const all = s.revealUntil > w.time || (this.skill >= 0.8 && !this.adaptive);
     const sees = (x: number, z: number) => {
       if (all) return true;
       for (let i = 0; i < eyes.length; i += 3) if (hyp(eyes[i], eyes[i + 1], x, z) <= eyes[i + 2]) return true;
@@ -482,6 +624,7 @@ export class BotBrain {
       if (!against.has(u.seat) || u.inside || !sees(u.x, u.z)) continue;
       foes.push(u);
       if (u.seat !== WILD) this.seenUnits.set(u.id, { kind: u.kind, seat: u.seat, t: w.time });
+      if (u.kind === 'engineer' && u.order.t === 'gather') this.seenWork.set(u.id, { seat: u.seat, x: u.x, z: u.z, t: w.time });
     }
     for (const [id, m] of this.seenUnits) if (!w.units.has(id) || w.time - m.t > 120) this.seenUnits.delete(id);
     for (const b of w.buildings.values()) if (against.has(b.seat) && !BUILDINGS[b.kind].wall && (b.kind === 'uplink' || sees(b.x, b.z))) this.seenBuildings.set(b.id, { kind: b.kind, seat: b.seat, x: b.x, z: b.z });
@@ -553,6 +696,8 @@ export class BotBrain {
   /** Out of a fight it's losing: everyone back to the front of the base, not stopping to shoot. */
   private fallBack(w: World, s: Slot, army: Unit[], front: { x: number; z: number }, seconds: number): void {
     this.mode = seconds ? 'fallback' : 'build';
+    this.flank.clear();
+    this.flankAt = null;
     this.nextPush = w.time + 240;
     this.until = w.time + seconds;
     if (army.length) w.command(army.map((u) => u.id), s.seat, { t: 'move', x: front.x, z: front.z, attack: seconds === 0 });
@@ -564,15 +709,119 @@ export class BotBrain {
     if (send.length) w.command(send.map((u) => u.id), s.seat, { t: 'move', x, z, attack });
   }
 
-  /** In a fight, each picks the target it's best against, if one's in reach. */
+  /**
+   * In a fight, each picks its target: what it's best against first, then what's worth most for the
+   * health it has left (the wounded, finished off), and not one already as good as dead to the fire on it.
+   */
   private focus(w: World, s: Slot, army: Unit[], foes: Unit[]): void {
+    /** The fire already on each target (damage a second). */
+    const fire = new Map<number, number>();
+    for (const u of army) if (u.order.t === 'attack' && !u.order.building) fire.set(u.order.id, (fire.get(u.order.id) ?? 0) + UNITS[u.kind].damage * UNITS[u.kind].rate);
     for (const u of army) {
+      const d = UNITS[u.kind];
+      if (d.damage <= 0 || u.kind === 'artillery' || (u.order.t !== 'idle' && !(u.order.t === 'move' && u.order.attack))) continue;
       const want = PREFERS[u.kind];
-      if (!want || (u.order.t !== 'idle' && !(u.order.t === 'move' && u.order.attack))) continue;
-      const reach = UNITS[u.kind].range + 2;
-      const t = foes.find((f) => want.includes(f.kind) && hyp(f.x, f.z, u.x, u.z) <= reach && !(UNITS[f.kind].air && UNITS[u.kind].hits === undefined));
-      if (t) w.command([u.id], s.seat, { t: 'attack', id: t.id, building: false });
+      const hits = d.hits ?? 'ground';
+      const reach = d.range + 2;
+      let best: Unit | null = null;
+      let score = 0;
+      for (const f of foes) {
+        const air = !!UNITS[f.kind].air;
+        if ((air && hits === 'ground') || (!air && hits === 'air') || hyp(f.x, f.z, u.x, u.z) > reach) continue;
+        // (Enough on it already: it'll be dead in a couple of seconds.)
+        if ((fire.get(f.id) ?? 0) * 2 >= f.hp) continue;
+        const sc = ((want?.includes(f.kind) ? 2.5 : 1) * (worth(f.kind) + 40)) / (f.hp + 25);
+        if (sc > score) {
+          score = sc;
+          best = f;
+        }
+      }
+      if (!best) continue;
+      // (Only worth an order when it isn't what it'd shoot anyway: a clear choice, or what it's best against.)
+      if (!want?.includes(best.kind) && best.hp > best.max * 0.5) continue;
+      fire.set(best.id, (fire.get(best.id) ?? 0) + d.damage * d.rate);
+      w.command([u.id], s.seat, { t: 'attack', id: best.id, building: false });
     }
+  }
+
+  /** Who goes round the side: from a big enough army, the quickest third (not the guns or the commander), and where they gather. */
+  private planFlank(army: Unit[], t: { x: number; z: number }, base: { x: number; z: number }): void {
+    this.flank.clear();
+    this.flankAt = null;
+    if (this.skill < 0.7 || army.length < 10) return;
+    const quick = army.filter((u) => u.kind !== 'artillery' && u.kind !== 'hero' && u.kind !== 'medic' && !UNITS[u.kind].air).sort((a, b) => UNITS[b.kind].speed - UNITS[a.kind].speed);
+    const n = Math.floor(army.length / 3);
+    if (quick.length < n) return;
+    const stage = this.stage(t, base);
+    // Off to one side of the line in, as far round as the ground allows.
+    const d = hyp(t.x, t.z, stage.x, stage.z) || 1;
+    const px = -(t.z - stage.z) / d;
+    const pz = (t.x - stage.x) / d;
+    const side = Math.random() < 0.5 ? 1 : -1;
+    for (const off of [36, 30, 24, -36, -30, -24]) {
+      const x = stage.x + px * off * side + ((t.x - stage.x) / d) * 14;
+      const z = stage.z + pz * off * side + ((t.z - stage.z) / d) * 14;
+      if (Math.abs(x) > HALF - 8 || Math.abs(z) > HALF - 8 || inLake(x, z, 4) || inMesa(x, z, 4)) continue;
+      this.flankAt = { x, z };
+      for (const u of quick.slice(0, n)) this.flank.add(u.id);
+      return;
+    }
+  }
+
+  /**
+   * A raid on the enemy's engineers: from the middle game, every few minutes (a rusher more often),
+   * when the army at home is big enough to spare them, three or four of its quickest go for the
+   * engineers it last saw at work away from the enemy's towers. They give up when they're beaten, or when
+   * there's no one there.
+   */
+  private raiding(w: World, s: Slot, rest: Unit[], foes: Unit[], enemies: Slot[], front: { x: number; z: number }): void {
+    for (const [id, m] of this.seenWork) if (!w.units.has(id) || w.time - m.t > 150) this.seenWork.delete(id);
+    const party = [...this.raid].map((id) => w.units.get(id)).filter((u): u is Unit => !!u);
+    if (party.length && this.raidTo) {
+      const cx = party.reduce((n, u) => n + u.x, 0) / party.length;
+      const cz = party.reduce((n, u) => n + u.z, 0) / party.length;
+      const facing = foes.filter((f) => fights(f) && hyp(f.x, f.z, cx, cz) < 22);
+      const dug = [...this.seenBuildings.values()].filter((b) => (b.kind === 'tower' || b.kind === 'bunker') && hyp(b.x, b.z, cx, cz) < 20).length;
+      // Outgunned: home. There, and no one to shoot: home.
+      const there = hyp(cx, cz, this.raidTo.x, this.raidTo.z) < 10;
+      const prey = foes.filter((f) => f.kind === 'engineer' && f.seat !== WILD && hyp(f.x, f.z, cx, cz) < 24);
+      if (power(facing) + dug * FORT > power(party) * 1.1 || (there && !prey.length)) {
+        this.endRaid(w, s, front);
+        return;
+      }
+      if (prey.length) {
+        // Go for the engineers themselves.
+        const free = party.filter((u) => u.order.t !== 'attack');
+        for (const u of free) {
+          const e = prey.sort((a, b) => hyp(a.x, a.z, u.x, u.z) - hyp(b.x, b.z, u.x, u.z))[0];
+          w.command([u.id], s.seat, { t: 'attack', id: e.id, building: false });
+        }
+      } else this.go(w, s, party, this.raidTo.x, this.raidTo.z, false);
+      return;
+    }
+    if (this.mode !== 'build' || this.camp >= 0 || w.time < Math.max(420, w.peaceUntil + 30) || w.time < this.raidAt || rest.length < 9) return;
+    // Where: engineers seen at work lately, not under the enemy's towers.
+    const forts = [...this.seenBuildings.values()].filter((b) => b.kind === 'tower' || b.kind === 'bunker' || b.kind === 'hq');
+    const enemySeats = new Set(enemies.map((e) => e.seat));
+    const spots = [...this.seenWork.values()].filter((m) => enemySeats.has(m.seat) && !forts.some((b) => hyp(b.x, b.z, m.x, m.z) < 22));
+    const base = BASES[s.seat];
+    const to = spots.sort((a, b) => hyp(a.x, a.z, base.x, base.z) - hyp(b.x, b.z, base.x, base.z))[0];
+    if (!to) return;
+    const quick = rest.filter((u) => (u.kind === 'scout' || u.kind === 'rifle' || u.kind === 'tank') && u.hp > u.max * 0.7).sort((a, b) => UNITS[b.kind].speed - UNITS[a.kind].speed).slice(0, this.kind === 'rusher' ? 5 : 4);
+    if (quick.length < 3) return;
+    this.raidAt = w.time + (this.kind === 'rusher' ? 120 : 200) + Math.random() * 60;
+    this.raidUntil = w.time + 100;
+    this.raidTo = { x: to.x, z: to.z };
+    for (const u of quick) this.raid.add(u.id);
+    w.command(quick.map((u) => u.id), s.seat, { t: 'move', x: to.x, z: to.z, attack: false });
+  }
+
+  /** The raiders come home. */
+  private endRaid(w: World, s: Slot, front: { x: number; z: number }): void {
+    const ids = [...this.raid].filter((id) => w.units.has(id));
+    this.raid.clear();
+    this.raidTo = null;
+    if (ids.length) w.command(ids, s.seat, { t: 'move', x: front.x, z: front.z, attack: false });
   }
 
   /** Its units' special abilities, where they'd earn their keep. */

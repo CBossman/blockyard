@@ -20,7 +20,7 @@ import { TEAM_COLORS } from './defs';
 /** Where an order sends a unit. */
 type Order =
   | { t: 'idle' }
-  | { t: 'move'; x: number; z: number; attack: boolean; /** Which way to face on arriving. */ face?: number }
+  | { t: 'move'; x: number; z: number; attack: boolean; /** Which way to face on arriving. */ face?: number; /** The column's marching speed, kept to until near the end. */ pace?: number }
   | { t: 'attack'; id: number; building: boolean }
   | { t: 'gather'; node: number; phase: 'to' | 'work' | 'back'; slot?: number; held?: number }
   | { t: 'build'; id: number }
@@ -166,6 +166,8 @@ export interface World {
   minesOf(seat: number): number;
   /** A unit's special ability (`ids`' ready ones of a kind), on a spot if it wants one. */
   ability(seat: number, ids: number[], kind: UnitKind, x: number, z: number): boolean;
+  /** A bot commander's word to the table, in the feed. */
+  say(seat: number, text: string): void;
 }
 
 /** The wild's seat: the camps' guards. Its team is no one's. */
@@ -338,6 +340,19 @@ export default defineServer(shared, {
         return `${kind} for seat ${s}`;
       },
     });
+    game.commands.register('vet', {
+      usage: '<seat> <xp>',
+      help: 'Every unit of a seat given that much experience (16 makes an Elite)',
+      cheat: true,
+      run: ([seat, xp]) => {
+        let n = 0;
+        for (const u of units.values()) if (u.seat === Number(seat) && u.kind !== 'engineer') {
+          promote(u, Math.max(0, Number(xp ?? 16)) - u.xp);
+          n++;
+        }
+        return `${n} promoted`;
+      },
+    });
     game.commands.register('hurt', {
       usage: '<seat> [share]',
       help: 'Every unit of a seat down to a share of its health (default a third)',
@@ -436,6 +451,10 @@ interface SeatPlan {
   name: string;
   skill: number;
   style?: Style;
+  /** A bot that sizes up its enemies and gets sharper or easier to match. */
+  adaptive?: boolean;
+  /** A bot standing in for someone, which keeps their name (not one of its own). */
+  keep?: boolean;
 }
 
 function startFromLobby(game: GameContext): void {
@@ -443,7 +462,7 @@ function startFromLobby(game: GameContext): void {
   for (const x of lobby.seats) {
     if (x.kind === 'closed') continue;
     const player = x.kind === 'human' ? game.players.find((p) => p.id === x.id) ?? null : null;
-    plan.push({ seat: x.seat, team: x.team, player, name: player?.name ?? (x.kind === 'human' ? x.name : `Cmdr ${['Ash', 'Vega', 'Ryker', 'Sol', 'Voss', 'Kade'][x.seat]}`), skill: DIFFICULTIES.find((d) => d.id === x.difficulty)!.skill, style: x.style in STYLES ? (x.style as Style) : undefined });
+    plan.push({ seat: x.seat, team: x.team, player, name: player?.name ?? (x.kind === 'human' ? x.name : ''), skill: DIFFICULTIES.find((d) => d.id === x.difficulty)!.skill, adaptive: !!DIFFICULTIES.find((d) => d.id === x.difficulty)!.adaptive, keep: x.kind === 'human', style: x.style in STYLES ? (x.style as Style) : undefined });
   }
   startScale = START_RES[lobby.resources];
   startMatch(game, lobby.preset, 0.65, plan);
@@ -459,11 +478,14 @@ function startMatch(game: GameContext, chosen: Mode, skill: number, plan?: SeatP
   if (!plan) startScale = 1;
   uplinkOn = chosen !== 'stand' && (!plan || lobby.uplink);
   const humans = game.players.slice(0, 4);
-  const seat = (n: number, team: number, player: Player | null, name: string, skill: number, style?: Style): void => {
+  const seat = (n: number, team: number, player: Player | null, name: string, skill: number, style?: Style, adaptive = false, keep = false): void => {
     const doctrine = (player && picked.get(player.id)) || DOCTRINE_IDS[Math.floor(Math.random() * DOCTRINE_IDS.length)];
-    slots[n] = { seat: n, name, team, player, bot: player ? null : new BotBrain(skill, style), steel: Math.round(START.steel * startScale), oil: Math.round(START.oil * startScale), pop: 0, cap: 0, alive: true, lost: 0, doctrine, powerAt: DOCTRINES[doctrine].power.first, revealUntil: 0, techs: new Set(), rallyAt: 30, trade: { steel: 1, oil: 1, at: 0 }, stats: newStats(), army: [], banked: [] };
+    const bot = player ? null : new BotBrain(skill, style, adaptive);
+    // (A bot goes by its own name, which says how good it is and how it plays.)
+    if (bot && !keep) name = bot.callsign(n);
+    slots[n] = { seat: n, name, team, player, bot, steel: Math.round(START.steel * startScale), oil: Math.round(START.oil * startScale), pop: 0, cap: 0, alive: true, lost: 0, doctrine, powerAt: DOCTRINES[doctrine].power.first, revealUntil: 0, techs: new Set(), rallyAt: 30, trade: { steel: 1, oil: 1, at: 0 }, stats: newStats(), army: [], banked: [] };
   };
-  if (plan) for (const x of plan) seat(x.seat, x.team, x.player, x.name, x.skill, x.style);
+  if (plan) for (const x of plan) seat(x.seat, x.team, x.player, x.name, x.skill, x.style, x.adaptive, x.keep);
   else if (mode === 'stand') {
     for (let i = 0; i < Math.max(1, humans.length); i++) seat(i, 0, humans[i] ?? null, humans[i]?.name ?? 'Commander', skill);
     seat(STAND.seat, 1, null, 'The Raiders', skill);
@@ -673,7 +695,7 @@ function fireRate(u: Unit): number {
   if (u.kind !== 'hero') for (const h of units.values()) if (h.kind === 'hero' && h.seat === u.seat && dist(h.x, h.z, u.x, u.z) < HERO.aura) { r *= 1 + HERO.auraRate; break; }
   if (u.boostUntil > time) r *= 1 + HERO.rally.rate;
   if (u.flakUntil > time) r *= 2;
-  return r;
+  return r * (1 + rankOf(u.xp) * VET.rate);
 }
 /** How many of a kind a seat has, built or in a queue (for the commander's one-at-a-time limit). */
 const countOf = (seat: number, kind: UnitKind) => [...units.values()].filter((u) => u.seat === seat && u.kind === kind).length + [...buildings.values()].filter((b) => b.seat === seat).reduce((n, b) => n + b.queue.filter((q) => q.kind === kind).length, 0);
@@ -931,6 +953,8 @@ function healTick(dt: number): void {
     if (posts.some((b) => teamOf(b.seat) === teamOf(u.seat) && dist(b.x, b.z, u.x, u.z) < BUILDINGS[b.kind].radius + HEAL.radius)) u.hp = Math.min(u.max, u.hp + u.max * HEAL.rate * 0.5);
     // (Field Medicine: anywhere, at a third of the rate.)
     else if (has(u.seat, 'medicine')) u.hp = Math.min(u.max, u.hp + u.max * HEAL.rate * 0.5 * 0.34);
+    // (Elites see to themselves.)
+    else if (rankOf(u.xp) >= 3) u.hp = Math.min(u.max, u.hp + u.max * VET.regen * 0.5);
   }
 }
 
@@ -1337,7 +1361,9 @@ function findPath(x0: number, z0: number, x1: number, z1: number, team = -1): { 
 function move(u: Unit, tx: number, tz: number, dt: number, stop: number): boolean {
   const d = dist(u.x, u.z, tx, tz);
   if (d <= stop) return true;
-  const k = Math.min(UNITS[u.kind].speed * (u.sprintUntil > time ? RETREAT.speed : 1) * (ARMOR[u.kind] !== 'infantry' && has(u.seat, 'engines') ? 1.15 : 1) * dt, d - stop) / d;
+  const o = u.order;
+  const own = o.t === 'move' && o.pace !== undefined && dist(u.x, u.z, o.x, o.z) > 6 ? Math.min(UNITS[u.kind].speed, o.pace) : UNITS[u.kind].speed;
+  const k = Math.min(own * (u.sprintUntil > time ? RETREAT.speed : 1) * (ARMOR[u.kind] !== 'infantry' && has(u.seat, 'engines') ? 1.15 : 1) * dt, d - stop) / d;
   u.x += (tx - u.x) * k;
   u.z += (tz - u.z) * k;
   u.yaw = Math.atan2(tx - u.x, tz - u.z);
@@ -1838,7 +1864,10 @@ function damageUnit(game: GameContext, id: number, amount: number, by: number, s
   if (!u || u.inside) return;
   if (teamOf(by) !== teamOf(u.seat)) alert(game, u.seat, u.x, u.z, 'Your units are under attack!');
   u.hitAt = time;
-  u.hp -= amount * (has(u.seat, 'armor') ? 0.8 : 1) * (u.smokeUntil > time ? 0.5 : 1);
+  const dealt = Math.min(u.hp, amount * (has(u.seat, 'armor') ? 0.8 : 1) * (u.smokeUntil > time ? 0.5 : 1));
+  u.hp -= dealt;
+  // (Experience for landing hits, a little: the guns at the back and the rocket teams earn stars too.)
+  if (u.hp > 0 && src && units.has(src.id) && teamOf(src.seat) !== teamOf(u.seat) && u.seat !== NEUTRAL) promote(src, (dealt / 75) * VET.hit);
   // A unit hit by something it can shoot at turns on it.
   if (u.hp > 0) {
     if (u.kind !== 'engineer' && u.stance === 0 && UNITS[u.kind].damage > 0 && (u.order.t === 'idle' || (u.order.t === 'move' && u.order.attack))) {
@@ -2052,7 +2081,6 @@ function formation(list: Unit[], x: number, z: number, attack: boolean, queue = 
     give(list[0], { t: 'move', x, z, attack, face }, queue);
     return;
   }
-  const gap = Math.max(...list.map((u) => SPACE[u.kind])) + 0.9;
   const cols = Math.ceil(Math.sqrt(n * 1.8));
   const cx = list.reduce((a, u) => a + u.x, 0) / n;
   const cz = list.reduce((a, u) => a + u.z, 0) / n;
@@ -2060,19 +2088,40 @@ function formation(list: Unit[], x: number, z: number, attack: boolean, queue = 
   // (Facing the way it was dragged, if it was; else the way it's marching.)
   const fx = face === undefined ? (x - cx) / len : Math.sin(face);
   const fz = face === undefined ? (z - cz) / len : Math.cos(face);
+  const ground = list.filter((u) => !UNITS[u.kind].air);
+  const kinds = new Set(ground.map((u) => u.kind));
+  const spots: { u: Unit; x: number; z: number }[] = [];
   // Helicopters keep their own ranks over the ground troops' (they don't bump into them).
-  for (const group of [list.filter((u) => !UNITS[u.kind].air), list.filter((u) => UNITS[u.kind].air)]) {
-    const sorted = [...group].sort((a, b) => dist(a.x, a.z, x, z) - dist(b.x, b.z, x, z));
+  for (const group of [ground, list.filter((u) => UNITS[u.kind].air)]) {
+    // Armour in front, then the infantry, then those who keep behind the line: medics, flak, and the guns at the back.
+    const sorted = [...group].sort((a, b) => RANK[a.kind] - RANK[b.kind] || dist(a.x, a.z, x, z) - dist(b.x, b.z, x, z));
     const c = Math.min(cols, sorted.length);
-    sorted.forEach((u, i) => {
-      const across = ((i % c) - (c - 1) / 2) * gap;
-      const back = Math.floor(i / c) * gap;
-      const gx = x - fz * across - fx * back;
-      const gz = z + fx * across - fz * back;
-      give(u, { t: 'move', x: Math.max(-HALF + 2, Math.min(HALF - 2, gx)), z: Math.max(-HALF + 2, Math.min(HALF - 2, gz)), attack, face }, queue);
-    });
+    let back = 0;
+    let lastHalf = 0;
+    for (let r = 0; r * c < sorted.length; r++) {
+      const row = sorted.slice(r * c, r * c + c);
+      const gap = Math.max(...row.map((u) => SPACE[u.kind])) + 0.9;
+      if (r) back += lastHalf + gap / 2;
+      lastHalf = gap / 2;
+      // Each takes the place across the line nearest the side it's on, so the ranks don't cross each other getting there.
+      row.sort((p, q) => (fz * p.x - fx * p.z) - (fz * q.x - fx * q.z));
+      row.forEach((u, i) => {
+        const across = (i - (row.length - 1) / 2) * gap;
+        const gx = x - fz * across - fx * back;
+        const gz = z + fx * across - fz * back;
+        spots.push({ u, x: Math.max(-HALF + 2, Math.min(HALF - 2, gx)), z: Math.max(-HALF + 2, Math.min(HALF - 2, gz)) });
+      });
+    }
   }
+  // A long march keeps a mixed column together: each on the ground goes at the pace that brings it in when the
+  // slowest to get there does (and closes up at its own speed for the last stretch).
+  const march = kinds.size > 1 && len > 20 && !queue;
+  const takes = march ? Math.max(...spots.filter((p) => !UNITS[p.u.kind].air).map((p) => dist(p.u.x, p.u.z, p.x, p.z) / UNITS[p.u.kind].speed)) : 0;
+  for (const p of spots) give(p.u, { t: 'move', x: p.x, z: p.z, attack, face, pace: march && !UNITS[p.u.kind].air ? Math.max(1, dist(p.u.x, p.u.z, p.x, p.z) / takes) : undefined }, queue);
 }
+
+/** Where each kind takes its place in a formation: low numbers at the front. */
+const RANK: Record<UnitKind, number> = { brute: 0, tank: 0, hero: 1, guard: 2, rifle: 2, at: 2, scout: 2, engineer: 3, medic: 4, aa: 4, artillery: 5, heli: 0, gunboat: 0, transport: 1 };
 
 /** Where the next unit out of a building takes its place at the rally point: round it in a spiral, not on top of the last. */
 function rallySpot(seat: number, x: number, z: number, room = 3.4): { x: number; z: number } {
@@ -2312,6 +2361,10 @@ function world(game: GameContext): World {
       return !!sl && useAbility(game, sl, ids.map((id) => units.get(id)).filter((u): u is Unit => !!u && u.seat === seat), kind, x, z, false);
     },
     place: (seat, kind, x, z, builders) => place(game, seat, kind, x, z, builders),
+    say: (seat, text) => {
+      const sl = slots[seat];
+      if (sl && mode !== 'stand') game.hud.feed(`${sl.name}: “${text}”`, { color: TEAM_COLORS[seat % TEAM_COLORS.length] });
+    },
     power: (seat, x, z) => usePower(game, seat, x, z),
     command: (ids, seat, o) => {
       if (o.t === 'move' && ids.length > 1) {

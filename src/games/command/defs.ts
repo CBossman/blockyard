@@ -213,7 +213,8 @@ export const STANCES = [
  * Veterancy: kills earn experience (a kill is worth the victim's health over 75: an infantryman 1,
  * a tank about 5), and at 3, 8 and 16 a unit gains a star: each 12% more damage and 10% more health.
  */
-export const VET = { xp: [3, 8, 16], damage: 0.12, hp: 0.1 };
+/** Veterancy: experience from hits and kills (a kill counts for most), and at each threshold a star: more damage, health and rate of fire. Elites (three stars) patch themselves up between fights. */
+export const VET = { xp: [3, 8, 16], damage: 0.12, hp: 0.1, rate: 0.08, hit: 0.3, regen: 0.012, names: ['Recruit', 'Veteran', 'Hardened', 'Elite'] };
 export const rankOf = (xp: number) => VET.xp.filter((t) => xp >= t).length;
 /** High ground: how much further a unit on a hill reaches and sees, and how much less it takes from below. */
 export const HIGH = { range: 0.2, sight: 0.3, cover: 0.15 };
@@ -338,11 +339,12 @@ export const DROP_KINDS: Record<DropKind, { name: string; blurb: string; steel: 
 };
 
 /** How good the bots are (`bots.ts`: `skill` is how much of the job each does). */
-export type DifficultyId = 'easy' | 'normal' | 'hard';
-export const DIFFICULTIES: { id: DifficultyId; name: string; blurb: string; skill: number }[] = [
+export type DifficultyId = 'easy' | 'normal' | 'hard' | 'adaptive';
+export const DIFFICULTIES: { id: DifficultyId; name: string; blurb: string; skill: number; adaptive?: boolean }[] = [
   { id: 'easy', name: 'Easy', blurb: 'They leave you alone for fifteen minutes, and never retreat or plan.', skill: 0.3 },
   { id: 'normal', name: 'Normal', blurb: 'No attack before eleven minutes. They gather before they strike, and pull out of losing fights.', skill: 0.65 },
   { id: 'hard', name: 'Hard', blurb: 'They see the whole map, attack from nine minutes, raid your engineers and bomb your armies.', skill: 0.92 },
+  { id: 'adaptive', name: 'Adaptive', blurb: 'Starts at Normal and sizes you up every minute: sharper while you’re winning, easier while you’re losing.', skill: 0.6, adaptive: true },
 ];
 
 /** The bot styles the table offers (`bots.ts`). */

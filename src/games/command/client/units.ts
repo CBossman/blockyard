@@ -1,10 +1,10 @@
 import type { Client, Node } from '@platform/client';
-import { UNITS, type UnitKind } from '../defs';
+import { UNITS, VET, type UnitKind } from '../defs';
 import { FLOOR, heightAt } from '../map';
 import { rankBits } from '../protocol';
 import { SCALE, variantOf } from '../models';
 import { BUILDINGS } from '../defs';
-import type { B, U } from './ui';
+import { mySeat, type B, type U } from './ui';
 import { inView } from './camera';
 import { puff } from './battle';
 
@@ -49,6 +49,8 @@ interface Shown {
   /** A tank's turret, which turns on the hull, and which way it's pointing. */
   gun: Node | null;
   aim: number;
+  /** An artillery piece's barrel: how far it's lowered from firing (0) to travelling. */
+  lift: number;
   /** What turns on it: a helicopter's main rotor (fast), a flak tank's radar dish (slowly). */
   rotor: Node | null;
   crate: Node | null;
@@ -87,6 +89,8 @@ interface Dying {
   boat: boolean;
   /** A vehicle on land: it stays where it stopped, burning, before it sinks away. */
   wreck: boolean;
+  /** How many times its ammunition has gone off. */
+  pops: number;
   x: number;
   z: number;
   /** On foot: each man, how he goes over. */
@@ -179,7 +183,7 @@ function make(client: Client, u: U): Shown | null {
   const arms: Node[][] = [];
   for (let i = 0; i < n; i++) {
     const scale = SCALE[u.kind] * k;
-    const m = model(client, trousers ? `ic_${u.kind}_t_${variantOf(u.seat)}` : u.kind === 'tank' ? `ic_tank_h_${variantOf(u.seat)}` : `ic_${u.kind}_${variantOf(u.seat)}`, scale);
+    const m = model(client, trousers ? `ic_${u.kind}_t_${variantOf(u.seat)}` : u.kind === 'tank' || u.kind === 'artillery' || u.kind === 'aa' ? `ic_${u.kind}_h_${variantOf(u.seat)}` : `ic_${u.kind}_${variantOf(u.seat)}`, scale);
     if (!m) return null;
     if (trousers) {
       const pair = [leg(client, trousers, scale, -1), leg(client, trousers, scale, 1)];
@@ -197,9 +201,10 @@ function make(client: Client, u: U): Shown | null {
     men.push(m);
   }
   let gun: Node | null = null;
-  if (u.kind === 'tank') {
-    gun = model(client, `ic_tank_g_${variantOf(u.seat)}`, SCALE.tank);
+  if (u.kind === 'tank' || u.kind === 'artillery' || u.kind === 'aa') {
+    gun = model(client, `ic_${u.kind}_g_${variantOf(u.seat)}`, SCALE[u.kind]);
     if (!gun) return null;
+    gun.rotation.order = 'YXZ';
     node.add(gun);
   }
   // The rotor over a helicopter's mast (14 voxels up, at its scale).
@@ -227,7 +232,7 @@ function make(client: Client, u: U): Shown | null {
   const flag = addFlag(client, node, u.kind, u.seat);
   const gy = UNITS[u.kind].naval ? 0 : heightAt(u.x, u.z);
   const y = FLOOR + gy + (UNITS[u.kind].air ? 5 : 0);
-  return { arms, kicks: men.map(() => 0), brace: 0, beat: 0, tail, tilt: 0, tiltRoll: 0, surge: 0, bank: 0, was: 0, puff: Math.random(), kind: u.kind, seat: u.seat, node, men, legs, gun, aim: u.yaw, flag, rotor, crate: null, crateKind: 0, x: u.x, z: u.z, y, yaw: u.yaw, tx: u.x, tz: u.z, tyaw: u.yaw, vx: 0, vz: 0, at: now, hp: u.hp, flags: u.flags, phase: Math.random() * 6, speed: 0, kick: 0, fired: -9, hit: -9, seen: tick, gy };
+  return { arms, kicks: men.map(() => 0), brace: 0, beat: 0, tail, tilt: 0, tiltRoll: 0, surge: 0, bank: 0, was: 0, puff: Math.random(), kind: u.kind, seat: u.seat, node, men, legs, gun, aim: u.yaw, lift: 0.42, flag, rotor, crate: null, crateKind: 0, x: u.x, z: u.z, y, yaw: u.yaw, tx: u.x, tz: u.z, tyaw: u.yaw, vx: 0, vz: 0, at: now, hp: u.hp, flags: u.flags, phase: Math.random() * 6, speed: 0, kick: 0, fired: -9, hit: -9, seen: tick, gy };
 }
 
 let ghost: { id: string; node: Node } | null = null;
@@ -267,6 +272,7 @@ export function updateUnits(client: Client, list: U[]): void {
       client.fx.burst({ x: s.x, y: s.y + 3, z: s.z }, { color: '#ffd23a', count: 26, speed: 6, size: 0.3, glow: 1, life: 0.8, gravity: -1 });
       client.fx.shockwave({ x: s.x, y: s.y + 0.3, z: s.z }, 5, '#ffd23a');
       client.audio.play('cm_promote', { at: { x: s.x, y: s.y, z: s.z } });
+      if (u.seat === mySeat()) client.hud.toast(`${UNITS[u.kind].name} promoted: ${VET.names[rankBits(u.flags)]} ${'★'.repeat(rankBits(u.flags))}`);
     }
     if (u.x !== s.tx || u.z !== s.tz) {
       const gap = Math.min(0.5, Math.max(0.05, now - s.at));
@@ -291,7 +297,7 @@ export function updateUnits(client: Client, list: U[]): void {
     // Killed (it was hurt and something blew near it, or it was nearly dead): it topples and sinks.
     const killed = s.hp <= 40 || blasts.some((b) => now - b.t < 0.6 && Math.hypot(b.x - s.x, b.z - s.z) < 4);
     if (killed) {
-      dying.push({ node: s.node, t: now, y: s.y, yaw: s.yaw, air: !!UNITS[s.kind].air, boat: !!UNITS[s.kind].naval, wreck: !FOOT.includes(s.kind) && !UNITS[s.kind].air && !UNITS[s.kind].naval, x: s.x, z: s.z, men: FOOT.includes(s.kind) ? s.men : [], legs: s.legs, arms: s.arms, dirs: s.men.map(() => ({ back: Math.random() < 0.75 ? 1 : -1, side: (Math.random() - 0.5) * 0.7 })), gun: s.gun && Math.random() < 0.7 ? s.gun : null, rotor: s.rotor, tail: s.tail, crashed: false });
+      dying.push({ node: s.node, t: now, y: s.y, yaw: s.yaw, air: !!UNITS[s.kind].air, boat: !!UNITS[s.kind].naval, wreck: !FOOT.includes(s.kind) && !UNITS[s.kind].air && !UNITS[s.kind].naval, x: s.x, z: s.z, men: FOOT.includes(s.kind) ? s.men : [], legs: s.legs, arms: s.arms, dirs: s.men.map(() => ({ back: Math.random() < 0.75 ? 1 : -1, side: (Math.random() - 0.5) * 0.7 })), gun: s.gun && s.kind === 'tank' && Math.random() < 0.7 ? s.gun : null, pops: 0, rotor: s.rotor, tail: s.tail, crashed: false });
       if (s.flag) s.flag.visible = false;
       if (s.crate) s.crate.visible = false;
     } else client.scene.remove(s.node);
@@ -399,10 +405,24 @@ export function frameUnits(client: Client, dt: number): void {
     s.surge += (Math.max(-1, Math.min(1, accel * 0.14)) - s.surge) * Math.min(1, dt * 7);
     const moving = s.speed > 0.6;
     const moved = s.speed * dt;
-    // (A tank turns its hull only to drive; standing, its turret does the turning.)
+    // (A tank or a flak gun turns its hull only to drive; standing, its turret does the turning.)
     const heading = s.yaw;
-    if (s.kind !== 'tank' || moving) s.yaw = turn(s.yaw, s.tyaw, dt * (s.kind === 'tank' ? 4 : 10));
-    if (s.gun) {
+    if ((s.kind !== 'tank' && s.kind !== 'aa') || moving) s.yaw = turn(s.yaw, s.tyaw, dt * (s.kind === 'tank' || s.kind === 'aa' ? 4 : 10));
+    if (s.gun && s.kind === 'artillery') {
+      // Its barrel, down for the road; raised to fire, and kept up a while after; sliding back with each shot.
+      s.lift += ((now - s.fired < 7 ? 0 : 0.42) - s.lift) * Math.min(1, dt * 2.5);
+      const k = SCALE.artillery / 16;
+      s.gun.rotation.set(s.lift, 0, 0);
+      s.gun.position.set(0, 13 * k - Math.sin(0.52 - s.lift) * s.kick * 0.7, 7 * k - Math.cos(0.52 - s.lift) * s.kick * 0.7);
+    } else if (s.gun && s.kind === 'aa') {
+      // The flak guns: the mount swings round to what it's shooting and the barrels tilt up at it; they stand a little raised, watching.
+      s.aim = turn(s.aim, now - s.fired < 3 ? s.tyaw : s.yaw, dt * 7);
+      s.lift += ((now - s.fired < 3 ? -0.55 : -0.12) - s.lift) * Math.min(1, dt * 5);
+      const rel = s.aim - s.yaw;
+      const k = SCALE.aa / 16;
+      s.gun.rotation.set(s.lift, rel, 0);
+      s.gun.position.set(-Math.sin(rel) * s.kick * 0.25, 11 * k, -2 * k - Math.cos(rel) * s.kick * 0.25);
+    } else if (s.gun) {
       s.aim = turn(s.aim, now - s.fired < 3 ? s.tyaw : s.yaw, dt * 5);
       const rel = s.aim - s.yaw;
       s.gun.rotation.set(0, rel, 0);
@@ -581,6 +601,15 @@ export function frameUnits(client: Client, dt: number): void {
         const g = Math.min(t, 1);
         f.gun.position.set(g * 1.6, Math.max(0, 11 * g - 12 * g * g), -g * 1.1);
         f.gun.rotation.set(g * 2.2, g * 1.4, g * 1.1);
+      }
+      // Its ammunition cooking off: sharp pops of flame and sparks, a few, at odd moments.
+      if (t > 0.7 && t < 3.8 && f.pops < 4 && Math.random() < dt * 1.6) {
+        f.pops++;
+        const at = { x: f.x + (Math.random() - 0.5) * 1.4, y: f.y + 1.8, z: f.z + (Math.random() - 0.5) * 1.4 };
+        client.fx.flare(at, 1.3);
+        client.fx.burst(at, { color: '#ffc860', count: 14, speed: 9, size: 0.1, glow: 1.6, life: 0.55, gravity: 10 });
+        puff(client, at.x, at.y, at.z, 'y', 0.7, 0.2, 0, 3, 0);
+        if (inView(f.x, f.z, 0)) client.audio.play('explosion', { volume: 0.12, at });
       }
       if (t < 3.6 && Math.random() < 0.5) {
         const at = { x: f.x + (Math.random() - 0.5) * 1.6, y: f.y + 1.6, z: f.z + (Math.random() - 0.5) * 1.6 };

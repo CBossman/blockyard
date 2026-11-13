@@ -442,7 +442,14 @@ unit('tank', (m) => tank(m));
 unit('tank_h', (m) => tank(m, 'hull'));
 unit('tank_g', (m) => tank(m, 'gun'));
 
-unit('artillery', (m) => {
+const artillery = (m, part) => {
+  if (part === 'gun') {
+    // The barrel alone, its turning point (the mantlet's) at the origin: it climbs at 30 degrees, a step up every two.
+    for (let i = 0; i < 24; i++) m.box([-1, -1 + Math.floor(i / 2), i], [1, 1 + Math.floor(i / 2), 1 + i], i > 19 ? 'sandDark' : 'tan');
+    m.box([-2, 10, 22], [2, 13, 25], 'gunmetal');
+    camo(m, 'tan', 'sandDark', 'sand', 3);
+    return m;
+  }
   // A self-propelled gun: a long hull, its big turret set back, a very long barrel raised high.
   tracks(m, 5, 8, -16, 15, 5, { skirt: 'tan' });
   m.box([-5, 2, -16], [5, 7, 15], 'tan');
@@ -464,16 +471,31 @@ unit('artillery', (m) => {
   m.box([2, 15, -10], [4, 18, -8], 'gunmetal');
   // The barrel climbs from the mantlet at 30 degrees: a step up every two.
   m.box([-3, 9, 4], [3, 14, 7], 'sandDark');
-  for (let i = 0; i < 24; i++) m.box([-1, 12 + Math.floor(i / 2), 7 + i], [1, 14 + Math.floor(i / 2), 8 + i], i > 19 ? 'sandDark' : 'tan');
-  m.box([-2, 23, 29], [2, 26, 32], 'gunmetal');
+  if (part !== 'hull') {
+    for (let i = 0; i < 24; i++) m.box([-1, 12 + Math.floor(i / 2), 7 + i], [1, 14 + Math.floor(i / 2), 8 + i], i > 19 ? 'sandDark' : 'tan');
+    m.box([-2, 23, 29], [2, 26, 32], 'gunmetal');
+  }
   // Spades folded at the back.
   m.mx([4, 2, -18], [7, 6, -16], 'steelDark');
   m.box([-8, 7, 9], [8, 8, 11], 'team');
   camo(m, 'tan', 'sandDark', 'sand', 3);
   return m;
-});
+};
+unit('artillery', (m) => artillery(m));
+unit('artillery_h', (m) => artillery(m, 'hull'));
+unit('artillery_g', (m) => artillery(m, 'gun'));
 
-unit('aa', (m) => {
+const aa = (m, part) => {
+  if (part === 'gun') {
+    // The twin cannons on their mount alone, the turning point (the drum's middle, at the guns' height) at the origin.
+    m.mx([5, -2, -2], [7, 2, 5], 'oliveDark');
+    for (const x of [5, -7]) {
+      m.box([x, 0, 5], [x + 2, 1, 19], 'gunmetal');
+      m.box([x, -1, 11], [x + 2, 0, 12], 'gunmetal');
+      m.box([x, 0, 18], [x + 2, 1, 20], 'black');
+    }
+    return m;
+  }
   // A tracked flak gun: twin cannons, a radar dish turning on its mast.
   tracks(m, 4, 7, -12, 12, 5);
   m.box([-4, 2, -12], [4, 7, 12], 'olive');
@@ -485,11 +507,13 @@ unit('aa', (m) => {
   // Turret: a drum, the team's ring, the guns either side.
   m.disc(0, -2, 5.5, 8, 13, 'olive');
   m.ring(0, -2, 4.5, 5.5, 11, 12, 'team');
-  m.mx([5, 9, -4], [7, 13, 3], 'oliveDark');
-  for (const x of [5, -7]) {
-    m.box([x, 11, 3], [x + 2, 12, 17], 'gunmetal');
-    m.box([x, 10, 9], [x + 2, 11, 10], 'gunmetal');
-    m.box([x, 11, 16], [x + 2, 12, 18], 'black');
+  if (part !== 'hull') {
+    m.mx([5, 9, -4], [7, 13, 3], 'oliveDark');
+    for (const x of [5, -7]) {
+      m.box([x, 11, 3], [x + 2, 12, 17], 'gunmetal');
+      m.box([x, 10, 9], [x + 2, 11, 10], 'gunmetal');
+      m.box([x, 11, 16], [x + 2, 12, 18], 'black');
+    }
   }
   m.box([-2, 13, -5], [2, 15, 0], 'oliveDark');
   // The radar's mast (the dish is its own model, turned by the screen: `radar`).
@@ -500,7 +524,10 @@ unit('aa', (m) => {
   m.box([-7, 7, -12], [7, 8, -11], 'teamDark');
   camo(m, 'olive', 'oliveDark', 'oliveLight', 4);
   return m;
-});
+};
+unit('aa', (m) => aa(m));
+unit('aa_h', (m) => aa(m, 'hull'));
+unit('aa_g', (m) => aa(m, 'gun'));
 
 unit('heli', (m) => {
   // An attack helicopter: a slim body, two seats under one canopy, stub wings with rocket pods,

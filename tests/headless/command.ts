@@ -921,4 +921,132 @@ export default function command() {
   medic();
   mend();
   alarm();
+  ranks();
+  elites();
+  botSense();
+}
+
+/** A mixed army sent a long way: it keeps together on the march, and arrives armour in front, guns at the back. */
+function ranks() {
+  const h = launch('command', { seed: 6 });
+  const player = h.ctx.player.id;
+  const state = () => h.find('message', 'state').at(-1)?.args[0] as State;
+  const units = () => h.find('message', 'u').at(-1)?.args[0] as number[];
+  const lobby = (data: object) => h.send({ t: 'game', player, name: 'lobby', data });
+  h.run(1);
+  lobby({ op: 'preset', preset: 'ffa' });
+  lobby({ op: 'peace', peace: 10 });
+  lobby({ op: 'start' });
+  h.run(9);
+  const me = Object.values(state().mine)[0];
+  const B = BASES[me];
+  const at = { x: B.x * 0.6, z: B.z * 0.6 };
+  const to = { x: B.x * 0.1, z: B.z * 0.1 };
+  for (const a of ['tank 3', 'rifle 6', 'artillery 2', 'medic 2']) h.ctx.commands.run(`army ${a} ${me} ${at.x} ${at.z}`);
+  h.run(2);
+  const mine = () => {
+    const u = units();
+    const out: { id: number; kind: string; x: number; z: number }[] = [];
+    for (let i = 0; i < u.length; i += 8) if (u[i + 2] === me && UNIT_ORDER[u[i + 1]] !== 'engineer' && Math.hypot(u[i + 3] - at.x, u[i + 4] - at.z) < 60) out.push({ id: u[i], kind: UNIT_ORDER[u[i + 1]], x: u[i + 3], z: u[i + 4] });
+    return out;
+  };
+  const ids = new Set(mine().filter((u) => Math.hypot(u.x - at.x, u.z - at.z) < 16).map((u) => u.id));
+  const army = mine().filter((u) => ids.has(u.id));
+  const L = Math.hypot(to.x - at.x, to.z - at.z);
+  const along = (u: { x: number; z: number }) => ((u.x - at.x) * (to.x - at.x) + (u.z - at.z) * (to.z - at.z)) / L;
+  h.send({ t: 'game', player, name: 'move', data: { ids: army.map((u) => u.id), x: to.x, z: to.z } });
+  h.run(5);
+  const mid = mine().filter((u) => ids.has(u.id));
+
+  const spread = Math.max(...mid.map(along)) - Math.min(...mid.map(along));
+  const was = Math.max(...army.map(along)) - Math.min(...army.map(along));
+  check(spread < was + 6, `ranks: on the march the column keeps together (${spread.toFixed(1)} long)`);
+  h.run(20);
+  const end = mine().filter((u) => ids.has(u.id));
+  const avg = (k: string) => { const l = end.filter((u) => u.kind === k); return l.reduce((a, u) => a + along(u), 0) / l.length; };
+  console.log('front to back', ['tank', 'rifle', 'medic', 'artillery'].map((k) => `${k} ${avg(k).toFixed(1)}`).join(', '));
+  check(avg('tank') > avg('rifle') && avg('rifle') > avg('medic') && avg('medic') > avg('artillery'), 'ranks: tanks in front, then the infantry, the medics, the guns at the back');
+}
+
+/** Elites (three stars) mend themselves out in the field, where a recruit doesn't. */
+function elites() {
+  const h = launch('command', { seed: 6 });
+  const player = h.ctx.player.id;
+  const state = () => h.find('message', 'state').at(-1)?.args[0] as State;
+  const units = () => h.find('message', 'u').at(-1)?.args[0] as number[];
+  const lobby = (data: object) => h.send({ t: 'game', player, name: 'lobby', data });
+  h.run(1);
+  lobby({ op: 'preset', preset: 'ffa' });
+  lobby({ op: 'peace', peace: 10 });
+  lobby({ op: 'start' });
+  h.run(9);
+  const me = Object.values(state().mine)[0];
+  const B = BASES[me];
+  const at = { x: B.x + Math.sign(-B.x) * 50, z: B.z + Math.sign(-B.z) * 30 };
+  const TANK = UNIT_ORDER.indexOf('tank');
+  h.ctx.commands.run(`army tank 1 ${me} ${at.x} ${at.z}`);
+  h.run(1);
+  const tanks = () => {
+    const u = units();
+    const out: { id: number; hp: number; rank: number }[] = [];
+    for (let i = 0; i < u.length; i += 8) if (u[i + 2] === me && u[i + 1] === TANK) out.push({ id: u[i], hp: u[i + 5], rank: rankBits(u[i + 7]) });
+    return out;
+  };
+  const [vet] = tanks();
+  // (That one made an elite; one more, come after, left a recruit.)
+  h.ctx.commands.run(`vet ${me} 16`);
+  h.ctx.commands.run(`army tank 1 ${me} ${at.x} ${at.z + 10}`);
+  h.run(1);
+  const raw = tanks().find((t) => t.id !== vet.id)!;
+  h.ctx.commands.run(`hurt ${me} 0.4`);
+  h.run(1);
+  check(tanks().find((t) => t.id === vet.id)!.rank === 3, 'elites: made an elite (three stars)');
+  h.run(30);
+  const a = tanks().find((t) => t.id === vet.id)!;
+  check(a.hp >= 65, `elites: an elite out in the field mends itself (40% → ${a.hp}%)`);
+  const b = tanks().find((t) => t.id === raw.id)!;
+  check(b.rank === 0 && b.hp <= 45, `elites: a recruit beside it doesn't (40% → ${b.hp}%)`);
+}
+
+/** Bots go by a rank and a name of their style's; and one far from home pulls its badly hurt out of a fight to mend. */
+function botSense() {
+  const h = launch('command', { seed: 8 });
+  const player = h.ctx.player.id;
+  const state = () => h.find('message', 'state').at(-1)?.args[0] as State;
+  const units = () => h.find('message', 'u').at(-1)?.args[0] as number[];
+  const lobby = (data: object) => h.send({ t: 'game', player, name: 'lobby', data });
+  h.run(1);
+  lobby({ op: 'preset', preset: 'ffa' });
+  lobby({ op: 'peace', peace: 0 });
+  lobby({ op: 'sit', seat: 3 });
+  lobby({ op: 'difficulty', seat: 0, difficulty: 'normal' });
+  lobby({ op: 'difficulty', seat: 1, difficulty: 'adaptive' });
+  lobby({ op: 'difficulty', seat: 2, difficulty: 'hard' });
+  lobby({ op: 'start' });
+  h.run(9);
+  const bots = state().seats.filter((s) => !s.human);
+  check(bots.length === 3 && bots.every((s) => /^(Lt|Maj|Gen|Col)\. [A-Z]/.test(s.name)), `bots: each goes by a rank and a name (${bots.map((s) => s.name).join(', ')})`);
+  check(bots.find((s) => s.seat === 1)!.name.startsWith('Col.') && bots.find((s) => s.seat === 2)!.name.startsWith('Gen.'), 'bots: the rank says how good it is');
+  const me = state().mine[player];
+  const B = BASES[0];
+  const P = { x: B.x * 0.3, z: B.z * 0.3 };
+  const TANK = UNIT_ORDER.indexOf('tank');
+  h.ctx.commands.run(`army tank 3 0 ${P.x} ${P.z}`);
+  const towards = { x: -Math.sign(B.x) * 9, z: -Math.sign(B.z) * 9 };
+  h.ctx.commands.run(`army tank 1 ${me} ${P.x + towards.x} ${P.z + towards.z}`);
+  h.run(0.2);
+  const mine: number[] = [];
+  { const u = units(); for (let i = 0; i < u.length; i += 8) if (u[i + 2] === me && u[i + 1] === TANK && Math.hypot(u[i + 3] - P.x, u[i + 4] - P.z) < 20) mine.push(u[i]); }
+  h.send({ t: 'game', player, name: 'stance', data: { ids: mine, stance: 1 } });
+  h.run(2.5);
+  h.ctx.commands.run('hurt 0 0.28');
+  // (How far each got, looked at as it goes: one may still be caught on its way.)
+  const got = new Map<number, number>();
+  for (let t = 0; t < 6; t += 0.5) {
+    h.run(0.5);
+    const u = units();
+    for (let i = 0; i < u.length; i += 8) if (u[i + 2] === 0 && u[i + 1] === TANK) got.set(u[i], Math.max(got.get(u[i]) ?? 0, Math.hypot(u[i + 3] - P.x, u[i + 4] - P.z)));
+  }
+  const tanks = [...got.values()];
+  check(tanks.length > 0 && tanks.some((d) => d > 12), `bots: badly hurt and far from home, they pull out of the fight (${tanks.map((d) => d.toFixed(0)).join(', ')} from where they were)`);
 }

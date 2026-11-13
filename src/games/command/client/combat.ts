@@ -19,7 +19,7 @@ type At = { x: number; y: number; z: number };
 
 /** Where each kind's weapon fires from on its model (voxels: ahead of its middle, and up). */
 const MUZZLE: Partial<Record<string, [number, number]>> = {
-  tank: [31, 10.5], artillery: [32, 25], aa: [17.5, 11.5], gunboat: [25, 8.5], heli: [18, 0.5], brute: [9, 14.5],
+  tank: [31, 10.5], artillery: [32, 25], aa: [15, 21], gunboat: [25, 8.5], heli: [18, 0.5], brute: [9, 14.5],
   rifle: [10, 8.5], guard: [10, 8.5], at: [9, 11], hero: [3, 6], scout: [6, 11], engineer: [3, 4],
 };
 const SQUADS: Partial<Record<UnitKind, number>> = { rifle: 0.78, guard: 0.78, at: 0.78 };
@@ -198,6 +198,7 @@ export function booms(client: Client, a: number[]): void {
       plume(client, at.x, at.y, at.z, 2, 'l', 0.46, 0.7, 1, 1);
     } else if (kind === 1) {
       client.fx.flare(at, 1.5);
+      client.fx.shockwave(dirt, 3.2, '#c9b07a');
       plume(client, at.x, at.y, at.z, 4, 'f', 0.72, 0.3, 4, 1.4);
       plume(client, at.x, at.y, at.z, 4, 'm', 0.72, 1.1, 2.2, 2);
       client.fx.burst(at, { color: '#ffb347', count: 8, speed: 7, size: 0.1, glow: 1.3, life: 0.32, gravity: 8 });
@@ -207,7 +208,7 @@ export function booms(client: Client, a: number[]): void {
     } else {
       const big = kind === 2;
       client.fx.flare(at, big ? 3.4 : 1.9);
-      if (big) client.fx.shockwave({ x, y: floor + 0.4, z }, 9, '#ffb347');
+      client.fx.shockwave({ x, y: floor + 0.4, z }, big ? 9 : 3.6, '#ffb347');
       // White heat, then the fireball rolling up, embers on long arcs, the dust slapped out along the ground, a column of smoke.
       plume(client, x, at.y, z, big ? 6 : 3, 'y', big ? 1.5 : 1, 0.22, big ? 6 : 4, 2);
       plume(client, x, at.y, z, big ? 14 : 8, 'f', big ? 1.8 : 1.15, 0.5, big ? 8 : 5.5, 3.4);
