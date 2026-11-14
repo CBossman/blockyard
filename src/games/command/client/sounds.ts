@@ -1,6 +1,7 @@
 import type { Client } from '@platform/client';
 import { UNITS, type UnitKind } from '../defs';
 import { UNIT_ORDER } from '../protocol';
+import { inView } from './camera';
 
 /**
  * Block Command's sounds, synthesised on each screen (`client.audio.define`: nothing recorded):
@@ -96,6 +97,7 @@ export function setupSounds(c: Client): void {
   a.define('cm_promote', (s) => {
     [0, 4, 7, 12].forEach((n, i) => s.tone({ wave: 'sawtooth', from: 392 * 2 ** (n / 12), duration: i === 3 ? 0.4 : 0.1, volume: 0.13, delay: i * 0.09, lowpass: 2200, fm: { ratio: 1, depth: 0.4 } }));
   }, { reverb: 0.3 });
+  defineMusic(c);
   try {
     c.audio.loop('wind', { volume: 0.08 });
   } catch {
@@ -121,6 +123,8 @@ export function shotSounds(list: { x: number; y: number; z: number; k: number }[
     if (now - (lastShot.get(name) ?? 0) < (name === 'cm_rifle' ? 45 : 90)) continue;
     lastShot.set(name, now);
     n++;
+    // (The score follows the fighting the player is watching, not every skirmish on the map.)
+    if (inView(s.x, s.z, 10)) warm(name === 'cm_arty' || name === 'cm_cannon' ? 2 : 1);
     client.audio.play(name, { at: { x: s.x, y: s.y, z: s.z }, volume: name === 'cm_arty' || name === 'cm_cannon' ? 0.9 : 0.55 });
   }
 }
@@ -191,4 +195,87 @@ export function say(kind: UnitKind | null, what: 'select' | 'move' | 'attack' | 
   } catch {
     // (No speech on this browser: the radio's click will do.)
   }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Music: a battle score that comes in with the fighting
+
+/**
+ * How hot the fighting near the player is: each shot heard adds to it, and it cools by half every
+ * six seconds. The score follows it: nothing when it's quiet; when shots start flying, a march on the
+ * drums over a bass line in A minor; heavier, a snare and the toms; at its height, the brass.
+ */
+let heat = 0;
+let beatAt = 0;
+let step = 0;
+/** The bass line, two bars a note: A, F, G, E. */
+const BASS = [55, 43.65, 49, 41.2];
+
+export function defineMusic(c: Client): void {
+  const a = c.audio;
+  // Rain: a hiss on the grass, the patter higher up, a soft roar under it.
+  a.defineLoop('cm_rain', (l) => {
+    l.noise({ freq: 5200, filter: 'highpass', volume: 0.5 });
+    l.noise({ freq: 1600, filter: 'bandpass', q: 0.6, volume: 0.45 });
+    l.noise({ freq: 300, filter: 'lowpass', volume: 0.35 });
+  });
+  a.define('cm_kick', (s) => {
+    s.tone({ wave: 'sine', from: 120, to: 42, duration: 0.32, volume: 0.6, attack: 0.002 });
+    s.noise({ duration: 0.03, from: 2000, filter: 'lowpass', volume: 0.12 });
+  }, { reverb: 0.15 });
+  a.define('cm_snare', (s) => {
+    s.noise({ duration: 0.16, from: 3800, to: 1800, filter: 'bandpass', q: 0.7, volume: 0.32, attack: 0.001 });
+    s.tone({ wave: 'triangle', from: 210, to: 160, duration: 0.09, volume: 0.18 });
+  }, { reverb: 0.25 });
+  a.define('cm_tom', (s) => {
+    s.tone({ wave: 'sine', from: 150 * s.pitch, to: 80 * s.pitch, duration: 0.24, volume: 0.42 });
+  }, { reverb: 0.2 });
+  a.define('cm_bass', (s) => {
+    s.tone({ wave: 'sawtooth', from: 55 * s.pitch, duration: 1.15, volume: 0.22, lowpass: 320, attack: 0.02 });
+    s.tone({ wave: 'sine', from: 55 * s.pitch, duration: 1.15, volume: 0.3, attack: 0.02 });
+  }, { reverb: 0.2 });
+  // A brass chord, a minor triad over the bass's note, swelling a little.
+  a.define('cm_stab', (s) => {
+    for (const n of [0, 3, 7, 12]) s.tone({ wave: 'sawtooth', from: 220 * s.pitch * 2 ** (n / 12), duration: 0.55, volume: 0.07, attack: 0.04, lowpass: 1600, fm: { ratio: 1, depth: 0.25 } });
+  }, { reverb: 0.45 });
+}
+
+let rainLoop: ReturnType<Client['audio']['loop']> | null = null;
+/** The rain's sound, as heavy as the rain (started the first time it rains). */
+export function rainSound(heavy: number): void {
+  if (!rainLoop && heavy <= 0) return;
+  try {
+    rainLoop ??= client.audio.loop('cm_rain', { volume: 0 });
+    rainLoop.set({ volume: heavy * 0.32 });
+  } catch {
+    // (No sound yet: no matter.)
+  }
+}
+
+/** A shot near the player: the fighting warms. */
+export function warm(n: number): void {
+  heat = Math.min(3, heat + n * 0.05);
+}
+
+/** Each frame: the fighting cools, and the score plays its next step when one is due. */
+export function musicFrame(dt: number): void {
+  heat *= Math.pow(0.5, dt / 6);
+  const level = client.audio.music;
+  const now = performance.now() / 1000;
+  if (now < beatAt) return;
+  // Eighth notes at 96 a minute.
+  beatAt = Math.max(now, beatAt) + 0.3125;
+  const s = step++ % 16;
+  if (heat < 0.35 || level <= 0) {
+    step = 0;
+    return;
+  }
+  const v = level * Math.min(1, (heat - 0.35) / 0.6);
+  const play = (name: string, volume: number, pitch = 1) => client.audio.play(name, { volume: volume * v, pitch });
+  const bar = Math.floor(step / 16) % 4;
+  if (s === 0 || s === 6 || s === 8 || s === 14) play('cm_kick', 0.9);
+  if (s === 0 || s === 8) play('cm_bass', 0.9, BASS[bar] / 55);
+  if (heat > 0.8 && (s === 4 || s === 12)) play('cm_snare', 0.8);
+  if (heat > 1.2 && s >= 13) play('cm_tom', 0.7, [1, 1.3, 1.6][s - 13]);
+  if (heat > 1.6 && s === 0) play('cm_stab', 0.8, BASS[bar] / 55);
 }

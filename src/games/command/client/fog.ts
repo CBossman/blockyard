@@ -38,6 +38,8 @@ export function mountFog(layer: HTMLElement): void {
 /** A new match: nothing explored. */
 export function resetFog(): void {
   explored = new Uint8Array(N * N);
+  // (The ground's heights again too: the map may be another.)
+  heightsDone = false;
   version++;
 }
 

@@ -77,7 +77,13 @@ let splashIn = 3;
 let pumpTry = 0;
 let phaseNow = 'lobby';
 let depositsNow: number[] = [];
-const AUTUMN = TREES.filter((t) => Math.abs(Math.sin(t.x * 12.9 + t.z * 78.2)) < 0.25);
+let AUTUMN = TREES.filter((t) => Math.abs(Math.sin(t.x * 12.9 + t.z * 78.2)) < 0.25);
+/** Another map in play: its trees shed the leaves, its wells get the pumps. */
+export function lifeMap(client: Client): void {
+  AUTUMN = TREES.filter((t) => Math.abs(Math.sin(t.x * 12.9 + t.z * 78.2)) < 0.25);
+  for (const p of pumps.values()) client.scene.remove(p.node);
+  pumps.clear();
+}
 
 function piece(client: Client, id: string, scale: number): Node | null {
   const made = client.scene.item(id);

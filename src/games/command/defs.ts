@@ -67,8 +67,12 @@ export const UNITS: Record<UnitKind, UnitDef> = {
  * The pace of a match, aimed at about half an hour: how much longer everything takes to train, build
  * and research than its figure above, and how much more punishment units and buildings stand (so a
  * fight has time to be fought, and a base isn't gone in one push). The headquarters stands more still.
+ * `fire`: how much of their guns' damage units (and towers) do to units, so a battle lasts long enough to
+ * see it going one way, pull the hurt out, bring up the reserve and use the abilities (which, like mines
+ * and airstrikes, hit as hard as ever, and so count for more). Buildings take it in full. `guns`: the
+ * same for the towers' and the headquarters' guns, less cut, so a tower still holds off a raid.
  */
-export const PACE = { train: 1.7, build: 1.6, research: 1.7, unitHp: 1.4, buildingHp: 2.3, hqHp: 3.6 };
+export const PACE = { train: 1.7, build: 1.6, research: 1.7, unitHp: 1.4, buildingHp: 2.3, hqHp: 3.6, fire: 0.34, guns: 0.6 };
 for (const u of Object.values(UNITS)) {
   u.time = Math.round(u.time * PACE.train);
   u.hp = Math.round(u.hp * PACE.unitHp);
@@ -159,8 +163,8 @@ export const TECHS: Record<TechId, TechDef> = {
   armor: { name: 'Armor Plating', cost: { steel: 180, oil: 60 }, time: 40, blurb: 'Your units take 20% less damage.' },
   ordnance: { name: 'Ordnance', cost: { steel: 200, oil: 100 }, time: 45, blurb: 'Your units and towers hit 20% harder.' },
   optics: { name: 'Optics', cost: { steel: 120, oil: 80 }, time: 35, blurb: 'Your guns reach 20% further, and everything sees a fifth further.' },
-  age2: { name: 'Mechanized Era', cost: { steel: 250, oil: 100 }, time: 45, blurb: 'Era II: factories (tanks, anti-air), the lab and your commander.' },
-  age3: { name: 'Modern Era', cost: { steel: 400, oil: 250 }, time: 65, blurb: 'Era III: airfields (helicopters) and artillery.' },
+  age2: { name: 'Mechanized Era', cost: { steel: 450, oil: 200 }, time: 75, blurb: 'Era II: factories (tanks, anti-air), the lab and your commander. Opens at 5:00, and needs a barracks.' },
+  age3: { name: 'Modern Era', cost: { steel: 800, oil: 450 }, time: 100, blurb: 'Era III: airfields (helicopters) and artillery. Opens at 12:00, and needs a factory or a lab.' },
   medicine: { name: 'Field Medicine', cost: { steel: 160, oil: 80 }, time: 35, blurb: 'Your units heal slowly anywhere once they are out of the fighting, not only by a depot.' },
   engines: { name: 'Turbo Engines', cost: { steel: 180, oil: 140 }, time: 40, blurb: 'Your vehicles, boats and helicopters move 15% faster.' },
   logistics: { name: 'Logistics', cost: { steel: 150, oil: 30 }, time: 35, blurb: 'Engineers gather, build and repair 30% faster.' },
@@ -173,6 +177,20 @@ export const BUILDING_KINDS = Object.keys(BUILDINGS) as BuildingKind[];
 /** The era (1 to 3) each unit or building needs. Researched at the HQ: Mechanized Era, then Modern Era. */
 export const AGE_NEEDS: Partial<Record<UnitKind | BuildingKind, number>> = { tank: 2, aa: 2, hero: 2, medic: 2, artillery: 3, heli: 3, factory: 2, lab: 2, airfield: 3, dock: 2, gunboat: 2, uplink: 3 };
 export const AGE_NAMES = ['', 'Era I', 'Era II', 'Era III'];
+/** What a side must have standing (any one of them, built) before it can research the next era. */
+export const ERA_NEEDS: Partial<Record<TechId, BuildingKind[]>> = { age2: ['barracks'], age3: ['factory', 'lab'] };
+/** Whether a side with these buildings standing (built) may start an era now: undefined if so, else what's missing. */
+/** The match time (seconds) before which each era can't be started at all. */
+export const ERA_FROM: Partial<Record<TechId, number>> = { age2: 300, age3: 720 };
+export function eraWants(tech: TechId, techs: Iterable<TechId>, built: Iterable<BuildingKind>, time: number): string | undefined {
+  if (tech === 'age3' && !new Set(techs).has('age2')) return 'Era II';
+  const from = ERA_FROM[tech] ?? 0;
+  if (time < from) return `${Math.floor(from / 60)}:${String(from % 60).padStart(2, '0')}`;
+  const need = ERA_NEEDS[tech];
+  if (!need) return undefined;
+  const have = new Set(built);
+  return need.some((k) => have.has(k)) ? undefined : need.length > 1 ? `a ${need.join(' or a ')}` : `a ${need[0]}`;
+}
 export const ageOf = (techs: Iterable<TechId>): number => {
   const t = new Set(techs);
   return 1 + (t.has('age2') ? 1 : 0) + (t.has('age2') && t.has('age3') ? 1 : 0);
@@ -236,6 +254,11 @@ export const NEEDS: Partial<Record<BuildingKind, BuildingKind>> = { airfield: 'f
 export const ALARM = { reach: 50, boost: 0.15 };
 /** The uplink: how long it must stand, finished, for its side to win (seconds). Not in Last Stand. */
 export const UPLINK = { hold: 300 };
+/**
+ * Hold the Middle: a ring round the field's middle (`r` blocks); a side whose fighting troops are the
+ * only ones in it holds it, and one that has held it `need` seconds in all wins.
+ */
+export const HOLD = { x: 0, z: 0, r: 12, need: 240 };
 
 /** The commander's aura (blocks, and the share of fire rate it adds) and Rally: its radius, how long it lasts, the heal and the fire-rate boost, and its recharge. */
 export const HERO = { aura: 14, auraRate: 0.2, rally: { radius: 20, seconds: 9, heal: 0.25, rate: 0.4, cooldown: 50 } };

@@ -1,5 +1,5 @@
 import { FLANK, TRADE, fromBehind, tradeGet } from '../../src/games/command/defs';
-import { BASES, HALF, LAKES, MESAS, TREES, deposits, heightAt, wallLine, wallPlan, wallSnap } from '../../src/games/command/map';
+import { BASES, FLOOR, GROUND_Y, HALF, LAKES, MAPS, MESAS, TREES, deposits, heightAt, useMap, wallLine, wallPlan, wallSnap } from '../../src/games/command/map';
 import { BUILDING_ORDER, UNIT_ORDER, rankBits, stanceBits, type State } from '../../src/games/command/protocol';
 import { readFileSync } from 'node:fs';
 import { GameHost } from '../../src/platform/host/game';
@@ -441,6 +441,8 @@ function standing() {
   const d = state().drops[0];
   const rifles = units().filter((u) => u.seat === me && u.kind === UNIT_ORDER.indexOf('rifle')).map((u) => u.id);
   const carriers = rifles.length ? rifles : units().filter((u) => u.seat === me && u.kind === 0).map((u) => u.id);
+  // (Holding their fire: sent to fetch it, not to fight the raiders round it, who they'd turn on if shot at.)
+  send('stance', { ids: carriers, stance: 2 });
   send('move', { ids: carriers, x: d.x, z: d.z });
   h.run(60, { until: () => !state().drops.some((x) => x.id === d.id) });
   check(!state().drops.some((x) => x.id === d.id), 'drops: and goes to whoever gets there');
@@ -566,6 +568,8 @@ function walls() {
   step(15);
   check(Math.hypot(at().x - C.x, at().z - C.z) > 9, `gates: unlocked, he's out again (${Math.hypot(at().x - C.x, at().z - C.z).toFixed(1)} from the middle)`);
   // Bob's riflemen, sent to fight in the middle of the ring: no way in, so they shoot one.
+  // (Ann's engineers home first: raiders on an attack-move would go for them on the way.)
+  send(ann, 'move', { ids: engineers, x: BASES[annS].x, z: BASES[annS].z });
   const raiders = list(bob).filter((u) => u.seat === bobS && u.kind === 1).map((u) => u.id);
   send(bob, 'move', { ids: raiders, x: C.x, z: C.z, attack: true });
   let hurt = false;
@@ -846,9 +850,9 @@ function botWalls() {
   const GATE = BUILDING_ORDER.indexOf('gate');
   const walls = () => { const b = blds(); let r = 0; let g = 0; for (let i = 0; i < b.length; i += 9) if (b[i + 2] === 1 && b[i + 6] >= 100) { if (b[i + 1] === RAMPART) r++; if (b[i + 1] === GATE) g++; } return { r, g }; };
   // (Lengths by a camp still guarded wait for it to be cleared, which takes a while longer.)
-  h.run(900, { until: () => walls().r >= 30 && walls().g >= 2 });
+  h.run(900, { until: () => walls().r + walls().g * 3 >= 30 && walls().g >= 2 });
   const w1 = walls();
-  check(w1.r >= 30 && w1.g >= 2, `bot walls: the turtle walls its base (${w1.r} lengths and ${w1.g} gates built by ${state().time} s)`);
+  check(w1.r + w1.g * 3 >= 30 && w1.g >= 2, `bot walls: the turtle walls its base (${w1.r} lengths and ${w1.g} gatehouses, three lengths each, built by ${state().time} s)`);
   // And it still goes out: a unit trained since (inside them, where all it trains from is), well outside.
   const B = BASES[1];
   let out = 0;
@@ -941,6 +945,177 @@ export default function command() {
   botSense();
   routes();
   errands();
+  battle();
+  arrivals();
+  scars();
+  eras();
+  muster();
+  middle();
+  // (Last: it leaves this process's lists on another map for a while.)
+  maps();
+}
+
+/** A bot's army waits at the front of its base, the side towards the middle: not behind it, where it was trained. */
+function muster() {
+  const h = launch('command', { seed: 7 });
+  const player = h.ctx.player.id;
+  const units = () => h.find('message', 'u').at(-1)?.args[0] as number[];
+  const lobby = (data: object) => h.send({ t: 'game', player, name: 'lobby', data });
+  h.run(1);
+  lobby({ op: 'preset', preset: 'ffa' });
+  lobby({ op: 'peace', peace: 0 });
+  lobby({ op: 'map', map: 'heartland' });
+  lobby({ op: 'watch' });
+  for (const seat of [0, 1, 2, 3]) { lobby({ op: 'kind', seat, kind: 'bot' }); lobby({ op: 'difficulty', seat, difficulty: 'normal' }); }
+  lobby({ op: 'start' });
+  h.run(300);
+  let front = 0, back = 0;
+  const u = units();
+  for (let i = 0; i < u.length; i += 8) {
+    const seat = u[i + 2];
+    if (seat > 3 || UNIT_ORDER[u[i + 1]] === 'engineer') continue;
+    const B = BASES[seat];
+    // (How far it is towards the middle from its HQ: the front's ahead, behind's below nought.)
+    const ahead = ((u[i + 3] - B.x) * -Math.sign(B.x) + (u[i + 4] - B.z) * -Math.sign(B.z)) / Math.SQRT2;
+    if (ahead > 8) front++;
+    else if (ahead < -8) back++;
+  }
+  check(front > 8 && front > back * 3, `muster: the bots' armies wait at the front of their bases (${front} ahead, ${back} behind)`);
+}
+
+/** The eras: each needs a building of the era before it standing (a barracks, then a factory or lab), and costs what it says. */
+function eras() {
+  const h = launch('command', { seed: 14 });
+  const player = h.ctx.player.id;
+  const state = () => h.find('message', 'state').at(-1)?.args[0] as State;
+  const blds = () => h.find('message', 'b').at(-1)?.args[0] as number[];
+  const lobby = (data: object) => h.send({ t: 'game', player, name: 'lobby', data });
+  const send = (name: string, data: unknown) => h.send({ t: 'game', player, name, data });
+  h.run(1);
+  lobby({ op: 'sit', seat: 0 });
+  lobby({ op: 'preset', preset: 'ffa' });
+  lobby({ op: 'peace', peace: 0 });
+  lobby({ op: 'resources', resources: 'high' });
+  lobby({ op: 'start' });
+  h.run(9);
+  const me = state().mine[player];
+  const B = BASES[me];
+  const mine = () => state().seats.find((x) => x.seat === me)!;
+  let hq = -1;
+  { const b = blds(); for (let i = 0; i < b.length; i += 9) if (b[i + 2] === me && b[i + 1] === BUILDING_ORDER.indexOf('hq')) hq = b[i]; }
+  const steel0 = mine().steel;
+  check(steel0 >= 450 && mine().oil >= 200, `eras: rich enough for the Mechanized Era (${steel0} steel, ${mine().oil} oil)`);
+  send('research', { id: hq, tech: 'age2' });
+  h.run(1);
+  check(mine().steel >= steel0, `eras: no Mechanized Era without a barracks (${steel0} steel, then ${mine().steel})`);
+  h.ctx.commands.run(`raise barracks ${me} ${B.x + Math.sign(-B.x) * 16} ${B.z}`);
+  h.run(1);
+  const steel2 = mine().steel;
+  send('research', { id: hq, tech: 'age2' });
+  h.run(1);
+  check(mine().steel >= steel2, `eras: nor before five minutes, barracks or not (at ${state().time} s)`);
+  h.run(300 - state().time);
+  const steel1 = mine().steel;
+  send('research', { id: hq, tech: 'age2' });
+  h.run(1);
+  check(steel1 - mine().steel >= 380, `eras: at five minutes, with a barracks standing, it starts, for 450 steel less what's mined meanwhile (${steel1} then ${mine().steel})`);
+  h.run(140, { until: () => mine().techs.includes('age2') });
+  check(mine().techs.includes('age2') && state().time > 400, `eras: and takes a good while (done at ${state().time} s)`);
+  h.ctx.commands.run(`rich`);
+  h.run(1);
+}
+
+/** Hold the Middle: one side's troops alone in the ring hold it; others there make it fought over; held long enough, it wins. The bots come to take it. */
+function middle() {
+  const h = launch('command', { seed: 18 });
+  const player = h.ctx.player.id;
+  const state = () => h.find('message', 'state').at(-1)?.args[0] as State;
+  const units = () => h.find('message', 'u').at(-1)?.args[0] as number[];
+  const lobby = (data: object) => h.send({ t: 'game', player, name: 'lobby', data });
+  h.run(1);
+  lobby({ op: 'sit', seat: 0 });
+  lobby({ op: 'preset', preset: 'ffa' });
+  lobby({ op: 'peace', peace: 0 });
+  lobby({ op: 'resources', resources: 'normal' });
+  lobby({ op: 'hold' });
+  for (const seat of [1, 2, 3]) {
+    lobby({ op: 'kind', seat, kind: 'bot' });
+    lobby({ op: 'difficulty', seat, difficulty: 'hard' });
+  }
+  lobby({ op: 'start' });
+  h.run(9);
+  const s0 = state();
+  const me = s0.mine[player];
+  const team = s0.seats.find((x) => x.seat === me)!.team;
+  check(!!s0.hold && s0.hold.holder === -1, `middle: on, and no one holds it at the start (${JSON.stringify(s0.hold)})`);
+  h.ctx.commands.run(`army tank 4 ${me} 3 3`);
+  h.run(3);
+  check(state().hold!.holder === team, `middle: our tanks alone in it hold it (${JSON.stringify(state().hold)})`);
+  const foe = me === 1 ? 2 : 1;
+  h.ctx.commands.run(`army rifle 2 ${foe} -3 -3`);
+  h.run(1);
+  check(state().hold!.holder === -2, `middle: with the enemy in it too, it's fought over (${JSON.stringify(state().hold)})`);
+  h.ctx.commands.run(`army tank 30 ${me} 0 6`);
+  // The bots come for it, and are held off: held its time, it wins.
+  let came = 0;
+  h.run(400, { until: () => {
+    const u = units();
+    for (let i = 0; i < u.length; i += 8) if (u[i + 2] !== me && u[i + 2] < 6 && Math.hypot(u[i + 3], u[i + 4]) < 30) came++;
+    return state().phase === 'over';
+  } });
+  const s = state();
+  check(s.phase === 'over' && s.wonBy === 'hold' && s.winners.includes(me), `middle: held long enough, it wins (${s.phase}, ${s.wonBy}, winners ${s.winners}, at ${s.time} s)`);
+  check(came > 0, 'middle: the bots came to take it');
+}
+
+/** The battlefields: a match on another map stands its lakes and woods in the world (and tells the screens which); the next on Heartland puts the field back as it was. */
+function maps() {
+  const h = launch('command', { seed: 3 });
+  const player = h.ctx.player.id;
+  const state = () => h.find('message', 'state').at(-1)?.args[0] as State;
+  const send = (name: string, data: unknown = {}) => h.send({ t: 'game', player, name, data });
+  const lobby = (data: object) => h.send({ t: 'game', player, name: 'lobby', data });
+  const w = h.ctx.world;
+  const name = (x: number, y: number, z: number) => w.blockName(w.getBlock(x, y, z));
+  const wet = (x: number, z: number) => /^cm_(deep|water|shallows)$/.test(name(x, GROUND_Y, z));
+  h.run(1);
+  useMap('heartland');
+  // (Near the middle: a test's world is loaded only so far round the player.)
+  const trunk = TREES.find((t) => Math.abs(t.x) < 48 && Math.abs(t.z) < 48 && heightAt(t.x, t.z) === 0 && name(Math.floor(t.x), FLOOR, Math.floor(t.z)) === 'cm_trunk')!;
+  check(wet(0, -57) && !wet(-24, -4), 'maps: the world opens as Heartland');
+  send('mode', { mode: 'ffa', doctrine: 'armored', difficulty: 'normal', map: 'crossing', fog: false });
+  h.run(3);
+  const s = state();
+  check(s.map === 'crossing' && wet(-24, -4) && !wet(0, -57), `maps: River Crossing's river stands, Heartland's lakes are gone (${s.map})`);
+  const eyes = h.find('message', 'eyes').at(-1)?.args[0] as { all: boolean };
+  check(eyes?.all === true, 'maps: with the fog off, everything is seen');
+  useMap('crossing');
+  check(s.deposits.length >= deposits().length, `maps: the river's own deposits are out (${s.deposits.length})`);
+  check(name(Math.floor(trunk.x), FLOOR, Math.floor(trunk.z)) !== 'cm_trunk' || TREES.some((t) => Math.hypot(t.x - trunk.x, t.z - trunk.z) < 1), "maps: Heartland's trees went with it");
+  send('resign', {});
+  h.run(2);
+  send('again', {});
+  h.run(2);
+  lobby({ op: 'sit', seat: 0 });
+  lobby({ op: 'map', map: 'frostline' });
+  lobby({ op: 'start' });
+  h.run(10);
+  let snow = 0;
+  for (let x = -50; x <= 50; x += 10) for (let z = -50; z <= 50; z += 10) if (/^cm_snow/.test(name(x, GROUND_Y, z))) snow++;
+  check(state().map === 'frostline' && snow > 121 * 0.5 && !wet(-24, -4) && wet(-44, -16), `maps: then Frostline, set up in the lobby: snow (${snow} of 121 spots), its lakes, no river (${state().map})`);
+  send('resign', {});
+  h.run(2);
+  send('again', {});
+  h.run(2);
+  lobby({ op: 'sit', seat: 0 });
+  lobby({ op: 'map', map: 'heartland' });
+  lobby({ op: 'start' });
+  h.run(10);
+  useMap('heartland');
+  snow = 0;
+  for (let x = -50; x <= 50; x += 10) for (let z = -50; z <= 50; z += 10) if (/^cm_snow/.test(name(x, GROUND_Y, z))) snow++;
+  check(state().map === 'heartland' && wet(0, -57) && !wet(-24, -4) && snow === 0 && name(Math.floor(trunk.x), FLOOR, Math.floor(trunk.z)) === 'cm_trunk', `maps: and back to Heartland, the field as it was (${snow} snow)`);
+  check(MAPS.length >= 5, 'maps: five battlefields to choose from');
 }
 
 /** A mixed army sent a long way: it keeps together on the march, and arrives armour in front, guns at the back. */
@@ -951,6 +1126,8 @@ function ranks() {
   const units = () => h.find('message', 'u').at(-1)?.args[0] as number[];
   const lobby = (data: object) => h.send({ t: 'game', player, name: 'lobby', data });
   h.run(1);
+  // (Seat 0, whatever the matches before left the table with: its way out is clear of the camps.)
+  lobby({ op: 'sit', seat: 0 });
   lobby({ op: 'preset', preset: 'ffa' });
   lobby({ op: 'peace', peace: 10 });
   lobby({ op: 'start' });
@@ -1165,4 +1342,192 @@ function errands() {
     for (const v of theirs()) low = Math.min(low, v);
   }
   check(mine.length === 3 && low < 100, `errands: shot at on the way past, they fight back (the enemy's riflemen down to ${low}%)`);
+  // A forced march (Ctrl): past another lot of them, not stopping to fight.
+  const R = { x: B.x * 0.12, z: B.z * 0.12 };
+  const seen2 = new Set<number>();
+  { const u = units(); for (let i = 0; i < u.length; i += 8) seen2.add(u[i]); }
+  h.ctx.commands.run(`army rifle 3 6 ${R.x} ${R.z}`);
+  h.ctx.commands.run(`army rifle 3 ${me} ${R.x - across.x * 3} ${R.z - across.z * 3}`);
+  h.run(0.4);
+  const theirs2 = () => { const u = units(); const o: number[] = []; for (let i = 0; i < u.length; i += 8) if (u[i + 2] === 6 && !seen2.has(u[i])) o.push(u[i + 5]); return o; };
+  const marchers: number[] = [];
+  { const u = units(); for (let i = 0; i < u.length; i += 8) if (u[i + 2] === me && !seen2.has(u[i])) marchers.push(u[i]); }
+  const to = { x: R.x + across.x * 4, z: R.z + across.z * 4 };
+  send('move', { ids: marchers, x: to.x, z: to.z, force: true });
+  let low2 = 100;
+  // (While they're on the march: once there, they'd shoot what's in reach like anyone standing about.)
+  for (let t = 0; t < 4; t += 0.5) {
+    h.run(0.5);
+    for (const v of theirs2()) low2 = Math.min(low2, v);
+  }
+  check(marchers.length === 3 && low2 === 100, `errands: on a forced march they don't stop to fight (the enemy's riflemen at ${low2}%)`);
+}
+
+/**
+ * Combat sense: rocket teams with riflemen and a tank in reach shoot the tank; a squad standing near a
+ * friend who's being shot comes to help, and goes back to its spot after.
+ */
+function battle() {
+  const h = launch('command', { seed: 6 });
+  const player = h.ctx.player.id;
+  const state = () => h.find('message', 'state').at(-1)?.args[0] as State;
+  const units = () => h.find('message', 'u').at(-1)?.args[0] as number[];
+  const lobby = (data: object) => h.send({ t: 'game', player, name: 'lobby', data });
+  h.run(1);
+  lobby({ op: 'sit', seat: 0 });
+  lobby({ op: 'preset', preset: 'ffa' });
+  lobby({ op: 'peace', peace: 0 });
+  lobby({ op: 'start' });
+  h.run(9);
+  const me = state().mine[player];
+  const B = BASES[me];
+  const all = () => { const u = units(); const o: { id: number; kind: string; seat: number; x: number; z: number; hp: number }[] = []; for (let i = 0; i < u.length; i += 8) o.push({ id: u[i], kind: UNIT_ORDER[u[i + 1]], seat: u[i + 2], x: u[i + 3], z: u[i + 4], hp: u[i + 5] }); return o; };
+  const fresh = (f: (u: ReturnType<typeof all>[number]) => boolean, before: Set<number>) => all().filter((u) => !before.has(u.id) && f(u));
+  const ids = () => new Set(all().map((u) => u.id));
+  // Rocket teams; the wild's riflemen nearer them, its tank a little further (all in reach).
+  const P = { x: B.x * 0.45, z: B.z * 0.45 };
+  const ax = -Math.sign(B.x);
+  let seen = ids();
+  h.ctx.commands.run(`army at 3 ${me} ${P.x} ${P.z}`);
+  h.run(0.4);
+  const at = fresh((u) => u.seat === me, seen).map((u) => u.id);
+  seen = ids();
+  h.ctx.commands.run(`army rifle 2 6 ${P.x + ax * 3} ${P.z + 2}`);
+  h.ctx.commands.run(`army tank 1 6 ${P.x + ax * 6} ${P.z}`);
+  h.run(0.4);
+  const foes = fresh((u) => u.seat === 6, seen);
+  h.run(5);
+  const now = all();
+  const tankHp = now.find((u) => u.id === foes.find((f) => f.kind === 'tank')?.id)?.hp ?? 0;
+  const rifleHp = foes.filter((f) => f.kind === 'rifle').map((f) => now.find((u) => u.id === f.id)?.hp ?? 0);
+  // (The riflemen beside it catch some of the rockets' blast: the tank takes the most.)
+  check(at.length === 3 && tankHp < 80 && rifleHp.every((x) => 100 - x < 100 - tankHp), `battle: rocket teams shoot the tank, not the nearer riflemen (tank ${tankHp}%, riflemen ${rifleHp.join(', ')}%)`);
+  // A squad standing about; a friend of theirs a way off, shot at by the wild's riflemen out of the squad's reach.
+  const Q = { x: B.x * 0.45, z: B.z * 0.45 + 40 * -Math.sign(B.z) };
+  seen = ids();
+  h.ctx.commands.run(`army rifle 4 ${me} ${Q.x} ${Q.z}`);
+  h.run(0.4);
+  const squad = fresh((u) => u.seat === me, seen);
+  seen = ids();
+  h.ctx.commands.run(`army rifle 1 ${me} ${Q.x + ax * 12} ${Q.z}`);
+  h.run(0.4);
+  const friend = fresh((u) => u.seat === me, seen)[0];
+  seen = ids();
+  h.ctx.commands.run(`army rifle 2 6 ${Q.x + ax * 20} ${Q.z}`);
+  h.run(0.4);
+  const raiders = fresh((u) => u.seat === 6, seen).map((u) => u.id);
+  let moved = 0;
+  for (let t = 0; t < 6; t += 0.5) {
+    h.run(0.5);
+    for (const s of squad) {
+      const u = all().find((x) => x.id === s.id);
+      if (u) moved = Math.max(moved, Math.hypot(u.x - s.x, u.z - s.z));
+    }
+  }
+  check(!!friend && raiders.length === 2 && moved > 4, `battle: a squad near a friend under fire comes to help (moved up to ${moved.toFixed(1)})`);
+  h.run(20);
+  const left = all().filter((u) => raiders.includes(u.id)).length;
+  const back = squad.map((s) => { const u = all().find((x) => x.id === s.id); return u ? Math.hypot(u.x - s.x, u.z - s.z) : 0; });
+  check(left === 0 && back.every((d) => d < 4), `battle: the raiders beaten, the squad goes back to its spot (${left} left; ${back.map((d) => d.toFixed(1)).join(', ')} off)`);
+  // A real fight (six of the player's riflemen on four of the wild's): when it's over, the score.
+  h.ctx.commands.run(`army rifle 6 ${me} ${Q.x} ${Q.z - 30 * Math.sign(-B.z)}`);
+  h.ctx.commands.run(`army rifle 4 6 ${Q.x + ax * 8} ${Q.z - 30 * Math.sign(-B.z)}`);
+  h.run(40);
+  const report = h.find('hud', 'toast').map((c) => String(c.args[0])).find((t) => / of theirs for /.test(t));
+  check(!!report, `battle: when a fight dies down, its score (${report})`);
+}
+
+/**
+ * A unit sent onto something it can't stand on (the HQ) stops when it's as near as it can get, rather than
+ * pushing at it for ever; and a player's tank, badly hurt and under fire, lays its own smoke.
+ */
+function arrivals() {
+  const h = launch('command', { seed: 6 });
+  const player = h.ctx.player.id;
+  const state = () => h.find('message', 'state').at(-1)?.args[0] as State;
+  const units = () => h.find('message', 'u').at(-1)?.args[0] as number[];
+  const orders = () => h.find('message', 'orders').at(-1)?.args[0] as number[];
+  const lobby = (data: object) => h.send({ t: 'game', player, name: 'lobby', data });
+  const send = (name: string, data: unknown) => h.send({ t: 'game', player, name, data });
+  h.run(1);
+  lobby({ op: 'sit', seat: 0 });
+  lobby({ op: 'preset', preset: 'ffa' });
+  lobby({ op: 'peace', peace: 0 });
+  lobby({ op: 'start' });
+  h.run(9);
+  const me = state().mine[player];
+  const B = BASES[me];
+  const ENG = UNIT_ORDER.indexOf('engineer');
+  const eng = (() => { const u = units(); for (let i = 0; i < u.length; i += 8) if (u[i + 2] === me && u[i + 1] === ENG) return u[i]; return -1; })();
+  send('move', { ids: [eng], x: B.x, z: B.z });
+  h.run(14);
+  const planned = () => { const o = orders(); for (let i = 0; i < o.length; ) { if (o[i] === eng) return o[i + 1]; i += 2 + o[i + 1] * 3; } return 0; };
+  check(eng >= 0 && planned() === 0, `arrivals: sent onto the HQ, the engineer stops as near as it gets (orders left ${planned()})`);
+  // A tank of the player's, badly hurt, under the wild's fire: smoke.
+  const P = { x: B.x * 0.45, z: B.z * 0.45 };
+  const seen = new Set<number>();
+  { const u = units(); for (let i = 0; i < u.length; i += 8) seen.add(u[i]); }
+  h.ctx.commands.run(`army tank 1 ${me} ${P.x} ${P.z}`);
+  h.run(0.4);
+  const TANK = UNIT_ORDER.indexOf('tank');
+  const tank = (() => { const u = units(); for (let i = 0; i < u.length; i += 8) if (u[i + 2] === me && u[i + 1] === TANK && !seen.has(u[i])) return u[i]; return -1; })();
+  h.ctx.commands.run(`hurt ${me} 0.4`);
+  h.ctx.commands.run(`army rifle 3 6 ${P.x + 6} ${P.z}`);
+  let smoked = false;
+  for (let t = 0; t < 6 && !smoked; t += 0.5) {
+    h.run(0.5);
+    const cd = h.find('message', 'cd').at(-1)?.args[0] as number[] | undefined;
+    if (cd) for (let i = 0; i < cd.length; i += 2) if (cd[i] === tank) smoked = true;
+  }
+  check(tank >= 0 && smoked, 'arrivals: a badly hurt tank under fire lays its own smoke');
+}
+
+/** The field marked by the fighting: a barrage on a tree fells it (a stump left) and scorches the grass; a new match has it back. */
+function scars() {
+  const h = launch('command', { seed: 6 });
+  const player = h.ctx.player.id;
+  const state = () => h.find('message', 'state').at(-1)?.args[0] as State;
+  const lobby = (data: object) => h.send({ t: 'game', player, name: 'lobby', data });
+  const send = (name: string, data: unknown) => h.send({ t: 'game', player, name, data });
+  h.run(1);
+  lobby({ op: 'sit', seat: 0 });
+  lobby({ op: 'preset', preset: 'ffa' });
+  lobby({ op: 'peace', peace: 0 });
+  lobby({ op: 'start' });
+  h.run(9);
+  const me = state().mine[player];
+  const B = BASES[me];
+  const w = h.ctx.world;
+  const name = (x: number, y: number, z: number) => w.blockName(w.getBlock(x, y, z));
+  // A tree on the flat with open ground round it, not far from the base.
+  const t = TREES.filter((q) => heightAt(q.x, q.z) === 0 && Math.hypot(q.x - B.x, q.z - B.z) > 30 && name(Math.floor(q.x), FLOOR, Math.floor(q.z)) === 'cm_trunk').sort((a, b) => Math.hypot(a.x - B.x, a.z - B.z) - Math.hypot(b.x - B.x, b.z - B.z))[0];
+  const tx = Math.floor(t.x);
+  const tz = Math.floor(t.z);
+  const ARTY = UNIT_ORDER.indexOf('artillery');
+  h.ctx.commands.run(`army artillery 1 ${me} ${t.x + (B.x > t.x ? 22 : -22)} ${t.z}`);
+  h.run(0.4);
+  const units = h.find('message', 'u').at(-1)?.args[0] as number[];
+  let gun = -1;
+  for (let i = 0; i < units.length; i += 8) if (units[i + 2] === me && units[i + 1] === ARTY) gun = units[i];
+  const leavesAt = (x: number, z: number) => { let n = 0; for (let dx = -2; dx <= 2; dx++) for (let dz = -2; dz <= 2; dz++) for (let y = FLOOR + 2; y <= FLOOR + 7; y++) if (/^cm_(leaves|pine|amber)/.test(name(x + dx, y, z + dz))) n++; return n; };
+  // (The barrage's shells spread: whichever tree they bring down, the one the screens are told of.)
+  const near = TREES.filter((q) => Math.hypot(q.x - t.x, q.z - t.z) < 12).map((q) => ({ x: Math.floor(q.x), z: Math.floor(q.z), leaves: leavesAt(Math.floor(q.x), Math.floor(q.z)) }));
+  send('ability', { ids: [gun], kind: 'artillery', x: t.x, z: t.z });
+  h.run(12);
+  let soil = 0;
+  for (let dx = -6; dx <= 6; dx++) for (let dz = -6; dz <= 6; dz++) if (/^cm_(soil|dirt)$/.test(name(tx + dx, FLOOR - 1, tz + dz))) soil++;
+  const said = (h.find('message', 'felled')[0]?.args[0] as number[] | undefined) ?? [];
+  const down = near.filter((q) => said.length && Math.hypot(q.x + 0.5 - said[0], q.z + 0.5 - said[1]) < 1.5)[0] ?? near[0];
+  const before = down.leaves;
+  const leaves = () => leavesAt(down.x, down.z);
+  check(gun >= 0 && before > 0 && leaves() === 0 && name(down.x, FLOOR, down.z) === 'cm_trunk' && name(down.x, FLOOR + 1, down.z) === 'air', `scars: a barrage fells a tree, leaving a stump (${before} leaf blocks, ${leaves()} after)`);
+  check(soil >= 6, `scars: and scorches the grass round it (${soil} blocks)`);
+  check(h.find('message', 'felled').length > 0, 'scars: the screens are told, for the splinters and leaves');
+  // A new match: the tree back, the grass green.
+  send('resign', {});
+  h.run(2);
+  send('rematch', {});
+  h.run(12);
+  check(state().phase === 'play', 'scars: a rematch begins');
+  check(leaves() === before, `scars: a new match has the tree back (${leaves()} of ${before})`);
 }

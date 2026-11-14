@@ -1,6 +1,6 @@
 import { Blueprint } from '@platform';
-import { DRESSING } from './dressing';
-import { BASES, CAMPS, FLOOR, GROUND_Y, HALF, HILLS, LAKES, MESAS, TREES, deposits, hash, heightAt, inHill, inLake, inMesa } from './map';
+import { dressing } from './dressing';
+import { BASES, CAMPS, FLOOR, GROUND_Y, HALF, HILLS, LAKES, MAP, MESAS, TREES, deposits, hash, heightAt, inHill, inLake, inMesa } from './map';
 
 /**
  * The woods, the rocks, the roads and the bases' gravel pads, stamped into the world as it's made (so
@@ -10,6 +10,11 @@ import { BASES, CAMPS, FLOOR, GROUND_Y, HALF, HILLS, LAKES, MESAS, TREES, deposi
  */
 export function woods(): Blueprint {
   const pad = 24;
+  // (The map's ground: a meadow, lusher or drier, or snow.)
+  const look = MAP.ground;
+  const snow = look === 'snow';
+  const shift = look === 'dry' ? 0.2 : look === 'lush' ? -0.07 : 0;
+  const hillBlock = snow ? 'cm_snowhill' : 'cm_hill';
   const b = new Blueprint({ x: -HALF - pad, y: GROUND_Y, z: -HALF - pad }, { x: (HALF + pad) * 2, y: 18, z: (HALF + pad) * 2 });
   // The meadow's own variety: broad patches of lusher and of dry grass, flowers and bare dirt, ragged at
   // the edges, so it isn't one flat green.
@@ -29,10 +34,11 @@ export function woods(): Blueprint {
   for (let x = -HALF; x < HALF; x++) for (let z = -HALF; z < HALF; z++) {
     // Broad sweeps with finer ones laid over, and a little scatter so one shade feathers into the next.
     const j = (hash(x, z + 77) - 0.5) * 0.05;
-    const t = smooth(x, z, 38, 11) * 0.55 + smooth(x, z, 15, 400) * 0.3 + smooth(x, z, 6, 950) * 0.15 + j;
+    const t = smooth(x, z, 38, 11) * 0.55 + smooth(x, z, 15, 400) * 0.3 + smooth(x, z, 6, 950) * 0.15 + j + shift;
     const bloom = smooth(x, z, 9, 900) + j;
-    const bare = smooth(x, z, 14, 1700) + j;
-    if (bare > 0.8) b.set(x, GROUND_Y, z, 'cm_dirt');
+    const bare = smooth(x, z, 14, 1700) + j + (look === 'dry' ? 0.12 : 0);
+    if (snow) b.set(x, GROUND_Y, z, bare > 0.84 ? 'cm_worn' : t < 0.47 ? 'cm_snow' : 'cm_snow2');
+    else if (bare > 0.8) b.set(x, GROUND_Y, z, 'cm_dirt');
     else if (bare > 0.74) b.set(x, GROUND_Y, z, 'cm_worn');
     else if (bloom > 0.82 && t > 0.4 && t < 0.55) b.set(x, GROUND_Y, z, 'cm_flowers');
     else b.set(x, GROUND_Y, z, t < 0.38 ? 'cm_g0' : t < 0.45 ? 'cm_g1' : t < 0.53 ? 'cm_ground' : t < 0.59 ? 'cm_g3' : t < 0.65 ? 'cm_g4' : 'cm_g5');
@@ -73,7 +79,7 @@ export function woods(): Blueprint {
     for (let x = Math.floor(l.x - l.r - 3); x <= l.x + l.r + 3; x++) for (let z = Math.floor(l.z - l.r - 3); z <= l.z + l.r + 3; z++) {
       const d = Math.hypot(x - l.x, z - l.z) + (hash(x, z) - 0.5) * 1.6;
       if (d < l.r) b.set(x, GROUND_Y, z, d < l.r - 6 ? 'cm_deep' : d < l.r - 2.2 ? 'cm_water' : 'cm_shallows');
-      else if (d < l.r + 2.6) b.set(x, GROUND_Y, z, 'cm_sand');
+      else if (d < l.r + 2.6) b.set(x, GROUND_Y, z, snow ? 'cm_snow2' : 'cm_sand');
     }
   }
   // Mesas: stacks of rock under a grassy top, ragged at the edge.
@@ -83,14 +89,14 @@ export function woods(): Blueprint {
       if (d >= s.r) continue;
       // Lower towards the rim, a step at a time.
       const h = Math.max(1, Math.round(s.h * Math.min(1, (s.r - d) / 2.4)));
-      for (let y = 0; y < h; y++) b.set(x, GROUND_Y + y, z, y === h - 1 ? 'cm_ground' : hash(x + y, z - y) < 0.34 ? 'cm_cliff2' : 'cm_cliff');
+      for (let y = 0; y < h; y++) b.set(x, GROUND_Y + y, z, y === h - 1 ? (snow ? 'cm_snow' : look === 'dry' ? 'cm_rock' : 'cm_ground') : hash(x + y, z - y) < 0.34 ? 'cm_cliff2' : 'cm_cliff');
     }
   }
   // Hills: terraces of earth a block high under lusher grass, a boulder or two on top.
   for (const s of HILLS) {
     for (let x = Math.floor(s.x - s.r - 1); x <= s.x + s.r + 1; x++) for (let z = Math.floor(s.z - s.r - 1); z <= s.z + s.r + 1; z++) {
       const h = heightAt(x, z);
-      for (let y = 1; y <= h; y++) b.set(x, GROUND_Y + y, z, 'cm_hill');
+      for (let y = 1; y <= h; y++) b.set(x, GROUND_Y + y, z, hillBlock);
     }
     for (let k = 0; k < 3; k++) {
       const x = Math.floor(s.x + (hash(s.x + k, s.z) - 0.5) * s.r);
@@ -107,7 +113,7 @@ export function woods(): Blueprint {
     for (let i = 0; i < trunk; i++) b.set(x, FLOOR + i, z, 'cm_trunk');
     const y = FLOOR + trunk;
     const roll = hash(x + 1, z);
-    const kind = hash(z, x) < 0.3 ? 'cm_pine' : roll < 0.45 ? 'cm_leaves' : 'cm_leaves2';
+    const kind = hash(z, x) < MAP.woods.pines ? 'cm_pine' : roll < 0.45 ? 'cm_leaves' : 'cm_leaves2';
     // The canopy shaded: dark underneath, the crown catching the sun; one tree in eleven turning.
     const autumn = kind !== 'cm_pine' && hash(x + 7, z + 2) < 0.09;
     const under = autumn ? 'cm_amber' : kind;
@@ -116,7 +122,7 @@ export function woods(): Blueprint {
       for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) b.set(x + dx, y - 1, z + dz, kind);
       for (const [dx, dz] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]]) b.set(x + dx, y, z + dz, 'cm_pine2');
       b.set(x, y + 1, z, 'cm_pine2');
-      b.set(x, y + 2, z, 'cm_pine2');
+      b.set(x, y + 2, z, snow ? 'cm_snow' : 'cm_pine2');
     } else {
       const wide = hash(x, z + 5) < 0.45;
       const r = wide ? 2 : 1;
@@ -141,7 +147,7 @@ export function woods(): Blueprint {
     for (let y = 0; y < h; y++) {
       const top = y === h - 1;
       // (Grass banks low down, rock showing higher up.)
-      const block = top && h >= 13 ? 'cm_snow' : y < 7 ? 'cm_hill' : hash(x + y, z - y) < 0.34 ? 'cm_cliff2' : 'cm_cliff';
+      const block = top && (h >= 13 || snow) ? 'cm_snow' : y < 7 ? hillBlock : hash(x + y, z - y) < 0.34 ? 'cm_cliff2' : 'cm_cliff';
       b.set(x, GROUND_Y + y, z, block);
     }
   }
@@ -162,17 +168,18 @@ export function woods(): Blueprint {
     if (inLake(x, z, 4) || inMesa(x, z, 2) || inHill(x, z, 1) || BASES.some((s) => Math.hypot(s.x - x, s.z - z) < 15) || TREES.some((t) => Math.hypot(t.x - x, t.z - z) < 2.5) || taken.some((d) => Math.hypot(d.x - x, d.z - z) < 5) || Math.abs(Math.abs(x) - 68) < 3 || Math.abs(Math.abs(z) - 68) < 3) continue;
     // (A shrub is a low, uneven clump, shaded like the trees: never one lone cube.)
     if (i % 2) continue;
-    const leaf = hash(i, 13) < 0.5 ? 'cm_leaves' : 'cm_leaves2';
+    const leaf = snow ? 'cm_pine' : look === 'dry' ? (hash(i, 13) < 0.5 ? 'cm_amber' : 'cm_leaves2') : hash(i, 13) < 0.5 ? 'cm_leaves' : 'cm_leaves2';
     b.set(x, FLOOR, z, leaf).set(x + 1, FLOOR, z, leaf);
     if (hash(i, 15) < 0.7) b.set(x, FLOOR, z + 1, leaf);
     if (hash(i, 17) < 0.5) b.set(x - 1, FLOOR, z, leaf);
     if (hash(i, 18) < 0.5) b.set(x + 1, FLOOR, z - 1, leaf);
-    b.set(x, FLOOR + 1, z, 'cm_leaves3');
-    if (hash(i, 16) < 0.5) b.set(x + 1, FLOOR + 1, z, 'cm_leaves3');
+    const crown = snow ? 'cm_snow' : 'cm_leaves3';
+    b.set(x, FLOOR + 1, z, crown);
+    if (hash(i, 16) < 0.5) b.set(x + 1, FLOOR + 1, z, crown);
   }
   // Last, on open meadow only: tufts of grass, thick in patches and thin between, and flowers in drifts.
   const meadow = new Set(['cm_g0', 'cm_g1', 'cm_ground', 'cm_g3', 'cm_g4', 'cm_g5', 'cm_flowers']);
-  const clear = [...CAMPS, ...DRESSING];
+  const clear = [...CAMPS, ...dressing()];
   for (let x = -HALF + 1; x < HALF - 1; x++) for (let z = -HALF + 1; z < HALF - 1; z++) {
     const top = b.get(x, GROUND_Y, z) as string | undefined;
     if (!top || !meadow.has(top) || b.get(x, FLOOR, z) !== undefined || heightAt(x, z) > 0) continue;
@@ -180,7 +187,7 @@ export function woods(): Blueprint {
     const roll = hash(x + 41, z - 17);
     const drift = smooth(x, z, 8, 2300);
     const thick = smooth(x, z, 12, 5100);
-    if (drift > 0.68 && roll < 0.26) {
+    if (drift > 0.68 && roll < (look === 'dry' ? 0.05 : 0.26)) {
       const which = smooth(x, z, 22, 7300);
       b.set(x, FLOOR, z, which < 0.42 ? 'cm_bloom' : which < 0.6 ? 'cm_bloom2' : 'cm_bloom3');
     } else if (roll < 0.03 + Math.max(0, thick - 0.34) * 0.5) {

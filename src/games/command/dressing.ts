@@ -15,4 +15,4 @@ export interface Dress {
   block: number;
 }
 
-export const DRESSING: Dress[] = CAMPS.map((c) => ({ model: 'relic', x: c.x, z: c.z, yaw: 0, scale: 1, block: 0 }));
+export const dressing = (): Dress[] => CAMPS.map((c) => ({ model: 'relic', x: c.x, z: c.z, yaw: 0, scale: 1, block: 0 }));

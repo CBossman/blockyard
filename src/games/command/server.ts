@@ -1,9 +1,10 @@
 import { defineServer, math, type GameContext, type Player, type Prop, type PropModel } from '@platform';
 import { BotBrain, STYLES, type Style } from './bots';
-import { ABILITIES, DROP, DROP_KINDS, HEAL, MAX_WALLS, MINE, RETREAT, SALVAGE, SPACE, BODY, STAND, WAVE_UNITS, wavePay, waveWorth, type Ability, type DropKind, TRADE, tradeGet, UPLINK, MEDIC, ALARM } from './defs';
-import { DIFFICULTIES, BOARDS, COVER_RANGE, FLANK, fromBehind, HIGH, VET, rankOf, AGE_NEEDS, ARMOR, VERSUS, BUILDABLE, BUILDINGS, ageOf, CARRY, DOCTRINES, DOCTRINE_IDS, GATHER_RATE, HERO, MAX_POP, NEEDS, RELIC, SIGHT, START, TECHS, TECH_IDS, UNITS, type BuildingKind, type DoctrineId, type Mode, type ResKind, type TechId, type UnitKind, type DifficultyId } from './defs';
-import { DRESSING } from './dressing';
-import { BASES, CAMPS, FLOOR, HALF, LAKES, MESAS, TREES, deposits, heightAt, inHill, inLake, inMesa, hashYaw, inside, lakeOf, shore, wallLine, wallSnap, gateCells, gateAxis, SHUT, type Deposit } from './map';
+import { ABILITIES, DROP, DROP_KINDS, HEAL, MAX_WALLS, MINE, RETREAT, SALVAGE, SPACE, BODY, STAND, WAVE_UNITS, wavePay, waveWorth, type Ability, type DropKind, TRADE, tradeGet, UPLINK, HOLD, MEDIC, ALARM } from './defs';
+import { DIFFICULTIES, BOARDS, COVER_RANGE, FLANK, PACE, fromBehind, HIGH, VET, rankOf, AGE_NEEDS, eraWants, ARMOR, VERSUS, BUILDABLE, BUILDINGS, ageOf, CARRY, DOCTRINES, DOCTRINE_IDS, GATHER_RATE, HERO, MAX_POP, NEEDS, RELIC, SIGHT, START, TECHS, TECH_IDS, UNITS, type BuildingKind, type DoctrineId, type Mode, type ResKind, type TechId, type UnitKind, type DifficultyId } from './defs';
+import { dressing } from './dressing';
+import { woods } from './woods';
+import { BASES, CAMPS, FLOOR, GROUND_Y, HALF, LAKES, MAP, MAP_IDS, MESAS, TREES, useMap, type MapId, deposits, heightAt, inHill, inLake, inMesa, hashYaw, inside, lakeOf, shore, wallLine, wallSnap, gateCells, gateAxis, SHUT, type Deposit } from './map';
 import { DEPOSIT_MODELS, DRESSING as DRESS_MODELS, FLAGS, PORTRAITS, SCALE, modelFor, variantOf } from './models';
 import { BUILDING_ORDER, UNIT_ORDER, type Seat, type Shot, type State, type Summary, type Lobby, type LobbySeat } from './protocol';
 import { shared } from './shared';
@@ -22,7 +23,7 @@ type Order =
   | { t: 'idle' }
   | { t: 'move'; x: number; z: number; attack: boolean; /** Which way to face on arriving. */ face?: number; /** The column's marching speed, kept to until near the end. */ pace?: number; /** Getting away: it doesn't turn to fight even when it's shot at. */ flee?: boolean }
   | { t: 'attack'; id: number; building: boolean }
-  | { t: 'gather'; node: number; phase: 'to' | 'work' | 'back'; slot?: number; held?: number }
+  | { t: 'gather'; node: number; phase: 'to' | 'work' | 'back'; slot?: number; held?: number; /** Places at it tried that it couldn't get to. */ tries?: number }
   | { t: 'build'; id: number }
   | { t: 'repair'; id: number; /** A vehicle, not a building. */ unit?: boolean }
   /** Into a bunker (a building) or a transport (a boat). */
@@ -85,6 +86,13 @@ export interface Unit {
   /** Where it was when it last got anywhere, and how many times it has looked again since; a sidestep it's taking to get unstuck. */
   prog?: { x: number; z: number; t: number; n: number };
   dodge?: { a: number; until: number };
+  /** Where it last got anywhere on its way (and when, and when it was last on its way at all): one that can get no nearer is there. */
+  still?: { x: number; z: number; t: number; seen: number };
+  /** The unit it's been shooting (it keeps to it while it's in reach), and when it last called its friends in. */
+  aim?: number;
+  helpAt?: number;
+  /** Having found no one to fight, when it next looks (not every tick: no one there now is no one there a moment from now). */
+  scanAt?: number;
 }
 
 export interface Building {
@@ -166,6 +174,8 @@ export interface World {
   stand: boolean;
   /** Whether an uplink can be built (and win) this match. */
   uplinkOn: boolean;
+  /** Hold the Middle, when it's on: where, who holds it now (a team; -1 nobody, -2 fought over), and each team's seconds. */
+  hold: { x: number; z: number; r: number; holder: number; need: number; held: Map<number, number> } | null;
   /** Supply drops on their way down or on the ground; `at`: when it lands. */
   drops: { id: number; x: number; z: number; at: number }[];
   /** How many mines a seat has down. */
@@ -174,6 +184,8 @@ export interface World {
   ability(seat: number, ids: number[], kind: UnitKind, x: number, z: number): boolean;
   /** A bot commander's word to the table, in the feed. */
   say(seat: number, text: string): void;
+  /** A lot sold at a seat's trade post for the other resource (false: no post, or not enough). */
+  trade(seat: number, sell: ResKind): boolean;
 }
 
 /** The wild's seat: the camps' guards. Its team is no one's. */
@@ -215,13 +227,84 @@ let later: { t: number; run: () => void }[] = [];
 /** Patches of the map a side has lit up for a while. */
 let flares: { team: number; x: number; z: number; r: number; until: number }[] = [];
 let healIn = 0;
+/** Hold the Middle: whether it's on this match, each team's seconds held, who holds it now (a team; -1 nobody, -2 fought over). */
+let holdOn = false;
+const held = new Map<number, number>();
+let holder = -1;
+/** The holder the players were last told of. */
+let holdSaid = -1;
+let holdIn = 0;
+/** Who's in the middle, twice a second: one side's fighting troops alone there hold it (not in the peace). True when that's won it. */
+function holdTick(game: GameContext, dt: number): boolean {
+  if (!holdOn) return false;
+  holdIn -= dt;
+  if (holdIn > 0) return false;
+  holdIn = 0.5;
+  const there = new Set<number>();
+  for (const u of units.values()) {
+    const def = UNITS[u.kind];
+    if (u.seat === NEUTRAL || u.kind === 'engineer' || u.inside || def.air || def.naval || !slots[u.seat]?.alive) continue;
+    if (dist(u.x, u.z, HOLD.x, HOLD.z) <= HOLD.r) there.add(teamOf(u.seat));
+  }
+  holder = time < peaceUntil ? -1 : there.size === 1 ? [...there][0] : there.size ? -2 : -1;
+  if (holder >= 0) held.set(holder, (held.get(holder) ?? 0) + 0.5);
+  // (Told when a side takes it, or it's fought over; not when it's left empty.)
+  if (holder !== -1 && holder !== holdSaid) {
+    holdSaid = holder;
+    for (const s of slots) {
+      if (!s?.player) continue;
+      s.player.hud.toast(holder === -2 ? 'The middle is contested' : holder === s.team ? 'Your side holds the middle' : 'The enemy holds the middle');
+    }
+  }
+  if (holder >= 0 && (held.get(holder) ?? 0) >= HOLD.need) {
+    wonBy = 'hold';
+    const names = slots.filter((s) => s && s.team === holder && s.seat !== NEUTRAL).map((s) => s!.name);
+    game.hud.banner('The middle is held', `${names.join(' and ')} ${names.length > 1 ? 'win' : 'wins'} by holding the middle`, { duration: 4 });
+    checkEnd(game, true, holder);
+    return true;
+  }
+  return false;
+}
+/** Each player's fight going on: what they've killed and lost in it, and when the last of it was. */
+const fights = new Map<number, { killed: number; lost: number; at: number }>();
+function tally(seat: number, killed: number, lost: number): void {
+  if (!slots[seat]?.player) return;
+  const f = fights.get(seat) ?? { killed: 0, lost: 0, at: time };
+  f.killed += killed;
+  f.lost += lost;
+  f.at = time;
+  fights.set(seat, f);
+}
+let reportIn = 0;
+/**
+ * A fight that's died down (nothing killed on either side for eight seconds): its score to the player
+ * who fought it, if it was more than a skirmish of one or two.
+ */
+function reportTick(dt: number): void {
+  reportIn -= dt;
+  if (reportIn > 0) return;
+  reportIn = 1;
+  for (const [seat, f] of fights) {
+    if (time - f.at < 8) continue;
+    fights.delete(seat);
+    const p = slots[seat]?.player;
+    if (!p || f.killed + f.lost < 4) continue;
+    const verdict = f.killed >= f.lost * 1.5 ? 'Fight won' : f.lost >= f.killed * 1.5 ? 'Fight lost' : 'Hard fought';
+    p.hud.toast(`${verdict}: ${f.killed} of theirs for ${f.lost} of yours`);
+  }
+}
+/** The weather: how heavy the rain is now and is heading for, when this shower ends, and when the next one comes. */
+let rain = 0;
+let rainGoal = 0;
+let rainEnds = 0;
+let nextShower = 0;
 /** Mines in the ground. */
 let mines: { seat: number; team: number; x: number; z: number }[] = [];
 let mineIn = 0;
 
 // The match being set up, which stays as it was for a rematch.
 const makeSeat = (seat: number): LobbySeat => ({ seat, kind: seat < 4 ? 'bot' : 'closed', name: '', id: '', team: seat % 4, style: 'random', difficulty: 'normal', ready: false });
-const lobby: Lobby = { seats: [0, 1, 2, 3, 4, 5].map(makeSeat), host: '', preset: 'ffa', resources: 'normal', fog: true, uplink: true, peace: 0, watchers: [] };
+const lobby: Lobby = { seats: [0, 1, 2, 3, 4, 5].map(makeSeat), host: '', preset: 'ffa', resources: 'normal', map: 'heartland', hold: false, fog: true, uplink: true, peace: 0, watchers: [] };
 const BRIEFING = 7;
 const START_RES = { low: 0.5, normal: 1, high: 2.5 };
 let briefingLeft = 0;
@@ -245,6 +328,9 @@ const teamOf = (seat: number) => slots[seat]?.team ?? -1;
 
 export default defineServer(shared, {
   setup(game) {
+    // (A new world stands as Heartland, whatever the last room here was playing.)
+    useMap('heartland');
+    mapEdits = [];
     const kinds: Record<string, PropModel[]> = {};
     // Each building in each army's colours (and the wild's); the scenery once.
     for (const k of BUILDING_ORDER) kinds[k] = [0, 1, 2, 3, 4, 5, 6].map((v) => game.props.gltf(modelFor(k, v), { radius: 9 }));
@@ -374,6 +460,27 @@ export default defineServer(shared, {
         return `${n} hurt`;
       },
     });
+    game.commands.register('shell', {
+      usage: '<x> <z> [seat]',
+      help: 'Drops a howitzer shell on a spot (from a seat, default the wild), to see what it does to the field',
+      cheat: true,
+      run: ([x, z, seat]) => {
+        if (phase !== 'play') return 'During a match';
+        shellLands(game, Number(seat ?? NEUTRAL), undefined, 'artillery', Number(x), Number(z), ABILITIES.artillery!.radius, ABILITIES.artillery!.damage);
+        return 'shell';
+      },
+    });
+    game.commands.register('rain', {
+      usage: '[0..1]',
+      help: 'A shower now, that heavy (0 stops it)',
+      cheat: true,
+      run: ([v]) => {
+        rainGoal = Math.max(0, Math.min(1, Number(v ?? 1)));
+        rainEnds = time + 120;
+        if (!rainGoal) nextShower = time + 240;
+        return 'rain ' + rainGoal;
+      },
+    });
     game.commands.register('rich', {
       help: 'Every commander gets 9999 steel and oil, and every era',
       cheat: true,
@@ -386,6 +493,10 @@ export default defineServer(shared, {
   },
 
   start(game) {
+    // (A restart puts every block back as the world was made: Heartland.)
+    useMap('heartland');
+    mapEdits = [];
+    mapLater = [];
     phase = 'lobby';
     reset(game);
     gone.clear();
@@ -412,11 +523,13 @@ export default defineServer(shared, {
       time += dt;
       simulate(game, dt);
     }
+    mapTick(game);
     tell(game, rawDt);
   },
 });
 
 function reset(game: GameContext): void {
+  healField(game);
   for (const b of buildings.values()) unprop(b);
   for (const p of nodeProps.values()) p.remove();
   units = new Map();
@@ -427,7 +540,15 @@ function reset(game: GameContext): void {
   shots = [];
   booms = [];
   winners = [];
+  rain = 0;
+  rainGoal = 0;
+  fights.clear();
+  nextShower = 0;
   wonBy = undefined;
+  holdOn = false;
+  held.clear();
+  holder = -1;
+  holdSaid = -1;
   summary = undefined;
   later = [];
   flares = [];
@@ -471,13 +592,62 @@ function startFromLobby(game: GameContext): void {
     plan.push({ seat: x.seat, team: x.team, player, name: player?.name ?? (x.kind === 'human' ? x.name : ''), skill: DIFFICULTIES.find((d) => d.id === x.difficulty)!.skill, adaptive: !!DIFFICULTIES.find((d) => d.id === x.difficulty)!.adaptive, keep: x.kind === 'human', style: x.style in STYLES ? (x.style as Style) : undefined });
   }
   startScale = START_RES[lobby.resources];
-  startMatch(game, lobby.preset, 0.65, plan);
+  startMatch(game, lobby.preset, 0.65, plan, lobby.map);
+  holdOn = lobby.preset !== 'stand' && lobby.hold;
   peaceUntil = lobby.peace * 60;
   if (!lobby.fog) for (const x of slots) if (x) x.revealUntil = 1e9;
 }
 
-function startMatch(game: GameContext, chosen: Mode, skill: number, plan?: SeatPlan[]): void {
+/**
+ * The world's blocks as one map's, to stand as another's: the blocks that differ between the two (the
+ * woods, lakes, mesas, hills and ground), set a batch a tick so no tick stalls. Every screen is sent
+ * them, as for any block set.
+ */
+type MapEdit = [x: number, y: number, z: number, block: string, cell: number];
+let mapEdits: MapEdit[] = [];
+/** Edits that didn't land (their part of the world not loaded on the server yet), tried again now and then. */
+let mapLater: MapEdit[] = [];
+let laterIn = 0;
+function switchMap(id: MapId): void {
+  // (What's left of a switch before this one: set again as this map has it, wherever the world stands there now.)
+  const pending = new Set<number>();
+  for (const e of mapEdits) pending.add(e[4]);
+  for (const e of mapLater) pending.add(e[4]);
+  mapEdits = [];
+  mapLater = [];
+  if (id === MAP.id && !pending.size) return;
+  const was = woods().toData();
+  useMap(id);
+  const now = woods().toData();
+  const { origin, size } = now;
+  for (let i = 0; i < now.cells.length; i++) {
+    const a = was.cells[i] < 0 ? '' : String(was.palette[was.cells[i]]);
+    const b = now.cells[i] < 0 ? '' : String(now.palette[now.cells[i]]);
+    if (a === b && !pending.has(i)) continue;
+    const lx = i % size.x;
+    const rest = (i - lx) / size.x;
+    const lz = rest % size.z;
+    const y = origin.y + (rest - lz) / size.z;
+    // (A cell the map leaves alone is the world's own: its ground at the ground's height, air above.)
+    mapEdits.push([origin.x + lx, y, origin.z + lz, b || (y === GROUND_Y ? 'cm_ground' : 'air'), i]);
+  }
+  gridDirty = true;
+}
+/** A batch of the map's edits a tick; those that don't land, again every two seconds or so. */
+function mapTick(game: GameContext, most = 6000): void {
+  const set = (e: MapEdit) => game.world.setBlock(e[0], e[1], e[2], e[3]) || game.world.blockName(game.world.getBlock(e[0], e[1], e[2])) === e[3];
+  if (mapEdits.length) {
+    const batch = mapEdits.length > most ? mapEdits.splice(0, most) : mapEdits.splice(0);
+    for (const e of batch) if (!set(e)) mapLater.push(e);
+  } else if (mapLater.length && --laterIn <= 0) {
+    laterIn = 40;
+    mapLater = mapLater.filter((e) => !set(e));
+  }
+}
+
+function startMatch(game: GameContext, chosen: Mode, skill: number, plan?: SeatPlan[], map: MapId | 'random' = MAP.id): void {
   reset(game);
+  switchMap(map === 'random' ? MAP_IDS[Math.floor(Math.random() * MAP_IDS.length)] : map);
   mode = chosen;
   gone.clear();
   peaceUntil = 0;
@@ -513,7 +683,7 @@ function startMatch(game: GameContext, chosen: Mode, skill: number, plan?: SeatP
   }
   nodes = deposits().map((d) => ({ ...d }));
   gridDirty = true;
-  DRESSING.forEach((d, i) => {
+  dressing().forEach((d, i) => {
     const p = game.props.spawn(models.kinds[d.model][0], { position: { x: d.x, y: FLOOR, z: d.z }, scale: SCALE[d.model] * d.scale });
     p.quaternion.setFromEuler(euler.set(0, d.yaw, 0));
     nodeProps.set(-1 - i, p);
@@ -610,6 +780,8 @@ function lobbyOrder(game: GameContext, player: Player, d: Record<string, unknown
     }
   } else if (op === 'resources' && (d.resources === 'low' || d.resources === 'normal' || d.resources === 'high')) lobby.resources = d.resources;
   else if (op === 'fog') lobby.fog = !lobby.fog;
+  else if (op === 'hold') lobby.hold = !lobby.hold;
+  else if (op === 'map' && (d.map === 'random' || MAP_IDS.includes(d.map as MapId))) lobby.map = d.map as MapId | 'random';
   else if (op === 'uplink') lobby.uplink = !lobby.uplink;
   else if (op === 'peace' && [0, 3, 5, 10].includes(Number(d.peace))) lobby.peace = Number(d.peace);
   else if (op === 'start') {
@@ -665,6 +837,70 @@ function mowFor(game: GameContext, kind: BuildingKind, x: number, z: number): vo
   for (let i = Math.floor(x) - r; i <= x + r; i++) for (let k = Math.floor(z) - r; k <= z + r; k++) {
     if (/^cm_(tuft|bloom)/.test(game.world.blockName(game.world.getBlock(i, FLOOR, k)))) game.world.setBlock(i, FLOOR, k, 'air');
   }
+}
+
+// ---------------------------------------------------------------------------------------------
+// The field marked by the fighting: shells scorch the grass and flatten it, big blasts fell the trees
+// near them (a stump left standing, and a way through where the tree was). Each block changed is
+// remembered and put back for the next match.
+
+/** The blocks the fighting has changed this match, as they were (by "x,y,z"). */
+const scarred = new Map<string, number>();
+/** The trees felled this match (`TREES` indices): the pathfinder goes through where they stood. */
+const felled = new Set<number>();
+const TREE_BLOCK = /^cm_(trunk|leaves|pine|amber)/;
+const GRASS = /^cm_(g\d|ground|flowers|worn|hill|field|snow)/;
+
+function setScar(game: GameContext, x: number, y: number, z: number, block: string): void {
+  const key = x + ',' + y + ',' + z;
+  if (!scarred.has(key)) scarred.set(key, game.world.getBlock(x, y, z));
+  game.world.setBlock(x, y, z, block);
+}
+
+/** Scorched and flattened: the grass round a blast burnt to soil (bare dirt at the edge), the tufts gone. */
+function scorch(game: GameContext, x: number, z: number, r: number): void {
+  const ri = Math.ceil(r);
+  for (let i = Math.floor(x) - ri; i <= Math.floor(x) + ri; i++) {
+    for (let k = Math.floor(z) - ri; k <= Math.floor(z) + ri; k++) {
+      const d = Math.hypot(i + 0.5 - x, k + 0.5 - z);
+      // (Ragged at the edge, not a disc.)
+      if (d > r * (0.75 + 0.25 * Math.abs(Math.sin(i * 12.9898 + k * 78.233) * 43758.5453 % 1))) continue;
+      const top = FLOOR + heightAt(i + 0.5, k + 0.5);
+      const ground = game.world.blockName(game.world.getBlock(i, top - 1, k));
+      if (GRASS.test(ground)) setScar(game, i, top - 1, k, d < r * 0.55 ? 'cm_soil' : 'cm_dirt');
+      if (/^cm_(tuft|bloom)/.test(game.world.blockName(game.world.getBlock(i, top, k)))) setScar(game, i, top, k, 'air');
+    }
+  }
+}
+
+/** The trees a big blast reaches: down, a stump left, and the way through where they stood. */
+function fellNear(game: GameContext, x: number, z: number, r: number): void {
+  TREES.forEach((t, n) => {
+    if (felled.has(n) || Math.abs(t.x - x) > r + 1 || Math.abs(t.z - z) > r + 1 || dist(t.x, t.z, x, z) > r) return;
+    felled.add(n);
+    const tx = Math.floor(t.x);
+    const tz = Math.floor(t.z);
+    // (From a block up: the trunk's foot stays, a stump, and so does any felled neighbour's.)
+    for (let dx = -2; dx <= 2; dx++) for (let dz = -2; dz <= 2; dz++) for (let y = FLOOR + 1; y <= FLOOR + 7; y++) {
+      if (TREE_BLOCK.test(game.world.blockName(game.world.getBlock(tx + dx, y, tz + dz)))) setScar(game, tx + dx, y, tz + dz, 'air');
+    }
+    felledNow.push(round1(t.x), round1(t.z));
+    gridDirty = true;
+  });
+}
+/** Trees felled since the screens were last told (for the splinters and leaves). */
+let felledNow: number[] = [];
+
+/** The field as it was: for a new match. */
+function healField(game: GameContext): void {
+  for (const [key, id] of scarred) {
+    const [x, y, z] = key.split(',').map(Number);
+    game.world.setBlock(x, y, z, id);
+  }
+  scarred.clear();
+  felled.clear();
+  felledNow = [];
+  gridDirty = true;
 }
 
 /** A building off the field: its model, and a gate's doors. */
@@ -763,11 +999,15 @@ function simulate(game: GameContext, dt: number): void {
   }
   relicTick(game, dt);
   healTick(dt);
+  reportTick(dt);
+  weatherTick(dt);
   gateTick(dt);
+  autoTick(game, dt);
   medicTick(dt);
   mineTick(game, dt);
   dropTick(game, dt);
   if (mode === 'stand') standTick(game, dt);
+  if (holdTick(game, dt)) return;
   // An uplink that has stood its time: its side wins.
   for (const b of buildings.values()) {
     if (!uplinkOn || b.kind !== 'uplink' || b.doneAt === undefined || time - b.doneAt < UPLINK.hold || !slots[b.seat]?.alive) continue;
@@ -831,7 +1071,7 @@ function openGround(): { x: number; z: number } | null {
     if (inLake(x, z, 4) || inHill(x, z, 3) || inMesa(x, z, 3)) continue;
     if (hqs.some((b) => dist(b.x, b.z, x, z) < DROP.from) || [...buildings.values()].some((b) => dist(b.x, b.z, x, z) < 14)) continue;
     if (relics.some((r) => dist(r.x, r.z, x, z) < 14) || drops.some((d) => dist(d.x, d.z, x, z) < 30)) continue;
-    if (DRESSING.some((d) => d.block && dist(x, z, d.x, d.z) < d.block + 3) || nodes.some((n) => dist(n.x, n.z, x, z) < 6)) continue;
+    if (dressing().some((d) => d.block && dist(x, z, d.x, d.z) < d.block + 3) || nodes.some((n) => dist(n.x, n.z, x, z) < 6)) continue;
     return { x: round1(x), z: round1(z) };
   }
   return null;
@@ -1001,6 +1241,54 @@ function gateTick(dt: number): void {
   }
 }
 
+let autoIn = 0;
+/**
+ * The tricks that need no aiming, used for a player's units as a bot would (it's too much to click in a
+ * fight, and they're plainly right when they're right): a tank in trouble lays its smoke, flak goes up
+ * when there's something in the air in reach, and a rocket team on the defence braces for armour.
+ * The aimed ones (grenades, barrages, rockets, flares, mines) stay the player's to call.
+ */
+function autoTick(game: GameContext, dt: number): void {
+  autoIn -= dt;
+  if (autoIn > 0) return;
+  autoIn = 0.5;
+  for (const u of units.values()) {
+    const sl = slots[u.seat];
+    if (!sl?.player || sl.bot || u.inside || u.abilityAt > time || u.stance === 2) continue;
+    const a = ABILITIES[u.kind];
+    if (!a || a.aimed) continue;
+    if (u.kind === 'tank') {
+      if (u.hp < u.max * 0.55 && time - u.hitAt < 1.5) cast(game, u, a, 0, 0);
+    } else if (u.kind === 'aa') {
+      if (pickTarget(u, UNITS.aa.range)) cast(game, u, a, 0, 0);
+    } else if (u.kind === 'at') {
+      // (Standing or fighting, not on the move: bracing roots it to the spot.)
+      if (u.order.t === 'move' && !u.order.attack) continue;
+      const e = [...units.values()].find((v) => teamOf(v.seat) !== teamOf(u.seat) && v.seat !== NEUTRAL && !v.inside && ARMOR[v.kind] === 'vehicle' && !UNITS[v.kind].air && dist(v.x, v.z, u.x, u.z) < UNITS.at.range * 1.3);
+      if (e && time >= peaceUntil) cast(game, u, a, 0, 0);
+    }
+  }
+}
+
+/**
+ * Showers now and then (every four to eight minutes, a minute or two long), coming on and easing off:
+ * the field wet and grey for a while, everyone under the same sky. It's only weather: nothing plays
+ * differently for it.
+ */
+function weatherTick(dt: number): void {
+  if (nextShower === 0) nextShower = time + 180 + Math.random() * 180;
+  if (rainGoal === 0 && time >= nextShower) {
+    rainGoal = 0.45 + Math.random() * 0.55;
+    rainEnds = time + 60 + Math.random() * 60;
+  } else if (rainGoal > 0 && time >= rainEnds) {
+    rainGoal = 0;
+    nextShower = time + 240 + Math.random() * 240;
+  }
+  const was = Math.round(rain * 20);
+  rain += Math.max(-dt * 0.06, Math.min(dt * 0.06, rainGoal - rain));
+  if (Math.round(rain * 20) !== was) dirty = true;
+}
+
 function healTick(dt: number): void {
   healIn -= dt;
   if (healIn > 0) return;
@@ -1131,6 +1419,18 @@ function researchTick(b: Building, dt: number): void {
 }
 
 /** What `sell` fetches at a slot's trade post now (a share of full price): where it was, climbing back since. */
+/** A lot of one sold at the trade post for the other, at the going price (which drops for the next sale, and climbs back). */
+function trade(slot: Slot, sell: ResKind): boolean {
+  if (slot[sell] < TRADE.lot || ![...buildings.values()].some((b) => b.seat === slot.seat && b.kind === 'market' && b.built >= 1)) return false;
+  const price = priceNow(slot, sell);
+  slot[sell] -= TRADE.lot;
+  slot[sell === 'steel' ? 'oil' : 'steel'] += tradeGet(sell, price);
+  slot.trade = { ...slot.trade, steel: priceNow(slot, 'steel'), oil: priceNow(slot, 'oil'), at: time };
+  slot.trade[sell] = Math.max(TRADE.floor, price - TRADE.drop);
+  dirty = true;
+  return true;
+}
+
 function priceNow(s: Slot, sell: ResKind): number {
   return Math.min(1, s.trade[sell] + (time - s.trade.at) * TRADE.recover);
 }
@@ -1138,7 +1438,7 @@ function priceNow(s: Slot, sell: ResKind): number {
 function research(b: Building, tech: TechId): boolean {
   const s = slots[b.seat]!;
   const cost = TECHS[tech].cost;
-  if (b.built < 1 || b.research || s.techs.has(tech) || (tech === 'age3' && !s.techs.has('age2')) || !BUILDINGS[b.kind].research?.includes(tech) || !canAfford(s, cost)) return false;
+  if (b.built < 1 || b.research || s.techs.has(tech) || eraWants(tech, s.techs, [...buildings.values()].filter((x) => x.seat === b.seat && x.built >= 1).map((x) => x.kind), time) || !BUILDINGS[b.kind].research?.includes(tech) || !canAfford(s, cost)) return false;
   // (One lab per upgrade: not the same one in two labs at once.)
   if ([...buildings.values()].some((x) => x.seat === b.seat && x.research?.id === tech)) return false;
   s.steel -= cost.steel;
@@ -1162,7 +1462,7 @@ function towerTick(game: GameContext, b: Building, dt: number): void {
   const dmg = g.damage * (has(b.seat, 'ordnance') ? 1.2 : 1);
   shots.push({ x: round1(b.x), y: FLOOR + 7, z: round1(b.z), tx: round1(e.x), ty: FLOOR + heightAt(e.x, e.z) + 1.5, tz: round1(e.z), big: false, k: -1 });
   if (e.building) damageBuilding(game, e.id, dmg, b.seat);
-  else damageUnit(game, e.id, dmg, b.seat);
+  else damageUnit(game, e.id, dmg * PACE.guns, b.seat);
 }
 
 /** The commander's Rally: every unit of its side near it is healed and fires faster for a while. */
@@ -1205,6 +1505,42 @@ function nearestEnemy(seat: number, x: number, z: number, range: number, hits: '
   return best;
 }
 
+/** How much a unit is worth shooting first: what fights back over what doesn't (engineers, medics). */
+const THREAT: Partial<Record<UnitKind, number>> = { engineer: 0.45, medic: 0.6, scout: 0.75, transport: 0.6 };
+/** How much ACQUIRE adds to a unit's reach for what it notices and goes after (idle and aggressive, or attack-moving). */
+const ACQUIRE = 7;
+
+/**
+ * What a unit shoots: of the enemies in reach, the one it's best against (`VERSUS`), that fights back,
+ * and is worn down, and near; and the one it was shooting already, while it's still there to shoot
+ * (no switching from target to target every shot). Buildings only when there's no one. Not `wild`: the
+ * camps' guards left alone (what a unit sees past its reach it doesn't pick a fight with them over).
+ */
+function pickTarget(u: Unit, range: number, wild = true): { id: number; building: boolean; x: number; z: number; d: number } | null {
+  const team = teamOf(u.seat);
+  const hits = UNITS[u.kind].hits ?? 'ground';
+  const peace = time < peaceUntil && u.seat !== NEUTRAL;
+  const vs = VERSUS[u.kind] ?? {};
+  let best: { id: number; building: boolean; x: number; z: number; d: number } | null = null;
+  let score = 0;
+  for (const v of units.values()) {
+    if (teamOf(v.seat) === team || v.inside || (peace && v.seat !== NEUTRAL) || (!wild && v.seat === NEUTRAL)) continue;
+    const air = !!UNITS[v.kind].air;
+    if ((air && hits === 'ground') || (!air && hits === 'air')) continue;
+    if (Math.abs(v.x - u.x) > range || Math.abs(v.z - u.z) > range) continue;
+    const d = dist(u.x, u.z, v.x, v.z);
+    if (d > range) continue;
+    let sc = (vs[ARMOR[v.kind]] ?? 1) * (THREAT[v.kind] ?? 1) * (1.6 - (0.6 * v.hp) / v.max) / (1 + (0.8 * d) / (range + 1));
+    if (v.id === u.aim) sc *= 1.6;
+    if (sc > score) {
+      score = sc;
+      best = { id: v.id, building: false, x: v.x, z: v.z, d };
+    }
+  }
+  if (best || !wild) return best;
+  return nearestEnemy(u.seat, u.x, u.z, range, hits);
+}
+
 function targetOf(o: { id: number; building: boolean }): { x: number; z: number; radius: number; hp: number; air: boolean } | null {
   if (o.building) {
     const b = buildings.get(o.id);
@@ -1243,8 +1579,10 @@ function rebuildGrid(): void {
   for (const n of nodes) if (n.amount > 0 && !n.salvage) block(n.x, n.z, SHUT.deposit);
   for (const l of LAKES) block(l.x, l.z, l.r + SHUT.lake);
   for (const m of MESAS) block(m.x, m.z, m.r + SHUT.mesa);
-  for (const d of DRESSING) if (d.block) block(d.x, d.z, d.block);
-  for (const t of TREES) block(t.x, t.z, SHUT.tree);
+  for (const d of dressing()) if (d.block) block(d.x, d.z, d.block);
+  TREES.forEach((t, n) => {
+    if (!felled.has(n)) block(t.x, t.z, SHUT.tree);
+  });
   wallAt.clear();
   for (const bl of buildings.values()) {
     if (!BUILDINGS[bl.kind].wall) continue;
@@ -1282,7 +1620,19 @@ function findPath(x0: number, z0: number, x1: number, z1: number, team = -1): { 
   // Starting in a shut cell (pressed up against a building, or squeezed into the edge of a wall): the way
   // begins at the nearest free one to where it really is, so it isn't penned in by its own corner of the grid.
   let out0: { x: number; z: number } | null = null;
-  if (shut(start)) {
+  // (Only when it's boxed in: with a free cell beside it, the search gets out of a shut one on its own,
+  // and a detour to the middle of another cell first would only slow it down.)
+  const boxed = (c: number) => {
+    const ci = c % GN;
+    const cj = Math.floor(c / GN);
+    for (let di = -1; di <= 1; di++) for (let dj = -1; dj <= 1; dj++) {
+      const i = ci + di;
+      const j = cj + dj;
+      if ((di || dj) && i >= 0 && j >= 0 && i < GN && j < GN && !shut(j * GN + i)) return false;
+    }
+    return true;
+  };
+  if (shut(start) && boxed(start)) {
     const si = start % GN;
     const sj = Math.floor(start / GN);
     let best = 1e9;
@@ -1294,8 +1644,8 @@ function findPath(x0: number, z0: number, x1: number, z1: number, team = -1): { 
         if (i < 0 || j < 0 || i >= GN || j >= GN || shut(j * GN + i)) continue;
         const cx = i * CELL - HALF + CELL / 2;
         const cz = j * CELL - HALF + CELL / 2;
-        // (The nearest of them, a little towards where it's going.)
-        const sc = dist(cx, cz, x0, z0) + 0.25 * dist(cx, cz, x1, z1);
+        // (The one that makes the shortest way of it: out, and on to where it's going.)
+        const sc = dist(cx, cz, x0, z0) + dist(cx, cz, x1, z1);
         if (sc < best) {
           best = sc;
           out0 = { x: cx, z: cz };
@@ -1474,6 +1824,17 @@ function step(u: Unit, tx: number, tz: number, dt: number, stop: number): boolea
   }
   if (gridDirty) rebuildGrid();
   const team = teamOf(u.seat);
+  // As near as it can get (its spot taken, or inside something, and the crowd keeping it off): near enough is there.
+  const st = u.still;
+  if (!st || time - st.seen > 0.4 || dist(st.x, st.z, u.x, u.z) > 0.8) u.still = { x: u.x, z: u.z, t: time, seen: time };
+  else {
+    st.seen = time;
+    const left = dist(u.x, u.z, tx, tz);
+    if (time - st.t > 1.5 && (left < stop + 2.5 || (left < stop + 8 && isBlocked(tx, tz, team)))) {
+      u.still = undefined;
+      return true;
+    }
+  }
   if (clear(u.x, u.z, tx, tz, team)) {
     u.path = null;
     return move(u, tx, tz, dt, stop);
@@ -1488,7 +1849,8 @@ function step(u: Unit, tx: number, tz: number, dt: number, stop: number): boolea
   // Stuck (pressed against a corner by the crowd, say): it looks for its way again, and if that's no
   // better, sidesteps for a moment.
   const pr = u.prog;
-  if (!pr || dist(pr.x, pr.z, u.x, u.z) > 1.2) u.prog = { x: u.x, z: u.z, t: time, n: 0 };
+  // (Not since a while ago: it's been standing about, or busy at something else, and has only now set off.)
+  if (!pr || dist(pr.x, pr.z, u.x, u.z) > 1.2 || time - pr.t > 2.5) u.prog = { x: u.x, z: u.z, t: time, n: 0 };
   else if (time - pr.t > 1.6) {
     pr.t = time;
     pr.n++;
@@ -1550,7 +1912,7 @@ function unitTick(game: GameContext, u: Unit, dt: number): void {
     u.z = c.z;
     // From a bunker, soldiers fire from cover (unless holding fire); from a boat, not at all.
     if (!u.inside.boat && fighter && u.stance !== 2) {
-      const e = nearestEnemy(u.seat, u.x, u.z, range + BUILDINGS[(c as Building).kind].radius, def.hits);
+      const e = pickTarget(u, range + BUILDINGS[(c as Building).kind].radius);
       if (e) fire(game, u, e);
     }
     return;
@@ -1562,7 +1924,7 @@ function unitTick(game: GameContext, u: Unit, dt: number): void {
   if (o.t === 'enter') return enterTick(u, o, dt);
   // Braced: it stays where it is and shoots what's in its longer reach, and goes on with its orders after.
   if (u.braceUntil > time) {
-    const e = nearestEnemy(u.seat, u.x, u.z, range, def.hits);
+    const e = pickTarget(u, range);
     if (e && u.stance !== 2) {
       u.yaw = Math.atan2(e.x - u.x, e.z - u.z);
       fire(game, u, e);
@@ -1595,7 +1957,7 @@ function unitTick(game: GameContext, u: Unit, dt: number): void {
       u.pathFor = null;
     } else {
       // Whoever's in reach first, then the wall.
-      const e = nearestEnemy(u.seat, u.x, u.z, range, def.hits);
+      const e = pickTarget(u, range);
       if (e) {
         u.yaw = Math.atan2(e.x - u.x, e.z - u.z);
         fire(game, u, e);
@@ -1620,7 +1982,7 @@ function unitTick(game: GameContext, u: Unit, dt: number): void {
         if (d > range) {
           // Shot at on the way to it (its target run off behind its friends, say): it fights back
           // first, and goes on after the target once nothing's in reach.
-          const back = fighter && u.stance !== 2 && u.hitAt > time - 2.5 ? nearestEnemy(u.seat, u.x, u.z, range, hits) : null;
+          const back = fighter && u.stance !== 2 && u.hitAt > time - 2.5 ? pickTarget(u, range) : null;
           if (back) {
             u.yaw = Math.atan2(back.x - u.x, back.z - u.z);
             fire(game, u, back);
@@ -1637,13 +1999,21 @@ function unitTick(game: GameContext, u: Unit, dt: number): void {
       u.order = { ...o, attack: true };
       return;
     }
-    // Attack-moving, a fighter shoots whatever is in reach as it goes (and stops to).
-    const e = o.attack && fighter ? nearestEnemy(u.seat, u.x, u.z, range, def.hits) : null;
+    // Attack-moving, a fighter shoots the best of what's in reach as it goes (and stops to); and what it
+    // sees a little past its reach, it closes on (not standing by while the fight's just ahead of it).
+    const scan = time >= (u.scanAt ?? 0);
+    const e = scan && o.attack && fighter && u.stance !== 2 ? pickTarget(u, range) : null;
     if (e) {
       u.yaw = Math.atan2(e.x - u.x, e.z - u.z);
       fire(game, u, e);
       return;
     }
+    const near = scan && o.attack && fighter && u.stance === 0 ? pickTarget(u, range + ACQUIRE, false) : null;
+    if (near && !near.building) {
+      step(u, near.x, near.z, dt, range - 0.5);
+      return;
+    }
+    if (scan && o.attack) u.scanAt = time + 0.25;
     if (step(u, o.x, o.z, dt, 0.4)) {
       if (o.face !== undefined) u.yaw = o.face;
       u.order = { t: 'idle' };
@@ -1651,7 +2021,7 @@ function unitTick(game: GameContext, u: Unit, dt: number): void {
     return;
   }
   if (o.t === 'patrol') {
-    const e = fighter ? nearestEnemy(u.seat, u.x, u.z, range, def.hits) : null;
+    const e = fighter ? pickTarget(u, range) : null;
     if (e) {
       u.yaw = Math.atan2(e.x - u.x, e.z - u.z);
       fire(game, u, e);
@@ -1670,8 +2040,9 @@ function unitTick(game: GameContext, u: Unit, dt: number): void {
     }
     // (From as near as the crowding lets it get: they keep their distance from a tank.)
     const r = (SPACE[v.kind] + SPACE[u.kind]) / 2 + 1;
-    if (dist(u.x, u.z, v.x, v.z) > r) step(u, v.x, v.z, dt, r - 0.4);
-    else {
+    if (dist(u.x, u.z, v.x, v.z) > r && !step(u, v.x, v.z, dt, r - 0.4)) {
+      // On its way.
+    } else {
       u.yaw = Math.atan2(v.x - u.x, v.z - u.z);
       u.busy = time;
       v.hp = Math.min(v.max, v.hp + v.max * REPAIR_UNIT * dt * (has(u.seat, 'logistics') ? 1.3 : 1));
@@ -1686,8 +2057,10 @@ function unitTick(game: GameContext, u: Unit, dt: number): void {
     }
     // (A length of wall is built or mended from a little further off: from inside a corner, it's cornerwise.)
     const r = BUILDINGS[b.kind].radius + (BUILDINGS[b.kind].wall ? 3.5 : 1.6);
-    if (dist(u.x, u.z, b.x, b.z) > r) step(u, b.x, b.z, dt, r - 0.4);
-    else {
+    // (Or as near as it can get: a site pressed in among others may not let it any nearer.)
+    if (dist(u.x, u.z, b.x, b.z) > r && !step(u, b.x, b.z, dt, r - 0.4)) {
+      // On its way.
+    } else {
       u.yaw = Math.atan2(b.x - u.x, b.z - u.z);
       u.busy = time;
       b.hp = Math.min(BUILDINGS[b.kind].hp, b.hp + BUILDINGS[b.kind].hp * 0.045 * dt * (has(u.seat, 'logistics') ? 1.3 : 1));
@@ -1724,14 +2097,14 @@ function unitTick(game: GameContext, u: Unit, dt: number): void {
   }
   // Idle: a fighter shoots what's in reach, and (aggressive) goes after what's a little past it;
   // holding its ground it only shoots, holding fire it doesn't.
-  if (fighter && u.stance !== 2) {
-    const e = nearestEnemy(u.seat, u.x, u.z, range + (u.stance === 0 ? 5 : 0), def.hits);
+  if (fighter && u.stance !== 2 && time >= (u.scanAt ?? 0)) {
+    const e = pickTarget(u, range) ?? (u.stance === 0 ? pickTarget(u, range + ACQUIRE, false) : null);
     if (e) {
       if (e.d <= range) {
         u.yaw = Math.atan2(e.x - u.x, e.z - u.z);
         fire(game, u, e);
-      } else if (u.stance === 0) u.order = { t: 'attack', id: e.id, building: e.building };
-    }
+      } else if (u.stance === 0) engage(u, e, true);
+    } else u.scanAt = time + 0.3;
   }
 }
 
@@ -1775,13 +2148,25 @@ function gatherTick(game: GameContext, u: Unit, o: Extract<Order, { t: 'gather' 
   // (What it's gathered goes to the nearest headquarters or depot.)
   const post = [...buildings.values()].filter((b) => b.seat === u.seat && (b.kind === 'hq' || b.kind === 'depot') && b.built >= 1).sort((a, b) => dist(u.x, u.z, a.x, a.z) - dist(u.x, u.z, b.x, b.z))[0];
   if (o.phase === 'to') {
-    o.slot ??= gatherSlot(u, o.node, node);
+    // (A place it couldn't get to: round to another, further on each time.)
+    o.slot ??= (gatherSlot(u, o.node, node) + (o.tries ?? 0) * 5) % 18;
     const at = slotAt(node, o.slot);
     // (Someone or something in the way, and it's close enough: it works from where it stands.)
     if (dist(u.x, u.z, node.x, node.z) < 8) o.held = (o.held ?? 0) + dt;
     if (step(u, at.x, at.z, dt, 0.5) || (o.held ?? 0) > 3) {
       o.phase = 'work';
       o.held = 0;
+      o.tries = 0;
+    } else if (u.still && time - u.still.t > 4) {
+      // Getting nowhere (its place round the deposit is out of reach from here): another place, and after
+      // a few, another deposit of the kind.
+      u.still = undefined;
+      o.tries = (o.tries ?? 0) + 1;
+      o.slot = undefined;
+      if (o.tries >= 3) {
+        const other = nodes.filter((n) => n.amount > 0 && n.kind === node.kind && n.id !== node.id).sort((a, b) => dist(u.x, u.z, a.x, a.z) - dist(u.x, u.z, b.x, b.z))[0];
+        if (other) u.order = { t: 'gather', node: other.id, phase: 'to' };
+      }
     }
   } else if (o.phase === 'work') {
     u.yaw = Math.atan2(node.x - u.x, node.z - u.z);
@@ -1830,6 +2215,7 @@ function fire(game: GameContext, u: Unit, tgt: { id: number; building: boolean }
   u.cool = 1 / fireRate(u);
   const t = targetOf(tgt);
   if (!t) return;
+  u.aim = tgt.building ? undefined : tgt.id;
   u.yaw = Math.atan2(t.x - u.x, t.z - u.z);
   const blast = def.splash ?? (u.kind === 'tank' ? 3 : 0);
   const hu = heightAt(u.x, u.z);
@@ -1841,7 +2227,7 @@ function fire(game: GameContext, u: Unit, tgt: { id: number; building: boolean }
     const power = def.damage * (has(u.seat, 'ordnance') ? 1.2 : 1) * (1 + rankOf(u.xp) * VET.damage);
     const seat = u.seat;
     shots.push({ x: round1(u.x), y: lift(u.kind) + hu + 2.6, z: round1(u.z), tx: round1(at.x), ty: FLOOR + ht, tz: round1(at.z), big: true, k: UNIT_ORDER.indexOf(u.kind), arc: Math.round(flight * 10) / 10 });
-    later.push({ t: time + flight, run: () => shellLands(game, seat, u, 'artillery', at.x, at.z, blast, power) });
+    later.push({ t: time + flight, run: () => shellLands(game, seat, u, 'artillery', at.x, at.z, blast, power, PACE.fire) });
     return;
   }
   shots.push({ x: round1(u.x), y: lift(u.kind) + hu + (u.kind === 'tank' ? 2.6 : u.lake >= 0 ? 2.4 : 2), z: round1(u.z), tx: round1(t.x), ty: (t.air ? lift('heli') : FLOOR + ht) + 1.5, tz: round1(t.z), big: blast > 0, k: UNIT_ORDER.indexOf(u.kind) });
@@ -1858,23 +2244,29 @@ function fire(game: GameContext, u: Unit, tgt: { id: number; building: boolean }
   // (A ground vehicle caught from behind, where its armour's thin.)
   const rear = !!v && ARMOR[v.kind] === 'vehicle' && !UNITS[v.kind].air && !UNITS[v.kind].naval && fromBehind(v.yaw, v.x, v.z, u.x, u.z);
   if (tgt.building) damageBuilding(game, tgt.id, dmg, u.seat);
-  else damageUnit(game, tgt.id, dmg * (rear ? FLANK : 1), u.seat, u);
+  else damageUnit(game, tgt.id, dmg * PACE.fire * (rear ? FLANK : 1), u.seat, u);
   if (blast) {
     booms.push(round1(t.x), round1(t.z), 1);
+    if (!t.air && !inLake(t.x, t.z, 0)) scorch(game, t.x, t.z, 1);
     // The shell blasts the units round it.
-    for (const v of [...units.values()]) if (v.id !== tgt.id && !v.inside && !UNITS[v.kind].air && teamOf(v.seat) !== teamOf(u.seat) && dist(v.x, v.z, t.x, t.z) < blast) damageUnit(game, v.id, dmg * 0.4, u.seat, u);
+    for (const v of [...units.values()]) if (v.id !== tgt.id && !v.inside && !UNITS[v.kind].air && teamOf(v.seat) !== teamOf(u.seat) && dist(v.x, v.z, t.x, t.z) < blast) damageUnit(game, v.id, dmg * 0.4 * PACE.fire, u.seat, u);
   }
 }
 
 /** A shell or a grenade landing: everything of the others' near it is hurt, the most in the middle. */
-function shellLands(game: GameContext, seat: number, src: Unit | undefined, kind: UnitKind | 'mine', x: number, z: number, radius: number, damage: number): void {
+function shellLands(game: GameContext, seat: number, src: Unit | undefined, kind: UnitKind | 'mine', x: number, z: number, radius: number, damage: number, toUnits = 1): void {
   booms.push(round1(x), round1(z), 1);
+  if (!inLake(x, z, 0)) {
+    scorch(game, x, z, Math.max(1.2, radius * 0.7));
+    // (A howitzer's shell or the commander's barrage brings trees down; a grenade only scorches.)
+    if (kind === 'artillery' || kind === 'heli') fellNear(game, x, z, radius * 0.6 + 0.8);
+  }
   const versus: Partial<Record<'infantry' | 'vehicle' | 'air' | 'building', number>> = kind === 'mine' ? { vehicle: 1.5, infantry: 0.9, building: 0 } : (VERSUS[kind] ?? {});
   const team = teamOf(seat);
   for (const v of [...units.values()]) {
     if (teamOf(v.seat) === team || v.inside || UNITS[v.kind].air) continue;
     const d = dist(v.x, v.z, x, z);
-    if (d < radius) damageUnit(game, v.id, damage * (versus[ARMOR[v.kind]] ?? 1) * (1 - (0.6 * d) / radius), seat, src && units.has(src.id) ? src : undefined);
+    if (d < radius) damageUnit(game, v.id, damage * toUnits * (versus[ARMOR[v.kind]] ?? 1) * (1 - (0.6 * d) / radius), seat, src && units.has(src.id) ? src : undefined);
   }
   if (versus.building !== 0) for (const b of [...buildings.values()]) if (teamOf(b.seat) !== team && dist(b.x, b.z, x, z) < BUILDINGS[b.kind].radius + radius) damageBuilding(game, b.id, damage * (versus.building ?? 1), seat);
 }
@@ -1977,6 +2369,36 @@ function alert(game: GameContext, seat: number, x: number, z: number, what: stri
   game.clients.send(p, 'alert', { x: round1(x), z: round1(z), what });
 }
 
+/** Whether a unit's weapons can reach the kind another is (ground, air). */
+const canHit = (u: Unit, v: Unit) => {
+  const hits = UNITS[u.kind].hits ?? 'ground';
+  const air = !!UNITS[v.kind].air;
+  return UNITS[u.kind].damage > 0 && !(air && hits === 'ground') && !(!air && hits === 'air');
+};
+
+/**
+ * Go after an enemy, and then back to what it was doing: on its way somewhere, it goes on there; standing
+ * somewhere (`home`), it comes back to the spot (so a line put somewhere holds it, fight or no fight).
+ */
+function engage(u: Unit, e: { id: number; building: boolean }, home: boolean): void {
+  if (u.order.t === 'move' && u.next.length < 12) u.next.unshift(u.order);
+  else if (home && u.order.t === 'idle' && !u.next.length && !u.home) u.next.unshift({ t: 'move', x: u.x, z: u.z, attack: true, face: u.yaw });
+  u.order = { t: 'attack', id: e.id, building: e.building };
+}
+
+/** Shot at: its side's fighters near by who are standing about (aggressive, not busy) turn on whoever did it. */
+function callHelp(u: Unit, src: Unit): void {
+  const team = teamOf(u.seat);
+  for (const v of units.values()) {
+    if (v === u || v.inside || teamOf(v.seat) !== team || v.seat === NEUTRAL || v.stance !== 0 || v.kind === 'engineer' || v.kind === 'medic') continue;
+    if (Math.abs(v.x - u.x) > 16 || Math.abs(v.z - u.z) > 16 || dist(v.x, v.z, u.x, u.z) > 16) continue;
+    // (Not one already shooting at something in its reach: it's picked its own target there.)
+    if (!(v.order.t === 'idle' || (v.order.t === 'move' && v.order.attack)) || pickTarget(v, rangeOf(v))) continue;
+    if (!canHit(v, src) || dist(v.x, v.z, src.x, src.z) > rangeOf(v) + 18) continue;
+    engage(v, { id: src.id, building: false }, v.order.t === 'idle');
+  }
+}
+
 function damageUnit(game: GameContext, id: number, amount: number, by: number, src?: Unit): void {
   const u = units.get(id);
   if (!u || u.inside) return;
@@ -1986,11 +2408,17 @@ function damageUnit(game: GameContext, id: number, amount: number, by: number, s
   u.hp -= dealt;
   // (Experience for landing hits, a little: the guns at the back and the rocket teams earn stars too.)
   if (u.hp > 0 && src && units.has(src.id) && teamOf(src.seat) !== teamOf(u.seat) && u.seat !== NEUTRAL) promote(src, (dealt / 75) * VET.hit);
-  // A unit hit by something it can shoot at turns on it.
+  // A unit hit by something it can shoot at turns on it; and its friends near by who are standing about join in.
   if (u.hp > 0) {
-    if (u.kind !== 'engineer' && u.stance === 0 && UNITS[u.kind].damage > 0 && (u.order.t === 'idle' || (u.order.t === 'move' && u.order.attack))) {
-      const e = nearestEnemy(u.seat, u.x, u.z, 30, UNITS[u.kind].hits);
-      if (e) u.order = { t: 'attack', id: e.id, building: e.building };
+    const from = src && units.has(src.id) ? { id: src.id, building: false, x: src.x, z: src.z, d: dist(u.x, u.z, src.x, src.z) } : null;
+    // (Not when it has something in reach already: it picks its own target from what's there.)
+    if (u.kind !== 'engineer' && u.stance === 0 && UNITS[u.kind].damage > 0 && (u.order.t === 'idle' || (u.order.t === 'move' && u.order.attack)) && !pickTarget(u, rangeOf(u))) {
+      const e = from && canHit(u, src!) ? from : nearestEnemy(u.seat, u.x, u.z, 30, UNITS[u.kind].hits);
+      if (e) engage(u, e, u.order.t === 'idle');
+    }
+    if (from && teamOf(src!.seat) !== teamOf(u.seat) && (u.helpAt ?? -9) < time - 1) {
+      u.helpAt = time;
+      callHelp(u, src!);
     }
     return;
   }
@@ -1998,6 +2426,11 @@ function damageUnit(game: GameContext, id: number, amount: number, by: number, s
   slots[u.seat]!.pop -= UNITS[u.kind].pop;
   slots[u.seat]!.stats.lost++;
   if (teamOf(by) !== teamOf(u.seat) && slots[by]) slots[by]!.stats.killed++;
+  // (For the battle report: a loss to the one side, a kill to the other.)
+  if (teamOf(by) !== teamOf(u.seat)) {
+    tally(u.seat, 0, 1);
+    tally(by, 1, 0);
+  }
   // Experience for the one that fired.
   if (src && units.has(src.id) && teamOf(src.seat) !== teamOf(u.seat)) promote(src, u.max / 75);
   // A transport that goes down takes its passengers with it.
@@ -2250,16 +2683,44 @@ function rallySpot(seat: number, x: number, z: number, room = 3.4): { x: number;
   return { x: Math.max(-HALF + 2, Math.min(HALF - 2, x + Math.cos(a) * r)), z: Math.max(-HALF + 2, Math.min(HALF - 2, z + Math.sin(a) * r)) };
 }
 
+/** The patches crowding is worked out in (blocks a side): nothing pushes anything further off than this. */
+const PATCH = 8;
+const patchOf = (x: number, z: number) => (Math.floor((x + HALF) / PATCH) << 8) | Math.floor((z + HALF) / PATCH);
+
 function crowd(): void {
   const list = [...units.values()].filter((u) => !u.inside);
-  const layer = (u: Unit) => (UNITS[u.kind].air ? 2 : u.lake >= 0 ? 1 : 0);
+  const layers = list.map((u) => (UNITS[u.kind].air ? 2 : u.lake >= 0 ? 1 : 0));
+  // (Each against those in its own patch of the field and the eight round it, not against every unit there is.)
+  const near = new Map<number, number[]>();
+  list.forEach((u, i) => {
+    const k = patchOf(u.x, u.z);
+    const at = near.get(k);
+    if (at) at.push(i);
+    else near.set(k, [i]);
+  });
+  const sites = new Map<number, Building[]>();
+  for (const bl of buildings.values()) {
+    const k = patchOf(bl.x, bl.z);
+    const at = sites.get(k);
+    if (at) at.push(bl);
+    else sites.set(k, [bl]);
+  }
+  const round = (x: number, z: number, fn: (k: number) => void) => {
+    const pi = Math.floor((x + HALF) / PATCH);
+    const pk = Math.floor((z + HALF) / PATCH);
+    for (let di = -1; di <= 1; di++) for (let dk = -1; dk <= 1; dk++) fn(((pi + di) << 8) | (pk + dk));
+  };
   for (let i = 0; i < list.length; i++) {
     const a = list[i];
     const ra = UNITS[a.kind].size * 0.5;
     const sa = BODY[a.kind] * 0.5;
-    for (let j = i + 1; j < list.length; j++) {
+    const others: number[] = [];
+    round(a.x, a.z, (k) => {
+      for (const j of near.get(k) ?? []) if (j > i) others.push(j);
+    });
+    for (const j of others) {
       const b = list[j];
-      if (layer(a) !== layer(b)) continue;
+      if (layers[i] !== layers[j]) continue;
       const dx = b.x - a.x;
       const dz = b.z - a.z;
       const min = sa + BODY[b.kind] * 0.5;
@@ -2277,7 +2738,9 @@ function crowd(): void {
       ({ x: a.x, z: a.z } = inside(a.lake, a.x, a.z, 1.5));
       continue;
     }
-    for (const bl of UNITS[a.kind].air ? [] : buildings.values()) {
+    const close: Building[] = [];
+    if (!UNITS[a.kind].air) round(a.x, a.z, (k) => close.push(...(sites.get(k) ?? [])));
+    for (const bl of close) {
       if (bl.gate) {
         // A gate: its own side goes through (unless it's locked); to anyone else it's a slab three lengths long.
         if (!bl.gate.locked && teamOf(bl.seat) === teamOf(a.seat)) continue;
@@ -2433,7 +2896,7 @@ function place(game: GameContext, seat: number, kind: BuildingKind, x: number, z
   if (!wall) {
     if (kind === 'dock' ? !canDock(x, z) : inLake(x, z, def.radius + 1)) return false;
     if (inMesa(x, z, def.radius + 1) || inHill(x, z, def.radius)) return false;
-    if (DRESSING.some((d) => d.block && dist(x, z, d.x, d.z) < def.radius + d.block + 0.5)) return false;
+    if (dressing().some((d) => d.block && dist(x, z, d.x, d.z) < def.radius + d.block + 0.5)) return false;
   }
   s.steel -= def.cost.steel;
   s.oil -= def.cost.oil;
@@ -2475,6 +2938,10 @@ function usePower(game: GameContext, seat: number, x: number, z: number): boolea
           shots.push({ x: round1(bx), y: FLOOR + 70, z: round1(bz), tx: round1(bx), ty: FLOOR + heightAt(bx, bz), tz: round1(bz), big: true, k: -2 });
           booms.push(round1(bx), round1(bz), 1);
           for (const u of [...units.values()]) if (teamOf(u.seat) !== s.team && !u.inside && dist(u.x, u.z, bx, bz) < 6) damageUnit(game, u.id, 110, seat);
+          if (!inLake(bx, bz, 0)) {
+            scorch(game, bx, bz, 3.2);
+            fellNear(game, bx, bz, 4.5);
+          }
           for (const b of [...buildings.values()]) if (teamOf(b.seat) !== s.team && dist(b.x, b.z, bx, bz) < 6 + BUILDINGS[b.kind].radius) damageBuilding(game, b.id, 160, seat);
         },
       });
@@ -2519,6 +2986,7 @@ function world(game: GameContext): World {
     train,
     stand: mode === 'stand',
     uplinkOn,
+    hold: holdOn ? { x: HOLD.x, z: HOLD.z, r: HOLD.r, holder, need: HOLD.need, held } : null,
     drops,
     minesOf: (seat) => mines.filter((m) => m.seat === seat).length,
     ability: (seat, ids, kind, x, z) => {
@@ -2526,6 +2994,7 @@ function world(game: GameContext): World {
       return !!sl && useAbility(game, sl, ids.map((id) => units.get(id)).filter((u): u is Unit => !!u && u.seat === seat), kind, x, z, false);
     },
     place: (seat, kind, x, z, builders, axis) => place(game, seat, kind, x, z, builders, false, axis),
+    trade: (seat, sell) => !!slots[seat] && trade(slots[seat]!, sell),
     say: (seat, text) => {
       const sl = slots[seat];
       if (sl && mode !== 'stand') game.hud.feed(`${sl.name}: “${text}”`, { color: TEAM_COLORS[seat % TEAM_COLORS.length] });
@@ -2538,7 +3007,10 @@ function world(game: GameContext): World {
       }
       for (const id of ids) {
         const u = units.get(id);
-        if (u && u.seat === seat) u.order = o;
+        if (u && u.seat === seat) {
+          u.order = o;
+          u.next = [];
+        }
       }
     },
   };
@@ -2572,7 +3044,13 @@ function order(game: GameContext, player: Player, name: string, data: unknown): 
       dirty = true;
     }
     if (name === 'mode' && DOCTRINE_IDS.includes(d.doctrine as DoctrineId)) picked.set(player.id, d.doctrine as DoctrineId);
-    if (name === 'mode' && (d.mode === 'ffa' || d.mode === 'teams' || d.mode === 'coop' || d.mode === 'stand')) startMatch(game, d.mode, DIFFICULTIES.find((x) => x.id === d.difficulty)?.skill ?? 0.65);
+    if (name === 'mode' && (d.mode === 'ffa' || d.mode === 'teams' || d.mode === 'coop' || d.mode === 'stand')) {
+      // (The quick start's own choices: the map, and whether there's fog.)
+      const map = d.map === 'random' || MAP_IDS.includes(d.map as MapId) ? (d.map as MapId | 'random') : MAP.id;
+      startMatch(game, d.mode, DIFFICULTIES.find((x) => x.id === d.difficulty)?.skill ?? 0.65, undefined, map);
+      if (d.fog === false) for (const x of slots) if (x) x.revealUntil = 1e9;
+      holdOn = d.mode !== 'stand' && d.hold === true;
+    }
     return;
   }
   if (phase === 'over' && name === 'again') return void game.restart();
@@ -2593,7 +3071,8 @@ function order(game: GameContext, player: Player, name: string, data: unknown): 
   const queue = d.queue === true;
   if (name === 'move' && at) {
     const face = Number(d.face);
-    formation(us, Math.max(-HALF, Math.min(HALF, x)), Math.max(-HALF, Math.min(HALF, z)), d.attack === true, queue, d.face !== undefined && Number.isFinite(face) ? face : undefined);
+    // (Forced: a march that doesn't turn to fight when it's shot at.)
+    formation(us, Math.max(-HALF, Math.min(HALF, x)), Math.max(-HALF, Math.min(HALF, z)), d.attack === true, queue, d.face !== undefined && Number.isFinite(face) ? face : undefined, d.force === true && d.attack !== true);
   } else if (name === 'patrol' && at) {
     const tx = Math.max(-HALF, Math.min(HALF, x));
     const tz = Math.max(-HALF, Math.min(HALF, z));
@@ -2659,12 +3138,7 @@ function order(game: GameContext, player: Player, name: string, data: unknown): 
     const sell: ResKind = d.sell === 'oil' ? 'oil' : 'steel';
     if (!b || b.seat !== slot.seat || b.kind !== 'market' || b.built < 1) return;
     if (slot[sell] < TRADE.lot) return player.hud.toast(`Not enough ${sell}`);
-    const price = priceNow(slot, sell);
-    slot[sell] -= TRADE.lot;
-    slot[sell === 'steel' ? 'oil' : 'steel'] += tradeGet(sell, price);
-    slot.trade = { ...slot.trade, steel: priceNow(slot, 'steel'), oil: priceNow(slot, 'oil'), at: time };
-    slot.trade[sell] = Math.max(TRADE.floor, price - TRADE.drop);
-    dirty = true;
+    trade(slot, sell);
   } else if (name === 'research') {
     const b = buildings.get(Number(d.id));
     if (b && b.seat === slot.seat && TECH_IDS.includes(d.tech as TechId)) {
@@ -2770,7 +3244,7 @@ function tell(game: GameContext, dt: number): void {
       .map((s) => ({ seat: s.seat, name: s.name, team: s.team, color: s.seat % TEAM_COLORS.length, human: !!s.player, steel: Math.floor(s.steel), oil: Math.floor(s.oil), pop: s.pop, cap: s.cap, alive: s.alive, doctrine: s.doctrine, units: [...units.values()].filter((u) => u.seat === s.seat).length, buildings: [...buildings.values()].filter((b) => b.seat === s.seat).length, powerIn: Math.max(0, Math.ceil(s.powerAt - time)), rallyIn: Math.max(0, Math.ceil(s.rallyAt - time)), hero: [...units.values()].some((u) => u.seat === s.seat && u.kind === 'hero'), techs: [...s.techs], trade: [tradeGet('steel', priceNow(s, 'steel')), tradeGet('oil', priceNow(s, 'oil'))], style: s.bot?.style ?? '', worth: [...units.values()].filter((u) => u.seat === s.seat && u.kind !== 'engineer').reduce((a, u) => a + UNITS[u.kind].cost.steel + UNITS[u.kind].cost.oil, 0), income: Math.round(s.stats.steel + s.stats.oil - (s.banked[s.banked.length - 6] ?? 0)) }));
     const mine: Record<string, number> = {};
     for (const s of slots) if (s?.player) mine[s.player.id] = s.seat;
-    const state: State = { phase, mode, seats, mine, peaceUntil, watchers: phase === 'lobby' ? lobby.watchers.map((w) => w.name) : game.players.filter((p) => !slotOf(p)).map((p) => p.name), deposits: nodes.map((n) => Math.floor(n.amount)), salvage: nodes.filter((n) => n.salvage && n.amount > 0).map((n) => ({ id: n.id, x: n.x, z: n.z, scrap: n.scrap!, kind: 'steel' as const })), relics: relics.map((r) => ({ owner: r.owner, pct: Math.round((r.progress / RELIC.hold) * 100) })), drops: drops.map((x) => ({ id: x.id, x: x.x, z: x.z, landIn: Math.max(0, x.at - time) })), ...(mode === 'stand' && phase !== 'lobby' ? { stand: { wave, total: STAND.total, nextIn: wave < STAND.total ? Math.ceil(waveIn) : 0, left: [...units.values()].filter((u) => u.seat === STAND.seat).length } } : {}), time: Math.floor(time), winners, wonBy, uplinkOn, uplinks: [...buildings.values()].filter((b) => b.kind === 'uplink').map((b) => ({ seat: b.seat, x: round1(b.x), z: round1(b.z), left: b.doneAt === undefined ? -1 : Math.max(0, Math.ceil(UPLINK.hold - (time - b.doneAt))) })), ...(phase === 'lobby' ? { lobby } : {}), ...(phase === 'briefing' ? { briefing: Math.ceil(briefingLeft) } : {}), ...(summary ? { summary } : {}) };
+    const state: State = { ...(rain > 0.02 ? { rain: Math.round(rain * 20) / 20 } : {}), phase, map: MAP.id, mode, seats, mine, peaceUntil, watchers: phase === 'lobby' ? lobby.watchers.map((w) => w.name) : game.players.filter((p) => !slotOf(p)).map((p) => p.name), deposits: nodes.map((n) => Math.floor(n.amount)), salvage: nodes.filter((n) => n.salvage && n.amount > 0).map((n) => ({ id: n.id, x: n.x, z: n.z, scrap: n.scrap!, kind: 'steel' as const })), relics: relics.map((r) => ({ owner: r.owner, pct: Math.round((r.progress / RELIC.hold) * 100) })), drops: drops.map((x) => ({ id: x.id, x: x.x, z: x.z, landIn: Math.max(0, x.at - time) })), ...(mode === 'stand' && phase !== 'lobby' ? { stand: { wave, total: STAND.total, nextIn: wave < STAND.total ? Math.ceil(waveIn) : 0, left: [...units.values()].filter((u) => u.seat === STAND.seat).length } } : {}), time: Math.floor(time), winners, wonBy, uplinkOn, ...(holdOn ? { hold: { holder, need: HOLD.need, teams: [...held].map(([t, n]) => [t, Math.floor(n)] as [number, number]) } } : {}), uplinks: [...buildings.values()].filter((b) => b.kind === 'uplink').map((b) => ({ seat: b.seat, x: round1(b.x), z: round1(b.z), left: b.doneAt === undefined ? -1 : Math.max(0, Math.ceil(UPLINK.hold - (time - b.doneAt))) })), ...(phase === 'lobby' ? { lobby } : {}), ...(phase === 'briefing' ? { briefing: Math.ceil(briefingLeft) } : {}), ...(summary ? { summary } : {}) };
     game.clients.send('all', 'state', state);
   }
   if (phase === 'lobby') return;
@@ -2840,8 +3314,13 @@ function tell(game: GameContext, dt: number): void {
     game.clients.send('all', 'shots', shots.slice(0, 60));
     shots = [];
   }
+  if (felledNow.length) {
+    game.clients.send('all', 'felled', felledNow.slice(0, 40));
+    felledNow = [];
+  }
   if (booms.length) {
     game.clients.send('all', 'boom', booms.slice(0, 80));
     booms = [];
   }
 }
+

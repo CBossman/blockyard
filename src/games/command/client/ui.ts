@@ -1,7 +1,7 @@
 import type { Client } from '@platform/client';
-import { ABILITIES, ALARM, ARMOR, SPACE, RETREAT, SIGHT, AGE_NAMES, AGE_NEEDS, BOARDS, BUILDABLE, BUILDINGS, BUILD_KEYS, DOCTRINES, HIGH, MODES, NEEDS, STANCES, TEAM_COLORS, TECHS, TECH_IDS, VET, ageOf, versusText, UNITS, type BuildingKind, type DoctrineId, type UnitKind } from '../defs';
-import { BASES, CAMPS, FLOOR, HALF, HILLS, LAKES, MESAS, SHUT, TREES, WALL_CELL, deposits, inHill, inLake, inMesa, lakeOf, landShut, wallLine, wallSnap, gateCells, gateAxis } from '../map';
-import { DRESSING } from '../dressing';
+import { ABILITIES, ALARM, ARMOR, HOLD, SPACE, RETREAT, SIGHT, AGE_NAMES, AGE_NEEDS, BOARDS, BUILDABLE, BUILDINGS, BUILD_KEYS, DOCTRINES, HIGH, MODES, NEEDS, STANCES, TEAM_COLORS, TECHS, TECH_IDS, VET, ageOf, eraWants, versusText, UNITS, type BuildingKind, type DoctrineId, type UnitKind } from '../defs';
+import { BASES, CAMPS, FLOOR, HALF, HILLS, LAKES, MAP, MESAS, SHUT, TREES, WALL_CELL, deposits, inHill, inLake, inMesa, lakeOf, landShut, wallLine, wallSnap, gateCells, gateAxis } from '../map';
+import { dressing } from '../dressing';
 import { UNIT_ORDER, cargoBits, rankBits, stanceBits, type State } from '../protocol';
 import { cam, drag, lookAt, setDrift, toGround, toScreen, view, zoom } from './camera';
 import { iconHtml, iconPath, withIcons } from './icons';
@@ -93,7 +93,15 @@ export const el = <T extends Element = HTMLElement>(q: string) => root.querySele
 /** Text that came from a person, safe to put in the page. */
 export const esc = (t: string) => t.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 const DEPOSITS = deposits();
-const MAP_DEPOSITS = DEPOSITS.length;
+let MAP_DEPOSITS = DEPOSITS.length;
+/** Another map in play: its deposits, and its ground on the minimap. */
+export function uiMap(): void {
+  DEPOSITS.length = 0;
+  DEPOSITS.push(...deposits());
+  MAP_DEPOSITS = DEPOSITS.length;
+  felledTrees.clear();
+  redrawGround();
+}
 /** The wrecks and ruins the fighting has left, as deposits like the map's own. */
 export function mergeSalvage(s: State): void {
   if (s.phase === 'lobby') DEPOSITS.length = MAP_DEPOSITS;
@@ -107,6 +115,22 @@ export const mySeat = (): number => {
 };
 /** A unit's or building's picture, in a seat's colours (ours, unless it's someone else's). */
 export const pic = (kind: string, seat = mySeat()) => `ic_${kind}_${variantOf(seat < 0 ? 1 : seat)}`;
+/** A team's colour: its first seat's. */
+export const teamColor = (team: number): string => {
+  const x = ui.state?.seats.find((y) => y.team === team);
+  return x ? color(x.seat) : '#cfd8e6';
+};
+/** Hold the Middle on the bar: your side's time and the best of the rest, coloured by who holds it now. */
+function holdText(s: State): string {
+  const h = s.hold;
+  if (!h) return '';
+  const mine = meSeat()?.team ?? -9;
+  const t = (n: number) => `${Math.floor(n / 60)}:${String(n % 60).padStart(2, '0')}`;
+  const ours = h.teams.find(([k]) => k === mine)?.[1] ?? 0;
+  const theirs = Math.max(0, ...h.teams.filter(([k]) => k !== mine).map(([, n]) => n));
+  const c = h.holder >= 0 ? teamColor(h.holder) : h.holder === -2 ? '#ff9a5a' : '#cfd8e6';
+  return `<span style="color:${c}" title="Hold the middle for ${t(h.need)} in all to win">Middle ${t(ours)} · them ${t(theirs)} / ${t(h.need)}</span>`;
+}
 export const color = (seat: number) => (seat >= 6 ? '#aab4c2' : seat < 0 ? '#cfd8e6' : TEAM_COLORS[seat % TEAM_COLORS.length]);
 export const mine = () => ui.units.filter((u) => u.seat === mySeat());
 export const meSeat = () => ui.state?.seats.find((s) => s.seat === mySeat());
@@ -360,8 +384,10 @@ function commands(): Cmd[] {
       const done = me.techs.includes(tech);
       const rk = (def.trains.length ? 'CB' : 'ZXCVBN')[i];
       const era = tech === 'age2' || tech === 'age3';
-      const gated = tech === 'age3' && !me.techs.includes('age2');
-      out.push({ key: rk, code: `Key${rk}`, name: t.name, glyph: era ? '▲' : '⚙', cost: done ? 'done' : gated ? 'needs Era II' : costText(t.cost), tip: `<b>${t.name}</b>${tipCost(t.cost, t.time)}<p>${t.blurb}</p>${done ? '<div class="tsub">Researched.</div>' : gated ? '<div class="tsub"><em>Needs Era II.</em></div>' : ''}`, ok: !done && !gated && b.queue < 1000 && can(t.cost), on: b.queue >= 1000 && TECH_IDS[Math.floor(b.queue / 1000) - 1] === tech, run: () => client.send('research', { id: b.id, tech }) });
+      const want = eraWants(tech, me.techs, ui.buildings.filter((x) => x.seat === me.seat && x.built >= 100).map((x) => x.kind), ui.state?.time ?? 0);
+      // (A time: it opens then. Anything else: what it needs.)
+      const gated = want && /^\d/.test(want) ? `from ${want}` : want ? `needs ${want}` : '';
+      out.push({ key: rk, code: `Key${rk}`, name: t.name, glyph: era ? '▲' : '⚙', cost: done ? 'done' : gated || costText(t.cost), tip: `<b>${t.name}</b>${tipCost(t.cost, t.time)}<p>${t.blurb}</p>${done ? '<div class="tsub">Researched.</div>' : gated ? `<div class="tsub"><em>${gated[0].toUpperCase() + gated.slice(1)}.</em></div>` : ''}`, ok: !done && !gated && b.queue < 1000 && can(t.cost), on: b.queue >= 1000 && TECH_IDS[Math.floor(b.queue / 1000) - 1] === tech, run: () => client.send('research', { id: b.id, tech }) });
     });
     if (b.kind === 'market') {
       const [forSteel, forOil] = me.trade ?? [0, 0];
@@ -431,9 +457,12 @@ function commands(): Cmd[] {
         const of = us.filter((u) => u.kind === k && u.seat === me.seat);
         const ready = of.filter((u) => !ui.cd.has(u.id)).length;
         const key = 'REG'[i];
-        out.push({ key, code: `Key${key}`, name: a.name, glyph: a.glyph, cost: a.cost ? String(a.cost) : of.length > 1 ? `${ready}/${of.length}` : '', ok: ready > 0 && me.steel >= (a.cost ?? 0), on: ui.aim === 'ability' && ui.abKind === k, cooldown: ready ? 0 : Math.min(...of.map((u) => ui.cd.get(u.id) ?? 0)), tip: `<b>${a.name}</b><p>${a.blurb}</p><div class="tsub">${UNITS[k].name}. Recharges in ${a.cooldown}s.${a.aimed ? ` Click the map to aim it (or the minimap); reach ${a.range}.` : ''}</div>`, run: () => useAbility(k) });
+        out.push({ key, code: `Key${key}`, name: a.name, glyph: a.glyph, cost: a.cost ? String(a.cost) : of.length > 1 ? `${ready}/${of.length}` : '', ok: ready > 0 && me.steel >= (a.cost ?? 0), on: ui.aim === 'ability' && ui.abKind === k, cooldown: ready ? 0 : Math.min(...of.map((u) => ui.cd.get(u.id) ?? 0)), tip: `<b>${a.name}</b><p>${a.blurb}</p>${AUTO_USE[k] ? `<div class="tsub"><em>Used by itself ${AUTO_USE[k]} (not holding fire).</em></div>` : ''}<div class="tsub">${UNITS[k].name}. Recharges in ${a.cooldown}s.${a.aimed ? ` Click the map to aim it (or the minimap); reach ${a.range}.` : ''}</div>`, run: () => useAbility(k) });
       });
       if (!allEngineers && us.some((u) => u.seat === me.seat && !UNITS[u.kind].naval)) out.push({ key: 'X', code: 'KeyX', name: 'Fall back', glyph: '↩', ok: true, tip: `<b>Fall back</b><p>Everyone selected runs for the nearest depot or headquarters, ${Math.round((RETREAT.speed - 1) * 100)}% faster, not stopping to shoot. Near one, out of the fighting, they heal.</p>`, run: () => client.send('retreat', { ids: [...ui.sel] }) });
+      // Only the badly hurt out of the fight, the rest fighting on.
+      const hurt = us.filter((u) => u.seat === me.seat && u.kind !== 'engineer' && !UNITS[u.kind].naval && u.hp < 50);
+      if (!allEngineers && us.some((u) => u.seat === me.seat && !UNITS[u.kind].naval)) out.push({ key: 'V', code: 'KeyV', name: 'Pull out hurt', glyph: '✚', cost: hurt.length ? String(hurt.length) : '', ok: hurt.length > 0, tip: '<b>Pull out the hurt</b><p>Those selected at under half health run for the nearest depot or headquarters to mend, not stopping to shoot; the rest fight on.</p>', run: () => client.send('retreat', { ids: hurt.map((u) => u.id) }) });
     }
     if (us.some((x) => x.kind === 'hero')) out.push({ key: 'F', code: 'KeyF', name: 'Rally', glyph: '★', ok: me.rallyIn <= 0, cooldown: me.rallyIn, run: () => client.send('hero', {}) });
     // Stance: one button, round the three.
@@ -604,7 +633,7 @@ function listen(): void {
     const queue = e.shiftKey;
     // Right dragged: there, facing the way it was dragged.
     if (d.button === 2 && d.moved && faced && ui.sel.size) {
-      client.send('move', { ids: [...ui.sel], x: faced.from.x, z: faced.from.z, attack: cam.keys.has('KeyQ'), queue, face: Math.atan2(faced.to.x - faced.from.x, faced.to.z - faced.from.z) });
+      client.send('move', { ids: [...ui.sel], x: faced.from.x, z: faced.from.z, attack: cam.keys.has('KeyQ'), force: e.ctrlKey, queue, face: Math.atan2(faced.to.x - faced.from.x, faced.to.z - faced.from.z) });
       mark(faced.from, '#7dff7d');
       return;
     }
@@ -735,8 +764,9 @@ function listen(): void {
           client.send('gather', { ids, id: what.id, queue });
           if (g) mark(g, '#ffd27a');
         } else if (g) {
-          client.send('move', { ids, x: g.x, z: g.z, attack: cam.keys.has('KeyQ'), queue });
-          mark(g, cam.keys.has('KeyQ') ? '#ff7a5a' : '#7dff7d');
+          // (Ctrl: a forced march, not turning to fight when shot at.)
+          client.send('move', { ids, x: g.x, z: g.z, attack: cam.keys.has('KeyQ'), force: e.ctrlKey, queue });
+          mark(g, cam.keys.has('KeyQ') ? '#ff7a5a' : e.ctrlKey ? '#7dc8ff' : '#7dff7d');
         }
       } else if (ui.selB !== null && g) client.send('rally', { id: ui.selB, x: g.x, z: g.z });
     }
@@ -843,6 +873,8 @@ const PLURAL: Record<UnitKind, string> = { medic: 'Medics', at: 'AT Teams', gunb
 /** Those on foot (a squad's ring hugs the men, not a vehicle's width). */
 const FOOTED = new Set<UnitKind>(['engineer', 'rifle', 'at', 'hero', 'guard', 'medic']);
 const pct = (v: number) => Math.max(0, Math.min(100, v));
+/** The tricks a player's units use by themselves (the server's `autoTick`), and when. */
+const AUTO_USE: Partial<Record<UnitKind, string>> = { tank: 'when it’s badly hurt and under fire', aa: 'when aircraft come in reach', at: 'when armour comes near (not on the march)' };
 const hpColor = (p: number) => (p > 55 ? '#4cd04a' : p > 25 ? '#ffc83a' : '#f04438');
 
 /** What a unit is at, in a word or two, with a glyph and a colour (for the mark over it and the card on hover). */
@@ -973,7 +1005,7 @@ export function draw(): void {
   el('.pop').title = AGE_NAMES[ageOf(me?.techs ?? [])];
   el('.pop').innerHTML = `<span style="font-size:22px">☻</span>${me?.pop ?? 0}<small>/ ${me?.cap ?? 0}</small>`;
   const mode = MODES.find((m) => m.id === s.mode)?.name ?? '';
-  el('.cm-mid').innerHTML = `<span>${mode}</span><span style="color:#ffc83a">${AGE_NAMES[ageOf(me?.techs ?? [])]}</span><b>${Math.floor(s.time / 60)}:${String(s.time % 60).padStart(2, '0')}</b>${s.stand ? `<span style="color:#ff9a5a">Wave ${s.stand.wave}/${s.stand.total}${s.stand.nextIn ? ` · next ${Math.floor(s.stand.nextIn / 60)}:${String(s.stand.nextIn % 60).padStart(2, '0')}` : ''}${s.stand.left ? ` · ${s.stand.left} left` : ''}</span>` : ''}${(s.uplinks ?? []).filter((u) => u.left >= 0).map((u) => `<span style="color:${color(u.seat)}">Uplink ${Math.floor(u.left / 60)}:${String(u.left % 60).padStart(2, '0')}</span>`).join('')}${me ? '' : '<span style="color:#9fd0ff">Watching</span>'}`;
+  el('.cm-mid').innerHTML = `<span>${mode}</span><span style="color:#ffc83a">${AGE_NAMES[ageOf(me?.techs ?? [])]}</span><b>${Math.floor(s.time / 60)}:${String(s.time % 60).padStart(2, '0')}</b>${holdText(s)}${s.stand ? `<span style="color:#ff9a5a">Wave ${s.stand.wave}/${s.stand.total}${s.stand.nextIn ? ` · next ${Math.floor(s.stand.nextIn / 60)}:${String(s.stand.nextIn % 60).padStart(2, '0')}` : ''}${s.stand.left ? ` · ${s.stand.left} left` : ''}</span>` : ''}${(s.uplinks ?? []).filter((u) => u.left >= 0).map((u) => `<span style="color:${color(u.seat)}">Uplink ${Math.floor(u.left / 60)}:${String(u.left % 60).padStart(2, '0')}</span>`).join('')}${me ? '' : '<span style="color:#9fd0ff">Watching</span>'}`;
   el('.cm-players').innerHTML = s.seats.map((x) => `<div class="cm-pl ${x.alive ? '' : 'dead'}" title="${x.human ? 'Player' : `Bot: ${x.style}`}"><i style="background:${color(x.seat)}"></i>${esc(x.name)}${x.human ? '' : x.style ? `<em>${x.style}</em>` : '<small>bot</small>'}</div>`).join('');
   const vb = el('.cm-voice');
   vb.textContent = voices.on ? '🔊' : '🔇';
@@ -1075,7 +1107,7 @@ function drawSummary(s: State): void {
   const won = s.winners.includes(me);
   const names = s.seats.filter((x) => s.winners.includes(x.seat)).map((x) => x.name);
   const title = s.stand ? (s.winners.length && !s.winners.includes(4) ? 'You held' : `Overrun on wave ${s.stand.wave}`) : me < 0 ? (names.length ? `${names.join(' and ')} win${names.length === 1 ? 's' : ''}` : 'Everyone is out') : won ? 'Victory' : 'Defeat';
-  const how = s.wonBy === 'uplink' ? (won ? 'Your uplink held' : 'Their uplink held') : '';
+  const how = s.wonBy === 'uplink' ? (won ? 'Your uplink held' : 'Their uplink held') : s.wonBy === 'hold' ? (won ? 'You held the middle' : 'They held the middle') : '';
   const rows = sum.seats
     .map((x) => {
       const seat = s.seats.find((y) => y.seat === x.seat);
@@ -1092,7 +1124,7 @@ function drawSummary(s: State): void {
   const grid = [0, 0.5, 1].map((f) => `<line x1="34" x2="${W - 10}" y1="${Y(top * f)}" y2="${Y(top * f)}" stroke="#1d2a38"/><text x="30" y="${Y(top * f) + 4}" fill="#8497ad" font-size="11" text-anchor="end">${Math.round(top * f)}</text>`).join('');
   const minutes = Array.from({ length: Math.floor(((n - 1) * sum.every) / 60) + 1 }, (_, m) => m).filter((m) => m % Math.max(1, Math.ceil(((n - 1) * sum.every) / 60 / 8)) === 0).map((m) => `<text x="${X((m * 60) / sum.every)}" y="${H - 6}" fill="#8497ad" font-size="11" text-anchor="middle">${m}m</text>`).join('');
   const lines = sum.seats.map((x) => `<polyline fill="none" stroke="${color(x.seat)}" stroke-width="${x.seat === me ? 3.5 : 2}" stroke-linejoin="round" points="${x.army.map((v, i) => `${X(i)},${Y(v)}`).join(' ')}"/>`).join('');
-  box.querySelector('.ui')!.innerHTML = `<h1>${title}</h1><div class="when">${names.length ? `${names.join(' and ')} won` : 'No one is left'}${how ? ` (${how.toLowerCase()})` : ''} after ${Math.floor(s.time / 60)}:${String(s.time % 60).padStart(2, '0')}</div>
+  box.querySelector('.ui')!.innerHTML = `<h1>${title}</h1><div class="when">${names.length ? `${names.join(' and ')} won` : 'No one is left'}${how ? ` (${how.toLowerCase()})` : ''} after ${Math.floor(s.time / 60)}:${String(s.time % 60).padStart(2, '0')} on ${MAP.name}</div>
     <table><tr><th>Commander</th><th>Trained</th><th>Killed</th><th>Lost</th><th>Built</th><th>Razed</th><th>Steel</th><th>Oil</th></tr>${rows}</table>
     <h2>Army strength</h2><svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${grid}${minutes}${lines}</svg>
     <div class="btns"><button class="go" data-sum="rematch">Rematch</button><button data-sum="again">Back to setup</button><button data-sum="close">Look at the field</button></div>`;
@@ -1100,13 +1132,18 @@ function drawSummary(s: State): void {
 
 /** Whether a building may go here, as the server will judge it (near enough: not the other buildings). */
 /** Whether a wall's cell is shut already (the server's grid: the land, a building, a deposit): a wall skips it, as it's wall enough. */
+/** The trees the fighting has brought down this match (`TREES` indices): the ground where they stood is open. */
+export const felledTrees = new Set<number>();
+
 function cellShut(x: number, z: number): boolean {
   const near = (cx: number, cz: number, r: number) => Math.hypot(x - cx, z - cz) <= r + WALL_CELL * 0.5;
+  // (The land, as the map has it, less the trees felled since.)
+  const land = felledTrees.size ? LAKES.some((l) => near(l.x, l.z, l.r + SHUT.lake)) || MESAS.some((m) => near(m.x, m.z, m.r + SHUT.mesa)) || TREES.some((t, i) => !felledTrees.has(i) && near(t.x, t.z, SHUT.tree)) : landShut(x, z);
   return (
-    landShut(x, z) ||
+    land ||
     ui.buildings.some((b) => !BUILDINGS[b.kind].wall && near(b.x, b.z, BUILDINGS[b.kind].radius + SHUT.building)) ||
     DEPOSITS.some((n) => !n.salvage && (ui.state?.deposits[n.id] ?? 1) > 0 && near(n.x, n.z, SHUT.deposit)) ||
-    DRESSING.some((d) => d.block && near(d.x, d.z, d.block))
+    dressing().some((d) => d.block && near(d.x, d.z, d.block))
   );
 }
 
@@ -1168,7 +1205,9 @@ export function frameUi(c: Client): void {
     for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, String(v));
     out.push(n);
   };
-  const bar = (x: number, y: number, w: number, p: number) => {
+  const bar = (x: number, y: number, w: number, p: number, edge?: string) => {
+    // (Edged in its side's colour: whose is whose in a fight at a glance.)
+    if (edge) add('rect', { x: x - w / 2 - 2, y: y - 2, width: w + 4, height: 9, fill: edge });
     add('rect', { x: x - w / 2 - 1, y: y - 1, width: w + 2, height: 7, fill: '#0a0f15' });
     add('rect', { x: x - w / 2, y, width: (w * Math.max(0, p)) / 100, height: 5, fill: hpColor(p) });
   };
@@ -1209,7 +1248,7 @@ export function frameUi(c: Client): void {
       const y = UNITS[u.kind].naval ? FLOOR - 0.6 : g + 0.08;
       ring(at.x, at.z, r, { fill: '#7dff7d', 'fill-opacity': 0.12, stroke: '#7dff7d', 'stroke-width': 2, 'stroke-opacity': 0.95 }, y, 24);
     }
-    if (sel || u.hp < 100) bar(top.x, top.y - 6, 32, u.hp);
+    if (sel || u.hp < 100) bar(top.x, top.y - 6, 32, u.hp, color(u.seat));
     // A veteran's stars: gold chevrons over it.
     for (let k = 0; k < rank; k++) {
       const cx = top.x + (k - (rank - 1) / 2) * 9;
@@ -1232,6 +1271,15 @@ export function frameUi(c: Client): void {
     const lab = toScreen(c.x, FLOOR + 6, c.z);
     if (lab && r && r.pct > 0) bar(lab.x, lab.y, 40, r.pct);
   });
+  // The middle, when holding it wins: a broad ring in the holder's colour, faintly filled, its leader's share over it.
+  if (ui.state?.hold) {
+    const h = ui.state.hold;
+    const c = h.holder >= 0 ? teamColor(h.holder) : h.holder === -2 ? '#ff9a5a' : '#e8eef5';
+    ring(HOLD.x, HOLD.z, HOLD.r, { fill: h.holder >= 0 ? c : 'none', 'fill-opacity': 0.1, stroke: c, 'stroke-width': 4, 'stroke-dasharray': h.holder === -1 ? '12 9' : h.holder === -2 ? '5 5' : 'none', 'stroke-opacity': 0.85 });
+    const lead = h.teams.reduce((m, t) => (t[1] > m[1] ? t : m), [-1, 0] as [number, number]);
+    const lab = toScreen(HOLD.x, FLOOR + 8, HOLD.z);
+    if (lab && lead[1] > 0) bar(lab.x, lab.y, 60, (lead[1] / h.need) * 100);
+  }
   // A mine of theirs that a scout has found: a warning round it.
   for (let i = 0; i < ui.mines.length; i += 3) if (!ui.mines[i + 2]) ring(ui.mines[i], ui.mines[i + 1], 2.2, { fill: 'rgba(240,68,56,0.25)', stroke: '#f04438', 'stroke-width': 2 });
   if (ui.placing && ui.mouse) {
@@ -1430,7 +1478,10 @@ export function frameUi(c: Client): void {
 }
 
 let groundPic: HTMLCanvasElement | null = null;
-/** The minimap's ground, which never changes: meadow, roads, base pads, woods, hills and rock. */
+/** The minimap's ground: meadow, roads, base pads, woods, hills and rock (drawn again when trees come down). */
+export const redrawGround = (): void => {
+  groundPic = null;
+};
 function miniGround(): HTMLCanvasElement {
   if (groundPic) return groundPic;
   groundPic = document.createElement('canvas');
@@ -1438,7 +1489,7 @@ function miniGround(): HTMLCanvasElement {
   const g = groundPic.getContext('2d')!;
   const k = MINI / (2 * HALF);
   const X = (x: number) => (x + HALF) * k;
-  g.fillStyle = '#4a8e38';
+  g.fillStyle = MAP.mini;
   g.fillRect(0, 0, MINI, MINI);
   g.fillStyle = '#7e6749';
   g.fillRect(X(-69), X(-69), 138 * k, 3 * k + 1);
@@ -1452,7 +1503,7 @@ function miniGround(): HTMLCanvasElement {
     g.fill();
   }
   for (const hl of HILLS) for (let t = 0; t < hl.h; t++) {
-    g.fillStyle = t % 2 ? '#74b85a' : '#61a64c';
+    g.fillStyle = MAP.ground === 'snow' ? (t % 2 ? '#f4f8fa' : '#e6edf2') : MAP.ground === 'dry' ? (t % 2 ? '#a4a46c' : '#979a62') : t % 2 ? '#74b85a' : '#61a64c';
     g.beginPath();
     g.arc(X(hl.x), X(hl.z), (hl.r - t * 2.4) * k, 0, Math.PI * 2);
     g.fill();
@@ -1464,7 +1515,9 @@ function miniGround(): HTMLCanvasElement {
     g.fill();
   }
   g.fillStyle = '#2c6a2c';
-  for (const t of TREES) g.fillRect(X(t.x) - 1.1, X(t.z) - 1.1, 2.2, 2.2);
+  TREES.forEach((t, i) => {
+    if (!felledTrees.has(i)) g.fillRect(X(t.x) - 1.1, X(t.z) - 1.1, 2.2, 2.2);
+  });
   return groundPic;
 }
 
@@ -1491,6 +1544,18 @@ function drawMini(): void {
     g.beginPath();
     g.arc(X(l.x), X(l.z), l.r * k, 0, Math.PI * 2);
     g.fill();
+  }
+  // The middle, when holding it wins: a ring in the colour of whoever holds it (flashing when it's fought over).
+  if (ui.state?.hold) {
+    const h = ui.state.hold;
+    g.strokeStyle = h.holder >= 0 ? teamColor(h.holder) : h.holder === -2 ? (Math.sin(performance.now() / 120) > 0 ? '#ff9a5a' : '#ffffff') : 'rgba(255,255,255,0.75)';
+    g.lineWidth = 2;
+    g.setLineDash(h.holder === -1 ? [3, 3] : []);
+    g.beginPath();
+    g.arc(X(HOLD.x), X(HOLD.z), HOLD.r * k, 0, Math.PI * 2);
+    g.stroke();
+    g.setLineDash([]);
+    g.lineWidth = 1;
   }
   // Uplinks: a ring in the owner's colour, pulsing once it's running.
   for (const u of ui.state?.uplinks ?? []) {

@@ -3,20 +3,21 @@ import { defineClient, type Client } from '@platform/client';
 import { FLAGS, PORTRAITS, SCALE } from './models';
 import { clearUnits, frameUnits, updateScaffolds, updateUnits } from './client/units';
 import { booms, clearCombat, frameCombat, shoot } from './client/combat';
-import { clearLife, frameLife, lifeState, updateLife } from './client/life';
+import { clearLife, frameLife, lifeMap, lifeState, updateLife } from './client/life';
 import { sounds } from '@platform/client/kits';
-import { FLOOR, heightAt } from './map';
+import { FLOOR, MAP, TREES, heightAt, useMap, type MapId } from './map';
 import { BUILDING_ORDER, UNIT_ORDER, type Shot, type State } from './protocol';
 import { shared } from './shared';
 import { frameCamera } from './client/camera';
-import { draw, esc, frameUi, mergeSalvage, mySeat, setupUi, ui, type B, type U } from './client/ui';
+import { draw, esc, felledTrees, frameUi, redrawGround, mergeSalvage, mySeat, setupUi, teamColor, uiMap, ui, type B, type U } from './client/ui';
 import { chatLine } from './client/panels';
 import { lobbyChat } from './client/front';
 import { resetFog, seeFog } from './client/fog';
 import { clearBattle, fall, flyover, frameBattle, plume, puff, showMines, showDrops, tread } from './client/battle';
 import { inView } from './client/camera';
-import { jetSound, say, setupSounds, shotSounds } from './client/sounds';
-import { BUILDINGS, TEAM_COLORS, UNITS } from './defs';
+import { jetSound, musicFrame, rainSound, say, setupSounds, shotSounds } from './client/sounds';
+import { cam } from './client/camera';
+import { BUILDINGS, HOLD, TEAM_COLORS, UNITS } from './defs';
 
 /**
  * Each commander's screen: the strategy camera over the field (`client/camera.ts`), the interface
@@ -48,7 +49,10 @@ const done = new Set<number>();
 /** Each gate's doors as last heard (open or shut), to hear them swing. */
 const gates = new Map<number, boolean>();
 let puffAt = 0;
+let ringAt = 0;
 let beamAt = 0;
+/** The map this screen has the lists of (`useMap`). */
+let mapNow: MapId = 'heartland';
 const clockText = (t: number) => `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
 
 export default defineClient(shared, {
@@ -60,6 +64,19 @@ export default defineClient(shared, {
     setupUi(client);
     client.on('state', (d) => {
       ui.state = d as State;
+      // (Another map in play: the server is setting its blocks; the lists every part reads, and what's drawn from them.)
+      if (ui.state.map && ui.state.map !== mapNow) {
+        mapNow = ui.state.map;
+        useMap(mapNow);
+        uiMap();
+        lifeMap(client);
+        resetFog();
+      }
+      // (A new match: the woods stand again.)
+      if (ui.state.phase !== 'play' && felledTrees.size) {
+        felledTrees.clear();
+        redrawGround();
+      }
       mergeSalvage(ui.state);
       showDrops(client, ui.state.drops ?? []);
       lifeState(ui.state);
@@ -252,6 +269,27 @@ export default defineClient(shared, {
       for (const s of d as Shot[]) shoot(client, s);
       shotSounds(d as Shot[]);
     });
+    // A tree brought down: splinters and a shower of leaves where it stood.
+    client.on('felled', (d) => {
+      const a = d as number[];
+      for (let i = 0; i < a.length; i += 2) {
+        // (Which of the map's trees it was: the nearest to where it stood.)
+        let best = -1;
+        let bd = 1;
+        TREES.forEach((t, n) => {
+          const d = Math.hypot(t.x - a[i], t.z - a[i + 1]);
+          if (d < bd) {
+            bd = d;
+            best = n;
+          }
+        });
+        if (best >= 0) felledTrees.add(best);
+        redrawGround();
+        const at = { x: a[i], y: FLOOR + 3, z: a[i + 1] };
+        client.fx.burst(at, { color: '#3f7f34', count: 26, speed: 4.5, size: 0.32, gravity: 6, life: 1.4, drag: 1.5 });
+        client.fx.burst({ ...at, y: FLOOR + 1 }, { color: '#6a4a2c', count: 12, speed: 5, size: 0.24, gravity: 14, life: 0.9 });
+      }
+    });
     client.on('boom', (d) => {
       booms(client, d as number[]);
     });
@@ -263,6 +301,8 @@ export default defineClient(shared, {
     frameUnits(client, dt);
     frameBattle(client, dt);
     frameCombat(dt);
+    musicFrame(dt);
+    weatherFrame(client, dt);
     frameLife(client, dt);
     frameUi(client);
     // Dust under what's driving or hovering, smoke from the works, sparks where something is going up.
@@ -270,6 +310,20 @@ export default defineClient(shared, {
       if (!inView(d.x, d.z, 8)) continue;
       if (d.air) client.fx.burst({ x: d.x, y: FLOOR + 0.4, z: d.z }, { color: '#d8cdaa', count: 2, speed: 5, size: 0.18, life: 0.8, drag: 2, gravity: -0.2 });
       else puff(client, d.x + (Math.random() - 0.5) * 1.6, FLOOR + 0.4, d.z + (Math.random() - 0.5) * 1.6, 's', 0.55, 0.85, 0, 0.8, 0);
+    }
+    // The middle, when holding it wins: a ring of sparks round it in the holder's colour (white when no one holds it).
+    if (ui.state?.hold && clock > ringAt) {
+      ringAt = clock + 0.5;
+      const h = ui.state.hold;
+      if (inView(HOLD.x, HOLD.z, HOLD.r + 10)) {
+        const c = h.holder >= 0 ? teamColor(h.holder) : h.holder === -2 ? '#ff9a5a' : '#e8eef5';
+        for (let i = 0; i < 28; i++) {
+          const a = (i / 28) * Math.PI * 2 + clock * 0.2;
+          const x = HOLD.x + Math.cos(a) * HOLD.r;
+          const z = HOLD.z + Math.sin(a) * HOLD.r;
+          client.fx.burst({ x, y: FLOOR + heightAt(x, z) + 0.3, z }, { color: c, count: 1, speed: 0.3, size: 0.22, glow: 1.4, life: 0.9, gravity: -1.2 });
+        }
+      }
     }
     // A live uplink: pulses of light up its beam into the sky, in its side's colour, and a glow at the dish's feed.
     if (clock > beamAt) {
@@ -312,3 +366,32 @@ export default defineClient(shared, {
   },
 });
 
+
+/** The rain as it's falling here: easing towards what the server says, so a shower comes on and goes off softly. */
+let wet = 0;
+/**
+ * Rain: streaks falling over the part of the field the camera's on (as many as the shower's heavy, and
+ * no more than a screen's worth), and its sound.
+ */
+function weatherFrame(client: Client, dt: number): void {
+  const goal = ui.state?.phase === 'play' ? ui.state.rain ?? 0 : 0;
+  wet += Math.max(-dt * 0.3, Math.min(dt * 0.3, goal - wet));
+  // (On the winter map a shower is snow: quiet, slow flakes drifting down.)
+  const snow = MAP.ground === 'snow';
+  rainSound(snow ? 0 : wet);
+  if (wet < 0.03) return;
+  const reach = Math.min(70, cam.dist * 1.1);
+  // (Flakes linger where streaks flash past: fewer of them.)
+  const n = Math.round(wet * (snow ? 9 : 12));
+  for (let i = 0; i < n; i++) {
+    const x = cam.x + (Math.random() - 0.5) * reach * 2;
+    const z = cam.z + (Math.random() - 0.5) * reach * 1.6;
+    const top = FLOOR + 14 + Math.random() * 10;
+    if (snow) {
+      client.fx.particles({ x, y: top - 4, z }, [1, 1, 1], { count: 1, speed: 0.2, size: 0.26, life: 6, drag: 1.2, gravity: 0.35, velocity: { x: 0.8, y: -1.6, z: 0.3 } });
+      continue;
+    }
+    // (A streak falling, slanting a little with the wind, to the ground.)
+    client.fx.tracer({ x, y: top, z }, { x: x + 1.6, y: FLOOR + heightAt(x, z), z: z + 0.6 }, '#e2ebf5', { speed: 46, length: 2.6, width: 0.13, glow: 0.45 });
+  }
+}

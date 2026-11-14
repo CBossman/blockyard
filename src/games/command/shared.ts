@@ -89,6 +89,8 @@ export const shared = defineShared({
     cm_cliff: { texture: { color: ['#8d8a84', '#9a968e', '#7e7b75'], noise: 0.22, scale: 3 }, label: 'Cliff' },
     cm_cliff2: { texture: { color: ['#7a6a56', '#86755f', '#6e5f4c'], noise: 0.22, scale: 3 }, label: 'Cliff' },
     cm_snow: { texture: mottled(['#f4f8fa', '#e8eef2', '#ffffff']), label: 'Snow' },
+    cm_snow2: { texture: mottled(['#dfe7ee', '#d4dee8', '#e8eef4'], 4), label: 'Snow' },
+    cm_snowhill: { texture: { top: mottled(['#f0f5f8', '#e4ecf1', '#fbfdfe']), side: mottled(['#8d949a', '#9aa1a6', '#80878d']), bottom: EARTH }, label: 'Snowy slope' },
     cm_trunk: { texture: mottled(['#5a4028', '#644830', '#523a24']), label: 'Trunk' },
     cm_leaves: { texture: mottled(['#2a6a2c', '#317434', '#245e28']), label: 'Leaves' },
     cm_leaves2: { texture: mottled(['#3a8a32', '#44963a', '#32802c']), label: 'Leaves' },

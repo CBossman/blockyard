@@ -1,4 +1,5 @@
 import type { BuildingKind, DifficultyId, DoctrineId, Mode, TechId, UnitKind } from './defs';
+import type { MapId } from './map';
 
 /**
  * What the server tells the screens, and they ask it, as messages.
@@ -70,11 +71,15 @@ export interface Lobby {
   host: string;
   preset: Mode;
   resources: 'low' | 'normal' | 'high';
+  /** The battlefield (`MAPS`), or one picked at random as the match starts. */
+  map: MapId | 'random';
   fog: boolean;
   /** Whether a Satellite Uplink can win the match (and be built). */
   uplink: boolean;
   /** Minutes at the start when no side can attack another. */
   peace: number;
+  /** Whether holding the middle can win the match too. */
+  hold: boolean;
   watchers: { id: string; name: string }[];
 }
 
@@ -93,6 +98,10 @@ export interface Summary {
 
 export interface State {
   phase: 'lobby' | 'briefing' | 'play' | 'over';
+  /** The battlefield the world stands as (`useMap` on each screen). */
+  map: MapId;
+  /** A shower over the field, how heavy (0..1; none when it's dry). */
+  rain?: number;
   mode: Mode;
   seats: Seat[];
   /** The seat of each human, by player name (so a screen finds its own). */
@@ -109,7 +118,9 @@ export interface State {
   time: number;
   winners: number[];
   /** How it was won, if not by wiping out the others: an uplink that stood its time. */
-  wonBy?: 'uplink';
+  wonBy?: 'uplink' | 'hold';
+  /** Hold the Middle, when it's on: the team holding it now (-1 nobody, -2 fought over), and each team's seconds held. */
+  hold?: { holder: number; need: number; teams: [number, number][] };
   /** Whether an uplink can be built (and win) this match. */
   uplinkOn: boolean;
   /** Every uplink on the map (everyone sees them): whose, where, and seconds left on its clock (-1: still being built). */

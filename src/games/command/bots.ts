@@ -1,4 +1,4 @@
-import { ABILITIES, AGE_NEEDS, BUILDINGS, CARRY, SIGHT, UNITS, ageOf, type BuildingKind, type ResKind, type UnitKind } from './defs';
+import { ABILITIES, AGE_NEEDS, eraWants, BUILDINGS, CARRY, SIGHT, UNITS, ageOf, type BuildingKind, type ResKind, type UnitKind } from './defs';
 import { BASES, CAMPS, HALF, LAKES, inHill, inLake, inMesa, inside, lakeOf, wallLine, wallPlan } from './map';
 import type { Building, Slot, Unit, World } from './server';
 
@@ -125,6 +125,8 @@ export class BotBrain {
   private siegeBy = -1;
   /** An adaptive bot: when it next sizes up the match. */
   private tuneAt = 150;
+  /** When it next looks to the trade post. */
+  private tradeAt = 0;
 
   readonly kind: Style;
   /** How much of the job it does (an adaptive bot's moves as the match goes). */
@@ -310,7 +312,8 @@ export class BotBrain {
     let eraSaving = false;
     if (hq && hq.built >= 1 && !hq.research && !poor && home.length < 3) {
       const era = age === 1 && (w.time > st.age2 || (s.steel > 650 && w.time > st.age2 * 0.7)) ? 'age2' : age === 2 && w.time > st.age3 && (this.skill > 0.4 || st.air) ? 'age3' : null;
-      if (era && !w.research(hq, era)) eraSaving = engineers.length >= 6 && armyNow >= 4;
+      // (Not until it has what the era needs standing: its barracks, then a factory or lab.)
+      if (era && !eraWants(era, s.techs, bld.filter((b) => b.built >= 1).map((b) => b.kind), w.time) && !w.research(hq, era)) eraSaving = engineers.length >= 6 && armyNow >= 4;
     }
     const sites = bld.filter((b) => b.built < 1).length;
     let saving = false;
@@ -327,6 +330,8 @@ export class BotBrain {
       else if (w.time > 360 && count('bunker') < st.bunkers && count('barracks') > 0) next = 'bunker';
       else if (age >= 2 && this.skill > 0.5 && w.time > 660 && count('lab') < 1 && bld.some((b) => b.kind === 'barracks' && b.built >= 1)) next = 'lab';
       else if (w.time > (st.towers > 1 ? 300 : 480) && count('tower') < st.towers + Math.floor(this.skill * 2)) next = 'tower';
+      // A trade post once one resource is piling up: the surplus bought into what's short.
+      else if (smart && w.time > 480 && count('market') < 1 && (s.oil > 450 || s.steel > 700)) next = 'market';
       else if (s.pop + 6 >= s.cap && count('depot') < 6) next = 'depot';
       // Late and rich, a smart bot goes for the uplink (a turtle sooner): a way to win without marching on anyone.
       else if (smart && w.uplinkOn && age >= 3 && count('uplink') < 1 && count('lab') > 0 && w.time > (this.kind === 'turtle' ? 1200 : 1680) && s.steel >= BUILDINGS.uplink.cost.steel + 150 && s.oil >= BUILDINGS.uplink.cost.oil + 50) next = 'uplink';
@@ -346,6 +351,13 @@ export class BotBrain {
           }
         }
       }
+    }
+
+    // The trade post: the surplus of one sold for the other when that's run short (not too often: the price drops).
+    if (smart && w.time >= this.tradeAt && count('market') > 0) {
+      this.tradeAt = w.time + 6;
+      if (s.steel < 90 && s.oil > 320) w.trade(s.seat, 'oil');
+      else if (s.oil < 60 && s.steel > 520) w.trade(s.seat, 'steel');
     }
 
     // --- Walls: once it has a barracks and steel to spare, its base walled in, gates first; looked over
@@ -525,7 +537,9 @@ export class BotBrain {
 
     const need = st.army + this.wave * st.grow + Math.round((1 - this.skill) * 8);
     // An enemy uplink running: everything goes at it now, and keeps going.
-    const urgent = !!this.uplinkAgainst(w, enemies) && w.time >= w.peaceUntil;
+    // (Or the enemy holding the middle, when that wins too.)
+    const theirMiddle = !!w.hold && w.hold.holder >= 0 && w.hold.holder !== s.team;
+    const urgent = (!!this.uplinkAgainst(w, enemies) || theirMiddle) && w.time >= w.peaceUntil;
     const full = s.pop >= Math.min(s.cap, 60) - 2;
     // (No one comes for you early: time to build a base before the first fight.)
     const firstAttack = this.skill < 0.4 ? 900 : this.skill < 0.8 ? 660 : 540;
@@ -536,11 +550,18 @@ export class BotBrain {
       const r = w.relics[this.camp];
       this.go(w, s, rest, r.x, r.z, true);
     } else if (this.mode === 'build') {
-      this.go(w, s, rest.filter((u) => u.order.t === 'idle' && hyp(u.x, u.z, base.x, base.z) > 30), front.x, front.z, true);
+      // (Idle troops wait at the front, the side towards the middle: not wherever they were trained, behind the base.)
+      this.go(w, s, rest.filter((u) => u.order.t === 'idle' && hyp(u.x, u.z, front.x, front.z) > 16), front.x, front.z, true);
       if (urgent && rest.length >= 3) {
         this.chooseFoe(w, s, enemies);
         this.wave++;
         this.mode = 'push';
+      } else if (w.hold && !w.stand && !home.length && w.hold.holder !== s.team && w.time >= Math.max(240, w.peaceUntil) && rest.length >= Math.max(4, Math.round(need * 0.5))) {
+        // Hold the Middle: out to take it as soon as there's an army worth the name.
+        this.chooseFoe(w, s, enemies);
+        this.wave++;
+        this.mode = 'push';
+        this.say(w, s, 'attack');
       } else if (!w.stand && !home.length && w.time >= Math.max(firstAttack, w.peaceUntil - 20, this.nextPush) && (rest.length >= need || (full && rest.length >= 6))) {
         const t = this.chooseFoe(w, s, enemies);
         // Not against what it knows it can't beat, unless it can't get any bigger.
@@ -598,7 +619,7 @@ export class BotBrain {
     if (s.powerAt <= w.time) {
       if (s.doctrine === 'industrial') {
         const spot = sharp || home.length ? this.bestBombing(foes, home.length ? 300 : 500) : null;
-        const t = spot ?? (this.mode === 'push' ? this.target(w, s, enemies) : null);
+        const t = spot ?? (this.mode === 'push' && !w.hold ? this.target(w, s, enemies) : null);
         if (t) w.power(s.seat, t.x, t.z);
       } else if (s.doctrine === 'armored') {
         if (home.length || this.mode !== 'build' || w.time > 600) w.power(s.seat, 0, 0);
@@ -664,6 +685,8 @@ export class BotBrain {
       this.foeSeat = up.seat;
       return up;
     }
+    // (Then the middle, when holding it wins: to take it, or to keep it.)
+    if (w.hold && w.time >= w.peaceUntil) return { x: w.hold.x + (s.seat % 3) - 1, z: w.hold.z + ((s.seat >> 1) % 3) - 1 };
     if (!enemies.some((e) => e.seat === this.foeSeat)) {
       if (!enemies.length) return null;
       return this.chooseFoe(w, s, enemies);

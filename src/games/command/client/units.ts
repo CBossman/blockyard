@@ -21,6 +21,8 @@ import { puff } from './battle';
  */
 
 interface Shown {
+  /** When its last damage number went up (not one for every bullet). */
+  said?: number;
   kind: UnitKind;
   seat: number;
   node: Node;
@@ -264,7 +266,15 @@ export function updateUnits(client: Client, list: U[]): void {
       s = made;
       shown.set(u.id, s);
     }
-    if (u.hp < s.hp) s.hit = now;
+    if (u.hp < s.hp) {
+      s.hit = now;
+      // How much it took (its health's in hundredths): over it, red if it's one of ours.
+      const lost = Math.round(((s.hp - u.hp) / 100) * UNITS[u.kind].hp);
+      if (lost >= 1 && now - (s.said ?? -9) > 0.35) {
+        s.said = now;
+        client.fx.damageNumber({ x: s.x, y: s.y + (UNITS[u.kind].air ? 3 : 4.5), z: s.z }, lost, { color: u.seat === mySeat() ? '#ff6a5a' : '#ffe9a8' });
+      }
+    }
     // Being patched up: a green glimmer.
     else if (u.hp > s.hp && rankBits(u.flags) === rankBits(s.flags)) client.fx.burst({ x: s.x, y: s.y + 2, z: s.z }, { color: '#7dff7d', count: 3, speed: 1.2, size: 0.2, glow: 0.9, life: 0.6, gravity: -2.4 });
     // A star won: a gold burst and a fanfare.

@@ -16,17 +16,108 @@ export interface Spot {
   z: number;
 }
 
+type Round = { x: number; z: number; r: number };
+type Rise = Round & { h: number };
+export type MapId = 'heartland' | 'crossing' | 'badlands' | 'deepwoods' | 'frostline';
+/**
+ * A battlefield: the same four corner bases (and the co-op bots' two) and the roads between them on
+ * every map, but its own lakes, mesas, hills, camps, middle deposits, woods and ground. Each is turned
+ * round the middle (a half turn) onto itself, so no base has the better of it.
+ */
+export interface MapDef {
+  id: MapId;
+  name: string;
+  blurb: string;
+  lakes: Round[];
+  mesas: Rise[];
+  hills: Rise[];
+  camps: Spot[];
+  /** The rich deposits out on the field (not the bases' own). */
+  middle: [number, number, ResKind][];
+  /** The woods: the share of the field in clumps (`cut`: higher, fewer), how thick they grow, the lone trees between, a seed, the share of pines; `lanes` keeps the roads and the ways to the middle clear. */
+  woods: { cut: number; dense: number; sparse: number; seed: number; pines: number; lanes?: boolean };
+  ground: 'green' | 'dry' | 'lush' | 'snow';
+  /** The minimap's meadow. */
+  mini: string;
+}
+/** A river of round pools across the field (z = 0, winding), with fords at these x: nothing on foot crosses but at a ford. */
+const river = (fords: number[]): Round[] => {
+  const out: Round[] = [];
+  for (let x = -104; x <= 104; x += 8) if (!fords.some((f) => Math.abs(x - f) <= 8)) out.push({ x, z: Math.round(5 * Math.sin(x / 23)), r: 8 });
+  return out;
+};
+/** Mesas in a ring round the middle, with ways in between. */
+const ring = (n: number, at: number, r: number, h: number): Rise[] => Array.from({ length: n }, (_, k) => {
+  const a = ((k + 0.5) / n) * Math.PI * 2;
+  return { x: Math.round(Math.cos(a) * at), z: Math.round(Math.sin(a) * at), r, h };
+});
+export const MAPS: MapDef[] = [
+  {
+    id: 'heartland', name: 'Heartland', blurb: 'Rolling meadow: lakes, mesas and woods break up open ground.',
+    lakes: [{ x: -40, z: -6, r: 15 }, { x: 40, z: 6, r: 15 }, { x: 0, z: -50, r: 12 }, { x: 0, z: 50, r: 12 }],
+    mesas: [{ x: -24, z: -40, r: 7, h: 3 }, { x: 24, z: 40, r: 7, h: 3 }, { x: -56, z: 16, r: 6, h: 4 }, { x: 56, z: -16, r: 6, h: 4 }, { x: -28, z: 30, r: 6, h: 3 }, { x: 28, z: -30, r: 6, h: 3 }],
+    hills: [{ x: -14, z: -24, r: 8, h: 3 }, { x: 14, z: 24, r: 8, h: 3 }, { x: -24, z: 56, r: 8, h: 2 }, { x: 24, z: -56, r: 8, h: 2 }, { x: -42, z: -40, r: 7, h: 2 }, { x: 42, z: 40, r: 7, h: 2 }, { x: -84, z: -6, r: 10, h: 3 }, { x: 84, z: 6, r: 10, h: 3 }],
+    // (Well out from every base: midway between two on the map's side, or further in.)
+    camps: [{ x: -44, z: 27 }, { x: 44, z: -27 }, { x: -68, z: 0 }, { x: 68, z: 0 }],
+    middle: [[-14, -10, 'steel'], [14, 10, 'steel'], [0, 0, 'oil'], [-12, 14, 'oil'], [12, -14, 'oil'], [0, -22, 'steel'], [0, 22, 'steel']],
+    woods: { cut: 0.5, dense: 0.8, sparse: 0.04, seed: 0, pines: 0.3 },
+    ground: 'green',
+    mini: '#4a8e38',
+  },
+  {
+    id: 'crossing', name: 'River Crossing', blurb: 'A river cuts the field in two: three fords, and whoever holds them.',
+    lakes: river([-52, 0, 52]),
+    mesas: [{ x: -30, z: -42, r: 6, h: 3 }, { x: 30, z: 42, r: 6, h: 3 }, { x: -86, z: -32, r: 5, h: 4 }, { x: 86, z: 32, r: 5, h: 4 }],
+    hills: [{ x: 0, z: -26, r: 7, h: 3 }, { x: 0, z: 26, r: 7, h: 3 }, { x: -52, z: -24, r: 6, h: 2 }, { x: 52, z: 24, r: 6, h: 2 }],
+    camps: [{ x: -24, z: -28 }, { x: 24, z: 28 }, { x: -84, z: 26 }, { x: 84, z: -26 }],
+    middle: [[-10, -14, 'oil'], [10, 14, 'oil'], [14, -15, 'steel'], [-14, 15, 'steel'], [-62, -16, 'steel'], [62, 16, 'steel'], [-42, 17, 'oil'], [42, -17, 'oil']],
+    woods: { cut: 0.55, dense: 0.8, sparse: 0.04, seed: 7, pines: 0.3 },
+    ground: 'lush',
+    mini: '#3f8a34',
+  },
+  {
+    id: 'badlands', name: 'Badlands', blurb: 'Dry rock country: a ring of mesas round a rich middle, eight narrow ways in.',
+    lakes: [{ x: -62, z: -8, r: 9 }, { x: 62, z: 8, r: 9 }],
+    mesas: [...ring(8, 30, 6, 4), { x: -34, z: -64, r: 6, h: 4 }, { x: 34, z: 64, r: 6, h: 4 }, { x: -66, z: -34, r: 5, h: 3 }, { x: 66, z: 34, r: 5, h: 3 }],
+    hills: [{ x: -44, z: 42, r: 8, h: 3 }, { x: 44, z: -42, r: 8, h: 3 }],
+    camps: [{ x: -50, z: 20 }, { x: 50, z: -20 }, { x: -20, z: -52 }, { x: 20, z: 52 }],
+    middle: [[0, 0, 'oil'], [-12, -6, 'steel'], [12, 6, 'steel'], [7, -13, 'steel'], [-7, 13, 'steel']],
+    woods: { cut: 0.85, dense: 0.5, sparse: 0.015, seed: 31, pines: 0.15 },
+    ground: 'dry',
+    mini: '#8f9160',
+  },
+  {
+    id: 'deepwoods', name: 'Deep Woods', blurb: 'Thick forest: fight along the roads and the trails, or blast your own way through.',
+    lakes: [{ x: -34, z: 30, r: 11 }, { x: 34, z: -30, r: 11 }],
+    mesas: [{ x: -58, z: 6, r: 5, h: 3 }, { x: 58, z: -6, r: 5, h: 3 }],
+    hills: [{ x: 0, z: 0, r: 9, h: 3 }, { x: -24, z: -52, r: 7, h: 2 }, { x: 24, z: 52, r: 7, h: 2 }],
+    camps: [{ x: -40, z: -26 }, { x: 40, z: 26 }, { x: -20, z: 48 }, { x: 20, z: -48 }],
+    middle: [[-14, -12, 'steel'], [14, 12, 'steel'], [-16, 10, 'oil'], [16, -10, 'oil'], [0, -26, 'steel'], [0, 26, 'steel']],
+    woods: { cut: 0.22, dense: 0.85, sparse: 0.12, seed: 53, pines: 0.45, lanes: true },
+    ground: 'lush',
+    mini: '#3f8a34',
+  },
+  {
+    id: 'frostline', name: 'Frostline', blurb: 'A winter front: snowfields, pine woods and frozen-edged lakes.',
+    lakes: [{ x: -44, z: -16, r: 13 }, { x: 44, z: 16, r: 13 }, { x: 0, z: -44, r: 9 }, { x: 0, z: 44, r: 9 }],
+    mesas: [{ x: -20, z: -30, r: 6, h: 4 }, { x: 20, z: 30, r: 6, h: 4 }, { x: -70, z: 18, r: 6, h: 4 }, { x: 70, z: -18, r: 6, h: 4 }],
+    hills: [{ x: -30, z: -58, r: 7, h: 2 }, { x: 30, z: 58, r: 7, h: 2 }, { x: 16, z: -16, r: 8, h: 3 }, { x: -16, z: 16, r: 8, h: 3 }],
+    camps: [{ x: -48, z: 30 }, { x: 48, z: -30 }, { x: -80, z: -30 }, { x: 80, z: 30 }],
+    middle: [[0, 0, 'oil'], [-12, -6, 'steel'], [12, 6, 'steel'], [-26, 2, 'steel'], [26, -2, 'steel'], [0, -24, 'oil'], [0, 24, 'oil']],
+    woods: { cut: 0.55, dense: 0.7, sparse: 0.05, seed: 77, pines: 1 },
+    ground: 'snow',
+    mini: '#dfe7ec',
+  },
+];
+export const MAP_IDS = MAPS.map((m) => m.id);
+/** The map in play (the server's word: `useMap`). */
+export let MAP: MapDef = MAPS[0];
+
 /**
  * Neutral camps: a few wild guards round a relic, a rich steel deposit and an oil well, out on the
- * field. Clear the guards, then hold the relic to have it pay steel.
+ * field. Clear the guards, then hold the relic to have it pay steel. (The map's: `useMap` fills it.)
  */
-export const CAMPS: Spot[] = [
-  // (Well out from every base: midway between two on the map's side, or further in.)
-  { x: -44, z: 27 },
-  { x: 44, z: -27 },
-  { x: -68, z: 0 },
-  { x: 68, z: 0 },
-];
+export const CAMPS: Spot[] = [];
 
 /** The four players' bases, then the two a co-op game's bots take. */
 export const BASES: Spot[] = [
@@ -72,7 +163,7 @@ export function deposits(): Deposit[] {
     for (let k = 0; k < 3; k++) add(b.x + dx * (14 + k * 4) + (hash(i, k) - 0.5) * 6, b.z + (k - 1) * 9 + (hash(i, k + 9) - 0.5) * 4, 'steel', 1800);
     for (let k = 0; k < 2; k++) add(b.x + (k ? 11 : -11) * -dx * 0.5 + (hash(i, k + 20) - 0.5) * 3, b.z + dz * (13 + k * 5), 'oil', 1400);
   });
-  for (const [x, z, kind] of [[-14, -10, 'steel'], [14, 10, 'steel'], [0, 0, 'oil'], [-12, 14, 'oil'], [12, -14, 'oil'], [0, -22, 'steel'], [0, 22, 'steel']] as [number, number, ResKind][]) add(x, z, kind, 2600);
+  for (const [x, z, kind] of MAP.middle) add(x, z, kind, 2600);
   for (const c of CAMPS) {
     // (Mirrored, as the map is: the east half's camps are the west half's turned round the middle.)
     const s = c.x < 0 ? 1 : -1;
@@ -88,12 +179,7 @@ export function deposits(): Deposit[] {
 }
 
 /** Lakes: round pools between the bases that nothing on foot can cross (boats and bridges may come), with a sand shore. */
-export const LAKES: { x: number; z: number; r: number }[] = [
-  { x: -40, z: -6, r: 15 },
-  { x: 40, z: 6, r: 15 },
-  { x: 0, z: -50, r: 12 },
-  { x: 0, z: 50, r: 12 },
-];
+export const LAKES: Round[] = [];
 /** The lake a point is in (or nearest), by index. */
 export const lakeOf = (x: number, z: number): number => {
   let best = 0;
@@ -177,30 +263,14 @@ export function wallLine(x0: number, z0: number, x1: number, z1: number, max = 4
 export const inLake = (x: number, z: number, pad = 0) => LAKES.some((l) => Math.hypot(l.x - x, l.z - z) < l.r + pad);
 
 /** Plateaus: rocky mesas (a few blocks high) that nothing on foot can climb: they split the field and give the eye something to read. */
-export const MESAS: { x: number; z: number; r: number; h: number }[] = [
-  { x: -24, z: -40, r: 7, h: 3 },
-  { x: 24, z: 40, r: 7, h: 3 },
-  { x: -56, z: 16, r: 6, h: 4 },
-  { x: 56, z: -16, r: 6, h: 4 },
-  { x: -28, z: 30, r: 6, h: 3 },
-  { x: 28, z: -30, r: 6, h: 3 },
-];
+export const MESAS: Rise[] = [];
 export const inMesa = (x: number, z: number, pad = 0) => MESAS.some((s) => Math.hypot(s.x - x, s.z - z) < s.r + pad);
 
 /**
  * Hills: gentle grassy rises in terraces a block high, that anything can walk up. High ground sees
  * further and shoots further, and is harder to hit from below.
  */
-export const HILLS: { x: number; z: number; r: number; h: number }[] = [
-  { x: -14, z: -24, r: 8, h: 3 },
-  { x: 14, z: 24, r: 8, h: 3 },
-  { x: -24, z: 56, r: 8, h: 2 },
-  { x: 24, z: -56, r: 8, h: 2 },
-  { x: -42, z: -40, r: 7, h: 2 },
-  { x: 42, z: 40, r: 7, h: 2 },
-  { x: -84, z: -6, r: 10, h: 3 },
-  { x: 84, z: 6, r: 10, h: 3 },
-];
+export const HILLS: Rise[] = [];
 export const inHill = (x: number, z: number, pad = 0) => HILLS.some((s) => Math.hypot(s.x - x, s.z - z) < s.r + pad);
 /** How many blocks the ground stands above the field's floor at a point (0 off the hills). */
 export function heightAt(x: number, z: number): number {
@@ -219,21 +289,44 @@ export function heightAt(x: number, z: number): number {
  * Woods: clumps of trees scattered over the field, away from the bases and the deposits, that
  * units must go round (the pathfinder treats each as an obstacle) and that break up the view.
  */
-export const TREES: Spot[] = (() => {
+export const TREES: Spot[] = [];
+/** Whether a point is on one of the trails a forest map keeps clear: the roads between the bases, the ways in to the middle, and out to the co-op bases. */
+const onLane = (x: number, z: number): boolean => {
+  const ax = Math.abs(x);
+  const az = Math.abs(z);
+  return (Math.abs(ax - 68) < 6 && az < 74) || (Math.abs(az - 68) < 6 && ax < 74) || Math.abs(ax - az) < 7 || (ax < 6 && az > 55);
+};
+function plantTrees(): void {
   const all = deposits();
-  const out: Spot[] = [];
+  const w = MAP.woods;
+  TREES.length = 0;
   for (let gx = -HALF + 5; gx < HALF - 4; gx += 4.2) {
     for (let gz = -HALF + 5; gz < HALF - 4; gz += 4.2) {
       const x = gx + (hash(gx * 3, gz) - 0.5) * 3;
       const z = gz + (hash(gx, gz * 3) - 0.5) * 3;
-      const clump = hash(Math.floor(gx / 16), Math.floor(gz / 16)) > 0.5;
-      if (!(clump ? hash(gx, gz) < 0.8 : hash(gx + 7, gz - 3) < 0.04)) continue;
+      const clump = hash(Math.floor(gx / 16) + w.seed, Math.floor(gz / 16) - w.seed) > w.cut;
+      if (!(clump ? hash(gx, gz) < w.dense : hash(gx + 7, gz - 3) < w.sparse)) continue;
       if (inLake(x, z, 5) || inMesa(x, z, 3) || inHill(x, z, 1) || CAMPS.some((c) => Math.hypot(c.x - x, c.z - z) < 12) || BASES.some((b) => Math.hypot(b.x - x, b.z - z) < 28) || all.some((d) => Math.hypot(d.x - x, d.z - z) < 8)) continue;
-      out.push({ x: Math.round(x * 10) / 10, z: Math.round(z * 10) / 10 });
+      if (w.lanes && onLane(x, z)) continue;
+      TREES.push({ x: Math.round(x * 10) / 10, z: Math.round(z * 10) / 10 });
     }
   }
-  return out;
-})();
+}
+
+/** Put a map in play: its lakes, mesas, hills, camps and woods in the lists every part of the game reads (the same lists, filled again). */
+export function useMap(id: MapId): void {
+  MAP = MAPS.find((m) => m.id === id) ?? MAPS[0];
+  const fill = <T>(list: T[], from: T[]) => {
+    list.length = 0;
+    for (const x of from) list.push({ ...x });
+  };
+  fill(LAKES, MAP.lakes);
+  fill(MESAS, MAP.mesas);
+  fill(HILLS, MAP.hills);
+  fill(CAMPS, MAP.camps);
+  plantTrees();
+}
+useMap('heartland');
 
 /** How far past each thing on the land the grid units find their way on counts a cell shut (to the cell's middle, plus half a cell). */
 export const SHUT = { lake: 0.6, mesa: 0.8, tree: 0.9, deposit: 1.8, building: 1 };
