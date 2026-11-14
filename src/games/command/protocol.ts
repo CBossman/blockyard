@@ -31,6 +31,7 @@ export interface Seat {
   human: boolean;
   steel: number;
   oil: number;
+  wood: number;
   pop: number;
   cap: number;
   alive: boolean;
@@ -80,6 +81,8 @@ export interface Lobby {
   peace: number;
   /** Whether holding the middle can win the match too. */
   hold: boolean;
+  /** Commander must survive: each side starts with its commander, and loses its HQ when it falls. */
+  vip: boolean;
   watchers: { id: string; name: string }[];
 }
 
@@ -88,10 +91,12 @@ export const FLAG = { working: 1, steel: 2, oil: 4, idle: 8, high: 64 };
 export const rankBits = (f: number) => (f >> 4) & 3;
 export const stanceBits = (f: number) => (f >> 7) & 3;
 export const cargoBits = (f: number) => f >> 9;
+/** An engineer's load (in the same bits a transport's cargo uses): how full, 0 to 1. */
+export const loadOf = (f: number) => (f >> 9) / 15;
 
 /** The match in numbers, for the summary at its end: each seat's tallies, and its army's worth over time. */
 export interface Summary {
-  seats: { seat: number; name: string; trained: number; killed: number; lost: number; built: number; razed: number; steel: number; oil: number; army: number[] }[];
+  seats: { seat: number; name: string; trained: number; killed: number; lost: number; built: number; razed: number; steel: number; oil: number; wood: number; army: number[] }[];
   /** Seconds between the samples of `army`. */
   every: number;
 }
@@ -121,6 +126,8 @@ export interface State {
   wonBy?: 'uplink' | 'hold';
   /** Hold the Middle, when it's on: the team holding it now (-1 nobody, -2 fought over), and each team's seconds held. */
   hold?: { holder: number; need: number; teams: [number, number][] };
+  /** Commander must survive is on. */
+  vip?: boolean;
   /** Whether an uplink can be built (and win) this match. */
   uplinkOn: boolean;
   /** Every uplink on the map (everyone sees them): whose, where, and seconds left on its clock (-1: still being built). */

@@ -1,4 +1,4 @@
-import type { ResKind } from './defs';
+import { TREE_WOOD, type ResKind } from './defs';
 
 /**
  * The battlefield: a square of open ground with a base in each corner, two more spots for the bots
@@ -17,8 +17,9 @@ export interface Spot {
 }
 
 type Round = { x: number; z: number; r: number };
-type Rise = Round & { h: number };
-export type MapId = 'heartland' | 'crossing' | 'badlands' | 'deepwoods' | 'frostline';
+/** A rise: its height, and (a mesa) whether its top is bare rock rather than grass. */
+type Rise = Round & { h: number; rock?: boolean };
+export type MapId = 'heartland' | 'crossing' | 'badlands' | 'deepwoods' | 'frostline' | 'canyons' | 'highlands';
 /**
  * A battlefield: the same four corner bases (and the co-op bots' two) and the roads between them on
  * every map, but its own lakes, mesas, hills, camps, middle deposits, woods and ground. Each is turned
@@ -51,6 +52,12 @@ const ring = (n: number, at: number, r: number, h: number): Rise[] => Array.from
   const a = ((k + 0.5) / n) * Math.PI * 2;
   return { x: Math.round(Math.cos(a) * at), z: Math.round(Math.sin(a) * at), r, h };
 });
+/** A ridge of mesas along x, from z0 to z1, broken by passes at these z. */
+const ridge = (x: number, z0: number, z1: number, passes: number[]): Rise[] => {
+  const out: Rise[] = [];
+  for (let z = z0; z <= z1; z += 7) if (!passes.some((p) => Math.abs(z - p) <= 7)) out.push({ x, z, r: 5, h: 4, rock: true });
+  return out;
+};
 export const MAPS: MapDef[] = [
   {
     id: 'heartland', name: 'Heartland', blurb: 'Rolling meadow: lakes, mesas and woods break up open ground.',
@@ -108,6 +115,28 @@ export const MAPS: MapDef[] = [
     ground: 'snow',
     mini: '#dfe7ec',
   },
+  {
+    id: 'canyons', name: 'Canyons', blurb: 'Two long walls of rock run down the field: two passes through each, or the long way round their ends.',
+    lakes: [{ x: -56, z: 2, r: 7 }, { x: 56, z: -2, r: 7 }],
+    mesas: [...ridge(-30, -60, 60, [-20, 36]), ...ridge(30, -60, 60, [20, -36])],
+    hills: [{ x: 0, z: -40, r: 8, h: 3 }, { x: 0, z: 40, r: 8, h: 3 }, { x: 0, z: 0, r: 6, h: 2 }],
+    camps: [{ x: -50, z: -30 }, { x: 50, z: 30 }, { x: 14, z: -58 }, { x: -14, z: 58 }],
+    middle: [[0, -14, 'steel'], [0, 14, 'steel'], [-14, 0, 'oil'], [14, 0, 'oil'], [-16, -28, 'steel'], [16, 28, 'steel']],
+    woods: { cut: 0.6, dense: 0.7, sparse: 0.03, seed: 91, pines: 0.2 },
+    ground: 'green',
+    mini: '#4a8e38',
+  },
+  {
+    id: 'highlands', name: 'Highlands', blurb: 'Big hills everywhere: high ground sees and shoots further. The middle is a hilltop.',
+    lakes: [{ x: -46, z: 10, r: 8 }, { x: 46, z: -10, r: 8 }],
+    mesas: [{ x: -14, z: -50, r: 5, h: 4 }, { x: 14, z: 50, r: 5, h: 4 }],
+    hills: [{ x: 0, z: 0, r: 10, h: 4 }, { x: -30, z: -30, r: 11, h: 4 }, { x: 30, z: 30, r: 11, h: 4 }, { x: 30, z: -34, r: 10, h: 3 }, { x: -30, z: 34, r: 10, h: 3 }, { x: -72, z: 0, r: 10, h: 3 }, { x: 72, z: 0, r: 10, h: 3 }, { x: 0, z: -62, r: 8, h: 2 }, { x: 0, z: 62, r: 8, h: 2 }],
+    camps: [{ x: -44, z: -12 }, { x: 44, z: 12 }, { x: -20, z: 62 }, { x: 20, z: -62 }],
+    middle: [[-13, -15, 'steel'], [13, 15, 'steel'], [15, -13, 'oil'], [-15, 13, 'oil'], [0, -31, 'steel'], [0, 31, 'steel']],
+    woods: { cut: 0.6, dense: 0.75, sparse: 0.04, seed: 113, pines: 0.5 },
+    ground: 'lush',
+    mini: '#3f8a34',
+  },
 ];
 export const MAP_IDS = MAPS.map((m) => m.id);
 /** The map in play (the server's word: `useMap`). */
@@ -137,6 +166,8 @@ export interface Deposit extends Spot {
   scrap?: 'ruin' | 'henge' | 'rubble';
   /** Left by the fighting (a wreck, a ruin): anyone may strip it, and it doesn't stand in anyone's way. */
   salvage?: boolean;
+  /** A tree's wood (`TREES` index): engineers fell it a load at a time, and when it's all taken the tree is down. */
+  tree?: number;
 }
 
 /** The scrap out on the field: bombed-out houses and burned-out tanks, each worth some steel to whoever strips it. */
@@ -153,7 +184,8 @@ export function hash(a: number, b: number): number {
 /** Which way each deposit's model (and a pumpjack's beam on it) faces. */
 export const hashYaw = (n: number): number => (n * 2.399) % (Math.PI * 2);
 
-export function deposits(): Deposit[] {
+/** The map's deposits: the bases', the middle's, the camps', the scrap; then, unless `trees` is false, each tree's wood. */
+export function deposits(trees = true): Deposit[] {
   const out: Deposit[] = [];
   const add = (x: number, z: number, kind: ResKind, amount: number) => out.push({ id: out.length, x, z, kind, amount });
   BASES.forEach((b, i) => {
@@ -175,6 +207,10 @@ export function deposits(): Deposit[] {
     add(x, z, 'steel', scrap === 'henge' ? 900 : 700);
     out[out.length - 1].scrap = scrap;
   }
+  if (trees) TREES.forEach((t, i) => {
+    add(t.x, t.z, 'wood', TREE_WOOD);
+    out[out.length - 1].tree = i;
+  });
   return out;
 }
 
@@ -297,7 +333,7 @@ const onLane = (x: number, z: number): boolean => {
   return (Math.abs(ax - 68) < 6 && az < 74) || (Math.abs(az - 68) < 6 && ax < 74) || Math.abs(ax - az) < 7 || (ax < 6 && az > 55);
 };
 function plantTrees(): void {
-  const all = deposits();
+  const all = deposits(false);
   const w = MAP.woods;
   TREES.length = 0;
   for (let gx = -HALF + 5; gx < HALF - 4; gx += 4.2) {

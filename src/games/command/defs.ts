@@ -3,10 +3,13 @@
  * (which shows them) read: the two resources, the units and the buildings that train them.
  */
 
-export type ResKind = 'steel' | 'oil';
+/** The three resources: steel (mines and scrap), oil (wells), and wood (felled from the trees). */
+export type ResKind = 'steel' | 'oil' | 'wood';
+export const RES_KINDS: ResKind[] = ['steel', 'oil', 'wood'];
 export interface Cost {
   steel: number;
   oil: number;
+  wood: number;
 }
 
 export type UnitKind = 'engineer' | 'rifle' | 'scout' | 'at' | 'tank' | 'artillery' | 'aa' | 'heli' | 'hero' | 'guard' | 'brute' | 'gunboat' | 'transport' | 'medic';
@@ -47,20 +50,20 @@ export interface UnitDef {
 }
 
 export const UNITS: Record<UnitKind, UnitDef> = {
-  engineer: { name: 'Engineer', hp: 45, speed: 6, damage: 3, rate: 1, range: 1.8, cost: { steel: 50, oil: 0 }, time: 7, pop: 1, from: 'hq', size: 1.6, blurb: 'Gathers steel and oil, and builds.' },
-  rifle: { name: 'Infantry', hp: 75, speed: 6.5, damage: 7, rate: 1.4, range: 9, cost: { steel: 60, oil: 10 }, time: 8, pop: 1, from: 'barracks', size: 2.4, hits: 'both', blurb: 'Cheap riflemen. Good in a crowd, and they can shoot helicopters.' },
-  scout: { name: 'Scout', hp: 60, speed: 11, damage: 3, rate: 1.2, range: 6, cost: { steel: 45, oil: 10 }, time: 7, pop: 1, from: 'barracks', size: 1.7, hits: 'both', sight: 40, blurb: 'Fast and fragile: sees far, spots for the army.' },
-  at: { name: 'AT Team', hp: 70, speed: 5.8, damage: 38, rate: 0.5, range: 12, cost: { steel: 80, oil: 35 }, time: 11, pop: 1, from: 'barracks', size: 2.2, hits: 'both', blurb: 'Rocket launchers: wreck tanks and anything with armour, but slow to reload and weak against infantry.' },
-  tank: { name: 'Tank', hp: 360, speed: 5, damage: 32, rate: 0.6, range: 14, cost: { steel: 170, oil: 90 }, time: 20, pop: 3, from: 'factory', size: 3, blurb: 'Heavy armour and a big gun.' },
-  artillery: { name: 'Artillery', hp: 150, speed: 3.6, damage: 58, rate: 0.28, range: 32, cost: { steel: 210, oil: 120 }, time: 22, pop: 3, from: 'factory', size: 3, splash: 3.6, blurb: 'Long-range shells that blast a whole group. Fragile up close.' },
-  aa: { name: 'Anti-Air', hp: 140, speed: 5.5, damage: 9, rate: 2.6, range: 17, cost: { steel: 110, oil: 40 }, time: 14, pop: 2, from: 'factory', size: 2.6, hits: 'air', blurb: 'A flak gun on tracks. Only shoots helicopters.' },
-  heli: { name: 'Helicopter', hp: 190, speed: 9, damage: 10, rate: 2, range: 12, cost: { steel: 120, oil: 100 }, time: 16, pop: 2, from: 'airfield', size: 2.4, air: true, hits: 'both', blurb: 'Fast, flies over everything, hits air and ground.' },
-  guard: { name: 'Camp Guard', hp: 110, speed: 6, damage: 8, rate: 1.1, range: 9, cost: { steel: 0, oil: 0 }, time: 1, pop: 0, from: 'hq', size: 2.1, hits: 'both', blurb: 'A wild guard.' },
-  brute: { name: 'Camp Brute', hp: 420, speed: 4.6, damage: 24, rate: 0.7, range: 6, cost: { steel: 0, oil: 0 }, time: 1, pop: 0, from: 'hq', size: 2.6, blurb: 'A wild brute. Hits hard up close.' },
-  gunboat: { name: 'Gunboat', hp: 320, speed: 7, damage: 16, rate: 1.3, range: 15, cost: { steel: 130, oil: 60 }, time: 16, pop: 2, from: 'dock', size: 3.4, hits: 'both', naval: true, blurb: 'Rules its lake: a deck gun and a machine gun that reach the shore, and helicopters overhead.' },
-  transport: { name: 'Transport', hp: 260, speed: 8.5, damage: 0, rate: 0, range: 0, cost: { steel: 90, oil: 30 }, time: 12, pop: 1, from: 'dock', size: 3.6, naval: true, holds: 6, blurb: 'Ferries up to six infantry across its lake. Right click it with infantry to board; U lands them on the nearest shore.' },
-  medic: { name: 'Medic', hp: 80, speed: 6.4, damage: 0, rate: 0, range: 0, cost: { steel: 60, oil: 30 }, time: 9, pop: 1, from: 'barracks', size: 2.2, blurb: 'Patches up the soldiers and engineers round them, the most hurt first, and goes to those nearby who need it. Unarmed: keep them behind the line.' },
-  hero: { name: 'Commander', hp: 700, speed: 6, damage: 22, rate: 1.6, range: 11, cost: { steel: 300, oil: 150 }, time: 26, pop: 3, from: 'hq', size: 2.2, hits: 'both', limit: 1, blurb: 'One per army. Its aura speeds the fire of units near it, and Rally (F) heals and inspires them.' },
+  engineer: { name: 'Engineer', hp: 45, speed: 5.2, damage: 3, rate: 1, range: 1.8, cost: { steel: 50, oil: 0, wood: 0 }, time: 7, pop: 1, from: 'hq', size: 1.6, blurb: 'Gathers steel and oil, and builds.' },
+  rifle: { name: 'Infantry', hp: 75, speed: 6.5, damage: 7, rate: 1.4, range: 9, cost: { steel: 60, oil: 10, wood: 0 }, time: 8, pop: 1, from: 'barracks', size: 2.4, hits: 'both', blurb: 'Cheap riflemen. Good in a crowd, and they can shoot helicopters.' },
+  scout: { name: 'Scout', hp: 60, speed: 11, damage: 3, rate: 1.2, range: 6, cost: { steel: 45, oil: 10, wood: 0 }, time: 7, pop: 1, from: 'barracks', size: 1.7, hits: 'both', sight: 40, blurb: 'Fast and fragile: sees far, spots for the army.' },
+  at: { name: 'AT Team', hp: 70, speed: 5.8, damage: 38, rate: 0.5, range: 12, cost: { steel: 80, oil: 35, wood: 0 }, time: 11, pop: 1, from: 'barracks', size: 2.2, hits: 'both', blurb: 'Rocket launchers: wreck tanks and anything with armour, but slow to reload and weak against infantry.' },
+  tank: { name: 'Tank', hp: 360, speed: 5, damage: 32, rate: 0.6, range: 14, cost: { steel: 170, oil: 90, wood: 0 }, time: 20, pop: 3, from: 'factory', size: 3, blurb: 'Heavy armour and a big gun.' },
+  artillery: { name: 'Artillery', hp: 150, speed: 3.6, damage: 58, rate: 0.28, range: 32, cost: { steel: 210, oil: 120, wood: 0 }, time: 22, pop: 3, from: 'factory', size: 3, splash: 3.6, blurb: 'Long-range shells that blast a whole group. Fragile up close.' },
+  aa: { name: 'Anti-Air', hp: 140, speed: 5.5, damage: 9, rate: 2.6, range: 17, cost: { steel: 110, oil: 40, wood: 0 }, time: 14, pop: 2, from: 'factory', size: 2.6, hits: 'air', blurb: 'A flak gun on tracks. Only shoots helicopters.' },
+  heli: { name: 'Helicopter', hp: 190, speed: 9, damage: 10, rate: 2, range: 12, cost: { steel: 120, oil: 100, wood: 0 }, time: 16, pop: 2, from: 'airfield', size: 2.4, air: true, hits: 'both', blurb: 'Fast, flies over everything, hits air and ground.' },
+  guard: { name: 'Camp Guard', hp: 110, speed: 6, damage: 8, rate: 1.1, range: 9, cost: { steel: 0, oil: 0, wood: 0 }, time: 1, pop: 0, from: 'hq', size: 2.1, hits: 'both', blurb: 'A wild guard.' },
+  brute: { name: 'Camp Brute', hp: 420, speed: 4.6, damage: 24, rate: 0.7, range: 6, cost: { steel: 0, oil: 0, wood: 0 }, time: 1, pop: 0, from: 'hq', size: 2.6, blurb: 'A wild brute. Hits hard up close.' },
+  gunboat: { name: 'Gunboat', hp: 320, speed: 7, damage: 16, rate: 1.3, range: 15, cost: { steel: 130, oil: 60, wood: 0 }, time: 16, pop: 2, from: 'dock', size: 3.4, hits: 'both', naval: true, blurb: 'Rules its lake: a deck gun and a machine gun that reach the shore, and helicopters overhead.' },
+  transport: { name: 'Transport', hp: 260, speed: 8.5, damage: 0, rate: 0, range: 0, cost: { steel: 90, oil: 30, wood: 0 }, time: 12, pop: 1, from: 'dock', size: 3.6, naval: true, holds: 6, blurb: 'Ferries up to six infantry across its lake. Right click it with infantry to board; U lands them on the nearest shore.' },
+  medic: { name: 'Medic', hp: 80, speed: 6.4, damage: 0, rate: 0, range: 0, cost: { steel: 60, oil: 30, wood: 0 }, time: 9, pop: 1, from: 'barracks', size: 2.2, blurb: 'Patches up the soldiers and engineers round them, the most hurt first, and goes to those nearby who need it. Unarmed: keep them behind the line.' },
+  hero: { name: 'Commander', hp: 700, speed: 6, damage: 22, rate: 1.6, range: 11, cost: { steel: 300, oil: 150, wood: 0 }, time: 26, pop: 3, from: 'hq', size: 2.2, hits: 'both', limit: 1, blurb: 'One per army. Its aura speeds the fire of units near it, and Rally (F) heals and inspires them.' },
 };
 
 /**
@@ -72,7 +75,7 @@ export const UNITS: Record<UnitKind, UnitDef> = {
  * and airstrikes, hit as hard as ever, and so count for more). Buildings take it in full. `guns`: the
  * same for the towers' and the headquarters' guns, less cut, so a tower still holds off a raid.
  */
-export const PACE = { train: 1.7, build: 1.6, research: 1.7, unitHp: 1.4, buildingHp: 2.3, hqHp: 3.6, fire: 0.34, guns: 0.6 };
+export const PACE = { train: 2.0, build: 2.4, research: 1.7, unitHp: 1.4, buildingHp: 2.3, hqHp: 3.6, fire: 0.34, guns: 0.6 };
 for (const u of Object.values(UNITS)) {
   u.time = Math.round(u.time * PACE.train);
   u.hp = Math.round(u.hp * PACE.unitHp);
@@ -131,19 +134,19 @@ export interface BuildingDef {
 }
 
 export const BUILDINGS: Record<BuildingKind, BuildingDef> = {
-  hq: { name: 'Headquarters', hp: 2600, cost: { steel: 0, oil: 0 }, time: 0, radius: 4.2, pop: 12, trains: ['engineer', 'hero'], research: ['age2', 'age3'], holds: 10, guns: { damage: 20, rate: 1.2, range: 20, hits: 'both' }, blurb: 'Your base. Trains engineers and your commander. Its guns defend it, faster for every engineer sheltering inside (ring the Alarm). Lose it and the rest of your base falls within a minute.' },
-  depot: { name: 'Supply Depot', hp: 450, cost: { steel: 100, oil: 0 }, time: 12, radius: 2.4, pop: 10, trains: [], blurb: 'Room for ten more people. Engineers can bring what they gather here, so one by a far deposit is a forward base; and units out of the fighting heal near it.' },
-  barracks: { name: 'Barracks', hp: 750, cost: { steel: 150, oil: 0 }, time: 20, radius: 3.4, pop: 0, trains: ['rifle', 'scout', 'at', 'medic'], blurb: 'Trains infantry, scouts, anti-tank teams and (from Era II) medics.' },
-  factory: { name: 'Factory', hp: 950, cost: { steel: 250, oil: 60 }, time: 28, radius: 4, pop: 0, trains: ['tank', 'artillery', 'aa'], blurb: 'Builds tanks, artillery and anti-air.' },
-  airfield: { name: 'Airfield', hp: 800, cost: { steel: 220, oil: 140 }, time: 30, radius: 4.4, pop: 0, trains: ['heli'], blurb: 'Builds helicopters. Needs a factory.' },
-  lab: { name: 'Research Lab', hp: 650, cost: { steel: 200, oil: 80 }, time: 24, radius: 3, pop: 0, trains: [], research: ['armor', 'ordnance', 'optics', 'logistics', 'medicine', 'engines'], blurb: 'Researches upgrades for your whole army. Needs a barracks.' },
-  bunker: { name: 'Bunker', hp: 1000, cost: { steel: 140, oil: 0 }, time: 16, radius: 2.4, pop: 0, trains: [], holds: 6, blurb: 'Shelters six infantry: they fire from cover with 3 more reach and can’t be hit until it falls. Right click it with infantry to go in; U lets them out.' },
-  dock: { name: 'Dock', hp: 760, cost: { steel: 160, oil: 40 }, time: 22, radius: 3, pop: 0, trains: ['gunboat', 'transport'], blurb: 'Build it on a lake’s shore. Launches gunboats and transports.' },
-  rampart: { name: 'Wall', hp: 260, cost: { steel: 10, oil: 0 }, time: 3, radius: 1.5, pop: 0, trains: [], wall: true, blurb: 'Drag to lay a line of it. Nothing on the ground gets past: not theirs, and not yours either, so leave a gap or build a gate. Helicopters fly over, and guns shoot over.' },
-  gate: { name: 'Gate', hp: 700, cost: { steel: 50, oil: 0 }, time: 8, radius: 1.5, pop: 0, trains: [], wall: true, blurb: 'A gatehouse three lengths wide, set in a wall: its doors swing open as your side comes near and shut behind them, and stay shut to the enemy. Lock it (select it) to keep everyone out. Put it in a gap, or on your own wall to replace three lengths.' },
-  market: { name: 'Trade Post', hp: 600, cost: { steel: 120, oil: 0 }, time: 18, radius: 3, pop: 0, trains: [], blurb: 'Swaps steel for oil and oil for steel, a hundred at a time. Every sale gets you less for the next, and the price comes back slowly.' },
-  uplink: { name: 'Satellite Uplink', hp: 2400, cost: { steel: 900, oil: 700 }, time: 80, radius: 4.4, pop: 0, trains: [], blurb: 'A second way to win. Once it is finished, every commander on the map sees it, and a clock starts: if it still stands five minutes later, your side wins. Expect everyone to come for it. One each.' },
-  tower: { name: 'Guard Tower', hp: 520, cost: { steel: 130, oil: 30 }, time: 14, radius: 1.9, pop: 0, trains: [], guns: { damage: 13, rate: 1.3, range: 18, hits: 'both' }, blurb: 'Shoots anything that comes near, air and ground.' },
+  hq: { name: 'Headquarters', hp: 2600, cost: { steel: 0, oil: 0, wood: 0 }, time: 0, radius: 4.2, pop: 12, trains: ['engineer', 'hero'], research: ['age2', 'age3'], holds: 10, guns: { damage: 20, rate: 1.2, range: 20, hits: 'both' }, blurb: 'Your base. Trains engineers and your commander. Its guns defend it, faster for every engineer sheltering inside (ring the Alarm). Lose it and the rest of your base falls within a minute.' },
+  depot: { name: 'Supply Depot', hp: 450, cost: { steel: 0, oil: 0, wood: 100 }, time: 12, radius: 2.4, pop: 10, trains: [], blurb: 'Room for ten more people. Engineers can bring what they gather here, so one by a far deposit is a forward base; and units out of the fighting heal near it.' },
+  barracks: { name: 'Barracks', hp: 750, cost: { steel: 50, oil: 0, wood: 150 }, time: 20, radius: 3.4, pop: 0, trains: ['rifle', 'scout', 'at', 'medic'], blurb: 'Trains infantry, scouts, anti-tank teams and (from Era II) medics.' },
+  factory: { name: 'Factory', hp: 950, cost: { steel: 150, oil: 50, wood: 200 }, time: 28, radius: 4, pop: 0, trains: ['tank', 'artillery', 'aa'], blurb: 'Builds tanks, artillery and anti-air.' },
+  airfield: { name: 'Airfield', hp: 800, cost: { steel: 150, oil: 120, wood: 200 }, time: 30, radius: 4.4, pop: 0, trains: ['heli'], blurb: 'Builds helicopters. Needs a factory.' },
+  lab: { name: 'Research Lab', hp: 650, cost: { steel: 100, oil: 60, wood: 150 }, time: 24, radius: 3, pop: 0, trains: [], research: ['armor', 'ordnance', 'optics', 'logistics', 'medicine', 'engines'], blurb: 'Researches upgrades for your whole army. Needs a barracks.' },
+  bunker: { name: 'Bunker', hp: 1000, cost: { steel: 80, oil: 0, wood: 120 }, time: 16, radius: 2.4, pop: 0, trains: [], holds: 6, blurb: 'Shelters six infantry: they fire from cover with 3 more reach and can’t be hit until it falls. Right click it with infantry to go in; U lets them out.' },
+  dock: { name: 'Dock', hp: 760, cost: { steel: 60, oil: 30, wood: 150 }, time: 22, radius: 3, pop: 0, trains: ['gunboat', 'transport'], blurb: 'Build it on a lake’s shore. Launches gunboats and transports.' },
+  rampart: { name: 'Wall', hp: 260, cost: { steel: 0, oil: 0, wood: 8 }, time: 3, radius: 1.5, pop: 0, trains: [], wall: true, blurb: 'Drag to lay a line of it. Nothing on the ground gets past: not theirs, and not yours either, so leave a gap or build a gate. Helicopters fly over, and guns shoot over.' },
+  gate: { name: 'Gate', hp: 700, cost: { steel: 0, oil: 0, wood: 40 }, time: 8, radius: 1.5, pop: 0, trains: [], wall: true, blurb: 'A gatehouse three lengths wide, set in a wall: its doors swing open as your side comes near and shut behind them, and stay shut to the enemy. Lock it (select it) to keep everyone out. Put it in a gap, or on your own wall to replace three lengths.' },
+  market: { name: 'Trade Post', hp: 600, cost: { steel: 0, oil: 0, wood: 150 }, time: 18, radius: 3, pop: 0, trains: [], blurb: 'Swaps steel for oil and oil for steel, a hundred at a time. Every sale gets you less for the next, and the price comes back slowly.' },
+  uplink: { name: 'Satellite Uplink', hp: 2400, cost: { steel: 900, oil: 700, wood: 400 }, time: 80, radius: 4.4, pop: 0, trains: [], blurb: 'A second way to win. Once it is finished, every commander on the map sees it, and a clock starts: if it still stands five minutes later, your side wins. Expect everyone to come for it. One each.' },
+  tower: { name: 'Guard Tower', hp: 520, cost: { steel: 60, oil: 20, wood: 120 }, time: 14, radius: 1.9, pop: 0, trains: [], guns: { damage: 13, rate: 1.3, range: 18, hits: 'both' }, blurb: 'Shoots anything that comes near, air and ground.' },
 };
 
 for (const [k, b] of Object.entries(BUILDINGS)) {
@@ -160,14 +163,14 @@ export interface TechDef {
 }
 /** Upgrades, researched once each at a lab, for the whole army. */
 export const TECHS: Record<TechId, TechDef> = {
-  armor: { name: 'Armor Plating', cost: { steel: 180, oil: 60 }, time: 40, blurb: 'Your units take 20% less damage.' },
-  ordnance: { name: 'Ordnance', cost: { steel: 200, oil: 100 }, time: 45, blurb: 'Your units and towers hit 20% harder.' },
-  optics: { name: 'Optics', cost: { steel: 120, oil: 80 }, time: 35, blurb: 'Your guns reach 20% further, and everything sees a fifth further.' },
-  age2: { name: 'Mechanized Era', cost: { steel: 450, oil: 200 }, time: 75, blurb: 'Era II: factories (tanks, anti-air), the lab and your commander. Opens at 5:00, and needs a barracks.' },
-  age3: { name: 'Modern Era', cost: { steel: 800, oil: 450 }, time: 100, blurb: 'Era III: airfields (helicopters) and artillery. Opens at 12:00, and needs a factory or a lab.' },
-  medicine: { name: 'Field Medicine', cost: { steel: 160, oil: 80 }, time: 35, blurb: 'Your units heal slowly anywhere once they are out of the fighting, not only by a depot.' },
-  engines: { name: 'Turbo Engines', cost: { steel: 180, oil: 140 }, time: 40, blurb: 'Your vehicles, boats and helicopters move 15% faster.' },
-  logistics: { name: 'Logistics', cost: { steel: 150, oil: 30 }, time: 35, blurb: 'Engineers gather, build and repair 30% faster.' },
+  armor: { name: 'Armor Plating', cost: { steel: 180, oil: 60, wood: 0 }, time: 40, blurb: 'Your units take 20% less damage.' },
+  ordnance: { name: 'Ordnance', cost: { steel: 200, oil: 100, wood: 0 }, time: 45, blurb: 'Your units and towers hit 20% harder.' },
+  optics: { name: 'Optics', cost: { steel: 120, oil: 80, wood: 0 }, time: 35, blurb: 'Your guns reach 20% further, and everything sees a fifth further.' },
+  age2: { name: 'Mechanized Era', cost: { steel: 700, oil: 300, wood: 500 }, time: 75, blurb: 'Era II: factories (tanks, anti-air), the lab and your commander. Opens at 5:00, and needs a barracks.' },
+  age3: { name: 'Modern Era', cost: { steel: 1400, oil: 900, wood: 900 }, time: 100, blurb: 'Era III: airfields (helicopters) and artillery. Opens at 12:00, and needs a factory or a lab.' },
+  medicine: { name: 'Field Medicine', cost: { steel: 160, oil: 80, wood: 0 }, time: 35, blurb: 'Your units heal slowly anywhere once they are out of the fighting, not only by a depot.' },
+  engines: { name: 'Turbo Engines', cost: { steel: 180, oil: 140, wood: 0 }, time: 40, blurb: 'Your vehicles, boats and helicopters move 15% faster.' },
+  logistics: { name: 'Logistics', cost: { steel: 150, oil: 30, wood: 0 }, time: 35, blurb: 'Engineers gather, build and repair 30% faster.' },
 };
 for (const t of Object.values(TECHS)) t.time = Math.round(t.time * PACE.research);
 export const TECH_IDS = Object.keys(TECHS) as TechId[];
@@ -324,11 +327,13 @@ export const SPACE: Record<UnitKind, number> = { engineer: 2, medic: 2.8, rifle:
  */
 export const BODY: Record<UnitKind, number> = { engineer: 1.8, medic: 2.2, rifle: 2.6, at: 2.5, guard: 2.4, hero: 2.4, scout: 2.4, tank: 4.6, artillery: 4.8, aa: 4.2, heli: 7, brute: 4.4, gunboat: 6.4, transport: 6 };
 
-export const START = { steel: 300, oil: 80 };
+export const START = { steel: 250, oil: 80, wood: 200 };
 export const MAX_POP = 60;
 /** How much an engineer carries, and how fast it gathers (a second). */
 export const CARRY = 25;
-export const GATHER_RATE = 2.1;
+export const GATHER_RATE = 1.3;
+/** Wood on each tree: felled when it's all been taken. */
+export const TREE_WOOD = 100;
 
 export type Mode = 'ffa' | 'teams' | 'coop' | 'stand';
 export const MODES: { id: Mode; name: string; blurb: string }[] = [

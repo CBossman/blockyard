@@ -1,7 +1,7 @@
 import { defineServer, math, type GameContext, type Player, type Prop, type PropModel } from '@platform';
 import { BotBrain, STYLES, type Style } from './bots';
 import { ABILITIES, DROP, DROP_KINDS, HEAL, MAX_WALLS, MINE, RETREAT, SALVAGE, SPACE, BODY, STAND, WAVE_UNITS, wavePay, waveWorth, type Ability, type DropKind, TRADE, tradeGet, UPLINK, HOLD, MEDIC, ALARM } from './defs';
-import { DIFFICULTIES, BOARDS, COVER_RANGE, FLANK, PACE, fromBehind, HIGH, VET, rankOf, AGE_NEEDS, eraWants, ARMOR, VERSUS, BUILDABLE, BUILDINGS, ageOf, CARRY, DOCTRINES, DOCTRINE_IDS, GATHER_RATE, HERO, MAX_POP, NEEDS, RELIC, SIGHT, START, TECHS, TECH_IDS, UNITS, type BuildingKind, type DoctrineId, type Mode, type ResKind, type TechId, type UnitKind, type DifficultyId } from './defs';
+import { DIFFICULTIES, BOARDS, COVER_RANGE, FLANK, PACE, fromBehind, HIGH, VET, rankOf, AGE_NEEDS, eraWants, ARMOR, VERSUS, BUILDABLE, BUILDINGS, ageOf, CARRY, DOCTRINES, DOCTRINE_IDS, GATHER_RATE, HERO, MAX_POP, NEEDS, RELIC, SIGHT, START, TECHS, TECH_IDS, UNITS, type BuildingKind, type DoctrineId, type Mode, type ResKind, type TechId, type UnitKind, type DifficultyId, type Cost } from './defs';
 import { dressing } from './dressing';
 import { woods } from './woods';
 import { BASES, CAMPS, FLOOR, GROUND_Y, HALF, LAKES, MAP, MAP_IDS, MESAS, TREES, useMap, type MapId, deposits, heightAt, inHill, inLake, inMesa, hashYaw, inside, lakeOf, shore, wallLine, wallSnap, gateCells, gateAxis, SHUT, type Deposit } from './map';
@@ -88,6 +88,8 @@ export interface Unit {
   dodge?: { a: number; until: number };
   /** Where it last got anywhere on its way (and when, and when it was last on its way at all): one that can get no nearer is there. */
   still?: { x: number; z: number; t: number; seen: number };
+  /** The building it got as near to as it could, and is at work on from there. */
+  nearAs?: number;
   /** The unit it's been shooting (it keeps to it while it's in reach), and when it last called its friends in. */
   aim?: number;
   helpAt?: number;
@@ -127,6 +129,7 @@ export interface Slot {
   bot: BotBrain | null;
   steel: number;
   oil: number;
+  wood: number;
   pop: number;
   cap: number;
   alive: boolean;
@@ -141,7 +144,7 @@ export interface Slot {
   /** Its trade post's prices (a share of full price, steel then oil) as of `at`. */
   trade: { steel: number; oil: number; at: number };
   /** The match in numbers (the summary at the end), and its army's worth every few seconds. */
-  stats: { trained: number; killed: number; lost: number; built: number; razed: number; steel: number; oil: number };
+  stats: { trained: number; killed: number; lost: number; built: number; razed: number; steel: number; oil: number; wood: number };
   army: number[];
   /** All it has gathered so far, at each sample (for its income over the last minute). */
   banked: number[];
@@ -174,6 +177,8 @@ export interface World {
   stand: boolean;
   /** Whether an uplink can be built (and win) this match. */
   uplinkOn: boolean;
+  /** Commander must survive: the side's commander must be kept alive (not sent to fight). */
+  vip: boolean;
   /** Hold the Middle, when it's on: where, who holds it now (a team; -1 nobody, -2 fought over), and each team's seconds. */
   hold: { x: number; z: number; r: number; holder: number; need: number; held: Map<number, number> } | null;
   /** Supply drops on their way down or on the ground; `at`: when it lands. */
@@ -185,7 +190,7 @@ export interface World {
   /** A bot commander's word to the table, in the feed. */
   say(seat: number, text: string): void;
   /** A lot sold at a seat's trade post for the other resource (false: no post, or not enough). */
-  trade(seat: number, sell: ResKind): boolean;
+  trade(seat: number, sell: 'steel' | 'oil'): boolean;
 }
 
 /** The wild's seat: the camps' guards. Its team is no one's. */
@@ -227,6 +232,28 @@ let later: { t: number; run: () => void }[] = [];
 /** Patches of the map a side has lit up for a while. */
 let flares: { team: number; x: number; z: number; r: number; until: number }[] = [];
 let healIn = 0;
+/** Commander must survive: whether it's on this match. */
+let vipOn = false;
+/** Commander must survive: each side's commander, at its HQ from the start (and none trained after). */
+function giveCommanders(game: GameContext): void {
+  vipOn = true;
+  for (const s of slots) {
+    if (!s || s.seat === NEUTRAL || (mode === 'stand' && s.seat === STAND.seat)) continue;
+    const b = BASES[s.seat];
+    // (Behind the HQ, away from the middle.)
+    addUnit(game, s.seat, 'hero', b.x - Math.sign(b.x || 1) * 6, b.z - Math.sign(b.z || 1) * 6);
+    s.player?.hud.toast('Keep your commander alive: if it falls, so does your HQ');
+  }
+  dirty = true;
+}
+/** A commander down, when it must survive: its side's HQ goes with it. */
+function commanderDown(game: GameContext, u: Unit, by: number): void {
+  if (!vipOn || u.kind !== 'hero' || u.seat === NEUTRAL) return;
+  const s = slots[u.seat];
+  if (!s) return;
+  game.hud.banner('Commander down', `${s.name}’s commander has fallen`, { duration: 3 });
+  for (const b of [...buildings.values()]) if (b.seat === u.seat && b.kind === 'hq') damageBuilding(game, b.id, b.hp + 1e6, by);
+}
 /** Hold the Middle: whether it's on this match, each team's seconds held, who holds it now (a team; -1 nobody, -2 fought over). */
 let holdOn = false;
 const held = new Map<number, number>();
@@ -304,7 +331,7 @@ let mineIn = 0;
 
 // The match being set up, which stays as it was for a rematch.
 const makeSeat = (seat: number): LobbySeat => ({ seat, kind: seat < 4 ? 'bot' : 'closed', name: '', id: '', team: seat % 4, style: 'random', difficulty: 'normal', ready: false });
-const lobby: Lobby = { seats: [0, 1, 2, 3, 4, 5].map(makeSeat), host: '', preset: 'ffa', resources: 'normal', map: 'heartland', hold: false, fog: true, uplink: true, peace: 0, watchers: [] };
+const lobby: Lobby = { seats: [0, 1, 2, 3, 4, 5].map(makeSeat), host: '', preset: 'ffa', resources: 'normal', map: 'heartland', hold: false, vip: false, fog: true, uplink: true, peace: 0, watchers: [] };
 const BRIEFING = 7;
 const START_RES = { low: 0.5, normal: 1, high: 2.5 };
 let briefingLeft = 0;
@@ -414,15 +441,15 @@ export default defineServer(shared, {
       },
     });
     game.commands.register('raise', {
-      usage: '<kind> [seat] [x] [z] [built share]',
+      usage: '<kind> [seat] [x] [z] [built share] [axis]',
       help: 'Puts a building down for a seat (finished, or that much built)',
       cheat: true,
-      run: ([kind, seat, x, z, share]) => {
+      run: ([kind, seat, x, z, share, axis]) => {
         if (phase !== 'play' || !(kind in BUILDINGS)) return `Kinds: ${Object.keys(BUILDINGS).join(', ')} (during a match)`;
         const s = Number(seat ?? 0);
         if (!slots[s]) return 'No such seat';
         const part = share === undefined ? 1 : Math.max(0, Math.min(1, Number(share)));
-        const b = addBuilding(game, s, kind as BuildingKind, Number(x ?? 0), Number(z ?? 0), part >= 1);
+        const b = addBuilding(game, s, kind as BuildingKind, Number(x ?? 0), Number(z ?? 0), part >= 1, Number(axis ?? 0) ? 1 : 0);
         if (part < 1) {
           b.built = part;
           grow(b);
@@ -481,11 +508,26 @@ export default defineServer(shared, {
         return 'rain ' + rainGoal;
       },
     });
+    game.commands.register('cash', {
+      usage: '<seat> <amount>',
+      help: 'Gives a seat that much of each resource',
+      cheat: true,
+      run: ([seat, amount]) => {
+        const s = slots[Number(seat ?? 0)];
+        if (!s) return 'No such seat';
+        const n = Number(amount ?? 1000);
+        s.steel += n;
+        s.oil += n;
+        s.wood += n;
+        dirty = true;
+        return `+${n} each`;
+      },
+    });
     game.commands.register('rich', {
       help: 'Every commander gets 9999 steel and oil, and every era',
       cheat: true,
       run: () => {
-        for (const s of slots) if (s) { s.steel = 9999; s.oil = 9999; s.techs.add('age2'); s.techs.add('age3'); }
+        for (const s of slots) if (s) { s.steel = 9999; s.oil = 9999; s.wood = 9999; s.techs.add('age2'); s.techs.add('age3'); }
         dirty = true;
         return 'rich';
       },
@@ -545,6 +587,7 @@ function reset(game: GameContext): void {
   fights.clear();
   nextShower = 0;
   wonBy = undefined;
+  vipOn = false;
   holdOn = false;
   held.clear();
   holder = -1;
@@ -594,6 +637,7 @@ function startFromLobby(game: GameContext): void {
   startScale = START_RES[lobby.resources];
   startMatch(game, lobby.preset, 0.65, plan, lobby.map);
   holdOn = lobby.preset !== 'stand' && lobby.hold;
+  if (lobby.preset !== 'stand' && lobby.vip) giveCommanders(game);
   peaceUntil = lobby.peace * 60;
   if (!lobby.fog) for (const x of slots) if (x) x.revealUntil = 1e9;
 }
@@ -659,7 +703,7 @@ function startMatch(game: GameContext, chosen: Mode, skill: number, plan?: SeatP
     const bot = player ? null : new BotBrain(skill, style, adaptive);
     // (A bot goes by its own name, which says how good it is and how it plays.)
     if (bot && !keep) name = bot.callsign(n);
-    slots[n] = { seat: n, name, team, player, bot, steel: Math.round(START.steel * startScale), oil: Math.round(START.oil * startScale), pop: 0, cap: 0, alive: true, lost: 0, doctrine, powerAt: DOCTRINES[doctrine].power.first, revealUntil: 0, techs: new Set(), rallyAt: 30, trade: { steel: 1, oil: 1, at: 0 }, stats: newStats(), army: [], banked: [] };
+    slots[n] = { seat: n, name, team, player, bot, steel: Math.round(START.steel * startScale), oil: Math.round(START.oil * startScale), wood: Math.round(START.wood * startScale), pop: 0, cap: 0, alive: true, lost: 0, doctrine, powerAt: DOCTRINES[doctrine].power.first, revealUntil: 0, techs: new Set(), rallyAt: 30, trade: { steel: 1, oil: 1, at: 0 }, stats: newStats(), army: [], banked: [] };
   };
   if (plan) for (const x of plan) seat(x.seat, x.team, x.player, x.name, x.skill, x.style, x.adaptive, x.keep);
   else if (mode === 'stand') {
@@ -689,6 +733,8 @@ function startMatch(game: GameContext, chosen: Mode, skill: number, plan?: SeatP
     nodeProps.set(-1 - i, p);
   });
   for (const d of nodes) {
+    // (A tree's wood: the tree is in the world already.)
+    if (d.tree !== undefined) continue;
     const p = game.props.spawn(d.scrap ? models.kinds[d.scrap][0] : d.kind === 'steel' ? models.steel : models.oil, { position: { x: d.x, y: FLOOR, z: d.z }, scale: SCALE[d.scrap ?? d.kind] });
     p.quaternion.setFromEuler(euler.set(0, hashYaw(d.id), 0));
     nodeProps.set(d.id, p);
@@ -703,7 +749,7 @@ function startMatch(game: GameContext, chosen: Mode, skill: number, plan?: SeatP
     for (let k = 0; k < 2; k++) addUnit(game, s.seat, 'rifle', b.x + (k ? 9 : -9) * Math.sign(-b.x || 1), b.z + 3 * (k ? 1 : -1));
   }
   // The wild: guards round each camp's relic.
-  slots[NEUTRAL] = { seat: NEUTRAL, name: 'The wild', team: 99, player: null, bot: null, steel: 0, oil: 0, pop: 0, cap: 99, alive: true, lost: 0, doctrine: 'industrial', powerAt: 1e9, revealUntil: 0, techs: new Set(), rallyAt: 1e9, trade: { steel: 1, oil: 1, at: 0 }, stats: newStats(), army: [], banked: [] };
+  slots[NEUTRAL] = { seat: NEUTRAL, name: 'The wild', team: 99, player: null, bot: null, steel: 0, oil: 0, wood: 0, pop: 0, cap: 99, alive: true, lost: 0, doctrine: 'industrial', powerAt: 1e9, revealUntil: 0, techs: new Set(), rallyAt: 1e9, trade: { steel: 1, oil: 1, at: 0 }, stats: newStats(), army: [], banked: [] };
   CAMPS.forEach((c, i) => {
     relics.push({ x: c.x, z: c.z, owner: -1, progress: 0 });
     const guards: [UnitKind, number, number][] = [['brute', 0, 3], ['guard', -4, -2], ['guard', 4, -2], ['guard', 0, -5]];
@@ -781,6 +827,7 @@ function lobbyOrder(game: GameContext, player: Player, d: Record<string, unknown
   } else if (op === 'resources' && (d.resources === 'low' || d.resources === 'normal' || d.resources === 'high')) lobby.resources = d.resources;
   else if (op === 'fog') lobby.fog = !lobby.fog;
   else if (op === 'hold') lobby.hold = !lobby.hold;
+  else if (op === 'vip') lobby.vip = !lobby.vip;
   else if (op === 'map' && (d.map === 'random' || MAP_IDS.includes(d.map as MapId))) lobby.map = d.map as MapId | 'random';
   else if (op === 'uplink') lobby.uplink = !lobby.uplink;
   else if (op === 'peace' && [0, 3, 5, 10].includes(Number(d.peace))) lobby.peace = Number(d.peace);
@@ -793,7 +840,7 @@ function lobbyOrder(game: GameContext, player: Player, d: Record<string, unknown
   dirty = true;
 }
 
-const newStats = () => ({ trained: 0, killed: 0, lost: 0, built: 0, razed: 0, steel: 0, oil: 0 });
+const newStats = () => ({ trained: 0, killed: 0, lost: 0, built: 0, razed: 0, steel: 0, oil: 0, wood: 0 });
 /** Seconds between the samples of each army's worth (the summary's chart). */
 const SAMPLE = 10;
 let sampleIn = 0;
@@ -877,16 +924,25 @@ function scorch(game: GameContext, x: number, z: number, r: number): void {
 function fellNear(game: GameContext, x: number, z: number, r: number): void {
   TREES.forEach((t, n) => {
     if (felled.has(n) || Math.abs(t.x - x) > r + 1 || Math.abs(t.z - z) > r + 1 || dist(t.x, t.z, x, z) > r) return;
-    felled.add(n);
-    const tx = Math.floor(t.x);
-    const tz = Math.floor(t.z);
-    // (From a block up: the trunk's foot stays, a stump, and so does any felled neighbour's.)
-    for (let dx = -2; dx <= 2; dx++) for (let dz = -2; dz <= 2; dz++) for (let y = FLOOR + 1; y <= FLOOR + 7; y++) {
-      if (TREE_BLOCK.test(game.world.blockName(game.world.getBlock(tx + dx, y, tz + dz)))) setScar(game, tx + dx, y, tz + dz, 'air');
-    }
-    felledNow.push(round1(t.x), round1(t.z));
-    gridDirty = true;
+    fellTree(game, n);
   });
+}
+/** One of the map's trees down (by a blast, or its wood all taken): a stump left, and the way through where it stood. */
+function fellTree(game: GameContext, n: number): void {
+  const t = TREES[n];
+  if (!t || felled.has(n)) return;
+  felled.add(n);
+  // (Its wood goes with it.)
+  const wood = nodes.find((d) => d.tree === n);
+  if (wood) wood.amount = 0;
+  const tx = Math.floor(t.x);
+  const tz = Math.floor(t.z);
+  // (From a block up: the trunk's foot stays, a stump, and so does any felled neighbour's.)
+  for (let dx = -2; dx <= 2; dx++) for (let dz = -2; dz <= 2; dz++) for (let y = FLOOR + 1; y <= FLOOR + 7; y++) {
+    if (TREE_BLOCK.test(game.world.blockName(game.world.getBlock(tx + dx, y, tz + dz)))) setScar(game, tx + dx, y, tz + dz, 'air');
+  }
+  felledNow.push(round1(t.x), round1(t.z));
+  gridDirty = true;
 }
 /** Trees felled since the screens were last told (for the splinters and leaves). */
 let felledNow: number[] = [];
@@ -999,6 +1055,7 @@ function simulate(game: GameContext, dt: number): void {
   }
   relicTick(game, dt);
   healTick(dt);
+  pocketTick(dt);
   reportTick(dt);
   weatherTick(dt);
   gateTick(dt);
@@ -1020,7 +1077,7 @@ function simulate(game: GameContext, dt: number): void {
   sampleIn -= dt;
   if (sampleIn <= 0) {
     sampleIn = SAMPLE;
-    for (const sl of slots) if (sl && sl.seat !== NEUTRAL) sl.banked.push(sl.stats.steel + sl.stats.oil);
+    for (const sl of slots) if (sl && sl.seat !== NEUTRAL) sl.banked.push(sl.stats.steel + sl.stats.oil + sl.stats.wood);
     for (const sl of slots) if (sl && sl.seat !== NEUTRAL) sl.army.push([...units.values()].filter((u) => u.seat === sl.seat && u.kind !== 'engineer').reduce((a, u) => a + UNITS[u.kind].cost.steel + UNITS[u.kind].cost.oil, 0));
   }
   // A side that's lost its headquarters comes apart: its buildings fall within half a minute, and it's out.
@@ -1339,13 +1396,97 @@ function medicTick(dt: number): void {
 function gatherOrder(u: Unit): Order | null {
   const s = slots[u.seat];
   if (!s) return null;
-  const want: ResKind = s.oil < s.steel * 0.35 && s.oil < 250 ? 'oil' : 'steel';
+  // (Measured against what each is wanted for: steel most, then wood, oil least.)
+  const need: Record<ResKind, number> = { steel: s.steel / 1, wood: s.wood / 0.8, oil: s.oil / 0.45 };
+  const order = (['steel', 'wood', 'oil'] as ResKind[]).sort((a, b) => need[a] - need[b]);
   const pick = (kind: ResKind) => nodes.filter((n) => n.amount > 0 && n.kind === kind && dist(u.x, u.z, n.x, n.z) < 70).sort((a, b) => dist(u.x, u.z, a.x, a.z) - dist(u.x, u.z, b.x, b.z))[0];
-  const n = pick(want) ?? pick(want === 'oil' ? 'steel' : 'oil');
+  const n = pick(order[0]) ?? pick(order[1]) ?? pick(order[2]);
   return n ? { t: 'gather', node: n.id, phase: u.carry >= CARRY ? 'back' : 'to' } : null;
 }
 
 /** A building's queue: its first order counts down, and when it's done the unit steps out (to the rally point, if there is one). */
+/**
+ * Whether a cell (a team's units' grid) opens onto the field: from it, at least `need` free cells can
+ * be reached. A pocket between a building and a wall is a few cells, shut in.
+ */
+function roomy(cell: number, team: number, need = 80): boolean {
+  if (gridDirty) rebuildGrid();
+  const pass = passOf(team);
+  const free = (n: number) => grid[n] === 0 || grid[n] === pass;
+  if (!free(cell)) return false;
+  const seen = new Set<number>([cell]);
+  const todo = [cell];
+  while (todo.length && seen.size < need) {
+    const c = todo.pop()!;
+    const ci = c % GN;
+    const cj = (c - ci) / GN;
+    for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const i = ci + di;
+      const j = cj + dj;
+      if (i < 0 || j < 0 || i >= GN || j >= GN) continue;
+      const n = j * GN + i;
+      if (seen.has(n) || !free(n)) continue;
+      seen.add(n);
+      todo.push(n);
+    }
+  }
+  return seen.size >= need;
+}
+/** Where a building puts out what it makes: just outside it, as near the way `out` (an angle) as there's open ground that isn't a pocket. */
+function exitSpot(b: Building, out: number): { x: number; z: number } {
+  const r = BUILDINGS[b.kind].radius + 1.6;
+  const team = teamOf(b.seat);
+  for (let k = 0; k < 16; k++) {
+    // (Out, then a little to either side, and so on round.)
+    const a = out + Math.ceil(k / 2) * (k % 2 ? 1 : -1) * (Math.PI / 8);
+    for (const far of [r, r + 2.5]) {
+      const x = b.x + Math.sin(a) * far;
+      const z = b.z + Math.cos(a) * far;
+      if (Math.abs(x) > HALF - 2 || Math.abs(z) > HALF - 2) continue;
+      // (Not through a wall: on the building's own side of any that stands against it.)
+      let walled = false;
+      for (let t = 0.2; t <= 1 && !walled; t += 0.1) if (wallAt.has(gcell(b.z + (z - b.z) * t) * GN + gcell(b.x + (x - b.x) * t))) walled = true;
+      if (!walled && roomy(gcell(z) * GN + gcell(x), team)) return { x, z };
+    }
+  }
+  return { x: b.x + Math.sin(out) * r, z: b.z + Math.cos(out) * r };
+}
+let pocketIn = 0;
+/**
+ * Units shut in a pocket by their own side's building (put out before a wall closed round it, say):
+ * out of it by the building's other door, onto open ground. Every two seconds.
+ */
+function pocketTick(dt: number): void {
+  pocketIn -= dt;
+  if (pocketIn > 0) return;
+  pocketIn = 2;
+  for (const u of units.values()) {
+    if (u.inside || u.lake >= 0 || UNITS[u.kind].air || u.seat === NEUTRAL) continue;
+    const team = teamOf(u.seat);
+    // (Its own cell, or one beside it, opening onto the field: not shut in. Pressed into a building's edge, it's the cells beside that count.)
+    const ci = gcell(u.x);
+    const cj = gcell(u.z);
+    let open = false;
+    for (let di = -1; di <= 1 && !open; di++) for (let dj = -1; dj <= 1 && !open; dj++) {
+      const i = ci + di;
+      const j = cj + dj;
+      if (i >= 0 && j >= 0 && i < GN && j < GN && roomy(j * GN + i, team)) open = true;
+    }
+    if (open) continue;
+    // (Only a pocket by one of its own buildings: not anywhere else it's been walled in.)
+    let by: Building | null = null;
+    for (const b of buildings.values()) if (b.seat === u.seat && !BUILDINGS[b.kind].wall && b.built >= 1 && dist(b.x, b.z, u.x, u.z) < BUILDINGS[b.kind].radius + 6 && (!by || dist(b.x, b.z, u.x, u.z) < dist(by.x, by.z, u.x, u.z))) by = b;
+    if (!by) continue;
+    const at = exitSpot(by, Math.atan2(u.x - by.x, u.z - by.z) + Math.PI);
+    if (!roomy(gcell(at.z) * GN + gcell(at.x), team)) continue;
+    u.x = u.px = at.x;
+    u.z = u.pz = at.z;
+    u.path = null;
+    u.still = undefined;
+    dirty = true;
+  }
+}
+
 function trainTick(game: GameContext, b: Building, dt: number): void {
   if (b.built < 1) return;
   if (b.loop && b.lastKind && !b.queue.length) train(b, b.lastKind);
@@ -1354,10 +1495,10 @@ function trainTick(game: GameContext, b: Building, dt: number): void {
   q.t += dt * (slots[b.seat]!.doctrine === 'industrial' ? 1.12 : 1);
   if (q.t < UNITS[q.kind].time) return;
   b.queue.shift();
-  const def = BUILDINGS[b.kind];
   const base = BASES[b.seat];
-  const out = Math.atan2(base.x - b.x || 0.01, base.z - b.z || 0.01) + Math.PI;
-  const u = UNITS[q.kind].naval ? addUnit(game, b.seat, q.kind, b.x, b.z) : addUnit(game, b.seat, q.kind, b.x + Math.sin(out) * (def.radius + 1.6) + (Math.random() - 0.5), b.z + Math.cos(out) * (def.radius + 1.6) + (Math.random() - 0.5));
+  const out = b.rally ? Math.atan2(b.rally.x - b.x, b.rally.z - b.z) : Math.atan2(base.x - b.x || 0.01, base.z - b.z || 0.01) + Math.PI;
+  const door = exitSpot(b, out);
+  const u = UNITS[q.kind].naval ? addUnit(game, b.seat, q.kind, b.x, b.z) : addUnit(game, b.seat, q.kind, door.x + (Math.random() - 0.5), door.z + (Math.random() - 0.5));
   slots[b.seat]!.stats.trained++;
   // (Its pop was counted when it was queued.)
   slots[b.seat]!.pop -= UNITS[q.kind].pop;
@@ -1420,7 +1561,7 @@ function researchTick(b: Building, dt: number): void {
 
 /** What `sell` fetches at a slot's trade post now (a share of full price): where it was, climbing back since. */
 /** A lot of one sold at the trade post for the other, at the going price (which drops for the next sale, and climbs back). */
-function trade(slot: Slot, sell: ResKind): boolean {
+function trade(slot: Slot, sell: 'steel' | 'oil'): boolean {
   if (slot[sell] < TRADE.lot || ![...buildings.values()].some((b) => b.seat === slot.seat && b.kind === 'market' && b.built >= 1)) return false;
   const price = priceNow(slot, sell);
   slot[sell] -= TRADE.lot;
@@ -1431,7 +1572,7 @@ function trade(slot: Slot, sell: ResKind): boolean {
   return true;
 }
 
-function priceNow(s: Slot, sell: ResKind): number {
+function priceNow(s: Slot, sell: 'steel' | 'oil'): number {
   return Math.min(1, s.trade[sell] + (time - s.trade.at) * TRADE.recover);
 }
 
@@ -1441,8 +1582,7 @@ function research(b: Building, tech: TechId): boolean {
   if (b.built < 1 || b.research || s.techs.has(tech) || eraWants(tech, s.techs, [...buildings.values()].filter((x) => x.seat === b.seat && x.built >= 1).map((x) => x.kind), time) || !BUILDINGS[b.kind].research?.includes(tech) || !canAfford(s, cost)) return false;
   // (One lab per upgrade: not the same one in two labs at once.)
   if ([...buildings.values()].some((x) => x.seat === b.seat && x.research?.id === tech)) return false;
-  s.steel -= cost.steel;
-  s.oil -= cost.oil;
+  pay(s, cost);
   b.research = { id: tech, t: 0 };
   dirty = true;
   return true;
@@ -1576,7 +1716,8 @@ function rebuildGrid(): void {
   };
   // (The same reaches as `landShut` and the screen's wall ghost, so a wall's drawn where it'll go.)
   for (const bl of buildings.values()) if (!BUILDINGS[bl.kind].wall) block(bl.x, bl.z, BUILDINGS[bl.kind].radius + SHUT.building);
-  for (const n of nodes) if (n.amount > 0 && !n.salvage) block(n.x, n.z, SHUT.deposit);
+  // (Not a tree's wood: the tree itself stands in the way, below, till it's felled.)
+  for (const n of nodes) if (n.amount > 0 && !n.salvage && n.tree === undefined) block(n.x, n.z, SHUT.deposit);
   for (const l of LAKES) block(l.x, l.z, l.r + SHUT.lake);
   for (const m of MESAS) block(m.x, m.z, m.r + SHUT.mesa);
   for (const d of dressing()) if (d.block) block(d.x, d.z, d.block);
@@ -2058,9 +2199,13 @@ function unitTick(game: GameContext, u: Unit, dt: number): void {
     // (A length of wall is built or mended from a little further off: from inside a corner, it's cornerwise.)
     const r = BUILDINGS[b.kind].radius + (BUILDINGS[b.kind].wall ? 3.5 : 1.6);
     // (Or as near as it can get: a site pressed in among others may not let it any nearer.)
-    if (dist(u.x, u.z, b.x, b.z) > r && !step(u, b.x, b.z, dt, r - 0.4)) {
+    // (Once there, as near as it gets, it stays at it: not off to try again each moment.)
+    const there = dist(u.x, u.z, b.x, b.z) <= r || (u.nearAs === b.id && dist(u.x, u.z, b.x, b.z) <= r + 8);
+    if (!there && !step(u, b.x, b.z, dt, r - 0.4)) {
+      u.nearAs = undefined;
       // On its way.
     } else {
+      u.nearAs = b.id;
       u.yaw = Math.atan2(b.x - u.x, b.z - u.z);
       u.busy = time;
       b.hp = Math.min(BUILDINGS[b.kind].hp, b.hp + BUILDINGS[b.kind].hp * 0.045 * dt * (has(u.seat, 'logistics') ? 1.3 : 1));
@@ -2078,8 +2223,14 @@ function unitTick(game: GameContext, u: Unit, dt: number): void {
     }
     // (A length of wall is built or mended from a little further off: from inside a corner, it's cornerwise.)
     const r = BUILDINGS[b.kind].radius + (BUILDINGS[b.kind].wall ? 3.5 : 1.6);
-    if (dist(u.x, u.z, b.x, b.z) > r) step(u, b.x, b.z, dt, r - 0.4);
-    else {
+    // (Or as near as it can get: a length of wall pressed in among the rest, or against a building, may not let it any nearer.)
+    // (Once there, as near as it gets, it stays at it: not off to try again each moment.)
+    const there = dist(u.x, u.z, b.x, b.z) <= r || (u.nearAs === b.id && dist(u.x, u.z, b.x, b.z) <= r + 8);
+    if (!there && !step(u, b.x, b.z, dt, r - 0.4)) {
+      u.nearAs = undefined;
+      // On its way.
+    } else {
+      u.nearAs = b.id;
       u.yaw = Math.atan2(b.x - u.x, b.z - u.z);
       u.busy = time;
       const before = b.built;
@@ -2177,6 +2328,8 @@ function gatherTick(game: GameContext, u: Unit, o: Extract<Order, { t: 'gather' 
     node.amount -= take;
     if (node.amount <= 0) {
       nodeProps.get(node.id)?.remove();
+      // (A tree with all its wood taken: felled, a stump left.)
+      if (node.tree !== undefined) fellTree(game, node.tree);
       gridDirty = true;
     }
     if (u.carry >= CARRY - 0.001) {
@@ -2188,20 +2341,15 @@ function gatherTick(game: GameContext, u: Unit, o: Extract<Order, { t: 'gather' 
     const r = BUILDINGS[post.kind].radius + 1.4;
     if (dist(u.x, u.z, post.x, post.z) <= r) {
       const s = slots[u.seat]!;
-      if (u.carryRes === 'steel') {
-        s.steel += u.carry;
-        s.stats.steel += u.carry;
-      } else {
-        s.oil += u.carry;
-        s.stats.oil += u.carry;
-      }
+      const res = u.carryRes ?? 'steel';
+      s[res] += u.carry;
+      s.stats[res] += u.carry;
       u.carry = 0;
       u.carryRes = null;
       o.phase = 'to';
       dirty = true;
     } else step(u, post.x, post.z, dt, r - 0.4);
   } else u.order = { t: 'idle' };
-  void game;
 }
 
 /** An attack on a target (a unit or a building): damage, a shot to see, and what the kill does. */
@@ -2426,6 +2574,7 @@ function damageUnit(game: GameContext, id: number, amount: number, by: number, s
   slots[u.seat]!.pop -= UNITS[u.kind].pop;
   slots[u.seat]!.stats.lost++;
   if (teamOf(by) !== teamOf(u.seat) && slots[by]) slots[by]!.stats.killed++;
+  commanderDown(game, u, by);
   // (For the battle report: a loss to the one side, a kill to the other.)
   if (teamOf(by) !== teamOf(u.seat)) {
     tally(u.seat, 0, 1);
@@ -2438,6 +2587,7 @@ function damageUnit(game: GameContext, id: number, amount: number, by: number, s
     units.delete(v.id);
     slots[v.seat]!.pop -= UNITS[v.kind].pop;
     slots[v.seat]!.stats.lost++;
+    commanderDown(game, v, by);
   }
   // A wild unit's kill pays the one who took it, and clearing a camp pays more.
   if (u.seat === NEUTRAL && by !== NEUTRAL && slots[by]) {
@@ -2811,7 +2961,7 @@ function checkEnd(game: GameContext, force = false, team?: number): void {
   for (const sl of slots) if (sl && sl.seat !== NEUTRAL) sl.army.push([...units.values()].filter((u) => u.seat === sl.seat && u.kind !== 'engineer').reduce((a, u) => a + UNITS[u.kind].cost.steel + UNITS[u.kind].cost.oil, 0));
   summary = {
     every: SAMPLE,
-    seats: slots.filter((x): x is Slot => !!x && x.seat !== NEUTRAL).map((x) => ({ seat: x.seat, name: x.name, ...x.stats, steel: Math.round(x.stats.steel), oil: Math.round(x.stats.oil), army: x.army })),
+    seats: slots.filter((x): x is Slot => !!x && x.seat !== NEUTRAL).map((x) => ({ seat: x.seat, name: x.name, ...x.stats, wood: Math.round(x.stats.wood), steel: Math.round(x.stats.steel), oil: Math.round(x.stats.oil), army: x.army })),
   };
   dirty = true;
 }
@@ -2827,24 +2977,30 @@ function owned(slot: Slot, ids: unknown): Unit[] {
     .filter((u): u is Unit => !!u && u.seat === slot.seat);
 }
 
-function canAfford(s: Slot, c: { steel: number; oil: number }): boolean {
-  return s.steel >= c.steel && s.oil >= c.oil;
+function canAfford(s: Slot, c: Cost): boolean {
+  return s.steel >= c.steel && s.oil >= c.oil && s.wood >= c.wood;
+}
+/** Paid (or, `back`, paid back). */
+function pay(s: Slot, c: Cost, back = 1): void {
+  s.steel -= c.steel * back;
+  s.oil -= c.oil * back;
+  s.wood -= c.wood * back;
 }
 
 /** What a unit costs this seat: the intelligence doctrine's infantry are a quarter cheaper. */
-export function costFor(doctrine: DoctrineId, kind: UnitKind): { steel: number; oil: number } {
+export function costFor(doctrine: DoctrineId, kind: UnitKind): Cost {
   const c = UNITS[kind].cost;
   const k = doctrine === 'intel' && kind === 'rifle' ? 0.75 : 1;
-  return { steel: Math.round(c.steel * k), oil: Math.round(c.oil * k) };
+  return { steel: Math.round(c.steel * k), oil: Math.round(c.oil * k), wood: Math.round(c.wood * k) };
 }
 
 function train(b: Building, kind: UnitKind): boolean {
   const s = slots[b.seat]!;
+  if (vipOn && kind === 'hero') return false;
   const def = UNITS[kind];
   const cost = costFor(s.doctrine, kind);
   if (b.built < 1 || !BUILDINGS[b.kind].trains.includes(kind) || ageOf(s.techs) < (AGE_NEEDS[kind] ?? 1) || b.queue.length >= 5 || (def.limit !== undefined && countOf(b.seat, kind) >= def.limit) || !canAfford(s, cost) || s.pop + def.pop > s.cap) return false;
-  s.steel -= cost.steel;
-  s.oil -= cost.oil;
+  pay(s, cost);
   s.pop += def.pop;
   b.queue.push({ kind, t: 0 });
   b.lastKind = kind;
@@ -2892,14 +3048,13 @@ function place(game: GameContext, seat: number, kind: BuildingKind, x: number, z
       } else if (b.gate && !wall ? gateCells(b.x, b.z, b.gate.axis).some((q) => dist(q.x, q.z, x, z) < def.radius + 1.5) : d < def.radius + BUILDINGS[b.kind].radius + (wall || other ? 0 : 1)) return false;
     }
   }
-  for (const n of nodes) if (n.amount > 0 && cells.some((c) => dist(c.x, c.z, n.x, n.z) < (wall ? 1.5 : def.radius + 3))) return false;
+  for (const n of nodes) if (n.amount > 0 && n.tree === undefined && cells.some((c) => dist(c.x, c.z, n.x, n.z) < (wall ? 1.5 : def.radius + 3))) return false;
   if (!wall) {
     if (kind === 'dock' ? !canDock(x, z) : inLake(x, z, def.radius + 1)) return false;
     if (inMesa(x, z, def.radius + 1) || inHill(x, z, def.radius)) return false;
     if (dressing().some((d) => d.block && dist(x, z, d.x, d.z) < def.radius + d.block + 0.5)) return false;
   }
-  s.steel -= def.cost.steel;
-  s.oil -= def.cost.oil;
+  pay(s, def.cost);
   for (const o of over) {
     unprop(o);
     buildings.delete(o.id);
@@ -2986,6 +3141,7 @@ function world(game: GameContext): World {
     train,
     stand: mode === 'stand',
     uplinkOn,
+    vip: vipOn,
     hold: holdOn ? { x: HOLD.x, z: HOLD.z, r: HOLD.r, holder, need: HOLD.need, held } : null,
     drops,
     minesOf: (seat) => mines.filter((m) => m.seat === seat).length,
@@ -3050,6 +3206,7 @@ function order(game: GameContext, player: Player, name: string, data: unknown): 
       startMatch(game, d.mode, DIFFICULTIES.find((x) => x.id === d.difficulty)?.skill ?? 0.65, undefined, map);
       if (d.fog === false) for (const x of slots) if (x) x.revealUntil = 1e9;
       holdOn = d.mode !== 'stand' && d.hold === true;
+      if (d.mode !== 'stand' && d.vip === true) giveCommanders(game);
     }
     return;
   }
@@ -3132,10 +3289,11 @@ function order(game: GameContext, player: Player, name: string, data: unknown): 
     if (v && teamOf(v.seat) === slot.team && ARMOR[v.kind] === 'vehicle' && !UNITS[v.kind].naval) for (const u of us) if (u.kind === 'engineer') give(u, { t: 'repair', id: v.id, unit: true }, queue);
   } else if (name === 'repair') {
     const b = buildings.get(Number(d.id));
-    if (b && teamOf(b.seat) === slot.team) for (const u of us) if (u.kind === 'engineer') give(u, { t: 'repair', id: b.id }, queue);
+    // (One still going up, theirs or a friend's: they build it. A site isn't something to mend.)
+    if (b && teamOf(b.seat) === slot.team) for (const u of us) if (u.kind === 'engineer') give(u, b.built < 1 ? { t: 'build', id: b.id } : { t: 'repair', id: b.id }, queue);
   } else if (name === 'trade') {
     const b = buildings.get(Number(d.id));
-    const sell: ResKind = d.sell === 'oil' ? 'oil' : 'steel';
+    const sell: 'steel' | 'oil' = d.sell === 'oil' ? 'oil' : 'steel';
     if (!b || b.seat !== slot.seat || b.kind !== 'market' || b.built < 1) return;
     if (slot[sell] < TRADE.lot) return player.hud.toast(`Not enough ${sell}`);
     trade(slot, sell);
@@ -3153,7 +3311,8 @@ function order(game: GameContext, player: Player, name: string, data: unknown): 
     const c = boat ? units.get(id) : buildings.get(id);
     const room = c ? (boat ? UNITS[(c as Unit).kind].holds : BUILDINGS[(c as Building).kind].holds) ?? 0 : 0;
     if (!c || c.seat !== slot.seat || !room) return;
-    const going = us.filter((u) => BOARDS.includes(u.kind)).slice(0, Math.max(0, room - cargo(id, boat).length));
+    // (A commander that must survive can't hide in a building.)
+    const going = us.filter((u) => BOARDS.includes(u.kind) && !(vipOn && !boat && u.kind === 'hero')).slice(0, Math.max(0, room - cargo(id, boat).length));
     for (const u of going) give(u, { t: 'enter', id, boat }, queue);
     if (!going.length) player.hud.toast('No room (or nothing that can go in)');
     // An idle transport comes to the shore nearest them.
@@ -3197,8 +3356,7 @@ function order(game: GameContext, player: Player, name: string, data: unknown): 
     if (q) {
       const def = UNITS[q.kind];
       const cost = costFor(slot.doctrine, q.kind);
-      slot.steel += cost.steel;
-      slot.oil += cost.oil;
+      pay(slot, cost, -1);
       slot.pop -= def.pop;
     }
   } else return;
@@ -3241,10 +3399,10 @@ function tell(game: GameContext, dt: number): void {
     stateIn = 0.5;
     const seats: Seat[] = slots
       .filter((s): s is Slot => !!s && s.seat !== NEUTRAL)
-      .map((s) => ({ seat: s.seat, name: s.name, team: s.team, color: s.seat % TEAM_COLORS.length, human: !!s.player, steel: Math.floor(s.steel), oil: Math.floor(s.oil), pop: s.pop, cap: s.cap, alive: s.alive, doctrine: s.doctrine, units: [...units.values()].filter((u) => u.seat === s.seat).length, buildings: [...buildings.values()].filter((b) => b.seat === s.seat).length, powerIn: Math.max(0, Math.ceil(s.powerAt - time)), rallyIn: Math.max(0, Math.ceil(s.rallyAt - time)), hero: [...units.values()].some((u) => u.seat === s.seat && u.kind === 'hero'), techs: [...s.techs], trade: [tradeGet('steel', priceNow(s, 'steel')), tradeGet('oil', priceNow(s, 'oil'))], style: s.bot?.style ?? '', worth: [...units.values()].filter((u) => u.seat === s.seat && u.kind !== 'engineer').reduce((a, u) => a + UNITS[u.kind].cost.steel + UNITS[u.kind].cost.oil, 0), income: Math.round(s.stats.steel + s.stats.oil - (s.banked[s.banked.length - 6] ?? 0)) }));
+      .map((s) => ({ seat: s.seat, name: s.name, team: s.team, color: s.seat % TEAM_COLORS.length, human: !!s.player, steel: Math.floor(s.steel), oil: Math.floor(s.oil), wood: Math.floor(s.wood), pop: s.pop, cap: s.cap, alive: s.alive, doctrine: s.doctrine, units: [...units.values()].filter((u) => u.seat === s.seat).length, buildings: [...buildings.values()].filter((b) => b.seat === s.seat).length, powerIn: Math.max(0, Math.ceil(s.powerAt - time)), rallyIn: Math.max(0, Math.ceil(s.rallyAt - time)), hero: [...units.values()].some((u) => u.seat === s.seat && u.kind === 'hero'), techs: [...s.techs], trade: [tradeGet('steel', priceNow(s, 'steel')), tradeGet('oil', priceNow(s, 'oil'))], style: s.bot?.style ?? '', worth: [...units.values()].filter((u) => u.seat === s.seat && u.kind !== 'engineer').reduce((a, u) => a + UNITS[u.kind].cost.steel + UNITS[u.kind].cost.oil, 0), income: Math.round(s.stats.steel + s.stats.oil + s.stats.wood - (s.banked[s.banked.length - 6] ?? 0)) }));
     const mine: Record<string, number> = {};
     for (const s of slots) if (s?.player) mine[s.player.id] = s.seat;
-    const state: State = { ...(rain > 0.02 ? { rain: Math.round(rain * 20) / 20 } : {}), phase, map: MAP.id, mode, seats, mine, peaceUntil, watchers: phase === 'lobby' ? lobby.watchers.map((w) => w.name) : game.players.filter((p) => !slotOf(p)).map((p) => p.name), deposits: nodes.map((n) => Math.floor(n.amount)), salvage: nodes.filter((n) => n.salvage && n.amount > 0).map((n) => ({ id: n.id, x: n.x, z: n.z, scrap: n.scrap!, kind: 'steel' as const })), relics: relics.map((r) => ({ owner: r.owner, pct: Math.round((r.progress / RELIC.hold) * 100) })), drops: drops.map((x) => ({ id: x.id, x: x.x, z: x.z, landIn: Math.max(0, x.at - time) })), ...(mode === 'stand' && phase !== 'lobby' ? { stand: { wave, total: STAND.total, nextIn: wave < STAND.total ? Math.ceil(waveIn) : 0, left: [...units.values()].filter((u) => u.seat === STAND.seat).length } } : {}), time: Math.floor(time), winners, wonBy, uplinkOn, ...(holdOn ? { hold: { holder, need: HOLD.need, teams: [...held].map(([t, n]) => [t, Math.floor(n)] as [number, number]) } } : {}), uplinks: [...buildings.values()].filter((b) => b.kind === 'uplink').map((b) => ({ seat: b.seat, x: round1(b.x), z: round1(b.z), left: b.doneAt === undefined ? -1 : Math.max(0, Math.ceil(UPLINK.hold - (time - b.doneAt))) })), ...(phase === 'lobby' ? { lobby } : {}), ...(phase === 'briefing' ? { briefing: Math.ceil(briefingLeft) } : {}), ...(summary ? { summary } : {}) };
+    const state: State = { ...(rain > 0.02 ? { rain: Math.round(rain * 20) / 20 } : {}), phase, map: MAP.id, mode, seats, mine, peaceUntil, watchers: phase === 'lobby' ? lobby.watchers.map((w) => w.name) : game.players.filter((p) => !slotOf(p)).map((p) => p.name), deposits: nodes.map((n) => Math.floor(n.amount)), salvage: nodes.filter((n) => n.salvage && n.amount > 0).map((n) => ({ id: n.id, x: n.x, z: n.z, scrap: n.scrap!, kind: 'steel' as const })), relics: relics.map((r) => ({ owner: r.owner, pct: Math.round((r.progress / RELIC.hold) * 100) })), drops: drops.map((x) => ({ id: x.id, x: x.x, z: x.z, landIn: Math.max(0, x.at - time) })), ...(mode === 'stand' && phase !== 'lobby' ? { stand: { wave, total: STAND.total, nextIn: wave < STAND.total ? Math.ceil(waveIn) : 0, left: [...units.values()].filter((u) => u.seat === STAND.seat).length } } : {}), time: Math.floor(time), winners, wonBy, uplinkOn, ...(vipOn ? { vip: true } : {}), ...(holdOn ? { hold: { holder, need: HOLD.need, teams: [...held].map(([t, n]) => [t, Math.floor(n)] as [number, number]) } } : {}), uplinks: [...buildings.values()].filter((b) => b.kind === 'uplink').map((b) => ({ seat: b.seat, x: round1(b.x), z: round1(b.z), left: b.doneAt === undefined ? -1 : Math.max(0, Math.ceil(UPLINK.hold - (time - b.doneAt))) })), ...(phase === 'lobby' ? { lobby } : {}), ...(phase === 'briefing' ? { briefing: Math.ceil(briefingLeft) } : {}), ...(summary ? { summary } : {}) };
     game.clients.send('all', 'state', state);
   }
   if (phase === 'lobby') return;
@@ -3266,9 +3424,9 @@ function tell(game: GameContext, dt: number): void {
       for (const d of drops) eyes.push({ x: d.x, z: d.z, r: 10 });
       const seen = (x: number, z: number) => all || eyes.some((e) => dist(e.x, e.z, x, z) < e.r);
       const u: number[] = [];
-      for (const v of units.values()) if (!v.inside && (teamOf(v.seat) === mineTeam || seen(v.x, v.z))) u.push(v.id, UNIT_ORDER.indexOf(v.kind), v.seat, round1(v.x), round1(v.z), Math.round((v.hp / v.max) * 100), Math.round(v.yaw * 10), (time - v.busy < 0.3 ? 1 : 0) + (v.carry > 0 ? (v.carryRes === 'oil' ? 4 : 2) : 0) + (v.order.t === 'idle' ? 8 : 0) + rankOf(v.xp) * 16 + (heightAt(v.x, v.z) >= 1 ? 64 : 0) + v.stance * 128 + (UNITS[v.kind].holds ? cargo(v.id, true).length * 512 : 0));
+      for (const v of units.values()) if (!v.inside && (teamOf(v.seat) === mineTeam || seen(v.x, v.z))) u.push(v.id, UNIT_ORDER.indexOf(v.kind), v.seat, round1(v.x), round1(v.z), Math.round((v.hp / v.max) * 100), Math.round(v.yaw * 10), (time - v.busy < 0.3 ? 1 : 0) + (v.carry > 0 ? (v.carryRes === 'oil' ? 4 : v.carryRes === 'wood' ? 6 : 2) : 0) + (v.order.t === 'idle' ? 8 : 0) + rankOf(v.xp) * 16 + (heightAt(v.x, v.z) >= 1 ? 64 : 0) + v.stance * 128 + (UNITS[v.kind].holds ? cargo(v.id, true).length * 512 : v.kind === 'engineer' && v.seat === sl.seat ? Math.round((v.carry / CARRY) * 15) * 512 : 0));
       const b: number[] = [];
-      for (const v of buildings.values()) if (teamOf(v.seat) === mineTeam || v.kind === 'uplink' || seen(v.x, v.z)) b.push(v.id, BUILDING_ORDER.indexOf(v.kind), v.seat, round1(v.x), round1(v.z), Math.round((v.hp / BUILDINGS[v.kind].hp) * 100), Math.round(v.built * 100), v.research ? 1000 + Math.round((v.research.t / TECHS[v.research.id].time) * 100) + TECH_IDS.indexOf(v.research.id) * 1000 : v.queue.length ? Math.round((v.queue[0].t / UNITS[v.queue[0].kind].time) * 100) : -1, BUILDINGS[v.kind].holds ? cargo(v.id, false).length : v.gate ? v.gate.axis + (v.gate.locked ? 2 : 0) + (v.gate.open > 0.5 ? 4 : 0) : 0);
+      for (const v of buildings.values()) if (teamOf(v.seat) === mineTeam || v.kind === 'uplink' || seen(v.x, v.z)) b.push(v.id, BUILDING_ORDER.indexOf(v.kind), v.seat, round1(v.x), round1(v.z), Math.round((v.hp / BUILDINGS[v.kind].hp) * 100), Math.floor(v.built * 100), v.research ? 1000 + Math.round((v.research.t / TECHS[v.research.id].time) * 100) + TECH_IDS.indexOf(v.research.id) * 1000 : v.queue.length ? Math.round((v.queue[0].t / UNITS[v.queue[0].kind].time) * 100) : -1, BUILDINGS[v.kind].holds ? cargo(v.id, false).length : v.gate ? v.gate.axis + (v.gate.locked ? 2 : 0) + (v.gate.open > 0.5 ? 4 : 0) : 0);
       game.clients.send(sl.player, 'u', u);
       game.clients.send(sl.player, 'b', b);
       // What each of this side's buildings has in hand, and where its units are bound.
@@ -3303,9 +3461,9 @@ function tell(game: GameContext, dt: number): void {
     if (slotOf(p)) continue;
     // Those watching see everything.
     const u: number[] = [];
-    for (const v of units.values()) if (!v.inside) u.push(v.id, UNIT_ORDER.indexOf(v.kind), v.seat, round1(v.x), round1(v.z), Math.round((v.hp / v.max) * 100), Math.round(v.yaw * 10), (time - v.busy < 0.3 ? 1 : 0) + (v.carry > 0 ? (v.carryRes === 'oil' ? 4 : 2) : 0) + rankOf(v.xp) * 16);
+    for (const v of units.values()) if (!v.inside) u.push(v.id, UNIT_ORDER.indexOf(v.kind), v.seat, round1(v.x), round1(v.z), Math.round((v.hp / v.max) * 100), Math.round(v.yaw * 10), (time - v.busy < 0.3 ? 1 : 0) + (v.carry > 0 ? (v.carryRes === 'oil' ? 4 : v.carryRes === 'wood' ? 6 : 2) : 0) + rankOf(v.xp) * 16);
     const b: number[] = [];
-    for (const v of buildings.values()) b.push(v.id, BUILDING_ORDER.indexOf(v.kind), v.seat, round1(v.x), round1(v.z), Math.round((v.hp / BUILDINGS[v.kind].hp) * 100), Math.round(v.built * 100), v.queue.length ? 1 : -1, v.gate ? v.gate.axis + (v.gate.locked ? 2 : 0) : 0);
+    for (const v of buildings.values()) b.push(v.id, BUILDING_ORDER.indexOf(v.kind), v.seat, round1(v.x), round1(v.z), Math.round((v.hp / BUILDINGS[v.kind].hp) * 100), Math.floor(v.built * 100), v.queue.length ? 1 : -1, v.gate ? v.gate.axis + (v.gate.locked ? 2 : 0) : 0);
     game.clients.send(p, 'u', u);
     game.clients.send(p, 'b', b);
     game.clients.send(p, 'eyes', { all: true, eyes: [] });

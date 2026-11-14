@@ -65,7 +65,7 @@ export function woods(): Blueprint {
       if (d <= 15 && Math.abs(x) < HALF && Math.abs(z) < HALF) b.set(x, GROUND_Y, z, d > 13.8 ? 'cm_worn' : d > 12.2 ? 'cm_road' : hash(x + 8, z) < 0.14 ? 'cm_pad2' : 'cm_pad');
     }
   }
-  for (const n of deposits()) for (let x = Math.floor(n.x - 7); x <= n.x + 7; x++) for (let z = Math.floor(n.z - 7); z <= n.z + 7; z++) {
+  for (const n of deposits(false)) for (let x = Math.floor(n.x - 7); x <= n.x + 7; x++) for (let z = Math.floor(n.z - 7); z <= n.z + 7; z++) {
     // (Ragged at the edge, fading out through dirt and scuffed grass, not a stamp.)
     const d = Math.hypot(x + 0.5 - n.x, z + 0.5 - n.z) + (hash(x, z + 41) - 0.5) * 2.2;
     if (d <= 2.3) b.set(x, GROUND_Y, z, 'cm_soil');
@@ -89,7 +89,7 @@ export function woods(): Blueprint {
       if (d >= s.r) continue;
       // Lower towards the rim, a step at a time.
       const h = Math.max(1, Math.round(s.h * Math.min(1, (s.r - d) / 2.4)));
-      for (let y = 0; y < h; y++) b.set(x, GROUND_Y + y, z, y === h - 1 ? (snow ? 'cm_snow' : look === 'dry' ? 'cm_rock' : 'cm_ground') : hash(x + y, z - y) < 0.34 ? 'cm_cliff2' : 'cm_cliff');
+      for (let y = 0; y < h; y++) b.set(x, GROUND_Y + y, z, y === h - 1 ? (snow ? 'cm_snow' : look === 'dry' || s.rock ? 'cm_rock' : 'cm_ground') : hash(x + y, z - y) < 0.34 ? 'cm_cliff2' : 'cm_cliff');
     }
   }
   // Hills: terraces of earth a block high under lusher grass, a boulder or two on top.
@@ -161,7 +161,7 @@ export function woods(): Blueprint {
   }
   // Bushes and boulders in small groups, and fence posts round the fields: the little things that make
   // open ground read as a place.
-  const taken = deposits();
+  const taken = deposits(false);
   for (let i = 0; i < 260; i++) {
     const x = Math.floor((hash(i, 11) - 0.5) * 2 * (HALF - 5));
     const z = Math.floor((hash(i, 12) - 0.5) * 2 * (HALF - 5));

@@ -1,14 +1,14 @@
 import type { Client } from '@platform/client';
-import { ABILITIES, ALARM, ARMOR, HOLD, SPACE, RETREAT, SIGHT, AGE_NAMES, AGE_NEEDS, BOARDS, BUILDABLE, BUILDINGS, BUILD_KEYS, DOCTRINES, HIGH, MODES, NEEDS, STANCES, TEAM_COLORS, TECHS, TECH_IDS, VET, ageOf, eraWants, versusText, UNITS, type BuildingKind, type DoctrineId, type UnitKind } from '../defs';
+import { ABILITIES, ALARM, ARMOR, CARRY, HOLD, SPACE, RETREAT, SIGHT, AGE_NAMES, AGE_NEEDS, BOARDS, BUILDABLE, BUILDINGS, BUILD_KEYS, DOCTRINES, HIGH, MODES, NEEDS, STANCES, TEAM_COLORS, TECHS, TECH_IDS, VET, ageOf, eraWants, versusText, UNITS, type BuildingKind, type Cost, type DoctrineId, type UnitKind } from '../defs';
 import { BASES, CAMPS, FLOOR, HALF, HILLS, LAKES, MAP, MESAS, SHUT, TREES, WALL_CELL, deposits, inHill, inLake, inMesa, lakeOf, landShut, wallLine, wallSnap, gateCells, gateAxis } from '../map';
 import { dressing } from '../dressing';
-import { UNIT_ORDER, cargoBits, rankBits, stanceBits, type State } from '../protocol';
+import { UNIT_ORDER, cargoBits, loadOf, rankBits, stanceBits, type State } from '../protocol';
 import { cam, drag, lookAt, setDrift, toGround, toScreen, view, zoom } from './camera';
 import { iconHtml, iconPath, withIcons } from './icons';
 import { drawFog, mountFog } from './fog';
 import { say, voices } from './sounds';
 import { activity, drawnAt, frameGhost } from './units';
-import { FRONT_CSS, drawFront, setupFront, showSetup } from './front';
+import { FRONT_CSS, drawFront, setupFront, showMenu, showSetup } from './front';
 import { PANEL_CSS, drawPanels, openSay, setupPanels, toggleTech } from './panels';
 import { variantOf } from '../models';
 
@@ -254,6 +254,9 @@ html.cm-c-own body *:not(.ui):not(.ui *) { cursor: pointer !important; }
 .cm-sum svg.chart { position: static; width: 100%; height: 190px; background: #0b1118; border: 1px solid #2c3e52; border-radius: 4px; }
 .cm-sum .btns { display: flex; justify-content: center; gap: 12px; margin-top: 16px; }
 .cm-sum button { font-family: inherit; font-size: 17px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; padding: 9px 22px; border-radius: 4px; cursor: pointer; border: 2px solid #3a526b; background: #172231; color: #e8eef5; }
+.cm-overbar { position: absolute; top: 50px; left: 50%; transform: translateX(-50%); display: none; gap: 8px; align-items: center; padding: 6px 10px; background: rgba(11,17,24,0.92); border: 2px solid #3a526b; border-radius: 4px; pointer-events: auto; z-index: 24; font-weight: 700; color: #e8eef5; }
+.cm-overbar button { font: inherit; font-size: 14px; padding: 5px 12px; border-radius: 3px; cursor: pointer; border: 1px solid #3a526b; background: #172231; color: #e8eef5; }
+.cm-overbar button.go { border-color: var(--hi); background: #3a2a12; color: #ffe0a8; }
 .cm-sum button.go { border-color: var(--hi); background: #3a2a12; color: #ffe0a8; }
 `;
 
@@ -264,8 +267,8 @@ export function setupUi(c: Client): void {
   root.className = 'cm';
   root.innerHTML = `
     <svg></svg><div class="cm-box"></div>
-    <div class="cm-top ui"><div class="cm-res steel"></div><div class="cm-res oil"></div><div class="cm-res pop"></div><div class="cm-mid"></div><button class="cm-tech-btn" title="The tech tree (K)">Tech</button><button class="cm-tech-btn cm-menu-btn" title="Menu (F10)">Menu</button><button class="cm-voice" title="Unit voices on / off"></button><div class="cm-players"></div></div>
-    <div class="cm-sum"><div class="ui"></div></div>
+    <div class="cm-top ui"><div class="cm-res steel"></div><div class="cm-res oil"></div><div class="cm-res wood"></div><div class="cm-res pop"></div><div class="cm-mid"></div><button class="cm-tech-btn" title="The tech tree (K)">Tech</button><button class="cm-tech-btn cm-menu-btn" title="Menu (F10)">Menu</button><button class="cm-voice" title="Unit voices on / off"></button><div class="cm-players"></div></div>
+    <div class="cm-sum"><div class="ui"></div></div><div class="cm-overbar ui"><span>Match over</span><button data-sum="open">Summary</button><button class="go" data-sum="rematch">Rematch</button><button data-sum="menu">Main menu</button></div>
     <div class="cm-hint"></div><div class="cm-tip"></div><div class="cm-hover"></div><button class="cm-idle ui" title="Select idle engineers (.)"></button>
     <div class="cm-bar ui"><div class="cm-mini"><canvas width="${MINI}" height="${MINI}"></canvas><div class="cm-mm">${['All', 'Army', 'Eco', 'Land'].map((n, k) => `<button data-mm="${k}">${n}</button>`).join('')}</div></div><div class="cm-info"></div><div class="cm-grid"></div></div>
     <div class="cm-ask ui"><div class="box"><h2>Battle menu</h2><p>The fight goes on while this is open.</p><button class="go" data-ask="back">Back to the battle</button><button data-ask="quit">Surrender</button></div></div><div class="cm-lobby"></div><div class="cm-brief"></div><div class="cm-dock ui"></div><div class="cm-groups ui"></div><div class="cm-chat"></div><div class="cm-say ui"><input maxlength="160"></div><div class="cm-tech"></div><div class="cm-peace"></div><div class="cm-alt">Ranges · sight · health · territory. Alt + click to ping.</div>`;
@@ -308,16 +311,22 @@ export function setupUi(c: Client): void {
     voices.toggle();
     draw();
   });
-  el('.cm-sum').addEventListener('click', (e) => {
+  const onSum = (e: Event) => {
     const b = (e.target as HTMLElement).closest<HTMLElement>('[data-sum]');
     if (b?.dataset.sum === 'rematch') client.send('rematch', {});
     else if (b?.dataset.sum === 'again') {
       showSetup();
       client.send('again', {});
-    }
-    else if (b?.dataset.sum === 'close') el('.cm-sum').dataset.closed = '1';
+    } else if (b?.dataset.sum === 'menu') {
+      showMenu();
+      client.send('again', {});
+    } else if (b?.dataset.sum === 'close') el('.cm-sum').dataset.closed = '1';
+    else if (b?.dataset.sum === 'open') delete el('.cm-sum').dataset.closed;
     draw();
-  });
+  };
+  el('.cm-sum').addEventListener('click', onSum);
+  // (Looking at the field after a match: the way back to the summary, a rematch, or the menu.)
+  el('.cm-overbar').addEventListener('click', onSum);
   el('.cm-info').addEventListener('click', (e) => {
     const card = (e.target as HTMLElement).closest<HTMLElement>('[data-kind]');
     if (card) select(ui.units.filter((u) => ui.sel.has(u.id) && u.kind === card.dataset.kind).map((u) => u.id), null);
@@ -349,20 +358,22 @@ interface Cmd {
   run: () => void;
 }
 
-const res = (id: string, n: number) => (n ? `<span class="tc">${client.hud.icon({ item: id }).outerHTML}${n}</span>` : '');
-const tipCost = (c: { steel: number; oil: number }, seconds?: number) => `<div class="tcost">${res('ic_steel', c.steel)}${res('ic_oil', c.oil)}${seconds ? `<span class="tc">⏱ ${seconds}s</span>` : ''}</div>`;
-const unitTip = (k: UnitKind, cost: { steel: number; oil: number }, locked: string) => {
+/** A resource's icon: steel and oil their models, wood a log. */
+const resIcon = (id: string) => (id === 'ic_wood' ? client.hud.icon({ block: 'cm_trunk' }) : client.hud.icon({ item: id })).outerHTML;
+const res = (id: string, n: number) => (n ? `<span class="tc">${resIcon(id)}${n}</span>` : '');
+const tipCost = (c: Cost, seconds?: number) => `<div class="tcost">${res('ic_steel', c.steel)}${res('ic_oil', c.oil)}${res('ic_wood', c.wood)}${seconds ? `<span class="tc">⏱ ${seconds}s</span>` : ''}</div>`;
+const unitTip = (k: UnitKind, cost: Cost, locked: string) => {
   const d = UNITS[k];
   const hits = d.hits === 'air' ? 'air only' : d.hits === 'both' ? 'ground and air' : 'ground';
   return `<b>${d.name}</b>${tipCost(cost, d.time)}<p>${d.blurb}</p><div class="tstats"><span>♥ ${d.hp}</span><span>⚔ ${d.damage}${d.splash ? ' splash' : ''}</span><span>⌖ ${d.range}</span><span>» ${d.speed}</span><span>☻ ${d.pop}</span></div><div class="tsub"><b style="display:inline;font-size:13px;color:#9fe08a;text-transform:none">${versusText(k)}</b><br>Hits ${hits}.${locked ? ` <em>Needs ${locked}.</em>` : ''}</div>`;
 };
-const costText = (c: { steel: number; oil: number }) => [c.steel ? `${c.steel}` : '', c.oil ? `${c.oil}●` : ''].filter(Boolean).join(' ');
+const costText = (c: Cost) => [c.steel ? `${c.steel}` : '', c.oil ? `${c.oil}●` : '', c.wood ? `${c.wood}♣` : ''].filter(Boolean).join(' ');
 
 function commands(): Cmd[] {
   const s = ui.state;
   const me = meSeat();
   if (!s || !me || s.phase !== 'play') return [];
-  const can = (c: { steel: number; oil: number }) => me.steel >= c.steel && me.oil >= c.oil;
+  const can = (c: Cost) => me.steel >= c.steel && me.oil >= c.oil && me.wood >= c.wood;
   const has = (k: BuildingKind) => ui.buildings.some((x) => x.seat === me.seat && x.kind === k && x.built >= 100);
   const age = ageOf(me.techs);
   const out: Cmd[] = [];
@@ -372,7 +383,7 @@ function commands(): Cmd[] {
     const def = BUILDINGS[b.kind];
     def.trains.forEach((t, i) => {
       const k = me.doctrine === 'intel' && t === 'rifle' ? 0.75 : 1;
-      const cost = { steel: Math.round(UNITS[t].cost.steel * k), oil: Math.round(UNITS[t].cost.oil * k) };
+      const cost = { steel: Math.round(UNITS[t].cost.steel * k), oil: Math.round(UNITS[t].cost.oil * k), wood: Math.round(UNITS[t].cost.wood * k) };
       const locked = age < (AGE_NEEDS[t] ?? 1);
       const heroHave = UNITS[t].limit !== undefined && (me.hero || ui.units.some((x) => x.seat === me.seat && x.kind === t));
       out.push({ key: 'ZXC'[i], code: `Key${'ZXC'[i]}`, name: UNITS[t].name, icon: pic(t), cost: heroHave ? 'have one' : locked ? AGE_NAMES[AGE_NEEDS[t] ?? 1] : costText(cost), tip: unitTip(t, cost, locked ? AGE_NAMES[AGE_NEEDS[t] ?? 1] : ''), ok: !heroHave && !locked && can(cost) && me.pop + UNITS[t].pop <= me.cap, run: () => client.send('train', { id: b.id, kind: t }) });
@@ -877,18 +888,32 @@ const pct = (v: number) => Math.max(0, Math.min(100, v));
 const AUTO_USE: Partial<Record<UnitKind, string>> = { tank: 'when it’s badly hurt and under fire', aa: 'when aircraft come in reach', at: 'when armour comes near (not on the march)' };
 const hpColor = (p: number) => (p > 55 ? '#4cd04a' : p > 25 ? '#ffc83a' : '#f04438');
 
+/** An engineer's job and how far along it is (0 to 1): its load as it gathers, or the site it's putting up. */
+function task(u: U): { p: number; color: string; text: string } | null {
+  const load = loadOf(u.flags);
+  const res = (u.flags & 6) === 6 ? 'wood' : u.flags & 4 ? 'oil' : u.flags & 2 ? 'steel' : '';
+  if (u.flags & 1) {
+    const site = ui.buildings.find((b) => b.built < 100 && Math.hypot(b.x - u.x, b.z - u.z) < BUILDINGS[b.kind].radius + 5);
+    if (site) return { p: site.built / 100, color: '#7dd3ff', text: `${site.built}% built` };
+  }
+  if (res) return { p: load, color: res === 'wood' ? '#e0a050' : res === 'oil' ? '#ffd23a' : '#7fc8ff', text: `${Math.round(load * CARRY)} of ${CARRY} ${res}${load >= 0.99 ? ', taking it home' : ''}` };
+  return null;
+}
 /** What a unit is at, in a word or two, with a glyph and a colour (for the mark over it and the card on hover). */
 function doing(u: U): { text: string; glyph: string; color: string } {
   const a = activity(u.id);
-  if (u.flags & 2) return { text: 'Carrying steel home', glyph: '▣', color: '#cfd8e6' };
-  if (u.flags & 4) return { text: 'Carrying oil home', glyph: '●', color: '#cfd8e6' };
   if (u.flags & 1) {
     if (u.kind !== 'engineer') return { text: u.kind === 'medic' ? 'Healing' : 'At work', glyph: '⚒', color: '#ffd27a' };
     const site = ui.buildings.find((b) => b.built < 100 && Math.hypot(b.x - u.x, b.z - u.z) < BUILDINGS[b.kind].radius + 3);
     if (site) return { text: `Building a ${BUILDINGS[site.kind].name}`, glyph: '⚒', color: '#ffd27a' };
     const d = DEPOSITS.filter((n) => (ui.state?.deposits[n.id] ?? 1) > 0).sort((p, q) => Math.hypot(p.x - u.x, p.z - u.z) - Math.hypot(q.x - u.x, q.z - u.z))[0];
+    if (d?.kind === 'wood') return { text: 'Chopping wood', glyph: '🪓', color: '#ffd27a' };
     return d?.kind === 'oil' ? { text: 'Pumping oil', glyph: '⛏', color: '#ffd27a' } : { text: d?.scrap ? 'Stripping scrap for steel' : 'Mining steel', glyph: '⛏', color: '#ffd27a' };
   }
+  // (Not at work, with a load: on its way home with it.)
+  if ((u.flags & 6) === 6) return { text: 'Carrying wood home', glyph: '♣', color: '#cfd8e6' };
+  if (u.flags & 2) return { text: 'Carrying steel home', glyph: '▣', color: '#cfd8e6' };
+  if (u.flags & 4) return { text: 'Carrying oil home', glyph: '●', color: '#cfd8e6' };
   if (a.fighting) return { text: 'Fighting', glyph: '⚔', color: '#ff7a5a' };
   if (a.moving) return { text: 'On the move', glyph: '', color: '#9fd0ff' };
   if (u.flags & 8 && u.kind === 'engineer') return { text: 'Idle: waiting for orders', glyph: 'zz', color: '#ffe08a' };
@@ -938,6 +963,7 @@ function hoverCard(sx: number, sy: number): string {
   const dep = DEPOSITS.find((n) => (ui.state?.deposits[n.id] ?? 1) > 0 && Math.hypot(n.x - g.x, n.z - g.z) < 3.2);
   if (dep) {
     const left = ui.state?.deposits[dep.id] ?? dep.amount;
+    if (dep.kind === 'wood') return `<h4>Tree</h4><div class="doing" style="color:#cfd8e6">${left} wood left</div><p>Select engineers and right click it to chop wood. When its wood is all taken, the tree comes down.</p>`;
     const name = dep.salvage ? (dep.scrap === 'henge' ? 'Wreck (salvage)' : 'Rubble (salvage)') : dep.scrap === 'henge' ? 'Wrecked tank (scrap)' : dep.scrap === 'ruin' ? 'Bombed house (scrap)' : dep.kind === 'oil' ? 'Oil well' : 'Steel deposit';
     return `<h4>${name}</h4><div class="doing" style="color:#cfd8e6">${left} ${dep.kind} left</div><p>Select engineers and right click it to gather ${dep.kind}.</p>`;
   }
@@ -996,6 +1022,7 @@ export function draw(): void {
   const icon = (id: string) => client.hud.icon({ item: id }).outerHTML;
   el('.steel').innerHTML = `${icon('ic_steel')}${me?.steel ?? 0}`;
   el('.oil').innerHTML = `${icon('ic_oil')}${me?.oil ?? 0}`;
+  el('.wood').innerHTML = `${resIcon('ic_wood')}${me?.wood ?? 0}`;
   const idle = mine().filter((u) => u.kind === 'engineer' && u.flags & 8).length;
   const idleEl = el('.cm-idle');
   idleEl.style.display = s.phase === 'play' && idle ? 'flex' : 'none';
@@ -1017,7 +1044,7 @@ export function draw(): void {
     ? ui.placing === 'dock'
       ? 'Place the Dock on a lake’s shore (green when it fits). Right click cancels.'
       : ui.placing === 'rampart'
-        ? 'Wall: press and drag to lay a line of it (10 steel a length), or click for one. Trees, rocks and buildings in its way are left standing as part of it. Right click cancels.'
+        ? 'Wall: press and drag to lay a line of it (8 wood a length), or click for one. Trees, rocks and buildings in its way are left standing as part of it. Right click cancels.'
         : ui.placing === 'gate'
           ? 'Gate: a gatehouse three lengths wide. Click a gap in a wall, or your own wall (it takes the place of three lengths); it lines up with the wall. Right click cancels.'
       : `Place the ${BUILDINGS[ui.placing].name}: click the ground (not on a hill). Right click cancels.`
@@ -1050,7 +1077,9 @@ export function draw(): void {
     if (us.length === 1) {
       const one = us[0];
       const d = UNITS[one.kind];
-      const job = one.flags & 2 ? 'Carrying steel home' : one.flags & 4 ? 'Carrying oil home' : one.flags & 1 ? 'At work' : one.flags & 8 ? 'Idle' : 'Under orders';
+      // (An engineer's job in words, with how far along it is.)
+      const jobT = one.kind === 'engineer' ? task(one) : null;
+      const job = one.kind === 'engineer' && (one.flags & 7) ? `${doing(one).text}${jobT ? `: ${jobT.text}` : ''}` : one.flags & 1 ? 'At work' : one.flags & 8 ? 'Idle' : 'Under orders';
       const rank = rankBits(one.flags);
       const hpMax = Math.round(d.hp * (1 + rank * VET.hp));
       const extra = [
@@ -1094,11 +1123,14 @@ export function draw(): void {
 function drawSummary(s: State): void {
   const box = el('.cm-sum');
   const sum = s.summary;
+  const bar = el('.cm-overbar');
   if (s.phase !== 'over' || !sum) {
     box.style.display = 'none';
+    bar.style.display = 'none';
     delete box.dataset.closed;
     return;
   }
+  bar.style.display = box.dataset.closed ? 'flex' : 'none';
   if (box.dataset.closed) return void (box.style.display = 'none');
   box.style.display = 'grid';
   if (box.dataset.shown === String(s.time)) return;
@@ -1111,7 +1143,7 @@ function drawSummary(s: State): void {
   const rows = sum.seats
     .map((x) => {
       const seat = s.seats.find((y) => y.seat === x.seat);
-      return `<tr class="${s.winners.includes(x.seat) ? 'won' : ''}"><td><i style="background:${color(x.seat)}"></i>${esc(x.name)}${seat && !seat.human && seat.style ? ` <small style="color:var(--dim)">${seat.style}</small>` : ''}</td><td>${x.trained}</td><td>${x.killed}</td><td>${x.lost}</td><td>${x.built}</td><td>${x.razed}</td><td>${x.steel}</td><td>${x.oil}</td></tr>`;
+      return `<tr class="${s.winners.includes(x.seat) ? 'won' : ''}"><td><i style="background:${color(x.seat)}"></i>${esc(x.name)}${seat && !seat.human && seat.style ? ` <small style="color:var(--dim)">${seat.style}</small>` : ''}</td><td>${x.trained}</td><td>${x.killed}</td><td>${x.lost}</td><td>${x.built}</td><td>${x.razed}</td><td>${x.steel}</td><td>${x.oil}</td><td>${x.wood ?? 0}</td></tr>`;
     })
     .join('');
   // The chart: each army's worth (steel and oil in its fighting units) over the match.
@@ -1125,9 +1157,9 @@ function drawSummary(s: State): void {
   const minutes = Array.from({ length: Math.floor(((n - 1) * sum.every) / 60) + 1 }, (_, m) => m).filter((m) => m % Math.max(1, Math.ceil(((n - 1) * sum.every) / 60 / 8)) === 0).map((m) => `<text x="${X((m * 60) / sum.every)}" y="${H - 6}" fill="#8497ad" font-size="11" text-anchor="middle">${m}m</text>`).join('');
   const lines = sum.seats.map((x) => `<polyline fill="none" stroke="${color(x.seat)}" stroke-width="${x.seat === me ? 3.5 : 2}" stroke-linejoin="round" points="${x.army.map((v, i) => `${X(i)},${Y(v)}`).join(' ')}"/>`).join('');
   box.querySelector('.ui')!.innerHTML = `<h1>${title}</h1><div class="when">${names.length ? `${names.join(' and ')} won` : 'No one is left'}${how ? ` (${how.toLowerCase()})` : ''} after ${Math.floor(s.time / 60)}:${String(s.time % 60).padStart(2, '0')} on ${MAP.name}</div>
-    <table><tr><th>Commander</th><th>Trained</th><th>Killed</th><th>Lost</th><th>Built</th><th>Razed</th><th>Steel</th><th>Oil</th></tr>${rows}</table>
+    <table><tr><th>Commander</th><th>Trained</th><th>Killed</th><th>Lost</th><th>Built</th><th>Razed</th><th>Steel</th><th>Oil</th><th>Wood</th></tr>${rows}</table>
     <h2>Army strength</h2><svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${grid}${minutes}${lines}</svg>
-    <div class="btns"><button class="go" data-sum="rematch">Rematch</button><button data-sum="again">Back to setup</button><button data-sum="close">Look at the field</button></div>`;
+    <div class="btns"><button class="go" data-sum="rematch">Rematch</button><button data-sum="again">Back to setup</button><button data-sum="menu">Main menu</button><button data-sum="close">Look at the field</button></div>`;
 }
 
 /** Whether a building may go here, as the server will judge it (near enough: not the other buildings). */
@@ -1231,6 +1263,19 @@ export function frameUi(c: Client): void {
     const r = UNITS[u.kind].size * 0.5;
     // (The team shows in each unit's flag; under it only a soft shadow to sit it on the ground.)
     add('ellipse', { cx: p.x, cy: p.y + 1, rx: 6 + r * 7, ry: 2.5 + r * 2.6, fill: '#000', 'fill-opacity': 0.18 });
+  }
+  // Our engineers at work: a bar for how far along the job is (its load filling, or the building going up).
+  const meNow = mySeat();
+  for (const u of ui.units) {
+    if (u.kind !== 'engineer' || u.seat !== meNow) continue;
+    const t = task(u);
+    if (!t) continue;
+    const at = drawnAt.get(u.id) ?? u;
+    const top = toScreen(at.x, groundOf(u, at) + 4.6, at.z);
+    if (!top) continue;
+    const y = top.y - (ui.sel.has(u.id) || u.hp < 100 ? 15 : 6);
+    add('rect', { x: top.x - 18, y: y - 2, width: 36, height: 8, fill: '#0a0f15', stroke: '#000', 'stroke-width': 1 });
+    add('rect', { x: top.x - 17, y: y - 1, width: 34 * Math.max(0, Math.min(1, t.p)), height: 6, fill: t.color });
   }
   for (const u of ui.units) {
     const sel = ui.sel.has(u.id);
@@ -1608,7 +1653,8 @@ function drawMini(): void {
   }
   if (ui.miniMode !== 1) for (const n of DEPOSITS) {
     const left = ui.state?.deposits[n.id] ?? 1;
-    if (left <= 0) continue;
+    // (The trees are drawn as woods already.)
+    if (left <= 0 || n.kind === 'wood') continue;
     g.fillStyle = n.kind === 'steel' ? '#b8c4d8' : '#111';
     // (Economy: sized by what's left.)
     const size = ui.miniMode === 2 ? 2 + Math.min(6, left / 400) : 4;

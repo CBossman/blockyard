@@ -159,7 +159,7 @@ function advice(): { text: string; sub: string; run: Do } | null {
   const idle = eng.filter((u) => u.flags & 8).length;
   const foes = ui.units.filter((u) => ui.state?.seats.find((s) => s.seat === u.seat)?.team !== me.team && u.seat < 6);
   if (idle) return { text: `${idle} engineer${idle > 1 ? 's' : ''} idle`, sub: 'Select them and right click a deposit.', run: () => select(eng.filter((u) => u.flags & 8).map((u) => u.id), null) };
-  if (eng.length < 7 && hq && !hq.queue) return { text: 'Train more engineers', sub: 'More engineers, more steel. Open your HQ.', run: pickHq };
+  if (eng.length < 7 && hq && !hq.queue) return { text: 'Train more engineers', sub: 'More engineers, more of everything. Open your HQ.', run: pickHq };
   if (me.pop + 2 >= me.cap && !blds.some((b) => b.kind === 'depot' && b.built < 100)) return { text: 'Build a Supply Depot', sub: 'You are nearly out of room for people.', run: pickEng };
   if (!started('barracks')) return { text: 'Build a Barracks', sub: 'Select an engineer, then press X.', run: pickEng };
   if (done('barracks') && fighters.length < 5 && !blds.some((b) => b.kind === 'barracks' && b.queue >= 0)) return { text: 'Train infantry', sub: 'You need an army. Open your Barracks.', run: () => select([], blds.find((b) => b.kind === 'barracks')!.id) };
@@ -267,7 +267,7 @@ function renderTech(): void {
       const need = NEEDS[k];
       const got = has(k);
       const blocked = need && !has(need);
-      return node(icon(pic(k)), BUILDINGS[k].name, got ? 'Built' : !open ? `Needs ${AGE_NAMES[era]}` : blocked ? `Needs a ${BUILDINGS[need].name}` : `${BUILDINGS[k].cost.steel} steel${BUILDINGS[k].cost.oil ? `, ${BUILDINGS[k].cost.oil} oil` : ''}`, got ? 'have' : open && !blocked ? 'now' : 'locked');
+      return node(icon(pic(k)), BUILDINGS[k].name, got ? 'Built' : !open ? `Needs ${AGE_NAMES[era]}` : blocked ? `Needs a ${BUILDINGS[need].name}` : (['steel', 'oil', 'wood'] as const).filter((r) => BUILDINGS[k].cost[r]).map((r) => `${BUILDINGS[k].cost[r]} ${r}`).join(', '), got ? 'have' : open && !blocked ? 'now' : 'locked');
     });
     const units = UN.filter((k) => eraOf(k) === era).map((k) => {
       const from = UNITS[k].from;

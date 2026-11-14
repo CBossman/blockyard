@@ -25,11 +25,11 @@ export const FRONT_CSS = `
 .cm-quick { width: min(400px, 100%); box-sizing: border-box; margin: 4px 0 6px; padding: 8px 10px; display: grid; grid-template-columns: 86px 1fr; gap: 5px 8px; align-items: center; background: rgba(11,17,24,0.8); border: 1px solid #2c3f53; border-radius: 4px; }
 .cm-quick h3 { margin: 0; font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: var(--dim); }
 .cm-quick .row { display: flex; flex-wrap: wrap; gap: 4px; }
-.cm-lobby.title .cm-menu .cm-quick button { width: auto; margin: 0; padding: 4px 9px; font-size: 13px; font-weight: 600; letter-spacing: 0; text-transform: none; border-width: 1px; border-left-width: 1px; background: #0e151d; transform: none; }
+.cm-lobby.title .cm-menu .cm-quick button { width: auto; margin: 0; padding: 3px 7px; font-size: 12px; font-weight: 600; letter-spacing: 0; text-transform: none; border-width: 1px; border-left-width: 1px; background: #0e151d; transform: none; }
 .cm-lobby.title .cm-menu .cm-quick button.on { background: #3a2a12; border-color: var(--hi); color: #ffe0a8; }
 @media (max-height: 820px) { .cm-lobby.title .cm-menu h1 { font-size: 54px; } .cm-lobby.title .cm-menu .tag { margin: 8px 0 12px; } .cm-lobby.title .cm-menu > button { margin: 6px 0; padding: 8px 16px; } }
 .cm-quick p { grid-column: 2; margin: 0 0 2px; font-size: 12px; line-height: 1.25; color: #b5c3d1; display: flex; gap: 8px; align-items: center; }
-.cm-quick p img { width: 64px; height: 64px; flex: none; border: 1px solid #3a526b; border-radius: 3px; image-rendering: pixelated; }
+.cm-quick p img { width: 52px; height: 52px; flex: none; border: 1px solid #3a526b; border-radius: 3px; image-rendering: pixelated; }
 .cm-menu { text-align: center; padding: 26px 0 30px; }
 .cm-menu h1 { margin: 0; font-size: 62px; letter-spacing: 6px; text-transform: uppercase; color: #fff; }
 .cm-menu .tag { color: var(--dim); font-size: 18px; margin: 4px 0 30px; }
@@ -77,7 +77,7 @@ export const FRONT_CSS = `
 
 let client: Client;
 /** The quick start's choices (kept for next time on this screen). */
-const quick: { map: MapId | 'random'; fog: boolean; hold: boolean } = { map: 'heartland', fog: true, hold: false };
+const quick: { map: MapId | 'random'; fog: boolean; hold: boolean; vip: boolean } = { map: 'heartland', fog: true, hold: false, vip: false };
 try {
   Object.assign(quick, JSON.parse(localStorage.getItem('cm-quick') ?? '{}'));
 } catch {
@@ -112,7 +112,7 @@ function previewOf(id: MapId): string {
   g.fillStyle = snow ? '#2f4f3f' : '#2c6a2c';
   for (const t of TREES) g.fillRect(X(t.x) - 0.7, X(t.z) - 0.7, 1.4, 1.4);
   for (const l of LAKES) dot(l.x, l.z, l.r, '#3a8ad0');
-  for (const d of deposits()) if (!d.scrap) dot(d.x, d.z, 1.6, d.kind === 'oil' ? '#1d1d22' : '#c9ced6');
+  for (const d of deposits(false)) if (!d.scrap) dot(d.x, d.z, 1.6, d.kind === 'oil' ? '#1d1d22' : '#c9ced6');
   for (const cp of CAMPS) dot(cp.x, cp.z, 3, '#ffd23a');
   BASES.slice(0, 4).forEach((b, i) => dot(b.x, b.z, 7, TEAM_COLORS[i]));
   useMap(back);
@@ -125,10 +125,14 @@ function drawQuick(): void {
   el('.cm-quick').innerHTML = `<h3>Battlefield</h3><div class="row">${MAP_CHOICES.map((x) => `<button data-q="map" data-v="${x.id}" class="${x.id === quick.map ? 'on' : ''}">${x.name}</button>`).join('')}</div>
     <p>${m.id === 'random' ? '' : `<img src="${previewOf(m.id)}" alt="">`}<span>${m.blurb}</span></p>
     <h3>Fog of war</h3><div class="row"><button data-q="fog" data-v="1" class="${quick.fog ? 'on' : ''}">On</button><button data-q="fog" data-v="0" class="${quick.fog ? '' : 'on'}">Off</button></div>
-    <h3>To win</h3><div class="row"><button data-q="hold" data-v="0" class="${quick.hold ? '' : 'on'}">Conquest</button><button data-q="hold" data-v="1" class="${quick.hold ? 'on' : ''}" title="Destroy every enemy HQ, or hold the ring in the middle of the field four minutes in all">Or hold the middle</button></div>`;
+    <h3>Rules</h3><div class="row"><button data-q="hold" data-v="${quick.hold ? 0 : 1}" class="${quick.hold ? 'on' : ''}" title="Destroy every enemy HQ, or hold the ring in the middle of the field four minutes in all">Hold middle</button><button data-q="vip" data-v="${quick.vip ? 0 : 1}" class="${quick.vip ? 'on' : ''}" title="Commander must survive: every side starts with its commander. If it falls, so does that side's HQ">Keep commander</button></div>`;
 }
 /** Which screen of the front a player is on (the server only knows about the table). */
 let screen: 'menu' | 'setup' = 'menu';
+/** Back to the main menu (after a match). */
+export const showMenu = () => {
+  screen = 'menu';
+};
 export const showSetup = () => {
   screen = 'setup';
 };
@@ -136,7 +140,7 @@ export const showSetup = () => {
 export function setupFront(c: Client): void {
   client = c;
   el('.cm-lobby').innerHTML = '<div class="ui cm-front"><div class="cm-menu"></div><div class="cm-setup" style="display:none"><div class="cm-table"></div><div class="cm-lchat"><div class="log"></div><input maxlength="160" placeholder="Say something to the table (Enter)"></div></div></div>';
-  el('.cm-menu').innerHTML = `<h1>Block<em>Command</em></h1><div class="tag">Build a base, gather steel and oil, and march armour on your rivals.</div>
+  el('.cm-menu').innerHTML = `<h1>Block<em>Command</em></h1><div class="tag">Build a base, gather steel, oil and wood, and march armour on your rivals.</div>
     <button class="go" data-f="quick">Quick match<small>You against three bots, right now</small></button>
     <button data-f="stand">Last Stand<small>Hold your base against fifteen waves</small></button>
     <div class="cm-quick"></div>
@@ -150,6 +154,7 @@ export function setupFront(c: Client): void {
     if (t.dataset.q) {
       if (t.dataset.q === 'map') quick.map = t.dataset.v as MapId | 'random';
       else if (t.dataset.q === 'hold') quick.hold = t.dataset.v === '1';
+      else if (t.dataset.q === 'vip') quick.vip = t.dataset.v === '1';
       else quick.fog = t.dataset.v === '1';
       try {
         localStorage.setItem('cm-quick', JSON.stringify(quick));
@@ -162,7 +167,7 @@ export function setupFront(c: Client): void {
     if (t.dataset.doc) {
       ui.doctrine = t.dataset.doc as DoctrineId;
       client.send('doctrine', { doctrine: ui.doctrine });
-    } else if (t.dataset.f === 'quick') client.send('mode', { mode: 'ffa', doctrine: ui.doctrine, difficulty: 'normal', map: quick.map, fog: quick.fog, hold: quick.hold });
+    } else if (t.dataset.f === 'quick') client.send('mode', { mode: 'ffa', doctrine: ui.doctrine, difficulty: 'normal', map: quick.map, fog: quick.fog, hold: quick.hold, vip: quick.vip });
     else if (t.dataset.f === 'stand') client.send('mode', { mode: 'stand', doctrine: ui.doctrine, difficulty: 'normal', map: quick.map, fog: quick.fog });
     else if (t.dataset.f === 'setup') screen = 'setup';
     else if (t.dataset.f === 'menu') screen = 'menu';
@@ -224,6 +229,7 @@ function renderTable(l: Lobby): void {
     <h2>Peace at the start</h2><div class="cm-opts">${[0, 3, 5, 10].map((m) => choice('peace', 'peace', m, m ? `${m} min` : 'None', l.peace === m)).join('')}</div>
     <h2>Fog of war</h2><div class="cm-opts">${`<button data-l="fog" class="${l.fog ? 'on' : ''}"${dis}>${l.fog ? 'On' : 'Off: everyone sees everything'}</button>`}</div>
     <h2>Hold the middle</h2><div class="cm-opts">${`<button data-l="hold" class="${l.hold ? 'on' : ''}"${dis}>${l.hold ? 'On: hold the ring in the middle 4 minutes in all to win' : 'Off'}</button>`}</div>
+    <h2>Commander must survive</h2><div class="cm-opts">${`<button data-l="vip" class="${l.vip ? 'on' : ''}"${dis}>${l.vip ? 'On: lose your commander and your HQ falls' : 'Off'}</button>`}</div>
     <h2>Uplink victory</h2><div class="cm-opts">${`<button data-l="uplink" class="${l.uplink ? 'on' : ''}"${dis}>${l.uplink ? 'On: an uplink that stands five minutes wins' : 'Off: conquest only'}</button>`}</div>
     <h2>Your doctrine</h2>${DOCTRINE_IDS.map((id) => `<button class="cm-doc ${ui.doctrine === id ? 'on' : ''}" data-doc="${id}"><b>${DOCTRINES[id].name}</b><span>${DOCTRINES[id].passive}. Power: ${DOCTRINES[id].power.name}.</span></button>`).join('')}
   </div></div>`;
@@ -256,7 +262,7 @@ export function drawFront(s: State): void {
     const field = MAPS.find((m) => m.id === s.map);
     const html = `<div class="ui"><h1>${MODES.find((m) => m.id === s.mode)?.name ?? 'Match'}<span>${s.briefing ?? ''}</span></h1>
       ${field ? `<h2>Battlefield: ${field.name}</h2><p>${field.blurb}</p>` : ''}
-      <h2>Your orders</h2><p>${s.mode === 'stand' ? 'Hold out against fifteen waves of raiders, the first in five minutes. Clearing a wave pays.' : `Destroy every enemy headquarters${s.hold ? `, or hold the ring in the middle of the field ${Math.round(s.hold.need / 60)} minutes in all (only your side's fighting troops in it)` : ''}.`} Lose your own and the rest of your base falls within a minute.</p>
+      <h2>Your orders</h2><p>${s.mode === 'stand' ? 'Hold out against fifteen waves of raiders, the first in five minutes. Clearing a wave pays.' : `Destroy every enemy headquarters${s.hold ? `, or hold the ring in the middle of the field ${Math.round(s.hold.need / 60)} minutes in all (only your side's fighting troops in it)` : ''}.${s.vip ? ' Keep your commander alive: if it falls, so does your HQ.' : ''}`} Lose your own and the rest of your base falls within a minute.</p>
       ${s.peaceUntil ? `<p style="color:#ffd27a">No side can attack another for the first ${Math.round(s.peaceUntil / 60)} minutes.</p>` : ''}
       ${doc ? `<h2>${doc.name} doctrine</h2><p>${doc.passive}.</p><p><b>${doc.power.name} (P):</b> ${doc.power.blurb}</p>` : '<h2>You are watching</h2><p>You can see the whole battlefield.</p>'}
       <div class="sides"><div><h2>${me ? 'Your side' : ''}</h2>${friends.map(row).join('')}</div><div><h2>${me ? 'Against you' : 'Commanders'}</h2>${foes.map(row).join('')}</div></div>

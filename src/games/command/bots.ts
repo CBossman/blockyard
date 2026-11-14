@@ -259,15 +259,19 @@ export class BotBrain {
       }
       return best;
     };
-    // Too much oil in the bank: the oil gatherers go over to steel, which is what runs out.
-    const toSteel = s.oil > 260 && s.steel < 130 ? engineers.filter((u) => nodeOf(u)?.kind === 'oil') : [];
-    // And the other way: a bank full of steel and no oil, and a third of the steel gatherers switch.
-    const toOil = s.steel > 400 && s.oil < 120 ? engineers.filter((u) => nodeOf(u)?.kind === 'steel').slice(0, Math.ceil(engineers.length / 3)) : [];
-    for (const u of [...engineers.filter((e) => e.order.t === 'idle'), ...toSteel, ...toOil]) {
-      // (Oil matters more from the second era: tanks, gunboats and the eras themselves run on it.)
-      const oilShare = age >= 2 ? 0.42 : 0.28;
-      const onOil = engineers.filter((e) => nodeOf(e)?.kind === 'oil').length;
-      const want: ResKind = toOil.includes(u) || (s.oil < 400 && onOil < Math.ceil(engineers.length * oilShare)) ? 'oil' : 'steel';
+    // Too much oil (or wood) in the bank: those gatherers go over to steel, which is what runs out.
+    const toSteel = s.steel < 130 ? engineers.filter((u) => (s.oil > 260 && nodeOf(u)?.kind === 'oil') || (s.wood > 400 && nodeOf(u)?.kind === 'wood')) : [];
+    // And the other way: a bank full of steel and none of the others, and a third of the steel gatherers switch.
+    const fromSteel = (n: number) => engineers.filter((u) => nodeOf(u)?.kind === 'steel').slice(0, n);
+    const toOil = s.steel > 400 && s.oil < 120 ? fromSteel(Math.ceil(engineers.length / 3)) : [];
+    const toWood = s.steel > 300 && s.wood < 80 ? fromSteel(Math.ceil(engineers.length / 4)).filter((u) => !toOil.includes(u)) : [];
+    const onKind = (k: ResKind) => engineers.filter((e) => nodeOf(e)?.kind === k).length;
+    for (const u of [...engineers.filter((e) => e.order.t === 'idle'), ...toSteel, ...toOil, ...toWood]) {
+      // (Oil matters more from the second era: tanks, gunboats and the eras themselves run on it; wood most
+      // early on, for the buildings and the walls.)
+      const oilShare = age >= 2 ? 0.36 : 0.2;
+      const woodShare = age >= 2 ? 0.24 : 0.34;
+      const want: ResKind = toOil.includes(u) || (s.oil < 400 && onKind('oil') < Math.ceil(engineers.length * oilShare)) ? 'oil' : toWood.includes(u) || (s.wood < 450 && onKind('wood') < Math.ceil(engineers.length * woodShare)) ? 'wood' : 'steel';
       const node = pickNode(want);
       if (node < 0) continue;
       if (nodeOf(u)) load.set(nodeOf(u)!.id, (load.get(nodeOf(u)!.id) ?? 1) - 1);
@@ -334,15 +338,24 @@ export class BotBrain {
       else if (smart && w.time > 480 && count('market') < 1 && (s.oil > 450 || s.steel > 700)) next = 'market';
       else if (s.pop + 6 >= s.cap && count('depot') < 6) next = 'depot';
       // Late and rich, a smart bot goes for the uplink (a turtle sooner): a way to win without marching on anyone.
-      else if (smart && w.uplinkOn && age >= 3 && count('uplink') < 1 && count('lab') > 0 && w.time > (this.kind === 'turtle' ? 1200 : 1680) && s.steel >= BUILDINGS.uplink.cost.steel + 150 && s.oil >= BUILDINGS.uplink.cost.oil + 50) next = 'uplink';
-      const afford = !!next && s.steel >= BUILDINGS[next].cost.steel && s.oil >= BUILDINGS[next].cost.oil;
+      else if (smart && w.uplinkOn && age >= 3 && count('uplink') < 1 && count('lab') > 0 && w.time > (this.kind === 'turtle' ? 1200 : 1680) && s.steel >= BUILDINGS.uplink.cost.steel + 150 && s.oil >= BUILDINGS.uplink.cost.oil + 50 && s.wood >= BUILDINGS.uplink.cost.wood) next = 'uplink';
+      const afford = !!next && s.steel >= BUILDINGS[next].cost.steel && s.oil >= BUILDINGS[next].cost.oil && s.wood >= BUILDINGS[next].cost.wood;
       saving = !!next && !afford && armyNow >= 4 && next !== 'dock';
       const builder = spare.shift();
       if (next && afford && builder) this.raise(w, s, next, bld.length, count, builder, spare[0]);
-      else if (builder && smart && !next && s.steel >= 120 && !home.length && count('depot') < 8) {
+      else if (builder && smart && !next && s.wood >= BUILDINGS.depot.cost.wood && !home.length && count('depot') < 8) {
         // The steel round the base is running out: a depot by the next good deposit.
         const left = w.deposits.filter((d) => d.kind === 'steel' && d.amount > 200 && hyp(d.x, d.z, base.x, base.z) < 34).length;
-        if (left < 2) {
+        // (And a depot by the woods its choppers work, when they've a long walk home.)
+        const wood = engineers.filter((e) => nodeOf(e)?.kind === 'wood').map((e) => nodeOf(e)!);
+        const far = wood.find((n) => !posts.some((b) => hyp(n.x, n.z, b.x, b.z) < 22));
+        if (wood.length >= 3 && far) {
+          for (let a = 0; a < 8; a++) {
+            const x = far.x + Math.cos(a * 0.785) * 6;
+            const z = far.z + Math.sin(a * 0.785) * 6;
+            if (!inHill(x, z, 3) && w.place(s.seat, 'depot', x, z, [builder.id])) break;
+          }
+        } else if (left < 2) {
           const d = w.deposits.filter((n) => n.kind === 'steel' && n.amount > 700 && !n.salvage && !raiding(n.x, n.z, 20) && !posts.some((b) => hyp(n.x, n.z, b.x, b.z) < 16)).sort((p, q) => hyp(p.x, p.z, base.x, base.z) - hyp(q.x, q.z, base.x, base.z))[0];
           if (d) for (let a = 0; a < 8; a++) {
             const x = d.x + Math.cos(a * 0.785) * 7;
@@ -362,7 +375,7 @@ export class BotBrain {
 
     // --- Walls: once it has a barracks and steel to spare, its base walled in, gates first; looked over
     // every few seconds, a length at a time as steel comes in, so what's knocked down goes back up. Not by a camp still guarded.
-    if (smart && st.walls && hq && !home.length && !poor && w.time >= this.wallAt && w.time > (this.kind === 'turtle' ? 300 : 480) && count('barracks') > 0 && s.steel >= 100) {
+    if (smart && st.walls && hq && !home.length && !poor && w.time >= this.wallAt && w.time > (this.kind === 'turtle' ? 300 : 480) && count('barracks') > 0 && s.wood >= 80) {
       this.wallAt = w.time + 6;
       const guarded = CAMPS.filter((_, i) => [...w.units.values()].some((u) => u.camp === i));
       const free = (x: number, z: number) => !guarded.some((c) => hyp(c.x, c.z, x, z) < 15);
@@ -376,7 +389,7 @@ export class BotBrain {
         for (const k of [0, 1, -1, 2, -2]) if (w.place(s.seat, 'gate', g.x + ax * k, g.z + az * k, [], ax ? 0 : 1)) break;
       }
       for (const l of plan.lines) for (const c of wallLine(l[0], l[1], l[2], l[3])) {
-        if (s.steel < 60) break;
+        if (s.wood < 50) break;
         if (free(c.x, c.z)) w.place(s.seat, 'rampart', c.x, c.z, []);
       }
     }
@@ -441,7 +454,13 @@ export class BotBrain {
     // Raids: a few quick units off after the enemy's engineers at their work, while the main army waits.
     for (const id of this.raid) if (!w.units.has(id)) this.raid.delete(id);
     if (this.raid.size && (w.time > this.raidUntil || this.raid.size < 2 || home.length)) this.endRaid(w, s, front);
-    const army = mine.filter((u) => fights(u) && u.lake < 0 && !u.inside && u !== scout && !raiders.includes(u) && !this.wounded.has(u.id) && !this.raid.has(u.id));
+    // (A commander that must survive stays out of it: it keeps back at the HQ.)
+    const army = mine.filter((u) => fights(u) && u.lake < 0 && !u.inside && u !== scout && !raiders.includes(u) && !this.wounded.has(u.id) && !this.raid.has(u.id) && !(w.vip && u.kind === 'hero'));
+    if (w.vip) {
+      const boss = mine.find((u) => u.kind === 'hero');
+      const keep = { x: base.x - Math.sign(base.x || 1) * 6, z: base.z - Math.sign(base.z || 1) * 6 };
+      if (boss && boss.order.t !== 'move' && hyp(boss.x, boss.z, keep.x, keep.z) > 8) w.command([boss.id], s.seat, { t: 'move', x: keep.x, z: keep.z, attack: false });
+    }
 
     // The scout goes round the enemy's bases and the camps, and reports.
     if (scout && scout.order.t === 'idle') {

@@ -2,13 +2,13 @@ import { defineMeta } from '@platform';
 
 /**
  * Block Command: a real-time strategy game of the modern age, in the way of Age of Mythology. Up to
- * four commanders each build a base, gather steel and oil, raise barracks and factories and march
+ * four commanders each build a base, gather steel, oil and wood, raise barracks and factories and march
  * infantry and tanks on the others; free for all, two against two, or all together against bots.
  */
 export default defineMeta({
   id: 'command',
   title: 'Block Command',
-  tagline: 'Build a base, gather steel and oil, and march armour on your rivals. Four commanders, one front.',
+  tagline: 'Build a base, gather steel, oil and wood, and march armour on your rivals. Four commanders, one front.',
   accent: '#e8392e',
   instances: true,
   controls: [
@@ -16,7 +16,8 @@ export default defineMeta({
     ['Right click', 'move · attack · gather (on a deposit) · rally (with a building selected)'],
     ['Engineer selected', 'pick a building to place, then click the ground'],
     ['Building selected', 'train units from its panel; the HQ also advances your era (C), unlocking tanks, labs, helicopters and artillery. Era II needs a barracks standing, Era III a factory or a lab'],
-    ['Battlefields', 'pick one on the main menu or the match table: Heartland, River Crossing (three fords), Badlands (a ring of mesas), Deep Woods, Frostline, or Random. Fog of war can be turned off there too'],
+    ['Battlefields', 'pick one on the main menu or the match table: Heartland, River Crossing (three fords), Badlands (a ring of mesas), Deep Woods, Frostline, Canyons (two walls of rock with passes), Highlands (big hills), or Random. Fog of war can be turned off there too'],
+    ['Commander must survive', 'when it is on, every side starts with its commander (and can\'t train another or hide it in a building); if it falls, that side\'s HQ falls with it'],
     ['Hold the middle', 'when it is on, your side wins by having its fighting troops alone in the ring in the middle of the field for four minutes in all, as well as by conquest'],
     ['Q, then click', 'attack-move: fight whatever you meet on the way (Q held + right click too)'],
     ['P', "call your doctrine's special power"],
@@ -48,6 +49,7 @@ export default defineMeta({
     ['X', 'fall back to the nearest depot or HQ; near one, units out of the fight heal'],
     ['R (engineers)', 'lay a mine: hidden from the enemy, but scouts find and defuse them'],
     ['Depots', 'engineers can drop off at them, so a depot by a far deposit is a forward base'],
+    ['Three resources', 'steel (mines and scrap) pays for most units, oil for vehicles and upgrades, wood (right click a tree with engineers: it comes down when its wood is all taken) for buildings and walls. A depot by the woods saves the long walk home'],
     ['Wrecks and rubble', 'what the fighting leaves: engineers can strip it for steel'],
     ['N (building selected)', 'repeat: keep training the last unit you ordered there'],
     ['Supply drops', 'gold on the minimap: the first side standing on one alone takes it'],

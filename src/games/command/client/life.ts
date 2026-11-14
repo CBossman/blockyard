@@ -197,7 +197,7 @@ function framePumps(client: Client, dt: number): void {
   const live = phaseNow !== 'lobby';
   if (live && pumpTry <= 0) {
     pumpTry = 1;
-    for (const d of deposits()) {
+    for (const d of deposits(false)) {
       if (d.kind !== 'oil' || d.scrap || pumps.has(d.id)) continue;
       const node = piece(client, 'ic_pump', SCALE.oil);
       if (!node) break;
