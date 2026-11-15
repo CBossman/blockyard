@@ -333,7 +333,7 @@ export const MAX_POP = 60;
 export const CARRY = 25;
 export const GATHER_RATE = 1.3;
 /** Wood on each tree: felled when it's all been taken. */
-export const TREE_WOOD = 100;
+export const TREE_WOOD = 140;
 
 export type Mode = 'ffa' | 'teams' | 'coop' | 'stand';
 export const MODES: { id: Mode; name: string; blurb: string }[] = [
@@ -408,13 +408,13 @@ export const DOCTRINES: Record<DoctrineId, Doctrine> = {
     name: 'Industrial',
     blurb: 'A war economy: faster gathering and faster production.',
     passive: 'Gathers 15% faster; trains and researches 12% faster',
-    power: { kind: 'airstrike', name: 'Airstrike', blurb: 'Bombers flatten a patch of the map.', cooldown: 150, aimed: true, first: 480 },
+    power: { kind: 'airstrike', name: 'Airstrike', blurb: 'Bombers hit a patch of the map: five bombs, hardest where each lands.', cooldown: 240, aimed: true, first: 600 },
   },
   armored: {
     name: 'Armored',
     blurb: 'Steel first: tougher, harder-hitting tanks.',
     passive: 'Tanks have 15% more health and hit 10% harder',
-    power: { kind: 'reinforce', name: 'Reinforcements', blurb: 'Three tanks arrive at your HQ.', cooldown: 240, aimed: false, first: 480 },
+    power: { kind: 'reinforce', name: 'Reinforcements', blurb: 'Two tanks arrive at your HQ.', cooldown: 300, aimed: false, first: 600 },
   },
   intel: {
     name: 'Intelligence',

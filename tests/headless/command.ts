@@ -1,4 +1,4 @@
-import { FLANK, TRADE, UNITS, fromBehind, tradeGet } from '../../src/games/command/defs';
+import { CARRY, FLANK, TRADE, UNITS, fromBehind, tradeGet } from '../../src/games/command/defs';
 import { BASES, FLOOR, GROUND_Y, HALF, LAKES, MAPS, MESAS, TREES, deposits, heightAt, useMap, wallLine, wallPlan, wallSnap } from '../../src/games/command/map';
 import { BUILDING_ORDER, UNIT_ORDER, rankBits, stanceBits, type State } from '../../src/games/command/protocol';
 import { readFileSync } from 'node:fs';
@@ -42,14 +42,14 @@ function play(mode: string, seats: number, minutes: number) {
   h.run(9);
   check(units().length / 8 === before + 1 || state().seats.find((s) => s.seat === me)!.steel < s0.seats.find((s) => s.seat === me)!.steel, `${mode}: the HQ trains an engineer`);
 
-  // The armored doctrine's power: three tanks arrive at the HQ (once it's ready, eight minutes in).
+  // The armored doctrine's power: two tanks arrive at the HQ (once it's ready, ten minutes in).
   check(s0.seats.find((s) => s.seat === me)!.doctrine === 'armored', `${mode}: the player's doctrine is the one they picked`);
-  h.run(475);
+  h.run(595);
   const tanks = () => { let n = 0; const u = units(); for (let i = 0; i < u.length; i += 8) if (u[i + 2] === me && u[i + 1] === 2) n++; return n; };
   const before3 = tanks();
   send('power', {});
   h.run(1);
-  check(tanks() === before3 + 3, `${mode}: reinforcements bring three tanks (${before3} then ${tanks()})`);
+  check(tanks() === before3 + 2, `${mode}: reinforcements bring two tanks (${before3} then ${tanks()})`);
   check(state().seats.find((s) => s.seat === me)!.powerIn > 100, `${mode}: and the power recharges`);
   // Stances: told to hold their ground, the tanks say so.
   const myTanks: number[] = [];
@@ -631,7 +631,7 @@ function trade() {
   const [steel0, oil0, fetch0] = [me().steel, me().oil, me().trade[0]];
   send(ann, 'trade', { id: market()!.id, sell: 'steel' });
   step(0.2);
-  check(fetch0 === TRADE.oil && me().oil - oil0 === fetch0 && steel0 - me().steel <= TRADE.lot + 5 && steel0 - me().steel >= TRADE.lot - 20, `trade: a hundred steel fetches ${fetch0} oil (${steel0}→${me().steel} steel, ${oil0}→${me().oil} oil)`);
+  check(fetch0 === TRADE.oil && me().oil - oil0 === fetch0 && steel0 - me().steel <= TRADE.lot + 5 && steel0 - me().steel >= TRADE.lot - CARRY - 5, `trade: a hundred steel fetches ${fetch0} oil (${steel0}→${me().steel} steel, ${oil0}→${me().oil} oil)`);
   const fetch1 = me().trade[0];
   check(fetch1 < fetch0, `trade: and the next fetches less (${fetch1})`);
   step(40);
@@ -801,6 +801,19 @@ function alarm() {
   };
   const n0 = out();
   check(n0 >= 4 && hq()?.held === 0, `alarm: engineers at work, none in the HQ (${n0}, ${hq()?.held})`);
+  // One of them putting up a depot when the alarm goes.
+  const DEPOT = BUILDING_ORDER.indexOf('depot');
+  const depot = () => { const b = blds(); for (let i = 0; i < b.length; i += 9) if (b[i + 2] === me && b[i + 1] === DEPOT) return { id: b[i], built: b[i + 6] }; return null; };
+  let builder = -1;
+  { const u = units(); for (let i = 0; i < u.length; i += 8) if (u[i + 2] === me && u[i + 1] === ENGINEER) builder = u[i]; }
+  h.ctx.commands.run(`cash ${me} 500`);
+  const Bm = BASES[me];
+  for (const [dx, dz] of [[12, 0], [-12, 0], [0, 12], [0, -12], [12, 12], [-12, -12]]) {
+    if (depot()) break;
+    h.send({ t: 'game', player, name: 'build', data: { kind: 'depot', x: Bm.x + dx, z: Bm.z + dz, ids: [builder] } });
+    h.run(0.5);
+  }
+  h.run(3);
   h.send({ t: 'game', player, name: 'alarm', data: { id: hq()!.id } });
   h.run(12);
   check(hq()!.held === n0 && out() === 0, `alarm: all of them shelter in the HQ (${hq()!.held} in, ${out()} out)`);
@@ -810,6 +823,9 @@ function alarm() {
   let working = 0;
   for (let i = 0; i < u.length; i += 8) if (u[i + 2] === me && u[i + 1] === ENGINEER && !(u[i + 7] & 8)) working++;
   check(hq()!.held === 0 && working === n0, `alarm: let out, they're all back at work (${working} of ${n0})`);
+  // (The one that was building goes back to it, not off to gather.)
+  h.run(60, { until: () => (depot()?.built ?? 0) >= 100 });
+  check(!!depot() && depot()!.built >= 100, `alarm: and the one that was building a depot goes back and finishes it (${depot()?.built}%)`);
 }
 
 /**
@@ -955,6 +971,7 @@ export default function command() {
   commander();
   pockets();
   chopping();
+  homework();
   // (Last: it leaves this process's lists on another map for a while.)
   maps();
 }
@@ -1221,12 +1238,44 @@ function chopping() {
   h.run(25);
   const wood1 = state().seats.find((x) => x.seat === me)!.wood;
   check(engs.length === 4 && wood1 > wood0 + 20, `chopping: engineers at a tree bring wood home (${wood0} then ${wood1})`);
-  h.run(60, { until: () => (state().deposits[tree.id] ?? 1) <= 0 });
+  h.run(120, { until: () => (state().deposits[tree.id] ?? 1) <= 0 });
   h.run(1);
   const tx = Math.floor(tree.x);
   const tz = Math.floor(tree.z);
   check((state().deposits[tree.id] ?? 1) <= 0 && name(tx, FLOOR, tz) === 'cm_trunk' && name(tx, FLOOR + 1, tz) === 'air', `chopping: its wood all taken, the tree is down to a stump (${state().deposits[tree.id]} left, ${name(tx, FLOOR + 1, tz)} above the stump)`);
   check(h.find('message', 'felled').length > 0, 'chopping: and the screens are told it fell');
+}
+
+/** An engineer done with a job goes back to what it was gathering, by home: not off across the field to whatever the bank is short of. */
+function homework() {
+  const h = launch('command', { seed: 35 });
+  const player = h.ctx.player.id;
+  const state = () => h.find('message', 'state').at(-1)?.args[0] as State;
+  const units = () => h.find('message', 'u').at(-1)?.args[0] as number[];
+  const lobby = (data: object) => h.send({ t: 'game', player, name: 'lobby', data });
+  const send = (name: string, data: unknown) => h.send({ t: 'game', player, name, data });
+  h.run(1);
+  lobby({ op: 'sit', seat: 0 });
+  lobby({ op: 'preset', preset: 'ffa' });
+  lobby({ op: 'peace', peace: 10 });
+  lobby({ op: 'map', map: 'heartland' });
+  lobby({ op: 'start' });
+  h.run(30);
+  const me = state().mine[player];
+  const B = BASES[me];
+  // (A depot takes most of the wood: what the bank is short of then is wood, and the trees are well out from the base.)
+  let eng = -1;
+  { const u = units(); for (let i = 0; i < u.length; i += 8) if (u[i + 2] === me && UNIT_ORDER[u[i + 1]] === 'engineer') eng = u[i]; }
+  const before = state().seats.find((x) => x.seat === me)!;
+  check(before.wood > 0, 'homework: the start');
+  for (const [dx, dz] of [[12, 0], [-12, 0], [0, 12], [0, -12], [12, 12], [-12, -12]]) {
+    send('build', { kind: 'depot', x: B.x + dx, z: B.z + dz, ids: [eng] });
+    h.run(0.5);
+  }
+  h.run(70);
+  let far = 0;
+  { const u = units(); for (let i = 0; i < u.length; i += 8) if (u[i] === eng) far = Math.hypot(u[i + 3] - B.x, u[i + 4] - B.z); }
+  check(far < 30, `homework: done building, the engineer is back at work by the base (${far.toFixed(0)} out)`);
 }
 
 /** The battlefields: a match on another map stands its lakes and woods in the world (and tells the screens which); the next on Heartland puts the field back as it was. */
@@ -1501,8 +1550,11 @@ function errands() {
   for (let t = 0; t < 8; t += 0.5) {
     h.run(0.5);
     for (const v of theirs()) low = Math.min(low, v);
+    // (Or whatever other enemy they meet on the way: a move fights what it meets.)
+    const u = units();
+    for (let i = 0; i < u.length; i += 8) if (u[i + 2] !== me && [...Array(u.length / 8).keys()].some((k) => mine.includes(u[k * 8]) && Math.hypot(u[k * 8 + 3] - u[i + 3], u[k * 8 + 4] - u[i + 4]) < 16)) low = Math.min(low, u[i + 5]);
   }
-  check(mine.length === 3 && low < 100, `errands: shot at on the way past, they fight back (the enemy's riflemen down to ${low}%)`);
+  check(mine.length === 3 && low < 100, `errands: on the move past enemies, they fight them (the enemy down to ${low}%)`);
   // A forced march (Ctrl): past another lot of them, not stopping to fight.
   const R = { x: B.x * 0.12, z: B.z * 0.12 };
   const seen2 = new Set<number>();

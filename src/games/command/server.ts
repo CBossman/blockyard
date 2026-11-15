@@ -90,6 +90,10 @@ export interface Unit {
   still?: { x: number; z: number; t: number; seen: number };
   /** The building it got as near to as it could, and is at work on from there. */
   nearAs?: number;
+  /** What it gathered last: an engineer done with a job goes back to it. */
+  lastRes?: ResKind;
+  /** What it was at before the alarm sent it in, to go back to when it's let out. */
+  before?: Order;
   /** The unit it's been shooting (it keeps to it while it's in reach), and when it last called its friends in. */
   aim?: number;
   helpAt?: number;
@@ -1393,14 +1397,28 @@ function medicTick(dt: number): void {
 }
 
 /** An order to gather from the nearest deposit (oil if the bank is short of it), for an engineer with nothing to do; null if none's near. */
+/** Whether a spot is somewhere an engineer shouldn't go on its own: enemy troops or buildings near it (the wild's guards too). */
+function hostile(seat: number, x: number, z: number, r = 24): boolean {
+  const team = teamOf(seat);
+  for (const v of units.values()) if (teamOf(v.seat) !== team && !v.inside && Math.abs(v.x - x) < r && Math.abs(v.z - z) < r && dist(v.x, v.z, x, z) < r && (UNITS[v.kind].damage > 0)) return true;
+  for (const b of buildings.values()) if (teamOf(b.seat) !== team && !BUILDINGS[b.kind].wall && dist(b.x, b.z, x, z) < r) return true;
+  return false;
+}
 function gatherOrder(u: Unit): Order | null {
   const s = slots[u.seat];
   if (!s) return null;
   // (Measured against what each is wanted for: steel most, then wood, oil least.)
   const need: Record<ResKind, number> = { steel: s.steel / 1, wood: s.wood / 0.8, oil: s.oil / 0.45 };
   const order = (['steel', 'wood', 'oil'] as ResKind[]).sort((a, b) => need[a] - need[b]);
-  const pick = (kind: ResKind) => nodes.filter((n) => n.amount > 0 && n.kind === kind && dist(u.x, u.z, n.x, n.z) < 70).sort((a, b) => dist(u.x, u.z, a.x, a.z) - dist(u.x, u.z, b.x, b.z))[0];
-  const n = pick(order[0]) ?? pick(order[1]) ?? pick(order[2]);
+  // (What it was gathering before comes first: an engineer done with a job goes back to its old work.)
+  if (u.lastRes) order.unshift(u.lastRes);
+  // Only near home: by the HQ or a depot, where what it gathers goes. Nothing there, and it waits (the
+  // player is told it's idle) rather than wandering off past the walls to some far wood.
+  const posts = [...buildings.values()].filter((b) => b.seat === u.seat && b.built >= 1 && (b.kind === 'hq' || b.kind === 'depot'));
+  const home = (n: Deposit) => posts.some((b) => dist(b.x, b.z, n.x, n.z) < (n.tree !== undefined ? 26 : 36));
+  const pick = (kind: ResKind) => nodes.filter((n) => n.amount > 0 && n.kind === kind && dist(u.x, u.z, n.x, n.z) < 60 && home(n) && !hostile(u.seat, n.x, n.z)).sort((a, b) => dist(u.x, u.z, a.x, a.z) - dist(u.x, u.z, b.x, b.z))[0];
+  let n: Deposit | undefined;
+  for (const k of order) if ((n = pick(k))) break;
   return n ? { t: 'gather', node: n.id, phase: u.carry >= CARRY ? 'back' : 'to' } : null;
 }
 
@@ -2263,7 +2281,8 @@ function unitTick(game: GameContext, u: Unit, dt: number): void {
 function slotAt(node: Deposit, slot: number): { x: number; z: number } {
   const inner = slot < 6;
   const a = node.id * 1.3 + (inner ? (slot * Math.PI) / 3 : ((slot - 6) * Math.PI) / 6 + 0.26);
-  const r = inner ? 3.7 : 6.2;
+  // (A tree: right by its trunk, among the others round it; a deposit, round its pile.)
+  const r = node.tree !== undefined ? (inner ? 1.9 : 3.2) : inner ? 3.7 : 6.2;
   return { x: node.x + Math.cos(a) * r, z: node.z + Math.sin(a) * r };
 }
 
@@ -2292,8 +2311,9 @@ function gatherTick(game: GameContext, u: Unit, o: Extract<Order, { t: 'gather' 
   const node = nodes[o.node];
   if (!node || node.amount <= 0) {
     // Dry: on to the nearest one of the same kind, else stop.
-    const next = nodes.filter((n) => n.amount > 0 && n.kind === node?.kind).sort((a, b) => dist(u.x, u.z, a.x, a.z) - dist(u.x, u.z, b.x, b.z))[0];
-    u.order = next ? { t: 'gather', node: next.id, phase: u.carry >= CARRY ? 'back' : 'to' } : { t: 'idle' };
+    // (One close by, the next tree of the wood say; not one across the map. Else whatever's near home.)
+    const next = node ? nodes.filter((n) => n.amount > 0 && n.kind === node.kind && dist(n.x, n.z, node.x, node.z) < 20 && !hostile(u.seat, n.x, n.z)).sort((a, b) => dist(u.x, u.z, a.x, a.z) - dist(u.x, u.z, b.x, b.z))[0] : undefined;
+    u.order = next ? { t: 'gather', node: next.id, phase: u.carry >= CARRY ? 'back' : 'to' } : gatherOrder(u) ?? { t: 'idle' };
     return;
   }
   // (What it's gathered goes to the nearest headquarters or depot.)
@@ -2315,7 +2335,7 @@ function gatherTick(game: GameContext, u: Unit, o: Extract<Order, { t: 'gather' 
       o.tries = (o.tries ?? 0) + 1;
       o.slot = undefined;
       if (o.tries >= 3) {
-        const other = nodes.filter((n) => n.amount > 0 && n.kind === node.kind && n.id !== node.id).sort((a, b) => dist(u.x, u.z, a.x, a.z) - dist(u.x, u.z, b.x, b.z))[0];
+        const other = nodes.filter((n) => n.amount > 0 && n.kind === node.kind && n.id !== node.id && dist(n.x, n.z, node.x, node.z) < 30 && !hostile(u.seat, n.x, n.z)).sort((a, b) => dist(u.x, u.z, a.x, a.z) - dist(u.x, u.z, b.x, b.z))[0];
         if (other) u.order = { t: 'gather', node: other.id, phase: 'to' };
       }
     }
@@ -2325,6 +2345,7 @@ function gatherTick(game: GameContext, u: Unit, o: Extract<Order, { t: 'gather' 
     u.carry += take;
     u.busy = time;
     u.carryRes = node.kind;
+    u.lastRes = node.kind;
     node.amount -= take;
     if (node.amount <= 0) {
       nodeProps.get(node.id)?.remove();
@@ -2696,7 +2717,10 @@ function ringAlarm(seat: number): number {
   if (!b) return 0;
   const room = (BUILDINGS.hq.holds ?? 0) - cargo(b.id, false).length - [...units.values()].filter((u) => u.order.t === 'enter' && !u.order.boat && u.order.id === b.id).length;
   const go = [...units.values()].filter((u) => u.seat === seat && u.kind === 'engineer' && !u.inside && u.order.t !== 'enter' && dist(u.x, u.z, b.x, b.z) < ALARM.reach).sort((p, q) => dist(p.x, p.z, b.x, b.z) - dist(q.x, q.z, b.x, b.z)).slice(0, Math.max(0, room));
-  for (const u of go) give(u, { t: 'enter', id: b.id, boat: false }, false);
+  for (const u of go) {
+    if (u.order.t === 'build' || u.order.t === 'repair' || u.order.t === 'gather') u.before = u.order;
+    give(u, { t: 'enter', id: b.id, boat: false }, false);
+  }
   return go.length;
 }
 
@@ -2734,8 +2758,11 @@ function unload(id: number, boat: boolean): boolean {
     u.inside = null;
     u.x = u.px = Math.max(-HALF, Math.min(HALF, spots[i].x));
     u.z = u.pz = Math.max(-HALF, Math.min(HALF, spots[i].z));
-    // (Engineers let out go back to work.)
-    u.order = (!boat && u.kind === 'engineer' && gatherOrder(u)) || { t: 'idle' };
+    // (Engineers let out go back to work: what they were at before the alarm, if it's still to do; else gathering.)
+    const was = u.before;
+    u.before = undefined;
+    const still = was && (was.t !== 'build' && was.t !== 'repair' ? was.t === 'gather' : !!buildings.get(was.id));
+    u.order = (still && was) || (!boat && u.kind === 'engineer' && gatherOrder(u)) || { t: 'idle' };
   });
   dirty = true;
   return true;
@@ -3084,7 +3111,8 @@ function usePower(game: GameContext, seat: number, x: number, z: number): boolea
     // The jets are on their way: each screen sees them come in, over the spot as the first bomb goes.
     game.clients.send('all', 'jets', { x: round1(x), z: round1(z) });
     // Bombs, a moment after the call: each run of the bombers falls on a spread of the target.
-    for (let k = 0; k < 7; k++) {
+    // (Five bombs on a spread, each hurting most at its middle: a strike that breaks up a crowd, not one that wipes out an army.)
+    for (let k = 0; k < 5; k++) {
       const bx = x + (Math.random() - 0.5) * 14;
       const bz = z + (Math.random() - 0.5) * 14;
       later.push({
@@ -3092,12 +3120,15 @@ function usePower(game: GameContext, seat: number, x: number, z: number): boolea
         run: () => {
           shots.push({ x: round1(bx), y: FLOOR + 70, z: round1(bz), tx: round1(bx), ty: FLOOR + heightAt(bx, bz), tz: round1(bz), big: true, k: -2 });
           booms.push(round1(bx), round1(bz), 1);
-          for (const u of [...units.values()]) if (teamOf(u.seat) !== s.team && !u.inside && dist(u.x, u.z, bx, bz) < 6) damageUnit(game, u.id, 110, seat);
+          for (const u of [...units.values()]) {
+            const d = dist(u.x, u.z, bx, bz);
+            if (teamOf(u.seat) !== s.team && !u.inside && d < 5) damageUnit(game, u.id, 70 * (1 - (d / 5) * 0.6), seat);
+          }
           if (!inLake(bx, bz, 0)) {
             scorch(game, bx, bz, 3.2);
             fellNear(game, bx, bz, 4.5);
           }
-          for (const b of [...buildings.values()]) if (teamOf(b.seat) !== s.team && dist(b.x, b.z, bx, bz) < 6 + BUILDINGS[b.kind].radius) damageBuilding(game, b.id, 160, seat);
+          for (const b of [...buildings.values()]) if (teamOf(b.seat) !== s.team && dist(b.x, b.z, bx, bz) < 5 + BUILDINGS[b.kind].radius) damageBuilding(game, b.id, 100, seat);
         },
       });
     }
@@ -3105,9 +3136,9 @@ function usePower(game: GameContext, seat: number, x: number, z: number): boolea
   } else if (p.kind === 'reinforce') {
     const hq = [...buildings.values()].find((b) => b.seat === seat && b.kind === 'hq');
     if (!hq) return false;
-    for (let k = 0; k < 3; k++) {
+    for (let k = 0; k < 2; k++) {
       s.pop += UNITS.tank.pop;
-      const u = addUnit(game, seat, 'tank', hq.x + (k - 1) * 4, hq.z + BUILDINGS.hq.radius + 5);
+      const u = addUnit(game, seat, 'tank', hq.x + (k - 0.5) * 4, hq.z + BUILDINGS.hq.radius + 5);
       s.pop -= UNITS.tank.pop;
       s.stats.trained++;
       void u;
@@ -3228,8 +3259,18 @@ function order(game: GameContext, player: Player, name: string, data: unknown): 
   const queue = d.queue === true;
   if (name === 'move' && at) {
     const face = Number(d.face);
-    // (Forced: a march that doesn't turn to fight when it's shot at.)
-    formation(us, Math.max(-HALF, Math.min(HALF, x)), Math.max(-HALF, Math.min(HALF, z)), d.attack === true, queue, d.face !== undefined && Number.isFinite(face) ? face : undefined, d.force === true && d.attack !== true);
+    // A move: the fighters fight what they meet on the way (in reach of them as they go), then carry on;
+    // forced (Ctrl), a march that doesn't stop or turn for anything. The unarmed (engineers, medics) just go.
+    const force = d.force === true && d.attack !== true;
+    const tx = Math.max(-HALF, Math.min(HALF, x));
+    const tz = Math.max(-HALF, Math.min(HALF, z));
+    const fc = d.face !== undefined && Number.isFinite(face) ? face : undefined;
+    // (One formation, so the column keeps its order: armour in front, guns behind; the unarmed in it just go along.)
+    formation(us, tx, tz, !force, queue, fc, force);
+    for (const u of us) {
+      if (u.kind !== 'engineer' && UNITS[u.kind].damage > 0) continue;
+      for (const o of [u.order, ...u.next]) if (o.t === 'move') o.attack = false;
+    }
   } else if (name === 'patrol' && at) {
     const tx = Math.max(-HALF, Math.min(HALF, x));
     const tz = Math.max(-HALF, Math.min(HALF, z));

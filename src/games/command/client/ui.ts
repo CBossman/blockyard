@@ -361,7 +361,14 @@ interface Cmd {
 /** A resource's icon: steel and oil their models, wood a log. */
 const resIcon = (id: string) => (id === 'ic_wood' ? client.hud.icon({ block: 'cm_trunk' }) : client.hud.icon({ item: id })).outerHTML;
 const res = (id: string, n: number) => (n ? `<span class="tc">${resIcon(id)}${n}</span>` : '');
-const tipCost = (c: Cost, seconds?: number) => `<div class="tcost">${res('ic_steel', c.steel)}${res('ic_oil', c.oil)}${res('ic_wood', c.wood)}${seconds ? `<span class="tc">⏱ ${seconds}s</span>` : ''}</div>`;
+/** What the bank is short of for a cost, in words (empty when it can pay). */
+const shortOf = (c: Cost): string => {
+  const me = meSeat();
+  if (!me) return '';
+  const miss = (['steel', 'oil', 'wood'] as const).filter((r) => c[r] > me[r]).map((r) => `${Math.ceil(c[r] - me[r])} more ${r}`);
+  return miss.length ? `Need ${miss.join(', ')}` : '';
+};
+const tipCost = (c: Cost, seconds?: number) => `<div class="tcost">${res('ic_steel', c.steel)}${res('ic_oil', c.oil)}${res('ic_wood', c.wood)}${seconds ? `<span class="tc">⏱ ${seconds}s</span>` : ''}</div>${shortOf(c) ? `<div class="tsub" style="color:#ff8a7a">${shortOf(c)}</div>` : ''}`;
 const unitTip = (k: UnitKind, cost: Cost, locked: string) => {
   const d = UNITS[k];
   const hits = d.hits === 'air' ? 'air only' : d.hits === 'both' ? 'ground and air' : 'ground';

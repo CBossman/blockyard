@@ -562,11 +562,11 @@ export function frameUnits(client: Client, dt: number): void {
     // The flag streams out behind, fluttering.
     if (s.flag) s.flag.rotation.set(0, Math.sin(now * 3 + id) * 0.25 + (moving ? 0.3 : 0), 0);
     // An engineer's load: a crate of steel or a drum of oil on its back.
-    // (Wood: a crate of it too, for now.)
-    const want = (s.flags & 6) === 6 ? 1 : s.flags & 2 ? 1 : s.flags & 4 ? 2 : 0;
+    // (Wood: a bundle of logs.)
+    const want = (s.flags & 6) === 6 ? 3 : s.flags & 2 ? 1 : s.flags & 4 ? 2 : 0;
     if (want !== s.crateKind) {
       if (s.crate) s.node.remove(s.crate);
-      s.crate = want ? model(client, want === 1 ? 'ic_crate' : 'ic_drum', want === 1 ? SCALE.crate : SCALE.drum) : null;
+      s.crate = want ? model(client, want === 1 ? 'ic_crate' : want === 3 ? 'ic_logs' : 'ic_drum', want === 1 ? SCALE.crate : want === 3 ? SCALE.logs : SCALE.drum) : null;
       if (s.crate) {
         s.crate.position.set(0, 1.5, -1.1);
         s.node.add(s.crate);

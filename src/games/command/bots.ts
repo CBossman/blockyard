@@ -1,4 +1,4 @@
-import { ABILITIES, AGE_NEEDS, eraWants, BUILDINGS, CARRY, SIGHT, UNITS, ageOf, type BuildingKind, type ResKind, type UnitKind } from './defs';
+import { ABILITIES, AGE_NEEDS, TECHS, eraWants, BUILDINGS, CARRY, SIGHT, UNITS, ageOf, type BuildingKind, type ResKind, type UnitKind } from './defs';
 import { BASES, CAMPS, HALF, LAKES, inHill, inLake, inMesa, inside, lakeOf, wallLine, wallPlan } from './map';
 import type { Building, Slot, Unit, World } from './server';
 
@@ -259,19 +259,31 @@ export class BotBrain {
       }
       return best;
     };
+    const nextEra = age === 1 ? 'age2' : age === 2 ? 'age3' : null;
+    const eraGoal = nextEra && w.time > (nextEra === 'age2' ? st.age2 : st.age3) * 0.75 ? TECHS[nextEra].cost : null;
     // Too much oil (or wood) in the bank: those gatherers go over to steel, which is what runs out.
     const toSteel = s.steel < 130 ? engineers.filter((u) => (s.oil > 260 && nodeOf(u)?.kind === 'oil') || (s.wood > 400 && nodeOf(u)?.kind === 'wood')) : [];
     // And the other way: a bank full of steel and none of the others, and a third of the steel gatherers switch.
     const fromSteel = (n: number) => engineers.filter((u) => nodeOf(u)?.kind === 'steel').slice(0, n);
-    const toOil = s.steel > 400 && s.oil < 120 ? fromSteel(Math.ceil(engineers.length / 3)) : [];
-    const toWood = s.steel > 300 && s.wood < 80 ? fromSteel(Math.ceil(engineers.length / 4)).filter((u) => !toOil.includes(u)) : [];
+    // (Saving for an era with the steel near enough: hands over to whichever of the others is furthest short.)
+    const onAt = (k: ResKind) => engineers.filter((e) => e.order.t === 'gather' && w.deposits[e.order.node]?.kind === k).length;
+    // (No more than half on it, though: the steel still has to come in.)
+    const saveFor0 = eraGoal && s.steel > eraGoal.steel * 0.6 ? (eraGoal.wood - s.wood > eraGoal.oil - s.oil ? 'wood' : 'oil') : null;
+    const saveFor = saveFor0 && onAt(saveFor0) < engineers.length * 0.5 ? saveFor0 : null;
+    const toOil = (s.steel > 400 && s.oil < 120) || (saveFor === 'oil' && s.oil < eraGoal!.oil) ? fromSteel(Math.ceil(engineers.length / 3)) : [];
+    const toWood = (s.steel > 300 && s.wood < 80) || (saveFor === 'wood' && s.wood < eraGoal!.wood) ? fromSteel(Math.ceil(engineers.length / 4)).filter((u) => !toOil.includes(u)) : [];
     const onKind = (k: ResKind) => engineers.filter((e) => nodeOf(e)?.kind === k).length;
     for (const u of [...engineers.filter((e) => e.order.t === 'idle'), ...toSteel, ...toOil, ...toWood]) {
       // (Oil matters more from the second era: tanks, gunboats and the eras themselves run on it; wood most
       // early on, for the buildings and the walls.)
-      const oilShare = age >= 2 ? 0.36 : 0.2;
-      const woodShare = age >= 2 ? 0.24 : 0.34;
-      const want: ResKind = toOil.includes(u) || (s.oil < 400 && onKind('oil') < Math.ceil(engineers.length * oilShare)) ? 'oil' : toWood.includes(u) || (s.wood < 450 && onKind('wood') < Math.ceil(engineers.length * woodShare)) ? 'wood' : 'steel';
+      // (With the next era coming due, it gathers towards what that costs: past the usual caps, and more
+      // hands on whatever it's furthest short of.)
+      const goal = eraGoal;
+      const oilShare = (age >= 2 ? 0.36 : 0.2) + (goal && s.oil < goal.oil ? 0.08 : 0);
+      const woodShare = (age >= 2 ? 0.24 : 0.34) + (goal && s.wood < goal.wood ? 0.08 : 0);
+      const capOil = Math.max(400, (goal?.oil ?? 0) + 100);
+      const capWood = Math.max(450, (goal?.wood ?? 0) + 100);
+      const want: ResKind = toOil.includes(u) || (s.oil < capOil && onKind('oil') < Math.ceil(engineers.length * oilShare)) ? 'oil' : toWood.includes(u) || (s.wood < capWood && onKind('wood') < Math.ceil(engineers.length * woodShare)) ? 'wood' : 'steel';
       const node = pickNode(want);
       if (node < 0) continue;
       if (nodeOf(u)) load.set(nodeOf(u)!.id, (load.get(nodeOf(u)!.id) ?? 1) - 1);

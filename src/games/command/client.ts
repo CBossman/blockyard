@@ -346,6 +346,15 @@ export default defineClient(shared, {
         if (u.kind !== 'medic' || !(u.flags & 1) || !inView(u.x, u.z, 6)) continue;
         client.fx.burst({ x: u.x, y: FLOOR + heightAt(u.x, u.z) + 1.6, z: u.z }, { color: '#7dff7d', count: 5, speed: 1.4, size: 0.16, glow: 1.2, life: 0.8, gravity: -2.5 });
       }
+      // An engineer at work on a tree or a deposit: chips of wood, or grit, flying off where it strikes.
+      for (const u of ui.units) {
+        if (u.kind !== 'engineer' || !(u.flags & 1) || !(u.flags & 6) || !inView(u.x, u.z, 4)) continue;
+        const wood = (u.flags & 6) === 6;
+        if (!wood && !(u.flags & 2)) continue;
+        const yaw = u.yaw;
+        const at = { x: u.x + Math.sin(yaw) * 1.1, y: FLOOR + heightAt(u.x, u.z) + (wood ? 1.2 : 0.6), z: u.z + Math.cos(yaw) * 1.1 };
+        client.fx.particles(at, wood ? [0.62, 0.45, 0.24] : [0.55, 0.55, 0.58], { count: 3, speed: 2.2, size: 0.12, life: 0.6, drag: 1.5, gravity: 9 });
+      }
       for (const b of ui.buildings) {
         if (!inView(b.x, b.z, 12)) continue;
         if (b.built < 100) client.fx.burst({ x: b.x + (Math.random() - 0.5) * 4, y: FLOOR + 1 + Math.random() * 3, z: b.z + (Math.random() - 0.5) * 4 }, { color: '#ffd27a', count: 3, speed: 3, size: 0.2, glow: 0.8, life: 0.3, gravity: 4 });

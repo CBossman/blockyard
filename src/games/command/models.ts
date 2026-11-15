@@ -34,6 +34,7 @@ export const PORTRAITS: Record<string, string> = {
   ic_radar: PLAIN_FILES.radar,
   ic_scaffold: PLAIN_FILES.scaffold,
   ic_crate: PLAIN_FILES.crate,
+  ic_logs: PLAIN_FILES.logs,
   ic_drum: PLAIN_FILES.drum,
   ic_leg: PLAIN_FILES.leg,
   ic_leg_e: PLAIN_FILES.leg_e,
@@ -59,7 +60,7 @@ const TALL: Record<string, number> = { engineer: 2.6, rifle: 2.6, at: 2.6, guard
 const LONG: Record<string, number> = { scout: 3.3, tank: 6.2, artillery: 6.8, aa: 5.3, heli: 7.2, brute: 5.3, gunboat: 7.2, transport: 6.6 };
 const WIDE: Record<string, number> = {
   hq: 10.6, depot: 5.6, barracks: 7.8, factory: 9.6, airfield: 10.6, lab: 7.2, tower: 4.4, bunker: 5.6, dock: 7.2, rampart: 3, gate: 9, market: 7.2, uplink: 9.6,
-  steel: 5.6, oil: 2.1, crate: 1.1, drum: 0.9, scorch: 1, shell: 0.34, mine: 1.5, airdrop: 2.9, chute: 7.4, tracks: 3.2,
+  steel: 5.6, oil: 2.1, crate: 1.1, logs: 1.3, drum: 0.9, scorch: 1, shell: 0.34, mine: 1.5, airdrop: 2.9, chute: 7.4, tracks: 3.2,
   rubble: 5.6, house: 5.6, hut: 3.8, wall: 5.4, tent: 5.6, relic: 4.8, ruin: 5.4, henge: 5.6,
 };
 const fit = (k: string): number => {

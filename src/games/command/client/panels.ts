@@ -158,9 +158,13 @@ function advice(): { text: string; sub: string; run: Do } | null {
   const pickEng: Do = () => select(engIds.slice(0, 2), null);
   const idle = eng.filter((u) => u.flags & 8).length;
   const foes = ui.units.filter((u) => ui.state?.seats.find((s) => s.seat === u.seat)?.team !== me.team && u.seat < 6);
-  if (idle) return { text: `${idle} engineer${idle > 1 ? 's' : ''} idle`, sub: 'Select them and right click a deposit.', run: () => select(eng.filter((u) => u.flags & 8).map((u) => u.id), null) };
+  if (idle) return { text: `${idle} engineer${idle > 1 ? 's' : ''} idle`, sub: 'Select them and right click a deposit or a tree.', run: () => select(eng.filter((u) => u.flags & 8).map((u) => u.id), null) };
   if (eng.length < 7 && hq && !hq.queue) return { text: 'Train more engineers', sub: 'More engineers, more of everything. Open your HQ.', run: pickHq };
   if (me.pop + 2 >= me.cap && !blds.some((b) => b.kind === 'depot' && b.built < 100)) return { text: 'Build a Supply Depot', sub: 'You are nearly out of room for people.', run: pickEng };
+  // Choppers with a long walk home: a depot by the woods (a lumber camp) saves it.
+  const posts = blds.filter((b) => (b.kind === 'hq' || b.kind === 'depot') && b.built >= 100);
+  const farWood = eng.filter((u) => (u.flags & 6) === 6 && !posts.some((b) => Math.hypot(b.x - u.x, b.z - u.z) < 26)).length;
+  if (farWood >= 2 && !blds.some((b) => b.kind === 'depot' && b.built < 100)) return { text: 'Build a depot by the woods', sub: `${farWood} engineers have a long walk home with their wood. A depot near the trees cuts it short.`, run: () => select(eng.filter((u) => (u.flags & 6) === 6).map((u) => u.id).slice(0, 1), null) };
   if (!started('barracks')) return { text: 'Build a Barracks', sub: 'Select an engineer, then press X.', run: pickEng };
   if (done('barracks') && fighters.length < 5 && !blds.some((b) => b.kind === 'barracks' && b.queue >= 0)) return { text: 'Train infantry', sub: 'You need an army. Open your Barracks.', run: () => select([], blds.find((b) => b.kind === 'barracks')!.id) };
   if (age === 1 && hq && hq.queue < 1000) return { text: 'Advance to Era II', sub: 'Tanks, the factory and your commander. Open your HQ.', run: pickHq };
@@ -274,7 +278,7 @@ function renderTech(): void {
       const got = has(from);
       return node(icon(pic(k)), UNITS[k].name, !open ? `Needs ${AGE_NAMES[era]}` : got ? `Train at your ${BUILDINGS[from].name}` : `Needs a ${BUILDINGS[from].name}`, open && got ? 'now' : 'locked');
     });
-    const upgrade = (id: TechId, gl: string) => node(`<div class="g">${iconHtml(gl)}</div>`, TECHS[id].name, me.techs.includes(id) ? 'Researched' : `${TECHS[id].cost.steel} steel, ${TECHS[id].cost.oil} oil`, me.techs.includes(id) ? 'have' : open ? 'now' : 'locked');
+    const upgrade = (id: TechId, gl: string) => node(`<div class="g">${iconHtml(gl)}</div>`, TECHS[id].name, me.techs.includes(id) ? 'Researched' : `${(['steel', 'oil', 'wood'] as const).filter((r) => TECHS[id].cost[r]).map((r) => `${TECHS[id].cost[r]} ${r}`).join(', ')}`, me.techs.includes(id) ? 'have' : open ? 'now' : 'locked');
     const ups = era === 1 ? [upgrade('age2', '▲')] : era === 2 ? [upgrade('age3', '▲'), upgrade('armor', '⚙'), upgrade('ordnance', '⚙'), upgrade('optics', '⚙'), upgrade('logistics', '⚙'), upgrade('medicine', '⚙'), upgrade('engines', '⚙')] : [];
     return `<div><h2 class="${open ? '' : 'locked'}">${AGE_NAMES[era]}${age === era ? ' · you are here' : ''}</h2>${blds.join('')}${units.join('')}${ups.join('')}</div>`;
   };

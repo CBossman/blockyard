@@ -1670,6 +1670,17 @@ plain('oil', (m) => {
   return m;
 });
 
+/** What an engineer carries home: a crate of steel, a drum of oil, a bundle of logs. */
+plain('logs', (m) => {
+  // Three logs, two below and one on top, bark along them and pale cut ends.
+  for (const [x, y] of [[-3, 0], [1, 0], [-1, 2]]) {
+    m.box([x, y, -4], [x + 2, y + 2, 4], 'crateDark');
+    m.box([x, y + 1, -4], [x + 2, y + 2, 4], 'crate');
+    m.box([x, y, -5], [x + 2, y + 2, -4], 'canvas');
+    m.box([x, y, 4], [x + 2, y + 2, 5], 'canvas');
+  }
+  return m;
+});
 /** What an engineer carries home: a crate of steel, a drum of oil. */
 plain('crate', (m) => {
   m.box([-3, 0, -3], [3, 5, 3], 'crate');

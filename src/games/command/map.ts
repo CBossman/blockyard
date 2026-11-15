@@ -341,8 +341,9 @@ function plantTrees(): void {
       const x = gx + (hash(gx * 3, gz) - 0.5) * 3;
       const z = gz + (hash(gx, gz * 3) - 0.5) * 3;
       const clump = hash(Math.floor(gx / 16) + w.seed, Math.floor(gz / 16) - w.seed) > w.cut;
-      if (!(clump ? hash(gx, gz) < w.dense : hash(gx + 7, gz - 3) < w.sparse)) continue;
-      if (inLake(x, z, 5) || inMesa(x, z, 3) || inHill(x, z, 1) || CAMPS.some((c) => Math.hypot(c.x - x, c.z - z) < 12) || BASES.some((b) => Math.hypot(b.x - x, b.z - z) < 28) || all.some((d) => Math.hypot(d.x - x, d.z - z) < 8)) continue;
+      // (Thinner than they were: woods to walk through and fight in, not walls.)
+      if (!(clump ? hash(gx, gz) < w.dense * 0.72 : hash(gx + 7, gz - 3) < w.sparse)) continue;
+      if (inLake(x, z, 5) || inMesa(x, z, 3) || inHill(x, z, 1) || CAMPS.some((c) => Math.hypot(c.x - x, c.z - z) < 20) || BASES.some((b) => Math.hypot(b.x - x, b.z - z) < 34) || all.some((d) => Math.hypot(d.x - x, d.z - z) < 8)) continue;
       if (w.lanes && onLane(x, z)) continue;
       TREES.push({ x: Math.round(x * 10) / 10, z: Math.round(z * 10) / 10 });
     }
@@ -365,7 +366,8 @@ export function useMap(id: MapId): void {
 useMap('heartland');
 
 /** How far past each thing on the land the grid units find their way on counts a cell shut (to the cell's middle, plus half a cell). */
-export const SHUT = { lake: 0.6, mesa: 0.8, tree: 0.9, deposit: 1.8, building: 1 };
+// (A tree only by its trunk: there is room to walk between the trees of a wood, if not to drive a column through it.)
+export const SHUT = { lake: 0.6, mesa: 0.8, tree: 0.35, deposit: 1.8, building: 1 };
 /** Whether the cell round (x, z) is shut to walkers by the land itself: water, a mesa or a tree. */
 export function landShut(x: number, z: number): boolean {
   const near = (cx: number, cz: number, r: number) => Math.hypot(x - cx, z - cz) <= r + WALL_CELL * 0.5;

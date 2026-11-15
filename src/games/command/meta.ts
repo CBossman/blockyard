@@ -13,7 +13,7 @@ export default defineMeta({
   instances: true,
   controls: [
     ['Left click / drag', 'select your units and buildings (drag for a box)'],
-    ['Right click', 'move · attack · gather (on a deposit) · rally (with a building selected)'],
+    ['Right click', 'move (your fighters fight what they meet on the way) · attack · gather (on a deposit or a tree) · rally (with a building selected)'],
     ['Engineer selected', 'pick a building to place, then click the ground'],
     ['Building selected', 'train units from its panel; the HQ also advances your era (C), unlocking tanks, labs, helicopters and artillery. Era II needs a barracks standing, Era III a factory or a lab'],
     ['Battlefields', 'pick one on the main menu or the match table: Heartland, River Crossing (three fords), Badlands (a ring of mesas), Deep Woods, Frostline, Canyons (two walls of rock with passes), Highlands (big hills), or Random. Fog of war can be turned off there too'],
@@ -24,7 +24,7 @@ export default defineMeta({
     ['Double click', 'select every unit of that kind on screen'],
     ['H', 'halt'],
     ['T', 'stance: aggressive · hold ground · hold fire (troops shot at on the move fight back, unless holding fire)'],
-    ['Ctrl + right click', 'a forced march: they go, and don’t turn to fight when shot at'],
+    ['Ctrl + right click', 'a forced march: they go, and don’t stop or turn to fight anything'],
     ['Right click a bunker / transport', 'infantry go in (U lets them out; a transport lands them on the nearest shore)'],
     ['M / G (engineer)', 'build a bunker / a dock on a lake shore (gunboats and transports)'],
     ['Hills', 'high ground reaches and sees further, and is harder to hit from below'],
